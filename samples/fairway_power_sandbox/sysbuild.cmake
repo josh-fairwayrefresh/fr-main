@@ -1,0 +1,1 @@
+set(mcuboot_BOARD_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." CACHE PATH "")

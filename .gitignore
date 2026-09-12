@@ -1,0 +1,81 @@
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+version.conf
+.cache
+
+# Zephyr related
+build*
+sparkfun
+.vscode
+twister-out*
+
+# Docmentation Related
+docs/html
+
+# Extension related
+log-*.txt
+
+# Backup
+*.bak
+
+# Local OS metadata
+.DS_Store
+
+# Generated Fairway power-sandbox build directories
+/samples/fairway_power_sandbox/fairway_power_a/
+/samples/fairway_power_sandbox/fairway_power_a_psm_diag/
+/samples/fairway_power_sandbox/fairway_power_a_regression/
+/samples/fairway_power_sandbox/build/
+
+# Local Fairway production credential
+/samples/fairway_power_sandbox/src/secrets/fairway_device_key.h
