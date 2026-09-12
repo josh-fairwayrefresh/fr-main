@@ -110,7 +110,15 @@ The technical procedure below describes how an already-approved operation is per
 
 ### Build Procedure
 
-On a replacement machine, install the publicly available Nordic toolchain compatible with the `nrf` manifest revision in `west.yml` and West. Create a workspace directory, clone this repository into `<workspace>/nfed`, then initialize its vendor dependencies from the workspace root:
+On macOS, install the nRF Connect for VS Code extension and use **Install SDK** or **Manage SDKs** to install nRF Connect SDK v3.0.1 with its matching Nordic toolchain. This is the primary replacement-machine installation path. As an equivalent supported command-line alternative, use nRF Util SDK Manager with Nordic's release-specific v3.0.1 installation flow. Do not use the deprecated nRF Connect for Desktop Toolchain Manager for NCS 3.x.
+
+Create a clean workspace directory, then clone the Fairway recovery repository into `<workspace>/nfed`:
+
+```sh
+git clone https://github.com/josh-fairwayrefresh/fr-main.git <workspace>/nfed
+```
+
+From `<workspace>`, use a terminal configured by the installed NCS v3.0.1 toolchain and initialize the vendor dependencies:
 
 ```sh
 west init -l nfed
