@@ -20,9 +20,46 @@ The firmware runs on a Circuit Dojo nRF9151 Feather board and uses LTE-M connect
 
 ## 2. Workspace and Repository Ownership
 
-`feather_code` is the West workspace root used to assemble the embedded development environment.
-Within that workspace, `nfed` is the Fairway-owned Git repository and the Fairway engineering system of record.
+The canonical Fairway West workspace model is:
+
+`<west-workspace-root>/`
+  ├── `.west/`
+  ├── `nfed/`  — Fairway-owned local manifest repository and engineering system of record
+  ├── `nrf/`   — upstream dependency
+  ├── `zephyr/` — upstream dependency
+  ├── `nrfxlib/` — upstream dependency
+  ├── `modules/` — upstream dependencies
+  └── ...
+
+The parent directory of `nfed` is the West workspace root. `nfed` is not the workspace root itself.
+`nfed` is the Fairway-owned local manifest repository and the Fairway engineering system of record.
 It contains the Fairway firmware, backend, webapp, engineering documentation, and the West manifest used to define the workspace.
+
+### Canonical West initialization rule
+
+For a clean existing clone at `<workspace>/nfed`, initialize West from the parent workspace root using:
+
+```sh
+cd <workspace>
+west init -l nfed
+```
+
+Do not initialize `.west` inside `nfed`.
+Do not use `west init -m ...` when `nfed` already exists as the local manifest repository.
+Do not clone Nordic or Zephyr dependency repositories into `nfed`.
+Do not treat the manifest repo as the workspace root.
+
+If a workspace is already established, `west topdir` must resolve to the parent directory of `nfed`, and `west list` / `west update` must operate from that reconstructed workspace root.
+
+### Mandatory preflight for substantive VSC engineering tasks
+
+Before running any West command, identify and report:
+
+1. West workspace root
+2. manifest repository path
+3. result of `west topdir` if initialized
+
+Do not proceed if those three are inconsistent with the canonical workspace model.
 
 The Fairway Refresh GitHub repository is the off-laptop current-state recovery repository. It contains the current Fairway-owned source, board and build configuration, canonical engineering documents, dependency manifests, and Fairway-owned development and recovery tooling required to reconstruct the current development state on a replacement machine. Recovery assumes the repository, separately secured production secrets and credentials, and publicly obtainable vendor tooling and dependencies identified by repository manifests and procedures. It is not intended to preserve hosted CI, historical Git development state, obsolete branches, generated build products, historical binary backups, or abandoned development material.
 
