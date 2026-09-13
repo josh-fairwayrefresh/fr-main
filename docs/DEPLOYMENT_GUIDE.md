@@ -110,21 +110,9 @@ The technical procedure below describes how an already-approved operation is per
 
 ### Build Procedure
 
-Before running any West command, confirm the canonical workspace model:
-
-- Verify the West workspace root and manifest repository according to `docs/ENGINEERING_GUIDE.md`.
-- For an existing clone at `<workspace>/nfed`, initialize West from `<workspace>`:
-
-```sh
-cd <workspace>
-west init -l nfed
-```
-
-Do not use `west init -m ...` for this existing-clone recovery case.
+Fairway `nfed` operates as a freestanding product repository built against the separately installed official NCS v3.1.1 SDK. A second Fairway-owned West/NCS reconstruction (`west init`/`west update` against `nfed`) is not required and is not the validated procedure.
 
 On macOS, install the nRF Connect for VS Code extension and use **Install SDK** or **Manage SDKs** to install nRF Connect SDK v3.1.1 with its matching Nordic toolchain. NCS v3.1.1 is the validated canonical deployment SDK baseline. As an equivalent supported command-line alternative, use nRF Util SDK Manager with Nordic's release-specific v3.1.1 installation flow. Do not use the deprecated nRF Connect for Desktop Toolchain Manager for NCS 3.x.
-
-Fairway `nfed` operates as a freestanding product repository built against the separately installed official NCS v3.1.1 SDK. A second Fairway-owned West/NCS reconstruction (`west init`/`west update` against `nfed`) is not required and is not the validated procedure.
 
 Create a clean workspace directory, then clone the Fairway recovery repository into `<workspace>/nfed`:
 
