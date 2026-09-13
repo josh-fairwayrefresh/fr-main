@@ -122,7 +122,9 @@ west init -l nfed
 
 Do not use `west init -m ...` for this existing-clone recovery case.
 
-On macOS, install the nRF Connect for VS Code extension and use **Install SDK** or **Manage SDKs** to install nRF Connect SDK v3.0.1 with its matching Nordic toolchain. NCS v3.0.1 remains the currently validated LP 1.0 development/deployment baseline. NCS v3.1.1 is presently under isolated migration validation and is not yet the canonical deployment SDK. As an equivalent supported command-line alternative, use nRF Util SDK Manager with Nordic's release-specific v3.0.1 installation flow. Do not use the deprecated nRF Connect for Desktop Toolchain Manager for NCS 3.x.
+On macOS, install the nRF Connect for VS Code extension and use **Install SDK** or **Manage SDKs** to install nRF Connect SDK v3.1.1 with its matching Nordic toolchain. NCS v3.1.1 is the validated canonical deployment SDK baseline. As an equivalent supported command-line alternative, use nRF Util SDK Manager with Nordic's release-specific v3.1.1 installation flow. Do not use the deprecated nRF Connect for Desktop Toolchain Manager for NCS 3.x.
+
+Fairway `nfed` operates as a freestanding product repository built against the separately installed official NCS v3.1.1 SDK. A second Fairway-owned West/NCS reconstruction (`west init`/`west update` against `nfed`) is not required and is not the validated procedure.
 
 Create a clean workspace directory, then clone the Fairway recovery repository into `<workspace>/nfed`:
 
@@ -130,27 +132,24 @@ Create a clean workspace directory, then clone the Fairway recovery repository i
 git clone https://github.com/josh-fairwayrefresh/fr-main.git <workspace>/nfed
 ```
 
-From `<workspace>`, use a terminal configured by the installed NCS v3.0.1 toolchain and initialize the vendor dependencies:
+Using a terminal configured with the installed NCS v3.1.1 toolchain environment, build directly against the installed NCS v3.1.1 SDK directory (`<ncs-install-dir>`), passing `<workspace>/nfed` as an explicit board root:
 
 ```sh
-west init -l nfed
-west update
-```
-
-Build the current Fairway application with Build A configuration using a new pristine build directory from `<workspace>`:
-
-```sh
+cd <ncs-install-dir>
 west build \
   --build-dir <new-build-dir> \
   <workspace>/nfed/samples/fairway_power_sandbox \
   --pristine \
   --board circuitdojo_feather_nrf9151@1/nrf9151/ns \
-  -- -DEXTRA_CONF_FILE=prj_a.conf \
+  -- -DBOARD_ROOT=<workspace>/nfed \
+     -DEXTRA_CONF_FILE=prj_a.conf \
      -DDEBUG_THREAD_INFO=On \
      -DCONFIG_DEBUG_THREAD_INFO=y \
      -Dfairway_power_sandbox_DEBUG_THREAD_INFO=On \
      -Dmcuboot_DEBUG_THREAD_INFO=Off
 ```
+
+`-DBOARD_ROOT` is required so the installed NCS v3.1.1 workspace (whose own manifest does not include `nfed`) can resolve the Circuit Dojo `feather_nrf9151` board and Fairway's `sysbuild.cmake`-propagated MCUboot board root.
 
 The build must exit successfully and produce `<new-build-dir>/merged.hex`.
 Record the artifact path, byte size, SHA-256, board target, configuration, and source commit in the build provenance record before flashing.

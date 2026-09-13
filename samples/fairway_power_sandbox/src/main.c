@@ -33,10 +33,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/mfd/npm1300.h>
+#include <zephyr/drivers/mfd/npm13xx.h>
 #include <zephyr/drivers/regulator.h>
 #include <zephyr/drivers/sensor.h>
-#include <zephyr/drivers/sensor/npm1300_charger.h>
+#include <zephyr/drivers/sensor/npm13xx_charger.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
 #include <stdbool.h>
@@ -224,13 +224,13 @@ static void vbus_event_callback(const struct device *dev, struct gpio_callback *
 	ARG_UNUSED(dev);
 	ARG_UNUSED(cb);
 
-	if ((pins & BIT(NPM1300_EVENT_VBUS_DETECTED)) != 0U) {
+	if ((pins & BIT(NPM13XX_EVENT_VBUS_DETECTED)) != 0U) {
 		if (apply_buck2_power_policy(true) < 0) {
 			LOG_ERR("BUCK2 enable after VBUS detection failed");
 		}
 	}
 
-	if ((pins & BIT(NPM1300_EVENT_VBUS_REMOVED)) != 0U) {
+	if ((pins & BIT(NPM13XX_EVENT_VBUS_REMOVED)) != 0U) {
 		if (apply_buck2_power_policy(false) < 0) {
 			LOG_ERR("BUCK2 disable after VBUS removal failed");
 		}
@@ -247,14 +247,14 @@ static int configure_buck2_power_policy(void)
 	}
 
 	gpio_init_callback(&vbus_cb, vbus_event_callback,
-			   BIT(NPM1300_EVENT_VBUS_DETECTED) | BIT(NPM1300_EVENT_VBUS_REMOVED));
-	ret = mfd_npm1300_add_callback(npm1300_pmic_dev, &vbus_cb);
+			   BIT(NPM13XX_EVENT_VBUS_DETECTED) | BIT(NPM13XX_EVENT_VBUS_REMOVED));
+	ret = mfd_npm13xx_add_callback(npm1300_pmic_dev, &vbus_cb);
 	if (ret < 0) {
 		return ret;
 	}
 
-	ret = sensor_attr_get(npm1300_charger_dev, SENSOR_CHAN_NPM1300_CHARGER_VBUS_STATUS,
-			      SENSOR_ATTR_NPM1300_CHARGER_VBUS_PRESENT, &vbus_present);
+	ret = sensor_attr_get(npm1300_charger_dev, SENSOR_CHAN_NPM13XX_CHARGER_VBUS_STATUS,
+			      SENSOR_ATTR_NPM13XX_CHARGER_VBUS_PRESENT, &vbus_present);
 	if (ret < 0) {
 		return ret;
 	}
