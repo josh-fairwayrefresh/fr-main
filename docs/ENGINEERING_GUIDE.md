@@ -2,13 +2,13 @@
 
 ## Document Status
 - Status: Draft
-- Version: 0.1
-- Last updated: 2026-09-11
+- Version: 0.2
+- Last updated: 2026-09-12
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
 - Unverified claims are marked `To Be Verified`.
-- This revision reconciles the current `nfed` repository state against the May 18, 2026 milestone source and separates current verified behavior from historical milestone claims.
+- This revision reconciles the current `nfed` repository state against the validated LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) engineering baseline and separates current verified behavior from historical milestone claims.
 
 ## 1. Product System Overview
 
@@ -20,50 +20,14 @@ The firmware runs on a Circuit Dojo nRF9151 Feather board and uses LTE-M connect
 
 ## 2. Workspace and Repository Ownership
 
-The canonical Fairway West workspace model is:
+`nfed` is the Fairway-owned Git repository and the Fairway engineering system of record. It contains the Fairway firmware, backend, webapp, engineering documentation, board definitions, and build integration.
 
-`<west-workspace-root>/`
-  ├── `.west/`
-  ├── `nfed/`  — Fairway-owned local manifest repository and engineering system of record
-  ├── `nrf/`   — upstream dependency
-  ├── `zephyr/` — upstream dependency
-  ├── `nrfxlib/` — upstream dependency
-  ├── `modules/` — upstream dependencies
-  └── ...
+As of LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade), `nfed` is a freestanding product repository. It is not a West manifest repository and is not part of a Fairway-owned West workspace. The official Nordic NCS SDK (validated baseline: v3.1.1) is an independently installed, complete, pre-existing vendor West workspace external to `nfed`. Fairway builds against that installed SDK using an explicit `BOARD_ROOT` pointing at `nfed`; a second Fairway-owned West/NCS/Zephyr reconstruction (`west init`/`west update` against `nfed`) is not required and is not the validated procedure.
 
-The parent directory of `nfed` is the West workspace root. `nfed` is not the workspace root itself.
-`nfed` is the Fairway-owned local manifest repository and the Fairway engineering system of record.
-It contains the Fairway firmware, backend, webapp, engineering documentation, and the West manifest used to define the workspace.
+Exact build commands, the required matching Nordic toolchain, and the `BOARD_ROOT` invocation are owned by `docs/DEPLOYMENT_GUIDE.md` and are not duplicated here.
 
-### Canonical West initialization rule
+The Fairway Refresh GitHub repository (`nfed`) is the off-laptop current-state recovery repository. It contains the current Fairway-owned source, board and build configuration, canonical engineering documents, and Fairway-owned development and recovery tooling required to reconstruct the current development state on a replacement machine. Recovery assumes this repository, a separately installed official Nordic NCS SDK and matching toolchain, separately secured production secrets and credentials, and publicly obtainable vendor tooling identified by repository manifests and procedures. It is not intended to preserve hosted CI, historical Git development state, obsolete branches, generated build products, historical binary backups, or abandoned development material.
 
-For a clean existing clone at `<workspace>/nfed`, initialize West from the parent workspace root using:
-
-```sh
-cd <workspace>
-west init -l nfed
-```
-
-Do not initialize `.west` inside `nfed`.
-Do not use `west init -m ...` when `nfed` already exists as the local manifest repository.
-Do not clone Nordic or Zephyr dependency repositories into `nfed`.
-Do not treat the manifest repo as the workspace root.
-
-If a workspace is already established, `west topdir` must resolve to the parent directory of `nfed`, and `west list` / `west update` must operate from that reconstructed workspace root.
-
-### Mandatory preflight for substantive VSC engineering tasks
-
-Before running any West command, identify and report:
-
-1. West workspace root
-2. manifest repository path
-3. result of `west topdir` if initialized
-
-Do not proceed if those three are inconsistent with the canonical workspace model.
-
-The Fairway Refresh GitHub repository is the off-laptop current-state recovery repository. It contains the current Fairway-owned source, board and build configuration, canonical engineering documents, dependency manifests, and Fairway-owned development and recovery tooling required to reconstruct the current development state on a replacement machine. Recovery assumes the repository, separately secured production secrets and credentials, and publicly obtainable vendor tooling and dependencies identified by repository manifests and procedures. It is not intended to preserve hosted CI, historical Git development state, obsolete branches, generated build products, historical binary backups, or abandoned development material.
-
-The other major repositories present in the workspace, including `zephyr`, `nrf`, `nrfxlib`, and related modules, are upstream dependencies managed through West rather than Fairway-owned repositories.
 Canonical engineering documentation resides in `nfed/docs/`.
 Product strategy material, milestone notes, and historical business documents may exist outside `nfed`, but they are not part of the canonical engineering source of truth unless migrated into the repository-controlled documentation set.
 
@@ -187,9 +151,9 @@ This section is a summary only; canonical backlog ownership is maintained in `do
 - `docs/feature_backlog.md`
 - `docs/decisions/`
 
-### Artifact provenance
+### Artifact provenance (historical)
 
-The current validated Phase 2 Build A checkpoint is:
+The Phase 2 checkpoint below predates the LP 1.0 and LP 1.2 validated production generations and is retained only as historical context. Current firmware generation identity, checkpoint provenance, and artifact SHA-256 values are owned exclusively by the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
 
 - Checkpoint commit: `d4381b3cc30391ca5509c749e25f14aac24b0059` — `fairway: checkpoint Phase 2 power management`.
 - Board target: `circuitdojo_feather_nrf9151@1/nrf9151/ns`.
@@ -255,5 +219,4 @@ Verified in the current `nfed` repository:
 
 ## Workspace Evidence
 
-- `west.yml`
-- `/Users/DuplexLoop/Documents/feather_code/.west/config` (workspace evidence outside the `nfed` repository)
+- `west.yml` (historical West manifest; retained in `nfed` but not used by the validated LP 1.2 freestanding build procedure owned by `docs/DEPLOYMENT_GUIDE.md`).
