@@ -31,6 +31,18 @@ The Fairway Refresh GitHub repository (`nfed`) is the off-laptop current-state r
 Canonical engineering documentation resides in `nfed/docs/`.
 Product strategy material, milestone notes, and historical business documents may exist outside `nfed`, but they are not part of the canonical engineering source of truth unless migrated into the repository-controlled documentation set.
 
+## LP1.3 — Repository Cleanup Milestone
+
+LP1.3 is a repository/workspace engineering milestone. It is not a firmware generation and does not supersede LP1.2 as the validated firmware implementation. The validated firmware implementation remains the LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) generation recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`; that record is unchanged by LP1.3.
+
+LP1.3 records that:
+
+- The canonical Fairway engineering workspace is `/Users/DuplexLoop/Documents/feather_code`, and the canonical Fairway repository is `/Users/DuplexLoop/Documents/feather_code/nfed`, confirmed clean at commit `8773548f42676aaf90bde1771fa2613d26a3b852` on `main`.
+- `nfed` remains the freestanding Fairway product repository described above; the old Fairway-owned reconstructed West/NCS/Zephyr workspace (previously co-located as sibling directories alongside `nfed`) is not part of the active engineering state.
+- Migration/recovery workspaces, stale repository copies, generated recovery build products, redundant secret copies, obsolete Agent edit material, and superseded vendor West-module workspace material were removed from the active workspace.
+- The resulting repository was verified clean (no staged, unstaged, or untracked changes) before this milestone was recorded.
+- LP1.3 establishes the clean starting point for the next Health Check engineering sprint.
+
 ## Documentation Philosophy
 
 Fairway Refresh engineering documentation follows a single-owner model.
