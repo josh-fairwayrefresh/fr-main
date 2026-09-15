@@ -191,7 +191,7 @@ For the validated field/measurement path:
 5. Confirm the expected request and LED sequence.
 6. Confirm the device returns to its expected dormant state.
 
-The accepted production field result is approximately 23.5 uA dormant current at the 5.0 V boundary after the request transaction. This value and its implementation context are owned by `docs/FIRMWARE_SPECIFICATION.md`.
+The accepted production field dormant-current result and its implementation context are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### USB / PPK2 Switchover Observation
 

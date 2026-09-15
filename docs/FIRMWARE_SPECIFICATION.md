@@ -13,7 +13,7 @@ Firmware should be optimized for maximum battery lifetime while maintaining reli
 
 Field Observation
 -----------------
-Prototype 1.0 stopped functioning while the battery pack measured approximately 3.0 V at rest. Replacing the cells with fresh batteries measuring approximately 4.0 V restored operation. This indicates that resting voltage alone is insufficient to establish operational readiness. At the accepted 5.0 V PPK2 boundary, CPO validation measured an LTE transaction peak of approximately 250 mA. The full validated sequence was dormant -> button wake -> LTE/HTTPS request -> LED feedback -> return to approximately 23.5 uA dormant current. The supporting PPK2 waveform has been retained as reference validation evidence.
+Prototype 1.0 stopped functioning while the battery pack measured approximately 3.0 V at rest. Replacing the cells with fresh batteries measuring approximately 4.0 V restored operation. This indicates that resting voltage alone is insufficient to establish operational readiness. At the accepted 5.0 V PPK2 boundary, CPO validation measured an LTE transaction peak of approximately 250 mA. This LP 1.0-era validated sequence was dormant -> button wake -> LTE/HTTPS request -> LED feedback -> return to approximately 23.5 uA dormant current; see the Firmware Generation Registry below for the current LP 1.2 dormant-current result. The supporting PPK2 waveform has been retained as reference validation evidence.
 
 Current Implementation
 ----------------------
@@ -36,6 +36,10 @@ The current pilot firmware lineage is recorded against exact Git provenance and 
 | LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) | `3e3e724aa6bcb098d8fda98f45af78d299b9da62` (nPM1300 → nPM13XX Kconfig/API compatibility patch, plus removal of the ineffective stale `CONFIG_PDN_DEFAULT_APN` assignment) | Validated artifact `merged.hex`, SHA-256 `e2acecc0c0c958b448c8d399935e343e8d83cd0da1f27e1e18859d55c4c5c48f`, 500,228 bytes | 2026-09-12 | Validated production generation | Fairway `nfed` built as a freestanding product repository against the separately installed official NCS v3.1.1 SDK and matching Nordic toolchain, with explicit `BOARD_ROOT`; no second Fairway-owned West/NCS reconstruction required. Validated button transaction over LTE-M/HTTPS with backend/webapp acceptance. Field dormant current measured at 23.25 uA versus the approximately 23.5 uA LP 1.0 baseline; no regression demonstrated. A green RGB LED observed while USB was connected during service/debug mode is the nPM1300 PMIC's autonomous hardware charging-status indicator and is not evidence of a field-mode power regression. TF-M secure-image flash utilization observed at 97.90% (31,580 / 32,256 bytes); retained as a watch item, not a demonstrated blocker. |
 
 Firmware-bearing roadmap work uses sprint branches named `sprint/<category-slug>`, for example `sprint/button-behavior`, `sprint/device-provisioning`, `sprint/device-reliability`, `sprint/infrastructure`, `sprint/operator-ux`, `sprint/power-battery`, and `sprint/pilot-release`. The lightweight lifecycle is: approved roadmap sprint -> sprint branch -> implementation and validation -> approved merge to `main` -> canonical firmware registry update. Future generation names are selected for meaningful roadmap milestones; no rigid numeric sequence is required. OTA/FOTA and remote fleet firmware distribution are deferred and are not required for the current pilot strategy.
+
+Modem Firmware — CPO-Confirmed Physical-Device Validation
+-----------------------------------------------------------
+The validated LP1.2 device was confirmed by the CPO using Nordic nRF Connect for Desktop to be running nRF9151 modem firmware 2.0.2. This is CPO-confirmed physical-device validation evidence, not a repository-derived or Git-established fact.
 
 Validated Prototype Behavior
 ----------------------------
