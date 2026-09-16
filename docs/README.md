@@ -55,6 +55,7 @@ Current:
 - `docs/DEPLOYMENT_GUIDE.md` — deployment and operational guide.
 - `docs/DEVICE_PROVISIONING_GUIDE.md` — device provisioning lifecycle and registry requirements guide.
 - `docs/feature_backlog.md` — canonical engineering feature backlog.
+- `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
 
 Planned during documentation migration:
 
