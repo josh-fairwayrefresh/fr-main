@@ -259,11 +259,11 @@ Installed component identity and part numbers are owned by `docs/HARDWARE_BOM.md
 - Amber LED near the battery connector indicates battery charging; it illuminates when solar is available and extinguishes when solar is removed.
 - Neither LED was disabled as part of Prototype 1.1. LED power optimization is deferred to later low-power characterization.
 
-## Remaining Physical Detail
+## Retained Historical Power Conditioning in the Prototype 1.1 Reference Device
 
-The CPO-confirmed Prototype 1.1 wiring above establishes the active field-power path. The following historical Prototype 1.0 component detail remains unspecified and must not be assumed:
+The CPO confirmed that the historical Prototype 1.0 polyfuse and 1000 µF capacitor were not removed when the Adafruit 6106 output was connected to the existing Fairway positive and ground rails. Both remain installed and active in the validated Prototype 1.1 reference device, and the successful solar/LiPo/LTE validation occurred with both components present.
 
-- the current physical status of the historical Prototype 1.0 polyfuse and 1000 µF capacitor (retained in place but unused, or physically removed);
+Their presence in the reference device does not prescribe the five-new-board design. No additional external polyfuse is required for those boards. Whether the 1000 µF capacitor is required remains pending controlled A/B validation.
 
 ## CPO-Confirmed Functional Validation
 

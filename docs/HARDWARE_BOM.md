@@ -37,7 +37,11 @@ Prototype 1.1 is the current physical hardware generation. It replaces the Proto
 ### Retired from the active field-power path (historical Prototype 1.0 provenance only)
 
 - 2xAA battery holder (Keystone 2462) and Energizer Ultimate Lithium AA primary batteries — physically removed by the CPO before Prototype 1.1 installation; no longer part of the current field-power path.
-- Prototype 1.0 polyfuse (Littelfuse RUEF075HF-ND) and 1000 µF capacitor (Panasonic EEU-FR1A102) — installed as part of the historical Prototype 1.0 AA power-conditioning path. Their exact current physical status (retained in place but unused, or physically removed) is **not confirmed by direct CPO evidence** and requires physical inspection before being represented as retained or removed in a canonical wiring record.
+
+### Retained Historical Power-Conditioning Components in the Prototype 1.1 Reference Device
+
+- The historical Prototype 1.0 polyfuse (Littelfuse RUEF075HF-ND) and 1000 µF capacitor (Panasonic EEU-FR1A102) remain installed and active in the existing validated Prototype 1.1 reference device. This is CPO-confirmed physical-device evidence. Prototype 1.1 solar/LiPo/LTE validation therefore occurred with both components installed.
+- This reference-device state does not prescribe the five-new-board design: no additional external polyfuse is required for those boards, while the 1000 µF capacitor remains pending controlled A/B validation.
 
 ## Prototype 1.0 (Historical, First Build, Pre-Pilot)
 
