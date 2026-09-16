@@ -18,6 +18,7 @@ Prototype 1.0 stopped functioning while the battery pack measured approximately 
 Current Implementation
 ----------------------
 - Architecture: single application image managing a compact state machine for user interaction and network operations.
+- The Circuit Dojo nRF9151 Feather physical header-to-signal/nRF9151 mapping is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`; current source and DTS own implementation pin configuration and consumption.
 - Modem provisioning: current firmware provisions a Cloud Run CA chain into the modem credential store, performs a single LTE connect call on startup, then polls registration status until home or roaming registration is reached.
 - Payload and auth: current firmware sends a minimal JSON payload including `device_id` and `event_type` and sets an `X-Fairway-Device-Key` header for backend authentication.
 - Button lockout: the firmware uses configurable `REQUEST_MAX_ATTEMPTS` and `REQUEST_ATTEMPT_TIMEOUT_MS` values, derives the physical-button lockout as their product, and ignores additional button activity during that lockout. A held button does not delay the first network attempt.

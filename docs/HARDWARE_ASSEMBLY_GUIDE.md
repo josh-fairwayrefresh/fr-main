@@ -16,11 +16,55 @@ The current physical hardware generation is Prototype 1.1, documented in a dedic
 
 | Topic | Canonical Owner |
 |--------|-----------------|
-| Feather pin map | docs/ENGINEERING_GUIDE.md |
+| Feather physical header/pin reference | Circuit Dojo nRF9151 Feather Pin Reference (this document) |
 | Installed components | docs/HARDWARE_BOM.md |
 | Prototype 1.0 wiring | Prototype 1.0 Wiring Record (this document) |
 | Firmware behavior | docs/FIRMWARE_SPECIFICATION.md |
 | User-visible behavior | docs/UX_SPECIFICATION.md |
+
+---
+
+# Circuit Dojo nRF9151 Feather Pin Reference
+
+This table is the canonical Fairway reference for physical Feather header-to-signal/nRF9151 mapping. Current source and DTS own which pins are presently configured, consumed, or reserved by the implementation; physical exposure does not imply availability.
+
+## J1 - 12-Pin Header
+
+| Feather header | nRF9151 | Label |
+|----------------|---------|-------|
+| J1/1 | - | VBAT |
+| J1/2 | - | EN |
+| J1/3 | - | VBUS |
+| J1/4 | P0.00 | D8 |
+| J1/5 | P0.31 | D7 |
+| J1/6 | P0.30 | D6 |
+| J1/7 | P0.29 | D5 |
+| J1/8 | P0.28 | D4 |
+| J1/9 | P0.27 | D3 |
+| J1/10 | P0.26 | D2 |
+| J1/11 | P0.01 | SCL |
+| J1/12 | P0.02 | SDA |
+
+## J2 - 16-Pin Header
+
+| Feather header | nRF9151 | Label |
+|----------------|---------|-------|
+| J2/1 | - | ~RST |
+| J2/2 | - | 3V3 |
+| J2/3 | - | MODE/WAKE |
+| J2/4 | - | GND |
+| J2/5 | P0.13 | A0 |
+| J2/6 | P0.14 | A1 |
+| J2/7 | P0.15 | A2 |
+| J2/8 | P0.16 | A3 |
+| J2/9 | P0.17 | A4 |
+| J2/10 | P0.18 | A5 |
+| J2/11 | P0.20 | SCK |
+| J2/12 | P0.21 | COPI |
+| J2/13 | P0.22 | CIPO |
+| J2/14 | P0.23 | RX |
+| J2/15 | P0.24 | TX |
+| J2/16 | P0.25 | EXTRA |
 
 ---
 
@@ -61,8 +105,8 @@ The approved component list for Prototype 1.0 is maintained exclusively in:
 
 1. Verify the BOM revision.
 
-2. Verify the Feather orientation against the pin map in
-   `docs/ENGINEERING_GUIDE.md`.
+2. Verify the Feather orientation against the Circuit Dojo nRF9151 Feather Pin
+  Reference in this document.
 
 3. Install the female headers.
 

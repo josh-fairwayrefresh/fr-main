@@ -107,7 +107,10 @@ Prototype 1.0 hardware definition is split between two owner documents.
 
 Prototype 1.0 uses the Circuit Dojo nRF9151 Feather development board.
 
-- `docs/decisions/`
+The complete physical Feather header-to-signal/nRF9151 mapping is owned by the
+Circuit Dojo nRF9151 Feather Pin Reference in
+`docs/HARDWARE_ASSEMBLY_GUIDE.md`. Current source and DTS own implementation
+pin configuration, consumption, and reservation.
 
 Firmware generation identity and accepted checkpoint provenance are owned exclusively by `docs/FIRMWARE_SPECIFICATION.md`. Production authentication material is restored separately at the documented local path; the public CA input is tracked with the production application.
 ### Device authentication/rejection behavior

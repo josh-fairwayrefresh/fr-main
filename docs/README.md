@@ -25,7 +25,7 @@ This document is the starting point for engineering work in Fairway Refresh. It 
 - `docs/README.md` — documentation navigation and policy.
 - `docs/ENGINEERING_GUIDE.md` — system-level overview and cross-document summary.
 - `docs/HARDWARE_BOM.md` — installed hardware components and part numbers.
-- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — Prototype 1.0 physical assembly, wiring, and maintenance power procedure.
+- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — physical assembly, wiring, maintenance power procedure, and the complete Circuit Dojo nRF9151 Feather physical header/pin reference.
 - `docs/FIRMWARE_SPECIFICATION.md` — current firmware implementation, constraints, and firmware backlog.
 - `docs/UX_SPECIFICATION.md` — externally observable user behavior.
 - `docs/DEPLOYMENT_GUIDE.md` — deployment and operational configuration ownership.
@@ -48,7 +48,7 @@ Current:
 - `docs/README.md` — documentation index and usage principles.
 - `docs/ENGINEERING_GUIDE.md` — primary engineering handbook; currently a draft.
 - `docs/HARDWARE_BOM.md` — installed prototype hardware components and part numbers.
-- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — assembly and wiring guide for Prototype 1.0.
+- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — assembly and wiring guide for Prototype 1.0, including the complete Circuit Dojo nRF9151 Feather physical header/pin reference.
 - `docs/decisions/` — accepted engineering decision records.
 - `docs/FIRMWARE_SPECIFICATION.md` — implementation-level firmware behavior and design rationale.
 - `docs/UX_SPECIFICATION.md` — externally-observable user interaction and LED behavior.
