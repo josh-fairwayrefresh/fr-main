@@ -10,6 +10,50 @@
 - Unverified claims are marked `To Be Verified`.
 - This revision reconciles the current `nfed` repository state against the validated LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) engineering baseline and separates current verified behavior from historical milestone claims.
 
+## Fidelity Mandate
+
+==================================================
+FAIRWAY REFRESH — FIDELITY MANDATE
+==================================================
+
+Before acting:
+
+1. Establish current truth from the canonical Fairway repository. Confirm Git
+   branch, HEAD, upstream and working-tree status. Read docs/README.md first,
+   then freshly read all current Major Engineering Documents:
+
+   docs/ENGINEERING_GUIDE.md
+   docs/FIRMWARE_SPECIFICATION.md
+   docs/HARDWARE_BOM.md
+   docs/HARDWARE_ASSEMBLY_GUIDE.md
+   docs/DEPLOYMENT_GUIDE.md
+   docs/DEVICE_PROVISIONING_GUIDE.md
+   docs/feature_backlog.md
+   docs/UX_SPECIFICATION.md
+
+2. Follow the README-defined owner-document hierarchy. Current tracked
+   source/configuration is authoritative for implementation; owner documents
+   are authoritative for their engineering decisions and requirements;
+   CPO-confirmed physical/validation evidence is valid evidence. Surface any
+   material conflict rather than resolving it by assumption.
+
+3. Perform only the work explicitly authorized. Use the canonical Fairway
+   workspace, established procedures and direct current evidence. Preserve a
+   clean workspace and keep investigation, editing, build, flash, test,
+   deployment, commit and push within their explicit authorization boundaries.
+
+4. Before reporting completion, inspect the actual result and re-check Git
+   state. Verify the work against current implementation and the relevant owner
+   documents, then report what changed, what was validated, anything unresolved,
+   and anything not performed.
+
+If the task requires an unapproved engineering/product decision or encounters
+a material conflict that direct evidence cannot resolve, STOP and report it
+for CPO/Architect decision.
+==================================================
+
+This section is the canonical Fairway Refresh Fidelity Mandate. Its exact text is authoritative for Fairway engineering governance and must be preserved verbatim.
+
 ## 1. Product System Overview
 
 The implemented end-to-end path is:
