@@ -43,6 +43,36 @@ LP1.3 records that:
 - The resulting repository was verified clean (no staged, unstaged, or untracked changes) before this milestone was recorded.
 - LP1.3 establishes the clean starting point for the next Health Check engineering sprint.
 
+## Prototype 1.1 — Solar Power Integration (Hardware Milestone)
+
+Prototype 1.1 is a physical hardware milestone. It is not a firmware generation and does not change the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`. The current validated firmware generation remains LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade), unchanged by this milestone.
+
+Prototype 1.1 replaces the historical Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed solar / LiPo / Adafruit 6106 field-power architecture. Installed components and part numbers are owned by `docs/HARDWARE_BOM.md`; physical wiring detail is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+CPO-confirmed functional validation for Prototype 1.1:
+
+- The Adafruit 6106 regulated output was measured by the CPO at approximately 5.2–5.3 V unloaded, consistent with expected Adafruit 6106 behavior.
+- The device operated the existing unchanged LP 1.2 firmware from the new power architecture and successfully completed a golfer button press through LTE-M/HTTPS to the existing backend, producing a request on the cart operator dashboard.
+- The device successfully operated from solar-supported power, with an amber charging indicator present.
+- The device transitioned from solar-supported to LiPo-only power without an observed functional interruption.
+- The device successfully completed a Fairway transaction while operating from LiPo power alone, after solar was disconnected.
+
+Not yet established by this milestone (deferred to later characterization / Device Health work):
+
+- exact dormant current of the complete solar/LiPo/6106 system;
+- 6106 conversion losses and quiescent consumption;
+- LiPo-side and solar-side current measurements;
+- LTE transient voltage/current behavior on the new power path;
+- battery sag under LTE load;
+- behavior across battery state-of-charge and solar irradiance/temperature conditions;
+- long-duration reliability and exact runtime/autonomy;
+- whether additional bulk capacitance is required;
+- Device Health battery-voltage telemetry and watchdog/recovery behavior.
+
+The historical LP 1.2 approximately 23.25 uA dormant-current measurement remains a whole-device measurement at the previously accepted 5.0 V boundary with AA batteries and USB disconnected; it is not reinterpreted as a measurement of the Prototype 1.1 solar/LiPo/6106 system.
+
+Prototype 1.1 establishes the current physical hardware baseline for the next Device Health / Reliability engineering sprint, alongside the unchanged LP 1.2 validated firmware generation and the LP1.3 repository/workspace cleanup milestone above.
+
 ## Documentation Philosophy
 
 Fairway Refresh engineering documentation follows a single-owner model.

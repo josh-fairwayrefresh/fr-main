@@ -8,6 +8,8 @@ Its purpose is to preserve exactly how the first working prototype was physicall
 
 This is not a manufacturing work instruction.
 
+The current physical hardware generation is Prototype 1.1, documented in a dedicated section near the end of this document. The Prototype 1.0 wiring record below remains a historical reference for the original AA-powered build and is not the current field-power architecture.
+
 ---
 
 ## Canonical Source References
@@ -226,6 +228,56 @@ Observed battery behavior and engineering risks are maintained in:
 
 ---
 
+# Prototype 1.1 — Solar Power Integration (Current Field-Power Architecture)
+
+Prototype 1.1 is the current physical hardware generation. It replaces the historical Prototype 1.0 AA/VBAT field-power architecture recorded above with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of this hardware generation; the current validated firmware generation remains LP 1.2 as recorded in `docs/FIRMWARE_SPECIFICATION.md`.
+
+## Current Field-Power Chain (CPO-Installed and Functionally Validated)
+
+```
+Adafruit 5366 solar panel
+  -> Voltaic solar extension/interconnect
+  -> Adafruit 4287 adapter
+  -> Adafruit 368 barrel/screw-terminal adapter
+  -> Adafruit 6106 solar/DC input
+
+Adafruit 6106 BQ25185 charger/power-path
+  <-> Adafruit 328 protected 3.7 V / 2500 mAh LiPo
+
+Adafruit 6106 TPS61023 regulated output
+  -> positive output screw terminal to existing Fairway Refresh positive power rail
+  -> ground output screw terminal to existing Fairway Refresh ground rail
+```
+
+The separate Adafruit 6106 protoboard supplies the existing Fairway Refresh power rails. Everything downstream of those rails, including the existing Feather, button, LED, antenna, SIM, Perma-Proto, and electronics wiring, remains the Prototype 1.0 configuration and was left untouched.
+
+Installed component identity and part numbers are owned by `docs/HARDWARE_BOM.md`.
+
+## CPO-Confirmed 6106 LED Behavior
+
+- Green LED near the output screw connector indicates the regulated 5 V output is active.
+- Amber LED near the battery connector indicates battery charging; it illuminates when solar is available and extinguishes when solar is removed.
+- Neither LED was disabled as part of Prototype 1.1. LED power optimization is deferred to later low-power characterization.
+
+## Remaining Physical Detail
+
+The CPO-confirmed Prototype 1.1 wiring above establishes the active field-power path. The following historical Prototype 1.0 component detail remains unspecified and must not be assumed:
+
+- the current physical status of the historical Prototype 1.0 polyfuse and 1000 µF capacitor (retained in place but unused, or physically removed);
+
+## CPO-Confirmed Functional Validation
+
+The following functional validation was performed by the CPO on the assembled Prototype 1.1 device, with the unchanged LP 1.2 validated firmware:
+
+- The device operated successfully from the new solar/LiPo/6106 power architecture and completed a golfer button press through LTE-M/HTTPS, producing a request on the cart operator dashboard.
+- The device operated successfully while solar power was present, with the amber charging LED illuminated.
+- The device transitioned from solar-supported operation to LiPo-only operation without an observed functional interruption.
+- The device completed a Fairway transaction successfully while operating from LiPo power alone.
+
+Detailed validation evidence and remaining characterization scope are recorded in `docs/ENGINEERING_GUIDE.md`.
+
+---
+
 # Notes
 
-This document is the canonical physical assembly record for Prototype 1.0.
+This document is the canonical physical assembly record for Prototype 1.0. The current Prototype 1.1 field-power architecture is recorded in the section above.
