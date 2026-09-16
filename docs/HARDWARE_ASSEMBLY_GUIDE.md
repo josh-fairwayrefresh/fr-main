@@ -26,6 +26,50 @@ The current physical hardware generation is Prototype 1.1, documented in a dedic
 
 # Circuit Dojo nRF9151 Feather Pin Reference
 
+## Feather onboard battery JST evidence
+
+Official Circuit Dojo current hardware evidence verifies the following:
+
+- J4 pad 1 = net 4 `VBAT`
+- J4 pad 2 = net 1 `GND`
+- J1 pad 1 = net 4 `VBAT`
+- J2 pad 4 = GND
+- J4 is the onboard battery connector; it is not a VBUS domain.
+
+This means the new Fairway feed using the onboard JST J4 connector is a physical interconnect refinement to the same VBAT/GND electrical domains as J1/1 and J2/4. The direct official PCB source confirms the shared net relationship and therefore closes the previous vendor-evidence gate for the current design state.
+
+## Approved Current Pilot-Build Architecture
+
+The CPO-approved pilot-build architecture is distinct from the current reference-device hardware evidence:
+
+- LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT
+- 5580 VIN → J2/2 3V3
+- 5580 GND → J2/4 GND
+- 5580 SCL → J1/11 / P0.01 / I2C2 SCL
+- 5580 SDA → J1/12 / P0.02 / I2C2 SDA
+- INT unused
+- QStart unused
+- SJ1 power LED jumper cut for pilot
+- VDD = VCC retained
+- external polyfuse omitted
+- 1000 uF capacitor omitted
+- 220 Ω PV4 LED resistor retained
+- Fairway power feed for new builds uses Adafruit 261 into onboard JST J4 VBAT/GND; J1/3 VBUS remains separate and is not the new Fairway feed
+
+Actual component placement, Perma-Proto geometry, battery mount location, connector orientation, harness routing, and the exact final mechanical layout remain TBD.
+
+## Forthcoming Validation of CPO-Approved Pilot-Build Architecture
+
+The following is forthcoming validation of the CPO-approved 5580/new-build architecture. It does not reopen architecture selection or imply that this validation has already occurred:
+
+- Verify LiPo → 5580 → 6106 continuity and polarity, with no battery-positive-to-ground short.
+- Verify 5580 VIN is tied only to Feather 3V3, and verify SDA/SCL routing and SJ1 cut state.
+- Verify I2C electrical behavior and MAX17048 response at address 0x36.
+- Compare MAX17048 cell voltage with a DMM measurement at the actual LiPo node.
+- Verify solar-present and battery-only operation, including a representative LTE/HTTPS transaction.
+- Verify return to LP1.2 low-power behavior, including incremental dormant-current and automatic-hibernate behavior.
+- Check for abnormal partial-power or back-power behavior throughout the validation.
+
 This table is the canonical Fairway reference for physical Feather header-to-signal/nRF9151 mapping. Current source and DTS own which pins are presently configured, consumed, or reserved by the implementation; physical exposure does not imply availability.
 
 ## J1 - 12-Pin Header
@@ -275,6 +319,8 @@ Observed battery behavior and engineering risks are maintained in:
 # Prototype 1.1 — Solar Power Integration (Current Field-Power Architecture)
 
 Prototype 1.1 is the current physical hardware generation. It replaces the historical Prototype 1.0 AA/VBAT field-power architecture recorded above with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of this hardware generation; the current validated firmware generation remains LP 1.2 as recorded in `docs/FIRMWARE_SPECIFICATION.md`.
+
+This section documents the current reference-device hardware evidence. The CPO-approved pilot-build architecture above remains a separate design-state record for new builds and must not be described as already installed in the current reference unit.
 
 ## Current Field-Power Chain (CPO-Installed and Functionally Validated)
 

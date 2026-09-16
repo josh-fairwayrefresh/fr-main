@@ -93,6 +93,28 @@ Prototype 1.1 is a physical hardware milestone. It is not a firmware generation 
 
 Prototype 1.1 replaces the historical Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed solar / LiPo / Adafruit 6106 field-power architecture. Installed components and part numbers are owned by `docs/HARDWARE_BOM.md`; physical wiring detail is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
+Current vendor evidence closure for the onboard JST power feed:
+
+- Official Circuit Dojo nRF9151 Feather specifications state that battery input supports LiPoly or primary cell and the battery operating range is 2.8–5.5 V.
+- The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to net 4 `VBAT` and J4 pad 2 to net 1 `GND`.
+- The same official PCB source assigns Feather J1 pad 1 to net 4 `VBAT`.
+- Therefore J4 pin 1 = J1/1 = VBAT and J4 pin 2 = common GND. This is not a VBUS domain.
+- The current Fairway measured regulated rail at approximately 5.2–5.3 V is within Circuit Dojo's published 2.8–5.5 V battery-input range.
+- No intervening alternate power-input topology exists between J4 pin 1 and J1/1; both are direct members of the same `VBAT` net on the official PCB.
+
+This evidence closes the previous direct vendor-evidence gate and authorizes the documented J4 VBAT/GND feed refinement to be described as a physical interconnect refinement to the same electrical domains, not as a separate VBUS-connected topology.
+
+The current approved pilot-build hardware architecture is distinct from the current reference device:
+
+- Prototype 1.1 reference device: separate solar / LiPo / 6106 architecture with the historical AA power path removed and the physically validated field-power chain retained in the reference build.
+- Current approved pilot-build architecture for new builds: LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT; 5580 VIN → J2/2 3V3; 5580 GND → J2/4 GND; 5580 SCL → J1/11 / P0.01 / I2C2 SCL; 5580 SDA → J1/12 / P0.02 / I2C2 SDA; INT and QStart unused; SJ1 power LED jumper cut for pilot; VDD=VCC retained; external polyfuse omitted; 1000 uF capacitor omitted; 220 Ω PV4 LED resistor retained.
+- The approved pilot-build power feed uses the existing regulated Fairway rail/common ground into the onboard JST J4 VBAT/GND domain using the Feather's official onboard connector path; J1/1 remains electrically VBAT and J2/4 remains electrically GND.
+- Exact component placement, Perma-Proto geometry, battery mounting, connector orientation, and harness routing remain TBD.
+
+Prototype 1.1 remains the current hardware milestone. The CPO-approved pilot-build architecture is a separate engineering-state record for new builds and must not be described as already installed on the reference unit.
+
+The historical TMUX1101, MAX4544, switched-SAADC/divider, and legacy power-conditioning alternatives remain historical only and are not current alternatives.
+
 CPO-confirmed functional validation for Prototype 1.1:
 
 - The Adafruit 6106 regulated output was measured by the CPO at approximately 5.2–5.3 V unloaded, consistent with expected Adafruit 6106 behavior.
@@ -146,6 +168,8 @@ It also minimizes documentation drift by ensuring updates are made in one locati
 Prototype 1.0 hardware definition is split between two owner documents.
 `docs/HARDWARE_BOM.md` owns the installed hardware components and part numbers.
 `docs/HARDWARE_ASSEMBLY_GUIDE.md` owns Prototype 1.0 physical assembly, wiring, and maintenance power-handling guidance.
+
+The current approved pilot-build hardware architecture is owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as the active design state for new builds, while the current reference-device evidence remains distinct and separate.
 
 ## Circuit Dojo nRF9151 Feather Reference
 

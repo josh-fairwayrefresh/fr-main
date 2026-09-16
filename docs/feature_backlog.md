@@ -23,3 +23,6 @@ Completed features should be removed from this document and incorporated into th
 | 15 | Course analytics dashboard | Aggregate usage trends and demand patterns. |
 | 16 | Finalize golfer button/LED UX before pilot | Revisit and approve the final golfer-facing button feedback sequence, LED meanings/timing, and request-lockout experience before pilot deployment. Current Build A behavior is an accepted engineering placeholder, not final pilot UX. |
 | 17 | Pilot readiness review | Final validation before pilot deployment. |
+| 18 | Pilot-build validation | Validate the CPO-approved 5580 / J4 VBAT-GND architecture, LiPo trend evidence, and end-to-end battery-health behavior on the new build set before any broader rollout. |
+
+Historical alternatives (TMUX1101, MAX4544, switched-SAADC/divider paths) remain archived and are not active backlog items for the current pilot-build architecture.

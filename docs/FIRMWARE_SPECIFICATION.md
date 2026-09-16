@@ -18,6 +18,7 @@ Prototype 1.0 stopped functioning while the battery pack measured approximately 
 Current Implementation
 ----------------------
 - Architecture: single application image managing a compact state machine for user interaction and network operations.
+- Hardware architecture boundary: the current approved pilot-build battery-health architecture (Adafruit 5580 / MAX17048 with the onboard J4 VBAT/GND feed refinement) is a hardware design decision owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`. It does not change the validated LP 1.2 firmware generation or the runtime firmware implementation described in this document.
 - The Circuit Dojo nRF9151 Feather physical header-to-signal/nRF9151 mapping is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`; current source and DTS own implementation pin configuration and consumption.
 - Modem provisioning: current firmware provisions a Cloud Run CA chain into the modem credential store, performs a single LTE connect call on startup, then polls registration status until home or roaming registration is reached.
 - Payload and auth: current firmware sends a minimal JSON payload including `device_id` and `event_type` and sets an `X-Fairway-Device-Key` header for backend authentication.

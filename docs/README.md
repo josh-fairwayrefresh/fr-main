@@ -12,6 +12,7 @@ This document is the starting point for engineering work in Fairway Refresh. It 
 - Historical documents preserve context but are never updated.
 - Keep documentation short, practical, and example-driven.
 - Repository recovery architecture is owned by `docs/ENGINEERING_GUIDE.md`.
+- Current prototype evidence, current pilot-build architecture, and physical-layout TBD status are tracked separately and never conflated.
 
 ## Documentation Hierarchy
 - **Index**: this document and other top-level navigation pages.
@@ -56,6 +57,11 @@ Current:
 - `docs/DEVICE_PROVISIONING_GUIDE.md` — device provisioning lifecycle and registry requirements guide.
 - `docs/feature_backlog.md` — canonical engineering feature backlog.
 - `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
+
+Current-state notes:
+- LP 1.2 remains the validated firmware generation.
+- Prototype 1.1 remains the current validated reference-device hardware milestone.
+- The current pilot-build hardware architecture retains the 5580 battery-health path and the new onboard J4 VBAT/GND feed, while actual physical placement remains TBD.
 
 Planned during documentation migration:
 

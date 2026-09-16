@@ -6,6 +6,46 @@ This document records the hardware installed in the Fairway Refresh prototype ac
 
 Prototype 1.1 is the current physical hardware generation. It replaces the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of this hardware generation; the current validated firmware generation remains LP 1.2 as recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
 
+## Approved Current Pilot-Build Hardware Architecture (New Builds)
+
+This is the current CPO-approved architecture for new Fairway builds. It is the engineering basis for the next build batch and is not a statement that the current reference device is already wired in this exact arrangement.
+
+### Approved power / battery-health path
+
+- LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT
+- 5580 VIN → J2/2 3V3
+- 5580 GND → J2/4 GND
+- 5580 SCL → J1/11 / P0.01 / I2C2 SCL
+- 5580 SDA → J1/12 / P0.02 / I2C2 SDA
+- INT unused
+- QStart unused
+- SJ1 power LED jumper CUT for pilot
+- VDD = VCC retained
+- external polyfuse omitted
+- 1000 uF capacitor omitted
+- 220 Ω PV4 LED resistor retained
+- actual LiPo voltage/trend remains the primary energy-health evidence; SOC is supplementary
+
+### Approved Feath er J4 power feed refinement
+
+The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to net 4 `VBAT` and J4 pad 2 to net 1 `GND`. The same PCB source assigns Feather J1 pad 1 to net 4 `VBAT`, and J2/4 is GND. Therefore the new Fairway feed using Adafruit 261 into the onboard JST J4 VBAT/GND connector is a physical interconnect refinement to the same VBAT/GND domains and is not a VBUS feed.
+
+### Locked BOM basis for pilot builds
+
+| Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
+|---|---|---|---|---|
+| LiPo fuel gauge | Adafruit | 5580 / MAX17048 | Adafruit | Direct LiPo voltage and fuel-gauge sensing for Device Health; electrically between the protected LiPo and the Adafruit 6106 battery input through the approved JST path. Actual LiPo voltage/trend is the primary operational metric; SOC is supplementary. |
+| Feather female headers | Adafruit | 2940 | Adafruit | Short female headers for the board build. |
+| Feather male breakaway headers | Adafruit | 3009 | Adafruit | Short male breakaway headers. |
+| Feather JST power pigtail | Adafruit | 261 | Adafruit | Used for the onboard J4 VBAT/GND feed. |
+| 5580 → 6106 battery jumper | Adafruit | 4714 | Adafruit | Current approved battery jumper. |
+
+The canonical engineering BOM basis is the approved pilot-build configuration above. Inventory quantities, procurement status, and cost are intentionally not duplicated in canonical engineering truth unless a BOM owner requires those fields.
+
+### Retained historical field-power evidence
+
+The current reference device remains a separate physical evidence record and is not redefined as the new-build architecture. The current reference device was functionally validated with solar / LiPo / Adafruit 6106 field power, and the physical placement and mounting details remain TBD.
+
 ### Retained from Prototype 1.0 (CPO-confirmed installed and functioning)
 
 | Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
@@ -43,6 +83,14 @@ Prototype 1.1 is the current physical hardware generation. It replaces the Proto
 - The historical Prototype 1.0 polyfuse (Littelfuse RUEF075HF-ND) and 1000 µF capacitor (Panasonic EEU-FR1A102) were present during the original successful Prototype 1.1 solar/LiPo/LTE validation. This is CPO-confirmed physical-device evidence.
 - The 1000 µF capacitor was subsequently electrically disconnected for CPO-performed functional validation. The Prototype 1.1 reference device successfully completed normal Fairway cellular transactions without it. The CPO accepted this functional result as sufficient to omit the capacitor from the five-new-board architecture; it is not detailed electrical transient characterization.
 - No additional external polyfuse or 1000 µF capacitor is required for the five new boards.
+
+### Historical alternatives retained only as history
+
+- TMUX1101
+- MAX4544
+- switched-SAADC/divider approaches
+
+These are historical alternatives and are not current alternatives for the approved pilot-build architecture.
 
 ## Prototype 1.0 (Historical, First Build, Pre-Pilot)
 
