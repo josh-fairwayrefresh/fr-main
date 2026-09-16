@@ -66,8 +66,9 @@ Not yet established by this milestone (deferred to later characterization / Devi
 - battery sag under LTE load;
 - behavior across battery state-of-charge and solar irradiance/temperature conditions;
 - long-duration reliability and exact runtime/autonomy;
-- whether additional bulk capacitance is required;
 - Device Health battery-voltage telemetry and watchdog/recovery behavior.
+
+The historical 1000 uF bulk capacitor was present during the original Prototype 1.1 solar/LiPo/LTE validation, then electrically disconnected for a CPO-performed functional validation. The device successfully completed normal Fairway cellular transactions without it. The CPO accepted that functional result as sufficient to omit the capacitor from the five-new-board architecture. This does not establish detailed electrical transient characteristics, conversion efficiency, or long-duration reliability.
 
 The historical LP 1.2 approximately 23.25 uA dormant-current measurement remains a whole-device measurement at the previously accepted 5.0 V boundary with AA batteries and USB disconnected; it is not reinterpreted as a measurement of the Prototype 1.1 solar/LiPo/6106 system.
 

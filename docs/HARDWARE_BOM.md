@@ -40,8 +40,9 @@ Prototype 1.1 is the current physical hardware generation. It replaces the Proto
 
 ### Retained Historical Power-Conditioning Components in the Prototype 1.1 Reference Device
 
-- The historical Prototype 1.0 polyfuse (Littelfuse RUEF075HF-ND) and 1000 µF capacitor (Panasonic EEU-FR1A102) remain installed and active in the existing validated Prototype 1.1 reference device. This is CPO-confirmed physical-device evidence. Prototype 1.1 solar/LiPo/LTE validation therefore occurred with both components installed.
-- This reference-device state does not prescribe the five-new-board design: no additional external polyfuse is required for those boards, while the 1000 µF capacitor remains pending controlled A/B validation.
+- The historical Prototype 1.0 polyfuse (Littelfuse RUEF075HF-ND) and 1000 µF capacitor (Panasonic EEU-FR1A102) were present during the original successful Prototype 1.1 solar/LiPo/LTE validation. This is CPO-confirmed physical-device evidence.
+- The 1000 µF capacitor was subsequently electrically disconnected for CPO-performed functional validation. The Prototype 1.1 reference device successfully completed normal Fairway cellular transactions without it. The CPO accepted this functional result as sufficient to omit the capacitor from the five-new-board architecture; it is not detailed electrical transient characterization.
+- No additional external polyfuse or 1000 µF capacitor is required for the five new boards.
 
 ## Prototype 1.0 (Historical, First Build, Pre-Pilot)
 

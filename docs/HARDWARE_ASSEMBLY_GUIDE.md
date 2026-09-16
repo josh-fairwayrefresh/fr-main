@@ -261,9 +261,9 @@ Installed component identity and part numbers are owned by `docs/HARDWARE_BOM.md
 
 ## Retained Historical Power Conditioning in the Prototype 1.1 Reference Device
 
-The CPO confirmed that the historical Prototype 1.0 polyfuse and 1000 µF capacitor were not removed when the Adafruit 6106 output was connected to the existing Fairway positive and ground rails. Both remain installed and active in the validated Prototype 1.1 reference device, and the successful solar/LiPo/LTE validation occurred with both components present.
+The CPO confirmed that the historical Prototype 1.0 polyfuse and 1000 µF capacitor were not removed when the Adafruit 6106 output was connected to the existing Fairway positive and ground rails. Both were present during the original successful Prototype 1.1 solar/LiPo/LTE validation.
 
-Their presence in the reference device does not prescribe the five-new-board design. No additional external polyfuse is required for those boards. Whether the 1000 µF capacitor is required remains pending controlled A/B validation.
+The 1000 µF capacitor was subsequently electrically disconnected for CPO-performed functional validation. The Prototype 1.1 reference device successfully completed normal Fairway cellular transactions without it. The CPO accepted this functional result as sufficient to omit the capacitor from the five-new-board architecture; it is not detailed electrical transient characterization. No additional external polyfuse or 1000 µF capacitor is required for those boards.
 
 ## CPO-Confirmed Functional Validation
 
