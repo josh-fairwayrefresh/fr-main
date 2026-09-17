@@ -6,7 +6,7 @@ find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(blinky)
 
 if(CONFIG_BOARD_CIRCUITDOJO_FEATHER_NRF9151)
-    target_sources(app PRIVATE src/main.c)
+    target_sources(app PRIVATE src/main.c src/health_temperature.c)
 else()
     message(FATAL_ERROR "Fairway requires circuitdojo_feather_nrf9151")
 endif()

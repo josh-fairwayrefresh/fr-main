@@ -43,11 +43,15 @@
 #include <stdio.h>
 #include <modem/nrf_modem_lib.h>
 #include <modem/lte_lc.h>
+#include <modem/modem_info.h>
 #include <zephyr/net/socket.h>
 #include <string.h>
+#include <errno.h>
+#include <stdint.h>
 #include <modem/modem_key_mgmt.h>
 #include <zephyr/net/tls_credentials.h>
 #include "secrets/fairway_device_key.h"
+#include "health_temperature.h"
 
 LOG_MODULE_REGISTER(main);
 static int send_https_test(int64_t attempt_deadline_ms);
@@ -107,6 +111,34 @@ static struct gpio_callback button_cb;
 static struct gpio_callback vbus_cb;
 static K_SEM_DEFINE(wake_sem, 0, 1);
 
+struct health_cellular_snapshot {
+	bool registration_valid;
+	enum lte_lc_nw_reg_status registration_state;
+	bool https_result_valid;
+	bool https_succeeded;
+	bool http_status_valid;
+	int http_status;
+	uint8_t transaction_attempts;
+	struct health_temperature_sample temperature;
+	bool conn_eval_valid;
+	int conn_eval_error;
+	bool rsrp_valid;
+	int rsrp_dbm;
+	bool rsrq_valid;
+	int rsrq_db;
+	bool snr_valid;
+	int snr_db;
+	bool serving_cell_valid;
+	uint32_t serving_cell_id;
+	bool serving_band_valid;
+	int serving_band;
+	bool psm_valid;
+	int psm_tau_s;
+	int psm_active_time_s;
+};
+
+static struct health_cellular_snapshot health_snapshot;
+
 static void button_pressed_cb(const struct device *dev, struct gpio_callback *cb,
 			     uint32_t pins)
 {
@@ -138,6 +170,9 @@ static void lte_diag_evt_handler(const struct lte_lc_evt *const evt)
 {
 	switch (evt->type) {
 	case LTE_LC_EVT_PSM_UPDATE:
+		health_snapshot.psm_valid = true;
+		health_snapshot.psm_tau_s = evt->psm_cfg.tau;
+		health_snapshot.psm_active_time_s = evt->psm_cfg.active_time;
 		LOG_INF("PSM granted: TAU=%d s, active_time=%d s",
 			evt->psm_cfg.tau, evt->psm_cfg.active_time);
 		break;
@@ -357,6 +392,8 @@ static int send_fairway_request(int64_t attempt_deadline_ms)
 	LOG_INF("Fairway HTTPS request send started");
 
 	ret = send_https_test(attempt_deadline_ms);
+	health_snapshot.https_result_valid = true;
+	health_snapshot.https_succeeded = (ret == 0);
 	if (ret) {
 		LOG_ERR("Fairway HTTPS request send failed: %d", ret);
 		return ret;
@@ -370,11 +407,55 @@ static int send_fairway_request(int64_t attempt_deadline_ms)
 static void run_request_flow(void)
 {
 	int ret = -ETIMEDOUT;
+	struct lte_lc_conn_eval_params conn_eval = {0};
+	int temperature_ret;
+
+	health_snapshot = (struct health_cellular_snapshot){
+		.registration_valid = health_snapshot.registration_valid,
+		.registration_state = health_snapshot.registration_state,
+		.psm_valid = health_snapshot.psm_valid,
+		.psm_tau_s = health_snapshot.psm_tau_s,
+		.psm_active_time_s = health_snapshot.psm_active_time_s,
+	};
+
+	temperature_ret = health_temperature_read(&health_snapshot.temperature);
+	if (temperature_ret) {
+		LOG_WRN("Device temperature unavailable: %d", temperature_ret);
+	}
+
+	ret = lte_lc_conn_eval_params_get(&conn_eval);
+	health_snapshot.conn_eval_error = ret;
+	if (ret == 0) {
+		health_snapshot.conn_eval_valid = true;
+		if (conn_eval.rsrp != LTE_LC_CELL_RSRP_INVALID) {
+			health_snapshot.rsrp_valid = true;
+			health_snapshot.rsrp_dbm = RSRP_IDX_TO_DBM(conn_eval.rsrp);
+		}
+		if (conn_eval.rsrq != LTE_LC_CELL_RSRQ_INVALID) {
+			health_snapshot.rsrq_valid = true;
+			health_snapshot.rsrq_db = RSRQ_IDX_TO_DB(conn_eval.rsrq);
+		}
+		if (conn_eval.snr != 127) {
+			health_snapshot.snr_valid = true;
+			health_snapshot.snr_db = SNR_IDX_TO_DB(conn_eval.snr);
+		}
+		if (conn_eval.cell_id != 0) {
+			health_snapshot.serving_cell_valid = true;
+			health_snapshot.serving_cell_id = conn_eval.cell_id;
+		}
+		if (conn_eval.band != 0) {
+			health_snapshot.serving_band_valid = true;
+			health_snapshot.serving_band = conn_eval.band;
+		}
+	} else {
+		LOG_WRN("Connection evaluation unavailable: %d", ret);
+	}
 
 	set_state(STATE_TRANSMITTING);
 	show_transmitting_feedback();
 
 	for (size_t attempt = 0; attempt < REQUEST_MAX_ATTEMPTS; attempt++) {
+		health_snapshot.transaction_attempts = attempt + 1;
 		int64_t now_ms = k_uptime_get();
 		int64_t attempts_remaining = REQUEST_MAX_ATTEMPTS - attempt;
 		int64_t reserved_for_later =
@@ -400,6 +481,19 @@ static void run_request_flow(void)
 		set_state(STATE_FAILURE);
 		show_failure_feedback();
 	}
+
+	LOG_INF("Health snapshot: attempts=%u https=%d http=%d temp_valid=%d temp_mC=%d conn_eval=%d rsrp=%d rsrq=%d snr=%d cell=%u band=%d",
+		health_snapshot.transaction_attempts,
+		health_snapshot.https_succeeded,
+		health_snapshot.http_status,
+		health_snapshot.temperature.valid,
+		health_snapshot.temperature.temp_mC,
+		health_snapshot.conn_eval_valid,
+			(int32_t)(health_snapshot.rsrp_valid ? health_snapshot.rsrp_dbm : INT32_MIN),
+			(int32_t)(health_snapshot.rsrq_valid ? health_snapshot.rsrq_db : INT32_MIN),
+			(int32_t)(health_snapshot.snr_valid ? health_snapshot.snr_db : INT32_MIN),
+		health_snapshot.serving_cell_valid ? health_snapshot.serving_cell_id : 0,
+		health_snapshot.serving_band_valid ? health_snapshot.serving_band : 0);
 
 	set_state(STATE_IDLE);
 	ring_off();
@@ -436,6 +530,9 @@ static int wait_for_lte_registration(void)
 			LOG_ERR("lte_lc_nw_reg_status_get failed: %d", ret);
 			return ret;
 		}
+
+		health_snapshot.registration_valid = true;
+		health_snapshot.registration_state = status;
 
 		if (status == LTE_LC_NW_REG_REGISTERED_HOME) {
 			LOG_INF("LTE registered: home network");
@@ -661,7 +758,10 @@ if (request_len < 0 || request_len >= sizeof(request)) {
 	LOG_INF("HTTPS response preview: %.80s", recv_buf);
 
 	int http_status = 0;
-	if (sscanf(recv_buf, "HTTP/%*u.%*u %d", &http_status) != 1 ||
+	health_snapshot.http_status_valid =
+		sscanf(recv_buf, "HTTP/%*u.%*u %d", &http_status) == 1;
+	health_snapshot.http_status = http_status;
+	if (!health_snapshot.http_status_valid ||
 	    http_status < 200 || http_status >= 300) {
 		zsock_close(fd);
 		zsock_freeaddrinfo(res);
