@@ -46,6 +46,10 @@ The canonical engineering BOM basis is the approved pilot-build configuration ab
 
 The current reference device remains a separate physical evidence record and is not redefined as the new-build architecture. The current reference device was functionally validated with solar / LiPo / Adafruit 6106 field power, and the physical placement and mounting details remain TBD.
 
+### Reference-Device Battery-Health Update
+
+The Adafruit 5580 / MAX17048 fuel gauge is now physically installed and wired on the current reference device, using the approved wiring: VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11, SDA → J1/12. I2C communication and battery-voltage acquisition were validated live on this reference device; see `docs/FIRMWARE_SPECIFICATION.md` for the validated Device Health result and `docs/HARDWARE_ASSEMBLY_GUIDE.md` for the wiring/validation record. Component placement, Perma-Proto geometry, and final mechanical layout remain TBD, as previously recorded.
+
 ### Retained from Prototype 1.0 (CPO-confirmed installed and functioning)
 
 | Component | Manufacturer | Manufacturer Part # | Supplier | Notes |

@@ -58,14 +58,19 @@ The CPO-approved pilot-build architecture is distinct from the current reference
 
 Actual component placement, Perma-Proto geometry, battery mount location, connector orientation, harness routing, and the exact final mechanical layout remain TBD.
 
-## Forthcoming Validation of CPO-Approved Pilot-Build Architecture
+## Validation of CPO-Approved Pilot-Build Architecture
 
-The following is forthcoming validation of the CPO-approved 5580/new-build architecture. It does not reopen architecture selection or imply that this validation has already occurred:
+Validated:
+
+- I2C electrical behavior and MAX17048 response at address 0x36: confirmed live through the existing Device Health snapshot, with the 5580 wired as VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11 / P0.01, SDA → J1/12 / P0.02.
+- MAX17048 cell voltage compared with a DMM measurement at the actual LiPo node: MAX17048 reported 4.0125 V; CPO DMM measurement at the LiPo node was approximately 4.0 V; difference approximately 12.5 mV (approximately 0.31%). The CPO accepted this as adequate out-of-box battery-voltage calibration for the prototype. This validates voltage acquisition only; it does not establish long-term SOC model accuracy.
+
+Physical assembly lesson: Feather header references (for example J1/11, J1/12) and Perma-Proto board coordinates are separate coordinate systems and must not be conflated. An earlier I2C communication failure was traced to SCL/SDA being physically landed on incorrect Perma-Proto positions while intending to reference J1/11 and J1/12; correcting the physical landing resolved the failure.
+
+Remaining forthcoming validation of the CPO-approved 5580/new-build architecture:
 
 - Verify LiPo → 5580 → 6106 continuity and polarity, with no battery-positive-to-ground short.
-- Verify 5580 VIN is tied only to Feather 3V3, and verify SDA/SCL routing and SJ1 cut state.
-- Verify I2C electrical behavior and MAX17048 response at address 0x36.
-- Compare MAX17048 cell voltage with a DMM measurement at the actual LiPo node.
+- Verify 5580 VIN is tied only to Feather 3V3, and verify SJ1 cut state.
 - Verify solar-present and battery-only operation, including a representative LTE/HTTPS transaction.
 - Verify return to LP1.2 low-power behavior, including incremental dormant-current and automatic-hibernate behavior.
 - Check for abnormal partial-power or back-power behavior throughout the validation.

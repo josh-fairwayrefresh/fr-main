@@ -96,6 +96,11 @@
 		irq-gpios = <&gpio0 19 GPIO_ACTIVE_HIGH>, <&gpio0 12 GPIO_ACTIVE_HIGH>;
 	};
 
+	max17048: max17048@36 {
+		compatible = "maxim,max17048";
+		reg = <0x36>;
+	};
+
 	npm1300_pmic: pmic@6b {
 		compatible = "nordic,npm1300";
 		host-int-gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;

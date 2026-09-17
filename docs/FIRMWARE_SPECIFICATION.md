@@ -93,6 +93,14 @@ USB/VBUS Service-Awake Behavior (Validated)
 - This is a service/development-mode behavior only. Field/dormant behavior when USB/VBUS is absent is unchanged: the CPU may enter WFI, the modem may use PSM, and BUCK2 follows the existing field policy described above.
 - Direct hardware validation (commit `c720f8069b514d28c97bf80c47b9e4b39399a0eb` on sprint branch `sprint/device-reliability`) confirmed: VBUS detected at boot, the keeper enabled, PSM withdrawn, normal STATE_IDLE reached with no false button/request event, and ordinary probe-rs access remained available after two separate approximately 5-minute USB-connected intervals with no recovery workaround required. This validates the prevention behavior across the tested interval; it does not establish multi-hour/day debug-session reliability, and it does not establish that every historical AP-access loss was caused by Errata 36.
 
+Device Health Diagnostics (Validated)
+--------------------------------------
+- The existing request-flow health snapshot captures, per attempt: registration state, HTTPS result, HTTP status, transaction attempt count, modem internal temperature, LTE connection-evaluation results (RSRP, RSRQ, SNR, serving cell ID, serving band), and PSM context where available.
+- Battery-health acquisition uses the native NCS 3.1.1 fuel-gauge API (`fuel_gauge_get_props()`) against the installed Adafruit 5580 / MAX17048 on I2C2 at address 0x36, requesting `FUEL_GAUGE_VOLTAGE` and `FUEL_GAUGE_RELATIVE_STATE_OF_CHARGE`. Battery voltage is the primary battery-health measurement; SOC is supplementary.
+- Direct hardware validation on the reference device confirmed live acquisition of all current Device Health fields in a single snapshot, including modem internal temperature, RSRP, RSRQ, SNR, serving cell ID, serving band, registration/HTTP/attempt tracking, and battery voltage/SOC.
+- Battery-voltage validation: the MAX17048 reported 4.0125 V; a CPO DMM measurement directly at the LiPo node was approximately 4.0 V; the difference was approximately 12.5 mV (approximately 0.31%), accepted by the CPO as adequate out-of-box battery-voltage calibration for the prototype. This validates voltage acquisition only; SOC accuracy has not been independently calibrated, and long-term SOC model behavior has not been validated.
+- This diagnostics work does not yet include persistence, backend transmission, or an admin-facing view; the snapshot is currently logged locally only.
+
 FUTURE ARCHITECTURAL OPTION
 - A substantially deeper application-core power architecture could be investigated using nRF9151 System OFF / power-off behavior. Conceptually, the possible future path is `running -> System OFF -> wake event -> reset/reboot -> initialize -> resume Fairway service`.
 - System OFF is not approved for implementation. The current product architecture intentionally retains WFI/resume-in-place behavior: `running -> WFI -> button interrupt -> resume execution`.

@@ -37,6 +37,7 @@
 #include <zephyr/drivers/regulator.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/sensor/npm13xx_charger.h>
+#include <zephyr/drivers/fuel_gauge.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
 #include <stdbool.h>
@@ -62,6 +63,7 @@ static const struct device *i2c2_dev = DEVICE_DT_GET(DT_NODELABEL(i2c2));
 static const struct device *npm1300_pmic_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_pmic));
 static const struct device *npm1300_charger_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_charger));
 static const struct device *buck2_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_buck2));
+static const struct device *max17048_dev = DEVICE_DT_GET(DT_NODELABEL(max17048));
 
 #define BUTTON_PIN    31
 #define RING_LED_PIN  30
@@ -182,9 +184,37 @@ struct health_cellular_snapshot {
 	bool psm_valid;
 	int psm_tau_s;
 	int psm_active_time_s;
+	bool battery_valid;
+	int battery_voltage_uV;
+	uint8_t battery_soc_pct;
 };
 
 static struct health_cellular_snapshot health_snapshot;
+
+/* Reads the installed Adafruit 5580 / MAX17048 via the native NCS fuel-gauge
+ * API into the Device Health snapshot. Leaves battery_valid false on any
+ * failure rather than reporting a stale or invented value.
+ */
+static void health_battery_read(void)
+{
+	if (!device_is_ready(max17048_dev)) {
+		return;
+	}
+
+	fuel_gauge_prop_t props[] = {
+		FUEL_GAUGE_VOLTAGE,
+		FUEL_GAUGE_RELATIVE_STATE_OF_CHARGE,
+	};
+	union fuel_gauge_prop_val vals[ARRAY_SIZE(props)];
+
+	if (fuel_gauge_get_props(max17048_dev, props, vals, ARRAY_SIZE(props)) < 0) {
+		return;
+	}
+
+	health_snapshot.battery_valid = true;
+	health_snapshot.battery_voltage_uV = vals[0].voltage;
+	health_snapshot.battery_soc_pct = vals[1].relative_state_of_charge;
+}
 
 static void button_pressed_cb(const struct device *dev, struct gpio_callback *cb,
 			     uint32_t pins)
@@ -500,6 +530,8 @@ static void run_request_flow(void)
 		LOG_WRN("Device temperature unavailable: %d", temperature_ret);
 	}
 
+	health_battery_read();
+
 	ret = lte_lc_conn_eval_params_get(&conn_eval);
 	health_snapshot.conn_eval_error = ret;
 	if (ret == 0) {
@@ -559,7 +591,7 @@ static void run_request_flow(void)
 		show_failure_feedback();
 	}
 
-	LOG_INF("Health snapshot: attempts=%u https=%d http=%d temp_valid=%d temp_mC=%d conn_eval=%d rsrp=%d rsrq=%d snr=%d cell=%u band=%d",
+	LOG_INF("Health snapshot: attempts=%u https=%d http=%d temp_valid=%d temp_mC=%d conn_eval=%d rsrp=%d rsrq=%d snr=%d cell=%u band=%d batt_valid=%d batt_uV=%d batt_soc=%u",
 		health_snapshot.transaction_attempts,
 		health_snapshot.https_succeeded,
 		health_snapshot.http_status,
@@ -570,7 +602,10 @@ static void run_request_flow(void)
 			(int32_t)(health_snapshot.rsrq_valid ? health_snapshot.rsrq_db : INT32_MIN),
 			(int32_t)(health_snapshot.snr_valid ? health_snapshot.snr_db : INT32_MIN),
 		health_snapshot.serving_cell_valid ? health_snapshot.serving_cell_id : 0,
-		health_snapshot.serving_band_valid ? health_snapshot.serving_band : 0);
+		health_snapshot.serving_band_valid ? health_snapshot.serving_band : 0,
+		health_snapshot.battery_valid,
+		health_snapshot.battery_valid ? health_snapshot.battery_voltage_uV : 0,
+		health_snapshot.battery_valid ? health_snapshot.battery_soc_pct : 0U);
 
 	set_state(STATE_IDLE);
 	ring_off();
