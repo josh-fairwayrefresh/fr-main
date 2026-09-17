@@ -111,6 +111,53 @@ static struct gpio_callback button_cb;
 static struct gpio_callback vbus_cb;
 static K_SEM_DEFINE(wake_sem, 0, 1);
 
+/* USB/VBUS service hold: reuses the existing GPIO wake path to keep the
+ * device out of its normal field WFI/PSM idle policy for as long as VBUS
+ * remains present. Set only from configure_buck2_power_policy() (boot) and
+ * vbus_event_callback() (runtime); read from low_power_idle() and configure_psm().
+ */
+static volatile bool vbus_hold_active;
+/* Guards PSM API calls from vbus_event_callback() until the modem is ready. */
+static volatile bool modem_ready;
+
+/* Global service-awake keeper: the lowest-priority application thread,
+ * strictly above K_IDLE_PRIO, that stays continuously runnable while VBUS
+ * is present so Zephyr can never select the idle thread and execute WFI,
+ * regardless of what any other thread (application or vendor LTE/modem
+ * code) is doing. Any higher-priority thread still preempts it normally.
+ */
+static K_SEM_DEFINE(keeper_sem, 0, 1);
+
+static void service_awake_keeper_entry(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	while (1) {
+		k_sem_take(&keeper_sem, K_FOREVER);
+
+		while (vbus_hold_active) {
+			k_yield();
+		}
+	}
+}
+
+K_THREAD_DEFINE(service_awake_keeper, 512, service_awake_keeper_entry, NULL, NULL, NULL,
+		K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
+
+static void set_vbus_hold(bool active)
+{
+	vbus_hold_active = active;
+
+	if (active) {
+		LOG_INF("SERVICE_AWAKE: keeper enabled");
+		k_sem_give(&keeper_sem);
+	} else {
+		LOG_INF("SERVICE_AWAKE: keeper disabled");
+	}
+}
+
 struct health_cellular_snapshot {
 	bool registration_valid;
 	enum lte_lc_nw_reg_status registration_state;
@@ -189,6 +236,26 @@ static void lte_diag_evt_handler(const struct lte_lc_evt *const evt)
 }
 #endif /* CONFIG_LTE_LC_MODEM_SLEEP_MODULE */
 
+/* Shared with vbus_event_callback() so VBUS insertion/removal reuses the
+ * exact same PSM request API as the existing field policy, instead of a
+ * new modem architecture.
+ */
+static void set_modem_psm_requested(bool requested)
+{
+	int ret = lte_lc_psm_req(requested);
+
+	if (ret) {
+		LOG_ERR("lte_lc_psm_req(%d) failed: %d", requested, ret);
+		return;
+	}
+
+	if (requested) {
+		LOG_INF("PSM requested: RPTAU=default, RAT=0 s");
+	} else {
+		LOG_INF("PSM request withdrawn: VBUS service hold active");
+	}
+}
+
 static void configure_psm(void)
 {
 	int ret;
@@ -199,13 +266,7 @@ static void configure_psm(void)
 		return;
 	}
 
-	ret = lte_lc_psm_req(true);
-	if (ret) {
-		LOG_ERR("lte_lc_psm_req(true) failed: %d", ret);
-		return;
-	}
-
-	LOG_INF("PSM configured: RPTAU=default, RAT=0 s");
+	set_modem_psm_requested(!vbus_hold_active);
 }
 
 static void low_power_idle(void)
@@ -260,14 +321,26 @@ static void vbus_event_callback(const struct device *dev, struct gpio_callback *
 	ARG_UNUSED(cb);
 
 	if ((pins & BIT(NPM13XX_EVENT_VBUS_DETECTED)) != 0U) {
+		set_vbus_hold(true);
+
 		if (apply_buck2_power_policy(true) < 0) {
 			LOG_ERR("BUCK2 enable after VBUS detection failed");
+		}
+
+		if (modem_ready) {
+			set_modem_psm_requested(false);
 		}
 	}
 
 	if ((pins & BIT(NPM13XX_EVENT_VBUS_REMOVED)) != 0U) {
+		set_vbus_hold(false);
+
 		if (apply_buck2_power_policy(false) < 0) {
 			LOG_ERR("BUCK2 disable after VBUS removal failed");
+		}
+
+		if (modem_ready) {
+			set_modem_psm_requested(true);
 		}
 	}
 }
@@ -294,7 +367,11 @@ static int configure_buck2_power_policy(void)
 		return ret;
 	}
 
-	return apply_buck2_power_policy(vbus_present.val1 != 0);
+	LOG_INF("VBUS_HOLD: active=%d at boot", vbus_present.val1 != 0);
+
+	set_vbus_hold(vbus_present.val1 != 0);
+
+	return apply_buck2_power_policy(vbus_hold_active);
 }
 
 static void ring_on(void)
@@ -816,6 +893,7 @@ int main(void)
 		LOG_ERR("Modem library init failed: %d", ret);
 	} else {
 		LOG_INF("Modem library init succeeded");
+		modem_ready = true;
 
 #if defined(CONFIG_LTE_LC_MODEM_SLEEP_MODULE)
 		lte_lc_register_handler(lte_diag_evt_handler);
