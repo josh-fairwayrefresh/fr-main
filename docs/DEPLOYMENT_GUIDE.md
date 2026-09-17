@@ -120,7 +120,30 @@ Create a clean workspace directory, then clone the Fairway recovery repository i
 git clone https://github.com/josh-fairwayrefresh/fr-main.git <workspace>/nfed
 ```
 
-Using a terminal configured with the installed NCS v3.1.1 toolchain environment, build directly against the installed NCS v3.1.1 SDK directory (`<ncs-install-dir>`), passing `<workspace>/nfed` as an explicit board root:
+Before building, activate or otherwise configure the Nordic-installed toolchain environment that matches the approved NCS SDK, then verify the shell before invoking West. The durable requirement is the matching Nordic-installed toolchain environment for the approved NCS version; the toolchain bundle identifier is installation evidence, not a permanent Fairway architecture constant.
+
+For the current validated local installation, the mapping is:
+
+```sh
+NCS_INSTALL_DIR=/opt/nordic/ncs/v3.1.1
+NCS_TOOLCHAIN_DIR=/opt/nordic/ncs/toolchains/561dce9adf
+
+export PATH="$NCS_TOOLCHAIN_DIR/bin:$NCS_TOOLCHAIN_DIR/usr/bin:$NCS_TOOLCHAIN_DIR/usr/local/bin:$NCS_TOOLCHAIN_DIR/opt/bin:$NCS_TOOLCHAIN_DIR/nrfutil/bin:$NCS_TOOLCHAIN_DIR/opt/zephyr-sdk/arm-zephyr-eabi/bin:$NCS_TOOLCHAIN_DIR/opt/zephyr-sdk/riscv64-zephyr-elf/bin:$PATH"
+export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+export ZEPHYR_SDK_INSTALL_DIR="$NCS_TOOLCHAIN_DIR/opt/zephyr-sdk"
+
+command -v west
+west --version
+grep -E 'EXTRAVERSION|VERSION_MAJOR|VERSION_MINOR' "$NCS_INSTALL_DIR/nrf/VERSION"
+test -x "$NCS_TOOLCHAIN_DIR/bin/python"
+test -x "$NCS_TOOLCHAIN_DIR/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc"
+```
+
+The verification must show that `west` resolves from the Nordic-installed environment, `west --version` succeeds, the SDK is NCS v3.1.1, and the selected toolchain is the one installed for that SDK. If `west` is not on `PATH`, activate or configure the matching Nordic-installed environment and repeat these checks. Do not search for or create a Fairway-owned West workspace, run `west init`/`west update` to reconstruct one, or create a second SDK workspace.
+
+The current local evidence above used NCS v3.1.1 with Nordic toolchain bundle `561dce9adf` and West 1.4.0. A future SDK Manager installation or update may use a different bundle identifier; that does not change the requirement to use the matching Nordic-installed toolchain environment.
+
+With the environment verified, build directly against the installed NCS v3.1.1 SDK directory (`<ncs-install-dir>`), passing `<workspace>/nfed` as an explicit board root:
 
 ```sh
 cd <ncs-install-dir>
