@@ -216,17 +216,17 @@ For the validated field/measurement path:
 
 The accepted production field dormant-current result and its implementation context are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
-### USB / PPK2 Switchover Observation
+### USB/VBUS Service-Mode Debug-Lock Prevention and Exceptional Recovery
 
-During development, the device has occasionally entered a locked state while physically switching between USB power/service connection and PPK2 field/measurement connection.
+The current accepted engineering strategy is prevention, not recovery. The implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`: the reference nRF9151 device is within the silicon family covered by Nordic Errata 36, and Fairway firmware keeps the application CPU out of Zephyr idle/WFI for as long as USB/VBUS is present. This was directly validated to preserve ordinary probe-rs access across the tested service interval. Ordinary Fairway flashing remains the normal `probe-rs download` procedure above; no separate recovery architecture is part of normal development workflow.
 
-The specific cause has not been determined. The occurrence may be related to the physical power, cable, or reset sequence used during the switchover.
+If a development reference Feather nevertheless becomes AP-inaccessible despite this prevention, destructive erase-all is an exceptional, manually authorized recovery action only, using the currently established command:
 
-If the device becomes locked, the condition can be confirmed from the terminal using `recovery --verify`. Recovery is straightforward: perform the established erase-all/unlock recovery procedure with `recovery --unlock-only` and then re-flash the approved firmware.
+```sh
+~/.zephyrtools/recovery/recovery --unlock-only
+```
 
-Determining which part of the physical USB/PPK2 switchover sequence causes this behavior is not currently a priority because the condition is easily recoverable and does not affect normal field operation.
-
-Revisit this issue only if it becomes frequent, difficult to recover from, or materially interferes with development or deployment.
+This command is destructive and requires explicit authorization before use. After an authorized erase-all, normal Fairway flashing and provisioning is required to restore the device.
 
 ---
 

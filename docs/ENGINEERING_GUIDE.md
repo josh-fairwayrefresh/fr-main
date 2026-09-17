@@ -212,6 +212,8 @@ The current nRF9151 board runner configuration is maintained in
 `boards/circuitdojo/feather_nrf9151/board.cmake`.
 The pyOCD runner target is `nrf91`, and the probe-rs target is `nRF9151_xxAA`.
 
+USB/VBUS service-mode debug-access loss on Errata-36-family reference silicon has been resolved through a validated CPU-awake prevention strategy while USB/VBUS is present. Implementation detail is owned by `docs/FIRMWARE_SPECIFICATION.md`; the exceptional destructive recovery procedure is owned by `docs/DEPLOYMENT_GUIDE.md`.
+
 ## 8. Troubleshooting Sequence
 
 1. Verify power.
