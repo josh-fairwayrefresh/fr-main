@@ -185,21 +185,7 @@ Successful programming is indicated by probe-rs completing erase and programming
 probe-rs reset --chip nRF9151_xxAA
 ```
 
-### Recovery and Debug-Lock Operations
-
-Debug-lock inspection is separate from normal deployment:
-
-```sh
-recovery --verify
-```
-
-This is a non-destructive diagnostic check. A destructive unlock/erase operation must be separately authorized and is not a normal flash prerequisite:
-
-```sh
-recovery --unlock-only
-```
-
-After an authorized unlock, verify the device reports unlocked before proceeding. Recovery does not replace the normal probe-rs programming procedure.
+Debug-access recovery for this procedure (including the non-destructive service-entry response and the exceptional destructive erase-all) is owned by the "USB/VBUS Service-Mode Debug-Lock Prevention and Exceptional Recovery" section below; there is no separate normal recovery-diagnostic step as part of ordinary flashing.
 
 ### Manual Validation
 
@@ -220,7 +206,20 @@ The accepted production field dormant-current result and its implementation cont
 
 The current accepted engineering strategy is prevention, not recovery. The implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`: the reference nRF9151 device is within the silicon family covered by Nordic Errata 36, and Fairway firmware keeps the application CPU out of Zephyr idle/WFI for as long as USB/VBUS is present. This was directly validated to preserve ordinary probe-rs access across the tested service interval. Ordinary Fairway flashing remains the normal `probe-rs download` procedure above; no separate recovery architecture is part of normal development workflow.
 
-If a development reference Feather nevertheless becomes AP-inaccessible despite this prevention, destructive erase-all is an exceptional, manually authorized recovery action only, using the currently established command:
+A bounded investigation into a separate field→USB debug-access gap (probe-rs access unavailable after actual field-powered operation, before USB was reconnected) found that a Fairway-owned TF-M secure-service reapply mechanism does not close this gap: it was implemented, built, and hardware-tested, and failed its physical acceptance criterion even after separately confirming `UICR.APPROTECT`/`UICR.SECUREAPPROTECT` were provisioned `HwUnprotected` on the test device. That experimental implementation has been fully removed from the codebase and is not current firmware architecture.
+
+#### Non-Destructive Service-Entry Response
+
+Direct CPO-confirmed physical validation established a non-destructive response to this specific condition, on a single tested instance:
+
+1. Connect USB using the existing safe power-isolation procedure (isolate the 6106 positive output from Feather VBAT/J4 before connecting USB; the solar/LiPo side may remain connected to the 6106).
+2. Attempt the normal `probe-rs` operation (for example `probe-rs reset --chip nRF9151_xxAA`).
+3. If the established AP/DRW access fault occurs, press the Circuit Dojo nRF9151 Feather physical RESET button once.
+4. Retry the normal `probe-rs` operation.
+
+This response required no erase, no reflash, and no UICR modification during service entry, and used no recovery utility. This is not a recovery architecture; it is the current non-destructive first response to this specific condition. It is validated on a single tested instance only — reliability across repeated field→USB cycles is not yet established.
+
+If a development reference Feather nevertheless remains AP-inaccessible after the above response, destructive erase-all is an exceptional, manually authorized recovery action only, using the currently established command:
 
 ```sh
 ~/.zephyrtools/recovery/recovery --unlock-only

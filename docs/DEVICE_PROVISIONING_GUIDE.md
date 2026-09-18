@@ -156,6 +156,15 @@ Canonical references:
 
 This document does not duplicate firmware build, flash, or implementation instructions.
 
+## UICR AP-Protect Provisioning (Unresolved Question)
+
+During a bounded engineering investigation, the current development reference device received:
+
+- `UICR.APPROTECT = HwUnprotected (0x50FA50FA)`
+- `UICR.SECUREAPPROTECT = HwUnprotected (0x50FA50FA)`
+
+This was applied once, to that specific device, as investigation evidence/provenance. It is not established whether future pilot devices require, or already have, this provisioning; this is an open question, not a current provisioning requirement. Any pilot provisioning requirement based on this evidence requires separate CPO approval.
+
 ## Backend Activation
 
 A device must be registered or activated in backend data so backend request handling recognizes it as an approved sender.

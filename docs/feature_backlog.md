@@ -24,5 +24,6 @@ Completed features should be removed from this document and incorporated into th
 | 16 | Finalize golfer button/LED UX before pilot | Revisit and approve the final golfer-facing button feedback sequence, LED meanings/timing, and request-lockout experience before pilot deployment. Current Build A behavior is an accepted engineering placeholder, not final pilot UX. |
 | 17 | Pilot readiness review | Final validation before pilot deployment. |
 | 18 | Pilot-build validation | Validate the CPO-approved 5580 / J4 VBAT-GND architecture, LiPo trend evidence, and end-to-end battery-health behavior on the new build set before any broader rollout. |
+| 19 | NCS 3.4 Upgrade — Post-Field Deployment | Do not begin until the current engineering/feature backlog is complete AND pilot units are deployed and operating successfully in the field. At that point: evaluate migration from NCS 3.1.1 to NCS 3.4; reassess nRF9151 Errata 36 / AP-protect handling using mechanisms supported by the newer SDK; preserve validated Fairway behavior during migration. |
 
 Historical alternatives (TMUX1101, MAX4544, switched-SAADC/divider paths) remain archived and are not active backlog items for the current pilot-build architecture.
