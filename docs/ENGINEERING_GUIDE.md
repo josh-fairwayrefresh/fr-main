@@ -140,6 +140,23 @@ The historical LP 1.2 approximately 23.25 uA dormant-current measurement remains
 
 Prototype 1.1 establishes the current physical hardware baseline for the next Device Health / Reliability engineering sprint, alongside the unchanged LP 1.2 validated firmware generation and the LP1.3 repository/workspace cleanup milestone above.
 
+## Prototype 1.2 — Device Reliability Integration (Hardware/System Milestone)
+
+Prototype 1.2 is the validated integrated product/system milestone. It is not a new firmware generation; the validated firmware implementation remains the LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) generation recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`, unchanged by this milestone.
+
+Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 6106 field-power architecture:
+
+- validated USB/VBUS service-awake behavior preventing Errata-36 debug-access loss while USB is present, implementation owned by `docs/FIRMWARE_SPECIFICATION.md`;
+- validated Device Health acquisition layer (modem internal temperature, cellular RSRP/RSRQ/SNR, serving cell/band, transaction result/attempt tracking), acquisition/logging only, with no backend persistence or admin UI yet;
+- the Adafruit 5580 / MAX17048 battery-health monitor, physically installed and wired on the reference device, with battery voltage/SOC acquisition integrated into the Device Health snapshot and validated against a DMM measurement;
+- the documented non-destructive physical-RESET USB service-entry procedure, owned by `docs/DEPLOYMENT_GUIDE.md`.
+
+CPO-confirmed validation: the integrated candidate built cleanly under the canonical NCS 3.1.1 procedure, flashed successfully, and operated correctly from the current field-power architecture with one normal Fairway button interaction producing the expected behavior.
+
+Backend Device Health persistence and an admin-facing Device Health view are not part of Prototype 1.2 and remain future work.
+
+Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing details (exact component placement, Perma-Proto geometry, and mechanical layout), which remain owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as previously recorded.
+
 ## Documentation Philosophy
 
 Fairway Refresh engineering documentation follows a single-owner model.

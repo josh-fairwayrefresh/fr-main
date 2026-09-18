@@ -60,7 +60,7 @@ Current:
 
 Current-state notes:
 - LP 1.2 remains the validated firmware generation.
-- Prototype 1.1 remains the current validated reference-device hardware milestone.
+- Prototype 1.2 is the current validated integrated product/system milestone, built on the Prototype 1.1 solar/LiPo/6106 hardware architecture with the validated USB service-awake behavior, Device Health acquisition layer, and MAX17048 battery-health integration now confirmed working together on the reference device.
 - The current pilot-build hardware architecture retains the 5580 battery-health path and the new onboard J4 VBAT/GND feed, while actual physical placement remains TBD.
 
 Planned during documentation migration:
