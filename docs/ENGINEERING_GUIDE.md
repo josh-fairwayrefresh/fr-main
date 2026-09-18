@@ -204,6 +204,10 @@ Firmware generation identity and accepted checkpoint provenance are owned exclus
 - Unknown device IDs are rejected with `404 Unknown device`.
 - Inactive devices are rejected with `403 Inactive device`.
 
+### Fleet data foundation
+
+The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. This module is additive to, and does not modify, the request-ingestion behavior described above.
+
 ### Cart operator webapp
 
 - The webapp is implemented in `fairway_webapp/cart_operator_dashboard/`.

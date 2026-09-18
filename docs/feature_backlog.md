@@ -4,26 +4,31 @@ This document is the canonical engineering feature backlog for Fairway Refresh.
 
 Completed features should be removed from this document and incorporated into the appropriate Source of Truth documents.
 
+## Current Sprint: Fleet Administration + Device Health (WP1–WP7)
+
+| WP | Work Package | Status | Notes |
+|----|---------------|--------|-------|
+| WP1 | Current-state architecture inspection | Complete | Read-only investigation; findings reconciled into `docs/DEVICE_PROVISIONING_GUIDE.md`. |
+| WP2 | Fleet data foundation (Customer -> Course -> Device) | Complete | Canonical Customer/Course/Device schema and centralized ID allocation (`fairway_backend/cloudrun_receiver/lib/fleet/`); see `docs/DEVICE_PROVISIONING_GUIDE.md`. Supersedes former backlog items "Multi-device provisioning," "Device-to-SIM registry," and "Course configuration." |
+| WP3 | Per-device credentials spike | Pending | Supersedes former backlog item "Device authentication." |
+| WP4 | Device Health transport + persistence | Pending | Supersedes former backlog items "Device health monitoring" and "LTE signal telemetry" (acquisition of RSRP/RSRQ/SNR/temperature/battery is already validated per `docs/FIRMWARE_SPECIFICATION.md`; WP4 adds transport and persistence). |
+| WP5 | Fleet/device administration UI | Pending | Supersedes former backlog item "Button provisioning workflow" (Admin "Add Device" allocation workflow). |
+| WP6 | Alert engine | Pending | New. |
+| WP7 | Second-device deployment spike | Pending | New. |
+
+## Future Backlog (Post Fleet Administration + Device Health Sprint)
+
 | Priority | Feature | Notes |
 |----------|---------|-------|
-| 1 | Multi-device provisioning | Support multiple deployed Fairway Refresh buttons with unique identities. |
-| 2 | Device-to-SIM registry | Track each FRB device against its installed Hologram SIM. |
-| 3 | Payload/API alignment | Finalize payload format and backend contract. |
-| 4 | Backend payload contract decision | Decide whether to remove or formally support backend payload aliases and default values. |
-| 5 | Device authentication | Replace prototype authentication with production device identity. |
-| 6 | Operator endpoint authentication hardening | Enforce authentication/authorization for operator confirm and complete endpoints. |
-| 7 | Course configuration | Support configurable course, hole, and deployment settings. |
-| 8 | Button provisioning workflow | Define first-time setup and commissioning process for new devices. |
-| 9 | Device health monitoring | Heartbeats, battery status, connectivity, and offline detection. |
-| 10 | LTE signal telemetry | Capture signal quality for diagnostics. |
-| 11 | Watchdog and fault recovery | Automatic recovery from firmware failures. |
-| 12 | Reset reason logging | Record reset causes for troubleshooting. |
-| 13 | Request timeout and retry handling | Improve robustness of network communications. |
-| 14 | Operator analytics | Capture request timing and operational metrics. |
-| 15 | Course analytics dashboard | Aggregate usage trends and demand patterns. |
-| 16 | Finalize golfer button/LED UX before pilot | Revisit and approve the final golfer-facing button feedback sequence, LED meanings/timing, and request-lockout experience before pilot deployment. Current Build A behavior is an accepted engineering placeholder, not final pilot UX. |
-| 17 | Pilot readiness review | Final validation before pilot deployment. |
-| 18 | Pilot-build validation | Validate the CPO-approved 5580 / J4 VBAT-GND architecture, LiPo trend evidence, and end-to-end battery-health behavior on the new build set before any broader rollout. |
-| 19 | NCS 3.4 Upgrade — Post-Field Deployment | Do not begin until the current engineering/feature backlog is complete AND pilot units are deployed and operating successfully in the field. At that point: evaluate migration from NCS 3.1.1 to NCS 3.4; reassess nRF9151 Errata 36 / AP-protect handling using mechanisms supported by the newer SDK; preserve validated Fairway behavior during migration. |
+| 1 | Admin notification delivery | Delivery of alert/health notifications to administrators; deferred per CPO direction. |
+| 2 | Remote / on-demand Device Health | Remote wake/downlink health-check request; deferred per CPO direction (visible-but-disabled admin placeholder is in scope for WP5). |
+| 3 | Cart operator UX + notifications | Cart-operator-facing notifications; separate from admin notification delivery above. |
+| 4 | Request/network robustness & remaining security hardening | Incorporates former items: Payload/API alignment; Backend payload contract decision (aliases/defaults); Operator endpoint authentication hardening; Request timeout and retry handling. |
+| 5 | Finalize golfer button/LED UX before pilot | Revisit and approve the final golfer-facing button feedback sequence, LED meanings/timing, and request-lockout experience before pilot deployment. Current Build A behavior is an accepted engineering placeholder, not final pilot UX. |
+| 6 | Watchdog + fault recovery / reset diagnostics | Incorporates former items: Watchdog and fault recovery; Reset reason logging. |
+| 7 | Analytics / course analytics | Incorporates former items: Operator analytics; Course analytics dashboard. |
+| 8 | Pilot readiness review | Final validation before pilot deployment. |
+| 9 | Pilot-build validation / deployment | Validate the CPO-approved 5580 / J4 VBAT-GND architecture, LiPo trend evidence, and end-to-end battery-health behavior on the new build set before any broader rollout. |
+| 10 | NCS 3.4 Upgrade — Post-Field Deployment | Do not begin until the current engineering/feature backlog is complete AND pilot units are deployed and operating successfully in the field. At that point: evaluate migration from NCS 3.1.1 to NCS 3.4; reassess nRF9151 Errata 36 / AP-protect handling using mechanisms supported by the newer SDK; preserve validated Fairway behavior during migration. |
 
 Historical alternatives (TMUX1101, MAX4544, switched-SAADC/divider paths) remain archived and are not active backlog items for the current pilot-build architecture.

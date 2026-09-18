@@ -12,6 +12,18 @@ This document is the canonical process for provisioning a new Fairway Refresh fi
 
 This document defines the canonical provisioning process. Device-specific records, provisioning logs, and historical provisioning events are operational records and are not part of the engineering Source of Truth.
 
+## Fleet Hierarchy
+
+Fairway Refresh fleet data is organized as:
+
+Customer -> Course -> Device
+
+- **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style.
+- **Course** — belongs to exactly one Customer. Canonical IDs use the `COURSE-0001` style. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time; stored/configured only, firmware scheduling is separate future work).
+- **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below). A Device is assigned to a Customer, a Course, and a marker location; that assignment is mutable, but the Device ID itself never changes.
+
+This hierarchy, the canonical ID formats, and the backend allocation mechanism are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/` (`schema.js`, `ids.js`, `customers.js`, `courses.js`, `devices.js`). These are internal backend primitives only; no admin UI or exposed admin API is implemented yet (future work, see `docs/feature_backlog.md`).
+
 ## Provisioning Workflow
 
 Assembled
@@ -48,6 +60,7 @@ Repository-verified:
 - Backend request ingestion validates X-Fairway-Device-Key against FAIRWAY_DEVICE_KEY.
 - Backend rejects unknown devices and devices marked inactive.
 - Backend stores request metadata using device course/hole data when present.
+- A backend fleet data-foundation module now exists (`fairway_backend/cloudrun_receiver/lib/fleet/`) implementing the canonical Customer/Course/Device schema and centralized ID allocation. It is purely additive: the live request-ingestion path above is unmodified and continues to read the same `active`/`course_id`/`course_name`/`hole`/`label` fields it always has, now derived/maintained by the new Device primitives for devices created or updated through them.
 
 Current prototype behavior:
 
@@ -61,9 +74,9 @@ Intended production model:
 
 Outstanding decisions:
 
-- Canonical registry implementation and ownership model.
 - Secret generation, storage, rotation, and revocation workflow.
 - Provisioning automation, manufacturing serialization, and inventory lifecycle tooling.
+- Admin UI/authorization model for creating and managing Customer/Course/Device records (see `docs/feature_backlog.md`).
 
 ## Provisioning Record
 
@@ -71,16 +84,20 @@ Each provisioned device requires a provisioning record with the fields below.
 
 | Field | Purpose |
 |---|---|
-| Device ID | Permanent logical identifier |
+| Device ID | Permanent logical identifier (`FRB-XXXX`) |
+| Customer ID | Assigned Customer (`CUST-XXXX`); mutable |
+| Course ID | Assigned Course (`COURSE-XXXX`); mutable |
+| Marker Location | Hole 1-18 or Custom free-text location name; mutable |
+| Administrative State | One of: In Inventory, Deployed, Maintenance, Retired |
 | Hardware Revision | Prototype or production revision |
 | Firmware Version | Installed firmware version |
 | PCB / Assembly Revision | Physical build reference |
 | SIM ICCID | Installed SIM identity |
 | Carrier | Cellular provider |
 | Authentication Credential Reference | Reference to assigned credential without exposing the secret |
+| Comments | Administrator free-text notes |
 | Provisioning Date | Traceability |
 | Provisioned By | Traceability |
-| Deployment Status | Current lifecycle state |
 
 Do not store secret values in this record. Do not store device-specific records in canonical engineering documentation.
 
@@ -98,8 +115,48 @@ Device ID remains unchanged when:
 - batteries are replaced
 - the SIM is replaced
 - the device moves between courses or holes
+- the device is reassigned to a different customer, course, or marker location
+- the device's administrative state changes
 
 If the physical device itself is replaced, assign a new Device ID.
+
+## Canonical Registered-Device States
+
+Every registered Device is in exactly one of the following canonical administrative states:
+
+- In Inventory
+- Deployed
+- Maintenance
+- Retired
+
+There is no normal delete workflow. A Retired device remains permanently in the registry for historical provenance rather than being deleted.
+
+Administrative state and backend/device communication access are related but distinct concepts:
+
+- `state` is the operational/admin lifecycle state (the four values above).
+- `active` is the existing compatibility flag the live request-ingestion path in `index.js` reads directly; it is a backend communication access gate, not an administrative lifecycle indicator.
+- Access policy: In Inventory, Deployed, and Maintenance all permit backend communication (`active = true`); only Retired denies it (`active = false`).
+
+Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/schema.js` (`DEVICE_STATES`, `deriveLegacyActiveFlag`) and `devices.js` (`updateDeviceState`). The current backend behavior in `index.js` is unaffected.
+
+## Fleet ID Allocation
+
+Customer, Course, and Device IDs (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`) are allocated centrally by the backend, never guessed or assigned client-side. The allocation mechanism uses a Firestore transaction against a per-prefix counter document (`counters/{prefix}`), which is duplicate-resistant and safe for future concurrent use by an Admin "Add Customer/Course/Device" workflow.
+
+Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/ids.js` (`allocateNextId`), used by `customers.js`, `courses.js`, and `devices.js`.
+
+Per CPO direction, a physical marker's `FRB-XXXX` ID is allocated only once build/test has reached "Ready for Deployment"; the Admin UI that will trigger that allocation is future work (see `docs/feature_backlog.md`), not implemented here.
+
+### Existing Reference Device: FRB-0001 Bootstrap
+
+The existing physical reference device is canonically designated **FRB-0001**. To reserve that identity, the Device allocator (`RESERVED_FLOORS` in `ids.js`) starts a fresh/uninitialized `counters/FRB` document at sequence `2` rather than `1`, so the allocator can never issue `FRB-0001` to a new device; the first device allocated through the future Add Device workflow will be `FRB-0002`. Customer and Course allocation are unaffected and continue to start at `CUST-0001` and `COURSE-0001` respectively.
+
+This is a backend/data-model allocation-floor fact only. It does **not** mean any live Firestore migration has occurred:
+
+- Current firmware still transmits the lowercase literal `frb-0001` (see `docs/FIRMWARE_SPECIFICATION.md`/`samples/fairway_power_sandbox/src/main.c`); migrating firmware identity to canonical `FRB-0001` is WP3 scope.
+- The live Firestore `devices` document ID for the existing reference device has not yet been inspected or verified against this canonical designation; that verification and any live-document migration/rename is deferred to WP3 or separately authorized live-cloud work.
+- No historical `requests` records are altered by this reservation.
+- No live Firestore counter document is created by this WP2 correction; the reservation only takes effect the first time the allocator runs against an absent `counters/FRB` document.
 
 ## Authentication Material
 
@@ -129,18 +186,19 @@ SIM assignment belongs in the device registry, not in the hardware BOM or assemb
 
 ## Device Registry
 
-The device registry is the authoritative operational record for every physical device.
+The device registry is the authoritative operational record for every physical device, implemented as the `devices` Firestore collection via `fairway_backend/cloudrun_receiver/lib/fleet/devices.js`.
 
 Registry fields should include:
 
 - Device ID
+- Customer ID and Course ID (current assignment)
 - SIM ICCID
 - authentication credential reference
 - hardware revision
 - firmware version
-- activation state
-- course
-- hole or marker location
+- administrative state (In Inventory, Deployed, Maintenance, Retired)
+- marker location (Hole 1-18 or Custom)
+- comments
 - commissioning date
 - service status
 - replacement or retirement history
@@ -175,16 +233,16 @@ Related planning owner:
 
 - docs/feature_backlog.md
 
-## Course and Hole Assignment
+## Course, Customer, and Marker Location Assignment
 
 A deployment-ready device may be associated with:
 
-- course
-- hole
-- marker location
-- operational status
+- a Customer (`customer_id`)
+- a Course (`course_id`), which itself belongs to exactly one Customer and carries a timezone and Device Health reporting schedule (default 09:00 and 17:00 course-local time)
+- a marker location: either a standard Hole 1 through Hole 18 selection, or a "Custom" free-text location name (for example "Driving Range", "Practice Green", "Clubhouse Patio")
+- administrator comments
 
-Physical identity remains constant even if deployment assignment changes.
+Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
 
 ## Functional Verification
 
@@ -239,12 +297,12 @@ Operational tooling is intentionally out of scope for this document.
 Provisioning work that remains to be completed, aligned with current repository state and backlog:
 
 - manufacturing serialization process
-- canonical device registry implementation and ownership model
 - production inventory management workflow
 - per-device secret generation and storage system of record
 - secure provisioning tooling
 - secret rotation and revocation procedures
 - fleet provisioning automation approach
+- Admin UI for creating/managing Customer, Course, and Device records (see `docs/feature_backlog.md`)
 
 ## Repository Ownership
 
