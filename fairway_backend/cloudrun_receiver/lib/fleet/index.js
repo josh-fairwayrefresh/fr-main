@@ -9,6 +9,7 @@
 module.exports = {
   ...require('./schema'),
   ...require('./ids'),
+  ...require('./credentials'),
   ...require('./customers'),
   ...require('./courses'),
   ...require('./devices'),

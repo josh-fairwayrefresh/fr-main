@@ -21,7 +21,7 @@ Current Implementation
 - Hardware architecture boundary: the current approved pilot-build battery-health architecture (Adafruit 5580 / MAX17048 with the onboard J4 VBAT/GND feed refinement) is a hardware design decision owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`. It does not change the validated LP 1.2 firmware generation or the runtime firmware implementation described in this document.
 - The Circuit Dojo nRF9151 Feather physical header-to-signal/nRF9151 mapping is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`; current source and DTS own implementation pin configuration and consumption.
 - Modem provisioning: current firmware provisions a Cloud Run CA chain into the modem credential store, performs a single LTE connect call on startup, then polls registration status until home or roaming registration is reached.
-- Payload and auth: current firmware sends a minimal JSON payload including `device_id` and `event_type` and sets an `X-Fairway-Device-Key` header for backend authentication.
+- Payload and auth: current firmware sends a minimal JSON payload including `device_id` and `event_type`, and sets an `X-Fairway-Device-Key` header for backend authentication. Both the `device_id` value and the credential are read from `FAIRWAY_DEVICE_ID`/`FAIRWAY_DEVICE_KEY` macros provisioned in one local, gitignored per-device header (`secrets/fairway_device_key.h`); firmware source no longer hardcodes a device identity literal. The backend verifies the presented credential against that exact claimed device's own stored verifier; see `docs/DEVICE_PROVISIONING_GUIDE.md` for the credential architecture.
 - Button lockout: the firmware uses configurable `REQUEST_MAX_ATTEMPTS` and `REQUEST_ATTEMPT_TIMEOUT_MS` values, derives the physical-button lockout as their product, and ignores additional button activity during that lockout. A held button does not delay the first network attempt.
 - Request retry and validation: the firmware performs sequential retry attempts without overlapping requests. Each attempt uses its own timeout window; valid HTTP 2xx responses succeed, HTTP 400, 401, 403, and 404 responses terminate retries, and other unsuccessful attempts use remaining configured attempts.
 - State machine: the device implements IDLE, TRANSMITTING, SUCCESS, and FAILURE states and transitions between them in response to button events and network results.
@@ -38,6 +38,8 @@ The current pilot firmware lineage is recorded against exact Git provenance and 
 | LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) | `3e3e724aa6bcb098d8fda98f45af78d299b9da62` (nPM1300 → nPM13XX Kconfig/API compatibility patch, plus removal of the ineffective stale `CONFIG_PDN_DEFAULT_APN` assignment) | Validated artifact `merged.hex`, SHA-256 `e2acecc0c0c958b448c8d399935e343e8d83cd0da1f27e1e18859d55c4c5c48f`, 500,228 bytes | 2026-09-12 | Validated production generation | Fairway `nfed` built as a freestanding product repository against the separately installed official NCS v3.1.1 SDK and matching Nordic toolchain, with explicit `BOARD_ROOT`; no second Fairway-owned West/NCS reconstruction required. Validated button transaction over LTE-M/HTTPS with backend/webapp acceptance. Field dormant current measured at 23.25 uA versus the approximately 23.5 uA LP 1.0 baseline; no regression demonstrated. A green RGB LED observed while USB was connected during service/debug mode is the nPM1300 PMIC's autonomous hardware charging-status indicator and is not evidence of a field-mode power regression. TF-M secure-image flash utilization observed at 97.90% (31,580 / 32,256 bytes); retained as a watch item, not a demonstrated blocker. |
 
 Firmware-bearing roadmap work uses sprint branches named `sprint/<category-slug>`, for example `sprint/button-behavior`, `sprint/device-provisioning`, `sprint/device-reliability`, `sprint/infrastructure`, `sprint/operator-ux`, `sprint/power-battery`, and `sprint/pilot-release`. The lightweight lifecycle is: approved roadmap sprint -> sprint branch -> implementation and validation -> approved merge to `main` -> canonical firmware registry update. Future generation names are selected for meaningful roadmap milestones; no rigid numeric sequence is required. OTA/FOTA and remote fleet firmware distribution are deferred and are not required for the current pilot strategy.
+
+WP3 per-device identity/credential note: the reference device has been physically validated end-to-end (button press through LTE/HTTPS to a persisted request) running a build of the `FAIRWAY_DEVICE_ID`/`FAIRWAY_DEVICE_KEY`-provisioned source described above, provisioned as `FRB-0001`; see `docs/DEVICE_PROVISIONING_GUIDE.md` ("Existing Reference Device: FRB-0001") for the full validation record. That source is currently part of the uncommitted `sprint/fleet-device-health` WP3 working tree, so no new Firmware Generation Registry row is added here yet; the table above remains the LP 1.2 committed checkpoint until this WP3 source is committed/merged to `main` and the registry is updated accordingly.
 
 Modem Firmware — CPO-Confirmed Physical-Device Validation
 -----------------------------------------------------------
@@ -112,7 +114,10 @@ This section owns firmware implementation backlog only. Product-level planning i
 
 - Watchdog timer and reset-reason logging.
 - Battery-under-load characterization and safe-transmit thresholds.
-- Telemetry and device health metrics.
+- Device Health transport and scheduling support for WP4; backend persistence,
+  reporting, admin presentation, and alerts remain owned by their later work
+  packages. The existing local acquisition snapshot is already implemented and
+  validated.
 - Explicit LTE reconnect strategy with bounded retry/backoff behavior.
 - Explicit power-optimization audit.
 

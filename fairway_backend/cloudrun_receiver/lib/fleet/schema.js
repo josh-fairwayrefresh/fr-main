@@ -19,16 +19,17 @@ function isValidDeviceState(state) {
 }
 
 /*
- * Legacy compatibility: current request ingestion (index.js createButtonRequest)
- * reads device.active directly as a boolean gate. `state` is the operational/
- * admin lifecycle state; `active` is a distinct backend/device communication
- * access flag. Only Retired denies backend access; In Inventory, Deployed, and
- * Maintenance all permit it. Devices created/updated through the fleet
- * primitives always derive `active` from `state` via this mapping so index.js
- * keeps working unmodified.
+ * Canonical backend/device communication permission, derived from `state`.
+ * There is no independent `active` field in the canonical Device schema;
+ * only In Inventory, Deployed, and Maintenance permit communication.
+ * Retired, missing, malformed, and unknown states all deny it.
  */
-function deriveLegacyActiveFlag(state) {
-  return state !== DEVICE_STATES.RETIRED;
+function isDeviceCommunicationAllowed(state) {
+  return (
+    state === DEVICE_STATES.IN_INVENTORY ||
+    state === DEVICE_STATES.DEPLOYED ||
+    state === DEVICE_STATES.MAINTENANCE
+  );
 }
 
 const MARKER_LOCATION_TYPES = Object.freeze({
@@ -65,6 +66,35 @@ function isValidMarkerLocation(location) {
   return false;
 }
 
+/*
+ * `location` is the single canonical source of marker placement; hole number
+ * and any display text are always derived from it rather than stored
+ * independently on the Device document.
+ */
+function deriveHoleFromLocation(location) {
+  if (location && location.type === MARKER_LOCATION_TYPES.HOLE) {
+    return location.hole;
+  }
+
+  return null;
+}
+
+function deriveDisplayLabelFromLocation(location) {
+  if (!location) {
+    return null;
+  }
+
+  if (location.type === MARKER_LOCATION_TYPES.HOLE) {
+    return `Hole ${location.hole}`;
+  }
+
+  if (location.type === MARKER_LOCATION_TYPES.CUSTOM) {
+    return location.name;
+  }
+
+  return null;
+}
+
 const ID_PREFIXES = Object.freeze({
   CUSTOMER: 'CUST',
   COURSE: 'COURSE',
@@ -82,11 +112,13 @@ module.exports = {
   DEVICE_STATES,
   DEVICE_STATE_VALUES,
   isValidDeviceState,
-  deriveLegacyActiveFlag,
+  isDeviceCommunicationAllowed,
   MARKER_LOCATION_TYPES,
   MIN_HOLE_NUMBER,
   MAX_HOLE_NUMBER,
   isValidMarkerLocation,
+  deriveHoleFromLocation,
+  deriveDisplayLabelFromLocation,
   ID_PREFIXES,
   ID_PAD_LENGTH,
   formatId,

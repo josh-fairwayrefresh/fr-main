@@ -2,22 +2,28 @@
 
 Purpose
 -------
-- Describe the externally observable behavior of the physical button and its feedback to users.
+- Describe the current externally observable behavior of the physical button
+   and its feedback to users, and identify the boundary for the future final
+   golfer experience.
 
 Scope
 -----
 - This document defines only observable product behavior (what a golfer sees and does).
 - It intentionally excludes implementation details such as GPIOs, timing constants, interrupt names, PWM values, or firmware function names.
+- The behavior below is the accepted current interim implementation. It is not
+   the final pilot UX and does not establish durable future blink counts,
+   colors, durations, sequencing, feedback states, or button interaction logic.
 
 Purpose of the button marker UX
 -------------------------------
 - Provide a simple, immediate way for a golfer in the field to create a service request.
 - Give clear, unambiguous feedback to the golfer that a request was received, transmitted, and processed.
 
-User interaction sequence
--------------------------
+Current interim interaction sequence
+------------------------------------
 1. Button pressed
-   - The LED immediately performs three brief blinks to confirm the press was accepted and request processing has begun.
+   - During current request processing, the device performs three brief blinks
+     before the first backend transmission attempt.
 
 2. Request initiated
    - The device begins the first backend transmission attempt after the initial three-blink acceptance indication. Internal retry attempts are not shown.
@@ -31,7 +37,6 @@ User interaction sequence
 LED meanings (golfer-level)
 ---------------------------
 - Initial three brief blinks: button press accepted and request processing begun.
-- Initial three brief blinks: button press accepted and request processing begun — please wait.
 - Three rapid blinks: success — the request has been acknowledged by the backend.
 - Long solid illumination: failure — the request did not complete successfully.
 
@@ -45,10 +50,25 @@ Expected user behavior
 
 Notes
 -----
-- Timing and blink durations are intentionally omitted; implementations may tune them for power and human factors.
+- Current timing constants and blink durations are intentionally omitted from
+   this user-behavior document; current implementation detail is owned by
+   `docs/FIRMWARE_SPECIFICATION.md` and source.
 - This spec assumes the LED is visible to the user in normal operating conditions.
 - Firmware implementation details and constraints are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
+Future final golfer button / LED UX
+-----------------------------------
+- The current interim interaction will be replaced by a newly designed golfer
+   button/light experience before pilot deployment.
+- Future backlog priority #5, "Final Golfer Button / LED UX," owns that work.
+- The future scheme is not yet canonically specified. Its colors, counts,
+   durations, sequences, feedback states, and button interaction logic require
+   separate CPO approval, implementation, and validation.
+- Nothing in the current interim sequence defines or constrains that future
+   scheme.
+
 Design principle
 ----------------
-The user experience intentionally favors confidence and simplicity over exposing technical details. The golfer should only need to understand whether the request is being processed, succeeded, or failed.
+The final user experience should favor confidence and simplicity over exposing
+technical details. Its concrete behavior remains forthcoming under backlog
+priority #5.

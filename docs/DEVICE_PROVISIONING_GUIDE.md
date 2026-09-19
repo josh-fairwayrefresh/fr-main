@@ -3,14 +3,18 @@
 ## Document Status
 
 - Status: Draft
-- Version: 0.1
-- Last Updated: 2026-08-03
+- Version: 0.2
+- Last Updated: 2026-09-18
 
 ## Purpose
 
 This document is the canonical process for provisioning a new Fairway Refresh field device before deployment.
 
-This document defines the canonical provisioning process. Device-specific records, provisioning logs, and historical provisioning events are operational records and are not part of the engineering Source of Truth.
+This document defines the canonical provisioning process. Device-specific
+records, provisioning logs, and historical provisioning events are operational
+records rather than canonical engineering configuration. The bounded FRB-0001
+migration evidence below is retained as the validated reference-device
+bootstrap record without exposing its secret or complete operational record.
 
 ## Fleet Hierarchy
 
@@ -18,9 +22,9 @@ Fairway Refresh fleet data is organized as:
 
 Customer -> Course -> Device
 
-- **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style.
-- **Course** — belongs to exactly one Customer. Canonical IDs use the `COURSE-0001` style. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time; stored/configured only, firmware scheduling is separate future work).
-- **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below). A Device is assigned to a Customer, a Course, and a marker location; that assignment is mutable, but the Device ID itself never changes.
+- **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style; the readable name is a separate `customer_name` field. Stored at `customers/{customerId}`; the Firestore document ID is the canonical identity and is not duplicated as a `customer_id` field inside the document.
+- **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time; stored/configured only, firmware scheduling is separate future work).
+- **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below), stored at the top level (`devices/{deviceId}`). A Device is assigned to a Customer, a Course belonging to that Customer, and a marker location; that assignment is mutable, but the Device ID itself never changes. The Device record stores both `customer_id`/`course_id` (authoritative) and `customer_name`/`course_name` (synchronized display copies sourced from the Customer/Course records, never independently editable) for administrator readability. Per current product policy, once a Device has a `customer_id` it is not reassigned to a different Customer; only Course (within the same Customer) and location may change through normal reassignment.
 
 This hierarchy, the canonical ID formats, and the backend allocation mechanism are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/` (`schema.js`, `ids.js`, `customers.js`, `courses.js`, `devices.js`). These are internal backend primitives only; no admin UI or exposed admin API is implemented yet (future work, see `docs/feature_backlog.md`).
 
@@ -36,35 +40,23 @@ Assembled
 -> Functional Verification
 -> Deployment Ready
 
-Lifecycle states:
-
-Manufactured
-	↓
-Provisioned
-	↓
-Verified
-	↓
-Deployed
-	↓
-Maintenance
-	↓
-Returned to Service
-	↓
-Retired
+These are provisioning workflow stages, not values stored in the Device
+`state` field. The persisted Device state enum is defined under "Canonical
+Registered-Device States" below.
 
 ## Repository Reconciliation
 
 Repository-verified:
 
-- Backend currently requires a recognized device identity in the devices collection and checks active state before accepting button events.
-- Backend request ingestion validates X-Fairway-Device-Key against FAIRWAY_DEVICE_KEY.
-- Backend rejects unknown devices and devices marked inactive.
-- Backend stores request metadata using device course/hole data when present.
-- A backend fleet data-foundation module now exists (`fairway_backend/cloudrun_receiver/lib/fleet/`) implementing the canonical Customer/Course/Device schema and centralized ID allocation. It is purely additive: the live request-ingestion path above is unmodified and continues to read the same `active`/`course_id`/`course_name`/`hole`/`label` fields it always has, now derived/maintained by the new Device primitives for devices created or updated through them.
+- Backend currently requires a recognized device identity in the devices collection and derives backend communication permission from canonical `state` before accepting button events.
+- Backend request ingestion verifies the presented `X-Fairway-Device-Key` credential against the exact claimed device's stored SHA-256 verifier; a single fleet-wide `FAIRWAY_DEVICE_KEY` is no longer the authentication mechanism.
+- Backend rejects unknown devices and Retired devices.
+- Backend stores request metadata using device course/hole data when present; hole number and display label are derived from the device's canonical `location` field.
+- A backend fleet data-foundation module now exists (`fairway_backend/cloudrun_receiver/lib/fleet/`) implementing the canonical Customer/Course/Device schema, centralized ID allocation, and per-device credential generation/verification (`credentials.js`). Courses are stored as a Firestore subcollection of their owning Customer (`customers/{customerId}/courses/{courseId}`); Course IDs remain globally allocated and unique. Device creation/reassignment always sources `customer_name`/`course_name` from the authoritative Customer/Course records and validates that an assigned Course belongs to the Device's Customer. The live request-ingestion path in `index.js` now looks up the claimed device first, then verifies its credential against that device's own stored verifier, before continuing to the same duplicate-suppression/request-creation logic as before.
 
 Current prototype behavior:
 
-- Authentication currently follows a shared-key prototype path.
+- Per-device credential verification is implemented in the backend and is now live in production: the canonical reference device `devices/FRB-0001` has an issued credential verifier and has been physically validated end-to-end (button press through LTE/HTTPS to a persisted request) using it.
 - Provisioning workflow around the devices registry is not yet fully codified as a single operational procedure.
 
 Intended production model:
@@ -74,7 +66,7 @@ Intended production model:
 
 Outstanding decisions:
 
-- Secret generation, storage, rotation, and revocation workflow.
+- Credential rotation and revocation workflow (credential issuance, verifier storage, and verification are implemented; routine rotation policy remains future work — see `docs/feature_backlog.md`, "Fleet Security Procedure & Credential Lifecycle").
 - Provisioning automation, manufacturing serialization, and inventory lifecycle tooling.
 - Admin UI/authorization model for creating and managing Customer/Course/Device records (see `docs/feature_backlog.md`).
 
@@ -84,20 +76,21 @@ Each provisioned device requires a provisioning record with the fields below.
 
 | Field | Purpose |
 |---|---|
-| Device ID | Permanent logical identifier (`FRB-XXXX`) |
-| Customer ID | Assigned Customer (`CUST-XXXX`); mutable |
-| Course ID | Assigned Course (`COURSE-XXXX`); mutable |
-| Marker Location | Hole 1-18 or Custom free-text location name; mutable |
-| Administrative State | One of: In Inventory, Deployed, Maintenance, Retired |
-| Hardware Revision | Prototype or production revision |
-| Firmware Version | Installed firmware version |
-| PCB / Assembly Revision | Physical build reference |
-| SIM ICCID | Installed SIM identity |
-| Carrier | Cellular provider |
-| Authentication Credential Reference | Reference to assigned credential without exposing the secret |
-| Comments | Administrator free-text notes |
-| Provisioning Date | Traceability |
-| Provisioned By | Traceability |
+| Firestore document ID | Permanent logical identifier (`devices/{FRB-XXXX}`); not duplicated as `device_id` |
+| `customer_id` / `customer_name` | Authoritative Customer ID and synchronized readable name; Customer assignment is set once |
+| `course_id` / `course_name` | Current Course ID within that Customer and synchronized readable name |
+| `location` | `{ type: "hole", hole: 1-18 }` or `{ type: "custom", name }` |
+| `state` | One exact canonical stored value: `in_inventory`, `deployed`, `maintenance`, or `retired` |
+| `hardware_revision` | Prototype or production hardware revision |
+| `firmware_generation` | Installed firmware generation |
+| `sim_iccid` | Installed SIM identity |
+| `credential` | Non-reversible SHA-256 verifier metadata only; never the plaintext secret |
+| `comments` | Administrator free-text notes |
+| `commissioning` | Commissioning metadata (`commissioned_at`, `commissioned_by`) or null |
+| `service` | Service metadata (`last_service_at`, `last_service_by`) or null |
+| `latest_health` | Reserved null placeholder until WP4 implements health transport/persistence |
+| `gps` | Reserved null placeholder for a future GPS extension |
+| `created_at` / `updated_at` | Standard record metadata |
 
 Do not store secret values in this record. Do not store device-specific records in canonical engineering documentation.
 
@@ -109,54 +102,81 @@ Device IDs use the format:
 
 FRB-0001
 
+The canonical identity is the Firestore document ID itself (`devices/{FRB-XXXX}`). A Device document does not additionally store its own ID as a `device_id` field; any code needing the Device ID derives it from the document reference/document ID, or from the request's claimed Device ID where applicable.
+
 Device ID remains unchanged when:
 
 - firmware changes
 - batteries are replaced
 - the SIM is replaced
 - the device moves between courses or holes
-- the device is reassigned to a different customer, course, or marker location
+- the device is reassigned to a different course (within the same Customer) or marker location
 - the device's administrative state changes
+
+Similarly, once a Device has been assigned a `customer_id`, that Customer association is not changed by normal reassignment; only Course (within that Customer) and marker location may change. There is no cross-Customer Device transfer workflow.
 
 If the physical device itself is replaced, assign a new Device ID.
 
 ## Canonical Registered-Device States
 
-Every registered Device is in exactly one of the following canonical administrative states:
+Every registered Device is in exactly one canonical persisted `state`:
 
-- In Inventory
-- Deployed
-- Maintenance
-- Retired
+- `in_inventory` (displayed as In Inventory)
+- `deployed` (displayed as Deployed)
+- `maintenance` (displayed as Maintenance)
+- `retired` (displayed as Retired)
 
 There is no normal delete workflow. A Retired device remains permanently in the registry for historical provenance rather than being deleted.
 
 Administrative state and backend/device communication access are related but distinct concepts:
 
-- `state` is the operational/admin lifecycle state (the four values above).
-- `active` is the existing compatibility flag the live request-ingestion path in `index.js` reads directly; it is a backend communication access gate, not an administrative lifecycle indicator.
-- Access policy: In Inventory, Deployed, and Maintenance all permit backend communication (`active = true`); only Retired denies it (`active = false`).
+- `state` is the sole canonical field representing operational/admin lifecycle (the four values above). There is no independent `active` field in the canonical Device schema.
+- Backend communication permission is always derived from `state` via `isDeviceCommunicationAllowed(state)`: `in_inventory`, `deployed`, and `maintenance` permit communication. `retired`, missing, malformed, and unknown values deny communication. The policy fails closed.
 
-Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/schema.js` (`DEVICE_STATES`, `deriveLegacyActiveFlag`) and `devices.js` (`updateDeviceState`). The current backend behavior in `index.js` is unaffected.
+Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/schema.js` (`DEVICE_STATES`, `isDeviceCommunicationAllowed`) and `devices.js` (`updateDeviceState`). The live request-ingestion handler (`index.js`) derives communication permission from `state` directly.
 
 ## Fleet ID Allocation
 
-Customer, Course, and Device IDs (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`) are allocated centrally by the backend, never guessed or assigned client-side. The allocation mechanism uses a Firestore transaction against a per-prefix counter document (`counters/{prefix}`), which is duplicate-resistant and safe for future concurrent use by an Admin "Add Customer/Course/Device" workflow.
+Customer, Course, and Device IDs (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`) are allocated centrally by the backend, never guessed or assigned client-side. The allocation mechanism uses a Firestore transaction against a per-prefix counter document (`counters/{prefix}`), which is duplicate-resistant and safe for future concurrent use by an Admin "Add Customer/Course/Device" workflow. Course IDs are allocated from a single global `counters/COURSE` document regardless of which Customer a Course is nested under, so Course IDs remain globally unique across the entire fleet and never restart per Customer.
 
 Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/ids.js` (`allocateNextId`), used by `customers.js`, `courses.js`, and `devices.js`.
 
 Per CPO direction, a physical marker's `FRB-XXXX` ID is allocated only once build/test has reached "Ready for Deployment"; the Admin UI that will trigger that allocation is future work (see `docs/feature_backlog.md`), not implemented here.
 
-### Existing Reference Device: FRB-0001 Bootstrap
+### Existing Reference Device: FRB-0001 (Live, Migrated, Physically Validated)
 
-The existing physical reference device is canonically designated **FRB-0001**. To reserve that identity, the Device allocator (`RESERVED_FLOORS` in `ids.js`) starts a fresh/uninitialized `counters/FRB` document at sequence `2` rather than `1`, so the allocator can never issue `FRB-0001` to a new device; the first device allocated through the future Add Device workflow will be `FRB-0002`. Customer and Course allocation are unaffected and continue to start at `CUST-0001` and `COURSE-0001` respectively.
+The existing physical reference device is canonically designated **FRB-0001** and this migration is now complete. To reserve that identity, the Device allocator (`RESERVED_FLOORS` in `ids.js`) starts a fresh/uninitialized `counters/FRB` document at sequence `2` rather than `1`, so the allocator can never issue `FRB-0001` to a new device; the first device allocated through the future Add Device workflow will be `FRB-0002`. Customer and Course allocation are unaffected and continue to start at `CUST-0001` and `COURSE-0001` respectively.
 
-This is a backend/data-model allocation-floor fact only. It does **not** mean any live Firestore migration has occurred:
+Current live state (CPO-authorized bootstrap writes, separate from the repository's own Admin "Add Device" workflow, which remains unimplemented):
 
-- Current firmware still transmits the lowercase literal `frb-0001` (see `docs/FIRMWARE_SPECIFICATION.md`/`samples/fairway_power_sandbox/src/main.c`); migrating firmware identity to canonical `FRB-0001` is WP3 scope.
-- The live Firestore `devices` document ID for the existing reference device has not yet been inspected or verified against this canonical designation; that verification and any live-document migration/rename is deferred to WP3 or separately authorized live-cloud work.
-- No historical `requests` records are altered by this reservation.
-- No live Firestore counter document is created by this WP2 correction; the reservation only takes effect the first time the allocator runs against an absent `counters/FRB` document.
+- `customers/CUST-0001` exists live with `customer_name = "Monarch Bay GC"`.
+- `customers/CUST-0001/courses/COURSE-0001` exists live with `course_name = "Tony Lema Course"`, `timezone = "America/Los_Angeles"`, and `health_report_schedule = { times: ["09:00", "17:00"] }` in course-local time.
+- Live allocation counters are `counters/CUST.next = 2`, `counters/COURSE.next = 2`, and `counters/FRB.next = 2`.
+- `devices/FRB-0001` exists live with the normalized canonical schema: `state = "deployed"`, `customer_id = "CUST-0001"`, `customer_name = "Monarch Bay GC"`, `course_id = "COURSE-0001"`, `course_name = "Tony Lema Course"`, `location = { type: "hole", hole: 7 }`, an associated SIM ICCID, `hardware_revision`, `firmware_generation`, and an issued unique credential verifier. No `device_id`, `active`, top-level `hole`, `label`, or `model` field is present.
+- The legacy lowercase `devices/frb-0001` record and the unrelated legacy `devices/pv4` record have both been deleted from live Firestore; the `devices` collection contains only `FRB-0001`.
+- The physical reference Feather has been reflashed with a firmware build reading `FAIRWAY_DEVICE_ID = "FRB-0001"` and its unique production credential from the local gitignored provisioning file; the firmware source change enabling this (`FAIRWAY_DEVICE_ID`/`FAIRWAY_DEVICE_KEY` macro usage) is currently part of the uncommitted WP3 working tree. Formal `docs/FIRMWARE_SPECIFICATION.md` Firmware Generation Registry update is deferred until this WP3 source is committed/merged to `main`; see that document for the current firmware-generation provenance note.
+- End-to-end physical validation succeeded: a real physical button press produced a successful (`HTTP 200`) request through the live `fairway-button-receiver` Cloud Run backend, authenticated using FRB-0001's own unique credential (no shared/global credential path), and persisted a request document with `device_id = "FRB-0001"`, `course_id = "COURSE-0001"`, `course_name = "Tony Lema Course"`, `hole = 7`, and `device_label = "Hole 7"`.
+- The cart-operator webapp was not independently visually verified during this validation; the underlying Firestore data it reads was confirmed correct. This is a known gap, not a WP3 blocker, and is not claimed as UI-validated.
+
+**Legacy field mapping applied during this migration:**
+
+| Legacy `devices/frb-0001` field | Canonical destination |
+|---|---|
+| `device_id` | Firestore document ID itself (`FRB-0001`); not duplicated as a document field |
+| `active` | Replaced by canonical `state`; communication permission derived via `isDeviceCommunicationAllowed(state)` |
+| `hole` | `location: { type: "hole", hole: N }` |
+| `label` (e.g. "Hole N Button") | Redundant for a normal hole placement; display text is derived from `location`, no canonical Device field required |
+| `course_id` / `course_name` | `course_id` carried forward as-is; `course_name` re-derived from the authoritative `customers/{customerId}/courses/{course_id}` record at migration time rather than copied verbatim, in case it has drifted |
+| (no legacy field) | The legacy record has no Customer association; migration must assign a `customer_id`/`customer_name` for the first time (a first-time assignment, not a reassignment) once the corresponding canonical `customers/CUST-0001` record exists |
+| `notes` | Canonical `comments` |
+| `model` (`"pv4"`) | Not migrated. CPO decision: `model = "pv4"` identifies the legacy E-Switch PV4 physical button model and is excluded from the canonical `FRB-0001` Device record; a future `button_type` field for multi-button-type support is deferred and not implemented. |
+
+### Additional Normalization Candidates
+
+Not changed in this migration; flagged for future CPO/Architect review:
+
+- Storing `customer_id` inside a Course document (in addition to the parent Firestore path already establishing ownership) was considered and intentionally **not** implemented: no current code path requires a Course-by-ID lookup without already knowing its Customer, so the parent path alone is sufficient today. Revisit if a future cross-Customer Course query (e.g. "find this Course ID across the whole fleet") becomes required.
+- `course_name` (and now `customer_name`) denormalized on the Device document are approved, intentional synchronized display copies per current CPO direction, not a normalization defect; they are re-derived from the authoritative Customer/Course records on every assignment/reassignment rather than being independently editable.
 
 ## Authentication Material
 
@@ -171,6 +191,25 @@ Requirements:
 - referenced in the provisioning record without exposing the secret
 - subject to future rotation and revocation procedures
 
+### Credential Architecture (Implemented)
+
+Each device has exactly one active unique credential, bound to its permanent Device ID (the Firestore document ID). There is no multiple-active-credential architecture and no routine rotation at this stage.
+
+- **Form:** a 256-bit (32-byte) cryptographically random value generated with Node's built-in `crypto.randomBytes(32)`, base64url-encoded for transport in the existing `X-Fairway-Device-Key` header. No new dependency, no custom cryptography, no PKI/device-certificate infrastructure.
+- **Backend storage:** only a non-reversible SHA-256 verifier (`{ algorithm: 'sha256', digest, updated_at }`) is persisted on the device record's `credential` field. The plaintext secret is never written to Firestore, never logged, and never written into canonical documentation.
+- **One-time delivery:** the plaintext secret is returned exactly once, at generation time, to the caller performing device creation/credential replacement (the future Admin "Add Device"/"Replace Credential" workflow, WP5). It is not routinely re-displayed afterward; the Admin UI should show credential status/metadata (e.g., last-updated time), not the secret itself, since the backend no longer possesses the plaintext after that one response.
+- **Verification/binding:** the backend looks up the device strictly by the claimed `device_id` (the Firestore document ID), rejects unknown or Retired devices (per canonical `state`), and only then verifies the presented credential against that exact device's stored verifier using a constant-time comparison. A credential issued for one FRB identity can never authenticate a request claiming a different FRB identity.
+- **Replacement:** a new credential can be issued for the same permanent `device_id` at any time (for example after suspected compromise); this replaces the stored verifier only and never changes the Device ID.
+- **Retirement and invalid state:** a Retired device, or a Device record with a missing, malformed, or unknown state, is rejected before credential verification is attempted, consistent with the fail-closed backend-access policy above.
+
+Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/credentials.js` (`generateDeviceCredential`, `deriveCredentialVerifier`, `verifyDeviceCredential`) and `lib/fleet/devices.js` (`replaceDeviceCredential`, `getDeviceForAuthentication`, `authenticateDeviceCredential`). The live request-ingestion handler (`index.js`) now verifies per-device credentials in this way instead of a single fleet-wide shared key. This architecture is now validated in live production: `devices/FRB-0001` has an issued credential and successfully authenticated a real physical button-press request end-to-end; the legacy fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed and no shared-key fallback remains.
+
+Full compromise-response, revocation, and routine-rotation procedures remain deferred; see `docs/feature_backlog.md` ("Fleet Security Procedure & Credential Lifecycle").
+
+### Device-Side Provisioning Material
+
+Firmware reads both the permanent canonical `FAIRWAY_DEVICE_ID` and the unique `FAIRWAY_DEVICE_KEY` from one local, gitignored per-device header (`samples/fairway_power_sandbox/src/secrets/fairway_device_key.h`), so identity and credential can never be independently hardcoded in different application locations. The tracked template (`fairway_device_key.example.h`) contains placeholders only, never a real ID or secret. This file is never committed and never duplicated into canonical documentation. Provisioning a physical unit means writing that unit's issued `FRB-XXXX` ID and one-time plaintext credential into this local file before building/flashing that unit's firmware.
+
 ## SIM Provisioning
 
 SIM provisioning associates:
@@ -178,7 +217,7 @@ SIM provisioning associates:
 - Device ID
 - Hologram SIM ICCID
 - carrier
-- activation state
+- canonical Device `state`
 
 The exact SIM identifier for each unit is recorded when the unit is built or provisioned.
 
@@ -188,20 +227,13 @@ SIM assignment belongs in the device registry, not in the hardware BOM or assemb
 
 The device registry is the authoritative operational record for every physical device, implemented as the `devices` Firestore collection via `fairway_backend/cloudrun_receiver/lib/fleet/devices.js`.
 
-Registry fields should include:
-
-- Device ID
-- Customer ID and Course ID (current assignment)
-- SIM ICCID
-- authentication credential reference
-- hardware revision
-- firmware version
-- administrative state (In Inventory, Deployed, Maintenance, Retired)
-- marker location (Hole 1-18 or Custom)
-- comments
-- commissioning date
-- service status
-- replacement or retirement history
+The canonical current Device fields are defined in "Provisioning Record" above.
+Device identity comes from the Firestore document ID; readable Customer/Course
+names are synchronized copies; placement comes from `location`; lifecycle and
+communication permission come from `state`; and operational history may be
+represented through the `commissioning` and `service` metadata objects. Future
+history requirements must not introduce duplicate identity, placement, or
+communication flags.
 
 ## Firmware Installation Prerequisite
 
@@ -223,11 +255,14 @@ During a bounded engineering investigation, the current development reference de
 
 This was applied once, to that specific device, as investigation evidence/provenance. It is not established whether future pilot devices require, or already have, this provisioning; this is an open question, not a current provisioning requirement. Any pilot provisioning requirement based on this evidence requires separate CPO approval.
 
-## Backend Activation
+## Backend Registration and Communication Permission
 
-A device must be registered or activated in backend data so backend request handling recognizes it as an approved sender.
+A device must be registered at `devices/{FRB-XXXX}` so backend request handling
+can recognize its permanent identity and verify its per-device credential.
 
-Activation authorizes a provisioned device to communicate with backend services.
+Registration does not create an independent activation flag. Communication
+permission is derived only from canonical `state`; `in_inventory`, `deployed`,
+and `maintenance` allow communication, while all other values deny it.
 
 Related planning owner:
 
@@ -237,16 +272,16 @@ Related planning owner:
 
 A deployment-ready device may be associated with:
 
-- a Customer (`customer_id`)
-- a Course (`course_id`), which itself belongs to exactly one Customer and carries a timezone and Device Health reporting schedule (default 09:00 and 17:00 course-local time)
-- a marker location: either a standard Hole 1 through Hole 18 selection, or a "Custom" free-text location name (for example "Driving Range", "Practice Green", "Clubhouse Patio")
+- a Customer (`customer_id`, authoritative) with a synchronized `customer_name` display copy
+- a Course (`course_id`, authoritative), which itself belongs to exactly one Customer (enforced by nested Firestore storage) and carries a timezone and Device Health reporting schedule (default 09:00 and 17:00 course-local time), with a synchronized `course_name` display copy
+- a marker location: either a standard Hole 1 through Hole 18 selection, or a "Custom" free-text location name (for example "Driving Range", "Practice Green", "Clubhouse Patio"). Hole number and any display text (e.g. "Hole 7") are always derived from this single `location` field; no independent `hole`/`label` fields are stored on the Device document.
 - administrator comments
 
-Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
+`customer_name` and `course_name` are always sourced from the authoritative Customer/Course records at assignment time; a caller cannot supply an arbitrary or conflicting display name. A Course can only be assigned if it belongs to the Device's own Customer; a Course belonging to a different Customer is rejected. Once a Device has a `customer_id`, normal reassignment only moves it between Courses belonging to that same Customer — there is no cross-Customer Device transfer workflow. Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
 
 ## Functional Verification
 
-A device is not considered provisioned until all of the following are verified:
+The standard future full deployment/provisioning validation includes:
 
 - Identity
 	- correct Device ID assigned
@@ -268,17 +303,15 @@ Canonical references:
 - docs/DEPLOYMENT_GUIDE.md
 - docs/UX_SPECIFICATION.md
 
-## Inventory States
+WP3 used a narrower, explicitly accepted bootstrap-validation scope: FRB-0001
+successfully authenticated and created exactly one correctly attributed backend
+request. The operator webapp was not independently visually validated, and its
+confirm/complete flow was not claimed as WP3 evidence. Broader UI validation
+remains part of a separately authorized full-system or pilot deployment check.
 
-| State | Meaning |
-|---|---|
-| Assembly | Hardware is being built |
-| Provisioning | Identity, SIM, and authentication are being assigned |
-| Verified | Functional provisioning checks completed |
-| Ready for Deployment | Approved for field installation |
-| Deployed | Installed in active service |
-| Maintenance | Temporarily removed from service |
-| Retired | Permanently removed from service |
+Build, test, provisioning, verification, and Ready for Deployment are workflow
+stages, not additional persisted Device states. The only persisted state enum
+is the four-value `state` model above.
 
 ## Device Replacement
 
@@ -298,9 +331,9 @@ Provisioning work that remains to be completed, aligned with current repository 
 
 - manufacturing serialization process
 - production inventory management workflow
-- per-device secret generation and storage system of record
-- secure provisioning tooling
-- secret rotation and revocation procedures
+- secure administrative delivery and storage policy for the one-time issued plaintext credential
+- credential replacement, revocation, and compromise-response procedures
+- future routine rotation policy and stronger protected device-side storage if justified
 - fleet provisioning automation approach
 - Admin UI for creating/managing Customer, Course, and Device records (see `docs/feature_backlog.md`)
 

@@ -3,7 +3,7 @@
 ## Document Status
 - Status: Draft
 - Version: 0.2
-- Last updated: 2026-09-12
+- Last updated: 2026-09-18
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
@@ -200,13 +200,14 @@ pin configuration, consumption, and reservation.
 Firmware generation identity and accepted checkpoint provenance are owned exclusively by `docs/FIRMWARE_SPECIFICATION.md`. Production authentication material is restored separately at the documented local path; the public CA input is tracked with the production application.
 ### Device authentication/rejection behavior
 
-- Requests without the expected device key are rejected with `401 Unauthorized`.
+- Requests presenting a missing or invalid per-device credential are rejected with `401 Unauthorized`.
 - Unknown device IDs are rejected with `404 Unknown device`.
-- Inactive devices are rejected with `403 Inactive device`.
+- Retired devices and records with missing, malformed, or unknown states are rejected with `403 Inactive device`; communication permission is always derived from the device's canonical `state` (there is no independent `active` field on the Device record). See `docs/DEVICE_PROVISIONING_GUIDE.md` ("Canonical Registered-Device States").
+- The claimed `device_id` (the Firestore document ID) is looked up first; credential verification is checked only against that exact device's own stored verifier, never a single fleet-wide value. See `docs/DEVICE_PROVISIONING_GUIDE.md` for the credential architecture.
 
 ### Fleet data foundation
 
-The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. This module is additive to, and does not modify, the request-ingestion behavior described above.
+The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The live request-ingestion handler (`index.js`) verifies per-device credentials via this module instead of a single fleet-wide shared key; the duplicate-suppression logic is unchanged, but request-document `hole`/`device_label` fields are now derived from the device's canonical `location` field rather than reading independent duplicate Device fields.
 
 ### Cart operator webapp
 
@@ -237,14 +238,11 @@ USB/VBUS service-mode debug-access loss on Errata-36-family reference silicon ha
 
 ## 8. Troubleshooting Sequence
 
-1. Verify power.
-2. Attempt a hardware reset.
-3. Connect USB with primary battery disconnected.
-4. Open serial.
-5. Reset and observe boot.
-6. Test button acknowledgement.
-7. Observe LTE/HTTPS logs.
-8. Check Cloud Run/backend only if the request reached it.
+Current power isolation, USB service entry, flashing, and exceptional recovery
+procedures are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md` and
+`docs/DEPLOYMENT_GUIDE.md`. Follow those procedures for the installed hardware
+generation before beginning symptom triage. Firmware behavior and diagnostic
+interpretation are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### Field Observation — 2026-08-02
 
@@ -260,20 +258,8 @@ USB/VBUS service-mode debug-access loss on Errata-36-family reference silicon ha
 - Blocking network operations in the firmware request path.
 - Battery behavior under LTE load remains uncharacterized.
 
-### Engineering Roadmap Themes
-
-Current engineering roadmap and feature planning are owned by `docs/feature_backlog.md`.
-
-- Device provisioning
-- Payload/API alignment
-- Device onboarding
-- Authentication & Security
-- Course configuration
-- Analytics
-- Health monitoring
-- Operational instrumentation
-
-This section is a summary only; canonical backlog ownership is maintained in `docs/feature_backlog.md`.
+Current engineering roadmap, sprint status, and feature priority are owned
+exclusively by `docs/feature_backlog.md` and are not duplicated here.
 
 ## 10. Documentation Map
 
@@ -308,9 +294,11 @@ The Build A authentication and TLS inputs are intentionally local, ignored, and 
 
 Their contents are not repository documentation or source-controlled configuration.
 
-A tracked successful-build record exists at
-`samples/fairway_request_test/notes/builds/stable-main-afa191d-2026-07-06.txt`.
-The matching `samples/fairway_request_test/build/merged.hex` is present in the current workspace and its SHA-256 matches the recorded checksum. It is not tracked as a formal release artifact, and source-to-binary provenance is not independently attested.
+Earlier workspace evidence referenced a `fairway_request_test` successful-build
+record and generated artifact. That sample and artifact are not present in the
+current workspace and are not current recoverable firmware provenance. Current
+firmware provenance is owned by the Firmware Generation Registry in
+`docs/FIRMWARE_SPECIFICATION.md`.
 
 ## 11. Historical Baseline — 2026-05-18
 
@@ -322,22 +310,26 @@ The May 18, 2026 milestone update described the following validated end-to-end s
 - Operators could confirm and complete requests, with completion showing a success screen and removing the request from the active queue.
 - The prototype latency from button press to dashboard card was approximately 8 seconds.
 
-### Current repository reconciliation
+### Historical repository reconciliation recorded for this milestone
 
-Verified in the current `nfed` repository:
+The earlier reconciliation associated with this historical milestone recorded:
 
 - Firmware path: `samples/fairway_request_test/src/main.c`.
 - Backend path: `fairway_backend/cloudrun_receiver/index.js`.
 - Webapp path: `fairway_webapp/cart_operator_dashboard/src/main.jsx`.
 - The firmware provisions the Google Cloud Run CA chain and uses TLS to connect to `fairway-button-receiver-936892386735.us-central1.run.app`.
-- The firmware currently sends a fixed JSON payload:
+- The firmware sent a fixed JSON payload:
   `{"device_id":"frb-0001","event_type":"button_press"}`.
-- The firmware sends the `X-Fairway-Device-Key` header using `FAIRWAY_DEVICE_KEY`.
-- The backend rejects missing/invalid device keys, unknown devices, and inactive devices.
-- The backend suppresses duplicate open requests by checking for existing `requests` with status `new` or `confirmed`.
-- The backend writes new request documents to the `requests` collection and supports status updates through `POST /api/v1/requests/{requestId}/confirm` and `POST /api/v1/requests/{requestId}/complete`.
-- The webapp implements Firebase authentication via `onAuthStateChanged`, `signInWithRedirect`, and `signInWithEmailAndPassword`.
-- The webapp subscribes to Firestore requests in real time and renders active request cards.
+- The firmware sent the `X-Fairway-Device-Key` header using `FAIRWAY_DEVICE_KEY`.
+- The backend rejected missing/invalid device keys, unknown devices, and inactive devices.
+- The backend suppressed duplicate open requests by checking for existing `requests` with status `new` or `confirmed`.
+- The backend wrote new request documents to the `requests` collection and supported status updates through `POST /api/v1/requests/{requestId}/confirm` and `POST /api/v1/requests/{requestId}/complete`.
+- The webapp implemented Firebase authentication via `onAuthStateChanged`, `signInWithRedirect`, and `signInWithEmailAndPassword`.
+- The webapp subscribed to Firestore requests in real time and rendered active request cards.
+
+These statements describe the historical snapshot, not current implementation.
+Current firmware, fleet identity, authentication, and deployment truth is owned
+by the current source and the subsystem owner documents listed above.
 
 ### Information from the milestone source and canonical ownership status
 

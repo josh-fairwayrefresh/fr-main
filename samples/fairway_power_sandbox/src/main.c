@@ -1,5 +1,5 @@
 /*
- * Fairway Refresh state-machine feedback test
+ * Fairway Refresh button-request state machine
  *
  * Confirmed hardware mappings:
  *
@@ -13,7 +13,7 @@
  *   PV4 LED + -> 220 ohm resistor -> J10
  *   J10       -> nRF GPIO P0.30 -> Zephyr gpio0 pin 30
  *
- * Current behavior:
+ * Current interim behavior (future final golfer UX is backlog work):
  *   Startup:
  *     Ring flashes 3 times
  *
@@ -21,13 +21,11 @@
  *     Ring off
  *
  *   Button press:
- *     ACK: ring solid briefly
- *     TRANSMITTING: slow blink
+ *     Capture the current Device Health snapshot
+ *     TRANSMITTING: 3 brief flashes before the first HTTPS attempt
  *     SUCCESS: 3 quick flashes
+ *     FAILURE: long solid illumination
  *     Return to IDLE
- *
- * Future replacement point:
- *   Replace simulated_send_request() with actual LTE/cloud request logic.
  */
 
 #include <zephyr/kernel.h>
@@ -480,18 +478,7 @@ static void show_failure_feedback(void)
 	ring_off();
 }
 
-/*
- * Placeholder for the future real LTE/cloud request.
- *
- * Return true for success.
- * Return false for failure.
- *
- * Later this function will:
- *   1. wake/connect modem
- *   2. send request payload
- *   3. wait for server response
- *   4. return success/failure
- */
+/* Sends the current authenticated LTE/HTTPS request within the attempt deadline. */
 static int send_fairway_request(int64_t attempt_deadline_ms)
 {
 	int ret;
@@ -728,8 +715,17 @@ static int send_https_test(int64_t attempt_deadline_ms)
 
 	const char *host = "fairway-button-receiver-936892386735.us-central1.run.app";
 
-	const char request_body[] =
-	"{\"device_id\":\"frb-0001\",\"event_type\":\"button_press\"}";
+	static char request_body[128];
+	int request_body_len;
+
+	request_body_len = snprintk(request_body, sizeof(request_body),
+		"{\"device_id\":\"%s\",\"event_type\":\"button_press\"}",
+		FAIRWAY_DEVICE_ID);
+
+	if (request_body_len < 0 || request_body_len >= sizeof(request_body)) {
+		LOG_ERR("HTTPS request body buffer too small");
+		return -ENOMEM;
+	}
 
 static char request[512];
 int request_len;
@@ -743,7 +739,7 @@ request_len = snprintk(request, sizeof(request),
 	"Connection: close\r\n"
 	"\r\n"
 	"%s",
-	(int)strlen(request_body),
+	request_body_len,
 	request_body);
 
 if (request_len < 0 || request_len >= sizeof(request)) {

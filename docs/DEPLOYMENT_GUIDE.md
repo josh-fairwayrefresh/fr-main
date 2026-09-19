@@ -30,18 +30,24 @@ Context references:
 
 ## Current Environment
 
-### Repository + Historical Deployment Configuration (Pending Live Verification)
+### Current Validated Deployment Environment
 
 | Item | Source | Value |
 |------|--------|-------|
-| Google Cloud Project | Repository + Historical Working State | savvy-kit-496703-r5 |
+| Google Cloud Project | Current Operational Evidence | savvy-kit-496703-r5 |
 | Project Number | Repository + Historical Working State | 936892386735 |
 | Firebase Project | Repository + Historical Working State | savvy-kit-496703-r5 |
-| Cloud Run Region | Repository + Historical Working State | us-central1 |
-| Cloud Run Service | Repository + Historical Working State | fairway-button-receiver |
-| Cloud Run URL | Repository + Historical Working State | https://fairway-button-receiver-936892386735.us-central1.run.app |
+| Cloud Run Region | Current Operational Evidence | us-central1 |
+| Cloud Run Service | Current Operational Evidence | fairway-button-receiver |
+| Cloud Run URL | Repository + Current Operational Evidence | https://fairway-button-receiver-936892386735.us-central1.run.app |
 | Firebase Hosting URL | Historical Working State | https://savvy-kit-496703-r5.web.app |
-| Firestore Database | Live Verification Required | Cloud Firestore (Native mode); database ID is not recorded in current repository-controlled artifacts. |
+| Firestore Database | Current Operational Evidence | Cloud Firestore (Native mode); database ID is not recorded in current repository-controlled artifacts. |
+
+WP3 deployment validation on 2026-09-18 established that Cloud Run revision
+`fairway-button-receiver-00009-c5j` was healthy and receiving 100% of service
+traffic. The revision identifies that validation event only; deployment and
+operational procedures target the durable service name, not a permanent
+revision ID.
 
 ### Historical Deployment Environment (Pending Independent Revalidation)
 
@@ -74,12 +80,15 @@ Current deployment depends on:
 
 | Item | Source | Status | Notes |
 |------|--------|--------|-------|
-| FAIRWAY_DEVICE_KEY | Repository | Required | Runtime secret used by backend request authentication; value intentionally omitted. |
-| Firmware device key secret | Repository | Required | Device-side secret material required for outbound request header; values intentionally omitted. |
+| Per-device firmware identity and credential | Local provisioning material | Required | `FAIRWAY_DEVICE_ID` and the per-device `FAIRWAY_DEVICE_KEY` macro are supplied by the local gitignored provisioning header; values are intentionally omitted. |
 | Firebase web configuration | Repository | Repository-managed | Web app configuration is maintained in source; this guide does not duplicate values. |
 | TLS CA chain certificates | Repository | Repository-managed | Firmware trust material is maintained in the firmware certificate directory. |
 | Cloud Run service account IAM | Historical Working State | Pending Live Verification | Historical source reports Firestore write role assignment; exact service account identity is not recorded in current repository-controlled artifacts. |
 | Secrets management system of record | Live Verification Required | Not Documented | Secrets system of record, ownership, and rotation workflow are not documented in current repository-controlled deployment artifacts. |
+
+The backend has no fleet-wide `FAIRWAY_DEVICE_KEY` requirement. Button-event
+authentication uses the claimed Device's own Firestore-stored verifier, and
+the obsolete Cloud Run environment variable has been removed.
 
 ---
 
@@ -134,7 +143,7 @@ export ZEPHYR_SDK_INSTALL_DIR="$NCS_TOOLCHAIN_DIR/opt/zephyr-sdk"
 
 command -v west
 west --version
-grep -E 'EXTRAVERSION|VERSION_MAJOR|VERSION_MINOR' "$NCS_INSTALL_DIR/nrf/VERSION"
+grep -Fx '3.1.1' "$NCS_INSTALL_DIR/nrf/VERSION"
 test -x "$NCS_TOOLCHAIN_DIR/bin/python"
 test -x "$NCS_TOOLCHAIN_DIR/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc"
 ```
@@ -231,12 +240,12 @@ This command is destructive and requires explicit authorization before use. Afte
 
 ## Backend Deployment
 
-Repository-Derived and Historical Backend Deployment Facts:
+Current Backend Deployment Facts:
 
 - Runtime libraries indicate Node.js function-style service using @google-cloud/functions-framework.
 - Documented deployed service name: fairway-button-receiver
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
-- Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication.
+- Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
 - Confirm and complete status endpoints currently do not enforce equivalent endpoint authentication in backend implementation.
 - Authentication/authorization hardening for operator control endpoints remains unresolved and is not an approved production security model.
 - Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
@@ -246,16 +255,27 @@ Repository-Derived and Historical Backend Deployment Facts:
   - POST /api/v1/requests/{requestId}/confirm
   - POST /api/v1/requests/{requestId}/complete
 
+The current working-tree backend source includes a fail-closed Device-state
+authorization correction made after revision
+`fairway-button-receiver-00009-c5j` was validated. Redeployment and bounded
+backend regression validation are required before the WP3 source can be
+committed; this guide does not claim that correction is already live.
+
+Operational lesson (established during WP3 per-device credential deployment): read-only Cloud Run inspection commands (for example `gcloud run services describe`) return full container environment variable values, including secrets, unless the output is field-restricted. Always use a field-restricted `--format=value(...)` (or equivalent) query that excludes environment variable values when inspecting a service that may hold secret-bearing configuration; only request variable names, never values, unless a value is explicitly required and authorized.
+
 Deployment process status:
 
 No repository-controlled backend deployment command or CI pipeline is currently documented.
 The canonical backend deployment process is not yet published in repository-controlled artifacts.
 
-Deployment Verification:
+### Backend Deployment Validation
 
-- Historical deployment verification flow (pending independent revalidation):
-  - Cloud Run curl POST creates Firestore document and returns OK with document id.
-  - Dashboard status actions update request status via confirm/complete endpoints.
+Backend deployment validation is scoped to the backend being changed. It
+includes service health, expected authentication/authorization responses, and
+request persistence behavior where applicable. WP3 validated per-device
+authentication and creation of exactly one correctly attributed FRB-0001
+request through a physical button press. It did not independently visually
+validate the operator webapp or its confirm/complete flow.
 
 ---
 
@@ -293,8 +313,11 @@ Repository-Derived Firestore Configuration:
 
 Repository-Derived collection usage in repository code:
 
-- requests (read and write paths)
-- devices (backend lookup for device activation and metadata)
+- `customers/{CUST-XXXX}` (Customer records)
+- `customers/{CUST-XXXX}/courses/{COURSE-XXXX}` (Customer-owned Course records)
+- `devices/{FRB-XXXX}` (Device registry, metadata, state-derived communication permission, and credential verifier)
+- `counters/CUST`, `counters/COURSE`, and `counters/FRB` (central ID allocation)
+- `requests/{requestId}` (request creation, lookup, and status updates)
 
 Collection schema is owned by the backend implementation.
 
@@ -320,7 +343,8 @@ Related planning reference:
 
 ## Operational Verification
 
-Repository + historical operational verification sequence (pending live verification):
+Full-system or pilot operational validation is broader than backend deployment
+validation. When that scope is authorized, the sequence is:
 
 1. Firmware boots and reaches network-ready state.
 2. Device sends request to Cloud Run endpoint.
@@ -329,7 +353,10 @@ Repository + historical operational verification sequence (pending live verifica
 5. Confirm action succeeds and updates status.
 6. Complete action succeeds and updates status/removes active item.
 
-A deployment is considered successful only after all six verification steps complete successfully.
+A full-system or pilot operational validation is complete only after all six
+steps succeed. A bounded backend deployment can be validated against its own
+approved backend acceptance criteria without claiming unperformed operator UI
+validation.
 
 ---
 

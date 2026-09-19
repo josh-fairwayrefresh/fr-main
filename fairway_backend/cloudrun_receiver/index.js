@@ -1,5 +1,11 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
+const { authenticateDeviceCredential } = require('./lib/fleet/devices');
+const {
+  isDeviceCommunicationAllowed,
+  deriveHoleFromLocation,
+  deriveDisplayLabelFromLocation,
+} = require('./lib/fleet/schema');
 
 const db = new Firestore();
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
@@ -16,23 +22,11 @@ function sendCorsOk(res) {
 }
 
 async function createButtonRequest(req, res) {
-  const expectedDeviceKey = process.env.FAIRWAY_DEVICE_KEY;
-  const providedDeviceKey = req.get(DEVICE_KEY_HEADER);
-
-  if (!expectedDeviceKey) {
-    console.error('FAIRWAY_DEVICE_KEY is not configured');
-    return res.status(500).send('Device key not configured\n');
-  }
-
-  if (!providedDeviceKey || providedDeviceKey !== expectedDeviceKey) {
-    console.warn('Rejected button request with missing or invalid device key');
-    return res.status(401).send('Unauthorized\n');
-  }
-
   const body = req.body || {};
 
   const deviceId = body.device_id || body.device || 'unknown_device';
   const eventType = body.event_type || body.event || 'button_press';
+  const presentedCredential = req.get(DEVICE_KEY_HEADER);
 
   const deviceRef = db.collection('devices').doc(deviceId);
 const deviceSnap = await deviceRef.get();
@@ -47,12 +41,20 @@ if (!deviceSnap.exists) {
 
 const device = deviceSnap.data();
 
-if (device.active === false) {
+if (!isDeviceCommunicationAllowed(device.state)) {
   console.warn('Rejected button request from inactive device:', {
     device_id: deviceId
   });
 
   return res.status(403).send('Inactive device\n');
+}
+
+if (!authenticateDeviceCredential(device, presentedCredential)) {
+  console.warn('Rejected button request with missing or invalid device credential:', {
+    device_id: deviceId
+  });
+
+  return res.status(401).send('Unauthorized\n');
 }
 
 const existingOpenRequests = await db.collection('requests')
@@ -76,8 +78,8 @@ const requestDoc = {
   course_id: device.course_id || 'unknown_course',
   course_name: device.course_name || null,
   device_id: deviceId,
-  device_label: device.label || null,
-  hole: device.hole ?? null,
+  device_label: deriveDisplayLabelFromLocation(device.location),
+  hole: deriveHoleFromLocation(device.location),
   event_type: eventType,
   status: 'new',
   source: 'nrf9151',
