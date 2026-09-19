@@ -175,6 +175,28 @@ It also minimizes documentation drift by ensuring updates are made in one locati
 - Flashing requires explicit authorization and must be treated separately.
 - Do not mix unrelated firmware, backend, and generated webapp changes in one task.
 
+### VS Code Integrated-Terminal Shell Safety
+
+VSC and engineers must not enable `set -u`, `setopt nounset`, `set -e`,
+`setopt errexit`, or `set -euo pipefail` in a persistent VS Code integrated
+zsh parent shell. Leaked `nounset` or `errexit` state can interfere with VS
+Code prompt integration. When strict execution is needed, isolate it so the
+option state cannot return to the parent shell:
+
+```sh
+(
+   set -euo pipefail
+   # bounded commands
+)
+```
+
+When only pipeline failure propagation is required, prefer `set -o pipefail`
+by itself. Do not mask this interaction by globally defining `RPROMPT`, by
+modifying `~/.zprofile` or `~/.zshrc` without a separately established reason,
+or by disabling VS Code shell integration. This is terminal-execution hygiene
+only; it does not alter Fairway build, NCS/toolchain, firmware, deployment, or
+Git architecture or governance.
+
 ## 4. Firmware
 
 - User-visible device behavior is owned by `docs/UX_SPECIFICATION.md`.
