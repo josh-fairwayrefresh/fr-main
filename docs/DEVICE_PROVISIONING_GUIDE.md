@@ -23,7 +23,7 @@ Fairway Refresh fleet data is organized as:
 Customer -> Course -> Device
 
 - **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style; the readable name is a separate `customer_name` field. Stored at `customers/{customerId}`; the Firestore document ID is the canonical identity and is not duplicated as a `customer_id` field inside the document.
-- **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time; stored/configured only, firmware scheduling is separate future work).
+- **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time); this timezone and schedule are currently stored/configured on the Course record. Autonomous firmware Device Health scheduling that uses these values is an approved WP4 sprint target and is not yet implemented; see `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Approved Target, Not Yet Implemented)") for the detailed requirement. A Device's effective timezone and Device Health reporting schedule are inherited from its currently assigned Course, are not independently stored/authoritative on the Device, and follow automatically whenever the Device is reassigned to a different Course.
 - **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below), stored at the top level (`devices/{deviceId}`). A Device is assigned to a Customer, a Course belonging to that Customer, and a marker location; that assignment is mutable, but the Device ID itself never changes. The Device record stores both `customer_id`/`course_id` (authoritative) and `customer_name`/`course_name` (synchronized display copies sourced from the Customer/Course records, never independently editable) for administrator readability. Per current product policy, once a Device has a `customer_id` it is not reassigned to a different Customer; only Course (within the same Customer) and location may change through normal reassignment.
 
 This hierarchy, the canonical ID formats, and the backend allocation mechanism are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/` (`schema.js`, `ids.js`, `customers.js`, `courses.js`, `devices.js`). These are internal backend primitives only; no admin UI or exposed admin API is implemented yet (future work, see `docs/feature_backlog.md`).
@@ -88,7 +88,7 @@ Each provisioned device requires a provisioning record with the fields below.
 | `comments` | Administrator free-text notes |
 | `commissioning` | Commissioning metadata (`commissioned_at`, `commissioned_by`) or null |
 | `service` | Service metadata (`last_service_at`, `last_service_by`) or null |
-| `latest_health` | Reserved null placeholder until WP4 implements health transport/persistence |
+| `latest_health` | Currently a null placeholder; no health transport/persistence is implemented yet. Approved target (see "Device Health: Latest State and History" below): the freshest successfully received valid Device Health observation, including a backend/server-owned `received_at`. |
 | `gps` | Reserved null placeholder for a future GPS extension |
 | `created_at` / `updated_at` | Standard record metadata |
 
@@ -278,6 +278,52 @@ A deployment-ready device may be associated with:
 - administrator comments
 
 `customer_name` and `course_name` are always sourced from the authoritative Customer/Course records at assignment time; a caller cannot supply an arbitrary or conflicting display name. A Course can only be assigned if it belongs to the Device's own Customer; a Course belonging to a different Customer is rejected. Once a Device has a `customer_id`, normal reassignment only moves it between Courses belonging to that same Customer — there is no cross-Customer Device transfer workflow. Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
+
+## Device Health: Latest State, History, Thresholds, and Alerts (Approved Target)
+
+This section is the canonical owner of backend Device Health state requirements, `latest_health` semantics, the health-history requirement, Device Health thresholds, and alert-state/lifecycle semantics. Firmware-side acquisition and the approved scheduled-transport requirement are owned by `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Approved Target, Not Yet Implemented)") and are not duplicated here.
+
+Current implementation status: `latest_health` is a null placeholder on every Device record today (see "Provisioning Record" above); no Device Health backend persistence, history store, threshold evaluation, or alert record exists in current tracked source.
+
+### Latest Health and History (Approved Target)
+
+- `devices/{FRB-XXXX}.latest_health` shall represent the freshest successfully received valid Device Health observation for that Device, including a backend/server-owned `received_at` timestamp.
+- The backend shall also retain immutable historical Device Health observations, distinct in purpose from `latest_health`: `latest_health` serves efficient current fleet/device state, while health history serves trends, diagnosis, alert analysis, and historical record.
+- Ordinary golfer button communications shall also update `latest_health` and health history whenever they carry a fresh valid health observation, in addition to the two autonomous scheduled observations per day described in `docs/FIRMWARE_SPECIFICATION.md`.
+- The exact immutable-history Firestore collection/path/schema is not yet approved and is unresolved WP4 implementation work; it is not invented here. Once WP4 implementation establishes an actual deployed Firestore collection/path/configuration, `docs/DEPLOYMENT_GUIDE.md` shall document that deployed configuration.
+
+### Device Health Thresholds (Approved Initial Values)
+
+| Metric | Yellow | Red | Status |
+|---|---|---|---|
+| Battery voltage | below 3.0 V | below 2.5 V | Approved |
+| Temperature | above 100 F | above 110 F | Approved |
+| RSRP | below -105 dBm | below -115 dBm | Provisional |
+| RSRQ | below -15 dB | below -19 dB | Provisional |
+| SNR | below 0 dB | below -5 dB | Provisional |
+
+Battery and temperature thresholds are approved initial values. Cellular thresholds (RSRP, RSRQ, SNR) are explicitly provisional sprint thresholds and must not be silently converted into permanent validated thresholds. These are approved target values; no threshold-evaluation implementation exists yet.
+
+### Alert Lifecycle (Approved Target)
+
+Health alerts are persistent records, not transient UI coloring. Alerts shall:
+
+- open when the relevant condition is established;
+- remain represented as an active condition while unresolved;
+- automatically resolve when subsequent valid evidence establishes recovery;
+- retain their history indefinitely; resolution does not erase alert history.
+
+A missed scheduled Device Health report is itself an alert condition, independent of the values contained in the most recent successful health observation. For the default 09:00/17:00 schedule, a report is missed if not successfully received by 09:05/17:05 Course-local time respectively; the backend independently determines a miss and must not depend on a failed Device transmission to report its own communication failure. The next successful health-bearing communication for that Device, whether a scheduled health report or an ordinary button communication, automatically resolves the missed-report/connectivity alert without erasing its history.
+
+No general stale-device threshold beyond the explicit 09:05/17:05 missed-scheduled-report rules has been approved; one is not implied or invented here. The exact alert collection/path/schema is unresolved WP4 implementation work, to be documented in `docs/DEPLOYMENT_GUIDE.md` once deployed.
+
+### Admin Notifications (Approved Target)
+
+A missed scheduled Device Health report shall generate an immediate notification to the admin once the backend establishes the miss at the applicable 09:05/17:05 Course-local deadline. Approved channels are email and SMS/text. For the present sprint/pilot, notification recipient scope is admin only; it must not be expanded to Course or Customer personnel without separate approval. The exact email/SMS provider is not yet selected and is not canonicalized here; notification implementation should remain sufficiently decoupled that the health architecture is not unnecessarily bound to a particular provider.
+
+### Admin Authorization (Current vs. Approved Target)
+
+The existing `fairway_webapp/cart_operator_dashboard/` currently implements Firebase Authentication (Google and email/password sign-in); there is no operator/admin role distinction today — every authenticated user is treated identically. Approved target: extend the existing Fairway application with a distinct admin area/login using the same Firebase authentication system, with real admin authorization. The exact admin authorization mechanism is not yet established and is not invented here; it remains implementation work, see `docs/feature_backlog.md` (WP5).
 
 ## Functional Verification
 

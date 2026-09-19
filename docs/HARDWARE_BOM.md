@@ -96,6 +96,19 @@ The Adafruit 5580 / MAX17048 fuel gauge is now physically installed and wired on
 
 These are historical alternatives and are not current alternatives for the approved pilot-build architecture.
 
+## Provisional Future Button / Indicator System — Not Yet Accepted
+
+This is a CPO-approved provisional future hardware direction, subject to physical/electrical/environmental testing and final acceptance. It is not accepted installed hardware, is not part of the locked pilot BOM above, and does not replace the current installed PV4 pushbutton (E-Switch `PV4F2B0SS-311`, "Retained from Prototype 1.0" above), which remains the current installed and functioning button hardware. No wiring or pinout for this system has been engineered or canonicalized.
+
+| Component | Manufacturer | Manufacturer Part # | Notes |
+|---|---|---|---|
+| Pushbutton (provisional) | E-Switch | PV8 family; non-illuminated, momentary, factory-wired version preferred/assumed, stainless body/actuator | Exact wired ordering part number is not yet confirmed and is not recorded here pending procurement/BOM canonicalization. |
+| Indicator, orange (provisional) | Dialight | 656-3352-303F | Domed, 5 VDC. Intended meaning: request/sending. |
+| Indicator, green (provisional) | Dialight | 656-3202-303F | Domed, 5 VDC. Intended meaning: successful network transmission. |
+| Indicator, red (provisional) | Dialight | 656-3102-303F | Domed, 5 VDC. Intended meaning: failed transmission / unavailable condition. |
+
+The complete golfer-facing light-state UX (timing, sequencing, repeated-press behavior) is not yet finalized; only the high-level color meanings above are established. See `docs/feature_backlog.md` (Future Backlog priority #5, "Final Golfer Button / LED UX") and `docs/UX_SPECIFICATION.md` for the current interim behavior and the future-UX boundary.
+
 ## Prototype 1.0 (Historical, First Build, Pre-Pilot)
 
 This section preserves the original Prototype 1.0 hardware record for historical provenance. It no longer reflects the current field-power architecture.

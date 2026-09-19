@@ -103,6 +103,17 @@ Device Health Diagnostics (Validated)
 - Battery-voltage validation: the MAX17048 reported 4.0125 V; a CPO DMM measurement directly at the LiPo node was approximately 4.0 V; the difference was approximately 12.5 mV (approximately 0.31%), accepted by the CPO as adequate out-of-box battery-voltage calibration for the prototype. This validates voltage acquisition only; SOC accuracy has not been independently calibrated, and long-term SOC model behavior has not been validated.
 - This diagnostics work does not yet include persistence, backend transmission, or an admin-facing view; the snapshot is currently logged locally only.
 
+Device Health Transport and Scheduling (Approved Target, Not Yet Implemented)
+------------------------------------------------------------------------------
+- Current firmware acquires the Device Health snapshot listed above but does not yet transport it: the outgoing request body remains `{"device_id":..., "event_type":"button_press"}` and carries no health fields. No autonomous scheduled wake exists today; the application currently blocks indefinitely in WFI for a button interrupt only. `latest_health` and health history are not currently persisted by the backend.
+- Approved sprint target: every `deployed` marker shall autonomously wake and transmit a Device Health report at approximately 09:00 and approximately 17:00 Course-local time, independent of golfer button activity, with accuracy within approximately +/- 1 minute.
+- Approved sprint target: each scheduled report permits exactly two total transmission attempts (the initial attempt plus one retry), with the retry occurring within 90 seconds of the failed first attempt. This scheduled-report attempt policy is distinct from the existing button-request `REQUEST_MAX_ATTEMPTS`/`REQUEST_ATTEMPT_TIMEOUT_MS` retry policy described above.
+- Approved sprint target: the Device shall possess valid authoritative time before trusting a scheduled-wake calculation. On first provisioning/boot, and after any reboot/reset where valid time cannot be trusted, the Device shall establish LTE as necessary to obtain/synchronize valid time rather than waiting indefinitely for button activity before doing so.
+- Approved sprint target: every successful authenticated Device communication shall provide the Device with its current effective backend configuration needed for scheduled health operation (at minimum, the effective Course timezone and health-report schedule), and the Device shall cache that effective configuration for later autonomous use.
+- Approved sprint target: scheduled health transport shall use a transport/event concept semantically distinct from an ordinary golfer `button_press`. `health_report` is the current approved architectural event-name direction.
+- The exact nRF9151/NCS timekeeping and low-power scheduled-wake mechanism (for example whether an application timer, modem-assisted time source, or another current-NCS-supported approach is used) is not yet established and is not documented here as implemented fact; it is unresolved implementation work for WP4. An external calendar RTC is not currently assumed necessary, but the actual mechanism must be verified during implementation before being described as current behavior.
+- Approved-target backend semantics for `latest_health`, health history, health thresholds, and alert lifecycle are owned by `docs/DEVICE_PROVISIONING_GUIDE.md` and are not duplicated here.
+
 FUTURE ARCHITECTURAL OPTION
 - A substantially deeper application-core power architecture could be investigated using nRF9151 System OFF / power-off behavior. Conceptually, the possible future path is `running -> System OFF -> wake event -> reset/reboot -> initialize -> resume Fairway service`.
 - System OFF is not approved for implementation. The current product architecture intentionally retains WFI/resume-in-place behavior: `running -> WFI -> button interrupt -> resume execution`.
@@ -114,10 +125,12 @@ This section owns firmware implementation backlog only. Product-level planning i
 
 - Watchdog timer and reset-reason logging.
 - Battery-under-load characterization and safe-transmit thresholds.
-- Device Health transport and scheduling support for WP4; backend persistence,
-  reporting, admin presentation, and alerts remain owned by their later work
-  packages. The existing local acquisition snapshot is already implemented and
-  validated.
+- Device Health transport and scheduling implementation for the approved WP4
+  target described above under "Device Health Transport and Scheduling
+  (Approved Target, Not Yet Implemented)"; backend persistence, thresholds,
+  alerts, and admin presentation are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`
+  and later work packages. The existing local acquisition snapshot is already
+  implemented and validated.
 - Explicit LTE reconnect strategy with bounded retry/backoff behavior.
 - Explicit power-optimization audit.
 

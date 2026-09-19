@@ -153,7 +153,7 @@ Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 
 
 CPO-confirmed validation: the integrated candidate built cleanly under the canonical NCS 3.1.1 procedure, flashed successfully, and operated correctly from the current field-power architecture with one normal Fairway button interaction producing the expected behavior.
 
-Backend Device Health persistence and an admin-facing Device Health view are not part of Prototype 1.2 and remain future work.
+Backend Device Health persistence and an admin-facing Device Health view are not part of Prototype 1.2. Current Prototype 1.2 behavior remains acquisition/logging only, with no backend persistence and no admin UI. The approved target architecture for Device Health transport, scheduling, backend persistence, thresholds, and alerts is recorded in `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Approved Target, Not Yet Implemented)") and `docs/DEVICE_PROVISIONING_GUIDE.md` ("Device Health: Latest State, History, Thresholds, and Alerts (Approved Target)"); the approved admin capability target is recorded in `docs/feature_backlog.md` (WP4/WP5/WP6). None of that approved target architecture is implemented as of Prototype 1.2.
 
 Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing details (exact component placement, Perma-Proto geometry, and mechanical layout), which remain owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as previously recorded.
 
