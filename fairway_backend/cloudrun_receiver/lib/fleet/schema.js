@@ -32,6 +32,24 @@ function isDeviceCommunicationAllowed(state) {
   );
 }
 
+/*
+ * Canonical authenticated Device request event types. `button_press` is the
+ * existing golfer-request event; `health_report` is the WP4 Device Health
+ * transport event. Both share the same request endpoint and authentication
+ * path; an event_type outside this set is rejected rather than silently
+ * treated as `button_press`.
+ */
+const EVENT_TYPES = Object.freeze({
+  BUTTON_PRESS: 'button_press',
+  HEALTH_REPORT: 'health_report',
+});
+
+const EVENT_TYPE_VALUES = Object.freeze(Object.values(EVENT_TYPES));
+
+function isValidEventType(eventType) {
+  return EVENT_TYPE_VALUES.includes(eventType);
+}
+
 const MARKER_LOCATION_TYPES = Object.freeze({
   HOLE: 'hole',
   CUSTOM: 'custom',
@@ -113,6 +131,9 @@ module.exports = {
   DEVICE_STATE_VALUES,
   isValidDeviceState,
   isDeviceCommunicationAllowed,
+  EVENT_TYPES,
+  EVENT_TYPE_VALUES,
+  isValidEventType,
   MARKER_LOCATION_TYPES,
   MIN_HOLE_NUMBER,
   MAX_HOLE_NUMBER,
