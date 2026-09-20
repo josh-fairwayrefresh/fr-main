@@ -23,6 +23,7 @@ Before acting:
    then freshly read all current Major Engineering Documents:
 
    docs/ENGINEERING_GUIDE.md
+   docs/Continuous_improvement_Kaizen_1.0.md
    docs/FIRMWARE_SPECIFICATION.md
    docs/HARDWARE_BOM.md
    docs/HARDWARE_ASSEMBLY_GUIDE.md
@@ -288,6 +289,7 @@ exclusively by `docs/feature_backlog.md` and are not duplicated here.
 
 - `docs/README.md`
 - `docs/ENGINEERING_GUIDE.md`
+- `docs/Continuous_improvement_Kaizen_1.0.md`
 - `docs/HARDWARE_BOM.md`
 - `docs/HARDWARE_ASSEMBLY_GUIDE.md`
 - `docs/FIRMWARE_SPECIFICATION.md`

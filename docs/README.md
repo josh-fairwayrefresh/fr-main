@@ -25,6 +25,7 @@ This document is the starting point for engineering work in Fairway Refresh. It 
 ## Canonical Document Ownership
 - `docs/README.md` — documentation navigation and policy.
 - `docs/ENGINEERING_GUIDE.md` — system-level overview, cross-document summary, and canonical Fairway Refresh Fidelity Mandate.
+- `docs/Continuous_improvement_Kaizen_1.0.md` — canonical owner of continuous-improvement and development-decision practice: product-first engineering discipline, prioritization/value-of-work, evidence and diagnostic-value discipline, reconsideration of canonical decisions, CPO-time protection, and retrospective practice.
 - `docs/HARDWARE_BOM.md` — installed hardware components and part numbers.
 - `docs/HARDWARE_ASSEMBLY_GUIDE.md` — physical assembly, wiring, maintenance power procedure, and the complete Circuit Dojo nRF9151 Feather physical header/pin reference.
 - `docs/FIRMWARE_SPECIFICATION.md` — current firmware implementation, constraints, and firmware backlog.
@@ -48,6 +49,7 @@ Current:
 
 - `docs/README.md` — documentation index and usage principles.
 - `docs/ENGINEERING_GUIDE.md` — primary engineering handbook; currently a draft, and the canonical owner of the Fairway Refresh Fidelity Mandate.
+- `docs/Continuous_improvement_Kaizen_1.0.md` — canonical owner of continuous-improvement and development-decision practice, complementary to the Fidelity Mandate.
 - `docs/HARDWARE_BOM.md` — installed prototype hardware components and part numbers.
 - `docs/HARDWARE_ASSEMBLY_GUIDE.md` — assembly and wiring guide for Prototype 1.0, including the complete Circuit Dojo nRF9151 Feather physical header/pin reference.
 - `docs/decisions/` — accepted engineering decision records.
