@@ -279,18 +279,17 @@ A deployment-ready device may be associated with:
 
 `customer_name` and `course_name` are always sourced from the authoritative Customer/Course records at assignment time; a caller cannot supply an arbitrary or conflicting display name. A Course can only be assigned if it belongs to the Device's own Customer; a Course belonging to a different Customer is rejected. Once a Device has a `customer_id`, normal reassignment only moves it between Courses belonging to that same Customer — there is no cross-Customer Device transfer workflow. Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
 
-## Device Health: Latest State, History, Thresholds, and Alerts (Approved Target)
+## Device Health: Latest State, History, Thresholds, and Alerts
 
-This section is the canonical owner of backend Device Health state requirements, `latest_health` semantics, the health-history requirement, Device Health thresholds, and alert-state/lifecycle semantics. Firmware-side acquisition and the approved scheduled-transport requirement are owned by `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Approved Target, Not Yet Implemented)") and are not duplicated here.
+This section is the canonical owner of backend Device Health state requirements, `latest_health` semantics, the health-history requirement, Device Health thresholds, and alert-state/lifecycle semantics. Firmware-side acquisition and the scheduled-transport requirement are owned by `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Implemented)") and are not duplicated here.
 
-Current implementation status: `latest_health` is a null placeholder on every Device record today (see "Provisioning Record" above); no Device Health backend persistence, history store, threshold evaluation, or alert record exists in current tracked source.
+Current implementation status: `latest_health` persistence, immutable health history, and effective-configuration resolution are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/health.js` and `index.js`, and are test-verified (56/56 backend unit tests passing, including `health.test.js` and the `health_report`/duplicate-suppression cases in `index.test.js`). Device Health threshold evaluation and the alert-record lifecycle described below remain approved target only; no threshold-evaluation or alert-record implementation exists in current tracked source.
 
-### Latest Health and History (Approved Target)
+### Latest Health and History (Implemented)
 
-- `devices/{FRB-XXXX}.latest_health` shall represent the freshest successfully received valid Device Health observation for that Device, including a backend/server-owned `received_at` timestamp.
-- The backend shall also retain immutable historical Device Health observations, distinct in purpose from `latest_health`: `latest_health` serves efficient current fleet/device state, while health history serves trends, diagnosis, alert analysis, and historical record.
-- Ordinary golfer button communications shall also update `latest_health` and health history whenever they carry a fresh valid health observation, in addition to the two autonomous scheduled observations per day described in `docs/FIRMWARE_SPECIFICATION.md`.
-- The exact immutable-history Firestore collection/path/schema is not yet approved and is unresolved WP4 implementation work; it is not invented here. Once WP4 implementation establishes an actual deployed Firestore collection/path/configuration, `docs/DEPLOYMENT_GUIDE.md` shall document that deployed configuration.
+- `devices/{FRB-XXXX}.latest_health` represents the freshest successfully received valid Device Health observation for that Device, including a backend/server-owned `received_at` timestamp (`FieldValue.serverTimestamp()`, never client-supplied; a client-supplied `received_at` key is rejected as an unknown field).
+- The backend also retains immutable historical Device Health observations in the `health_history` subcollection of each Device document (`devices/{FRB-XXXX}/health_history/{historyId}`), written in the same Firestore batch as the `latest_health` update so both always agree on receive time and cannot diverge from a partial failure.
+- Ordinary golfer button communications and scheduled `health_report` communications both resolve and return the Device's effective configuration (Course timezone and health-report schedule) from the same Customer/Course hierarchy; only a `health_report` event additionally updates `latest_health`/history, since `button_press` never carries a health observation.
 
 ### Device Health Thresholds (Approved Initial Values)
 
@@ -315,7 +314,9 @@ Health alerts are persistent records, not transient UI coloring. Alerts shall:
 
 A missed scheduled Device Health report is itself an alert condition, independent of the values contained in the most recent successful health observation. For the default 09:00/17:00 schedule, a report is missed if not successfully received by 09:05/17:05 Course-local time respectively; the backend independently determines a miss and must not depend on a failed Device transmission to report its own communication failure. The next successful health-bearing communication for that Device, whether a scheduled health report or an ordinary button communication, automatically resolves the missed-report/connectivity alert without erasing its history.
 
-No general stale-device threshold beyond the explicit 09:05/17:05 missed-scheduled-report rules has been approved; one is not implied or invented here. The exact alert collection/path/schema is unresolved WP4 implementation work, to be documented in `docs/DEPLOYMENT_GUIDE.md` once deployed.
+Missed-scheduled-report detection and the alert engine described in this subsection are WP6 scope (see `docs/feature_backlog.md`) and are not implemented by the current backend; `latest_health`/history persistence (above) is a separate, already-implemented WP4 concern and does not depend on this alert engine existing.
+
+No general stale-device threshold beyond the explicit 09:05/17:05 missed-scheduled-report rules has been approved; one is not implied or invented here. The exact alert collection/path/schema is unresolved WP6 implementation work, to be documented in `docs/DEPLOYMENT_GUIDE.md` once deployed.
 
 ### Admin Notifications (Approved Target)
 

@@ -277,8 +277,9 @@ interpretation are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### Current Observed or Repository-Verified Risks
 
-- Blocking network operations in the firmware request path.
+- Blocking network operations in the golfer button request path were resolved by the golfer-first transaction architecture in `fde1aade63ac62650709e7ea6aead6f817b71b58`; see `docs/FIRMWARE_SPECIFICATION.md` ("Golfer Transaction Architecture"). Remaining desk/source-verified-only scenarios (forced-FAILURE timing, Health-vs-golfer concurrency, repeated boot determinism) are tracked as WP4 follow-up validation, not an open architectural risk.
 - Battery behavior under LTE load remains uncharacterized.
+- CPO-observed whole-device idle-power regression (approximately an order of magnitude versus the LP 1.2 ~23.25 uA baseline) coincident with the 5580/6106 power-architecture integration; deferred and unresolved, see `docs/feature_backlog.md`.
 
 Current engineering roadmap, sprint status, and feature priority are owned
 exclusively by `docs/feature_backlog.md` and are not duplicated here.
