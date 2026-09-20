@@ -81,6 +81,68 @@ test('minimal observation with all nullable fields null accepted', () => {
   assert.strictEqual(isValidHealthObservation(MINIMAL_NULL_OBSERVATION), true);
 });
 
+// --- WP4 pre-build CHECK 3: literal firmware-constructed payload shapes ---
+//
+// send_health_report_request() serializes http_status/https_succeeded from
+// whatever health_snapshot currently holds at the moment the body is built,
+// which is BEFORE this transmission's own outcome is known (see main.c
+// send_health_report_request()/send_http_request()). These fixtures are the
+// exact three shapes that can actually occur, proven against the real
+// validator rather than assumed.
+
+const FIRMWARE_FIRST_ATTEMPT_OBSERVATION = Object.freeze({
+  // First attempt of a health_report cycle (including boot bootstrap):
+  // http_status/https_succeeded are always null here because no response to
+  // *this* transmission exists yet. psm_tau_s/psm_active_time_s are null
+  // because PSM may not yet have been granted this early (both share the
+  // single firmware psm_valid gate).
+  attempts: 1,
+  registration_state: 1,
+  http_status: null,
+  modem_temperature_m_c: 32000,
+  rsrp_dbm: -95,
+  rsrq_db: -10,
+  snr_db: 12,
+  serving_cell_id: 123456,
+  serving_band: 20,
+  psm_tau_s: null,
+  psm_active_time_s: null,
+  battery_voltage_u_v: 4000000,
+  battery_soc_pct: 87,
+  https_succeeded: null,
+});
+
+const FIRMWARE_RETRY_AFTER_TRANSPORT_FAILURE_OBSERVATION = Object.freeze({
+  // Retry (attempt 2) after attempt 1 failed at the transport level
+  // (connect/send/recv/timeout) without ever receiving an HTTP response:
+  // http_status/https_succeeded remain null, unchanged from attempt 1,
+  // because send_http_request() never reaches its status-line parse.
+  ...FIRMWARE_FIRST_ATTEMPT_OBSERVATION,
+  attempts: 2,
+});
+
+const FIRMWARE_RETRY_AFTER_HTTP_FAILURE_OBSERVATION = Object.freeze({
+  // Retry (attempt 2) after attempt 1 DID receive an HTTP response that was
+  // itself unsuccessful (e.g. a 500): http_status/https_succeeded now
+  // reflect that first attempt's real outcome.
+  ...FIRMWARE_FIRST_ATTEMPT_OBSERVATION,
+  attempts: 2,
+  http_status: 500,
+  https_succeeded: false,
+});
+
+test('CHECK 3: actual firmware first-attempt health_report payload is accepted', () => {
+  assert.strictEqual(isValidHealthObservation(FIRMWARE_FIRST_ATTEMPT_OBSERVATION), true);
+});
+
+test('CHECK 3: actual firmware retry payload after a transport-level failure is accepted', () => {
+  assert.strictEqual(isValidHealthObservation(FIRMWARE_RETRY_AFTER_TRANSPORT_FAILURE_OBSERVATION), true);
+});
+
+test('CHECK 3: actual firmware retry payload after a received HTTP failure is accepted', () => {
+  assert.strictEqual(isValidHealthObservation(FIRMWARE_RETRY_AFTER_HTTP_FAILURE_OBSERVATION), true);
+});
+
 test('missing required attempts field rejected', () => {
   const { attempts, ...rest } = VALID_OBSERVATION;
   assert.strictEqual(isValidHealthObservation(rest), false);

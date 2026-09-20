@@ -32,12 +32,18 @@ function sendCorsOk(res) {
  */
 function createFairwayHandlers(db) {
   /*
-   * Persists a golfer button_press request. Behavior is byte-for-byte
-   * unchanged from the pre-WP4 implementation; only its call site moved
-   * (device lookup/state/credential/hierarchy checks now happen once, in
-   * handleDeviceEvent, before dispatching here or to persistHealthReport).
+   * Persists a golfer button_press request. Request persistence, duplicate
+   * suppression, and the `requests` document shape are byte-for-byte
+   * unchanged from the pre-WP4 implementation. The response body now
+   * returns JSON (status/event_type/request_id/effective_config) instead of
+   * plain text so a successful button_press communication can refresh the
+   * Device's cached scheduling config exactly like health_report already
+   * does, using the same effectiveConfig already resolved once by the
+   * caller (handleDeviceEvent) -- no duplicate configuration-calculation
+   * logic. HTTP 200 status and existing auth/state/hierarchy enforcement
+   * (all in handleDeviceEvent, before this function runs) are unchanged.
    */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType) {
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, effectiveConfig) {
     const existingOpenRequests = await db.collection('requests')
       .where('device_id', '==', deviceId)
       .where('status', 'in', ['new', 'confirmed'])
@@ -52,7 +58,13 @@ function createFairwayHandlers(db) {
         existing_request_id: existingRequest.id,
       });
 
-      return res.status(200).send(`OK existing request ${existingRequest.id}\n`);
+      return res.status(200).json({
+        status: 'accepted',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+        request_id: existingRequest.id,
+        duplicate: true,
+        effective_config: effectiveConfig,
+      });
     }
 
     const requestDoc = {
@@ -79,7 +91,12 @@ function createFairwayHandlers(db) {
       event_type: eventType
     });
 
-    return res.status(200).send(`OK ${docRef.id}\n`);
+    return res.status(200).json({
+      status: 'accepted',
+      event_type: EVENT_TYPES.BUTTON_PRESS,
+      request_id: docRef.id,
+      effective_config: effectiveConfig,
+    });
   }
 
   /*
@@ -178,7 +195,7 @@ function createFairwayHandlers(db) {
       return persistHealthReport(res, deviceId, body.health, hierarchy.effectiveConfig);
     }
 
-    return persistButtonPressRequest(res, deviceId, device, body, eventType);
+    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig);
   }
 
   async function updateRequestStatus(req, res, requestId, action) {

@@ -51,9 +51,12 @@
 #include <zephyr/net/tls_credentials.h>
 #include "secrets/fairway_device_key.h"
 #include "health_temperature.h"
+#include "health_schedule.h"
+#include <date_time.h>
 
 LOG_MODULE_REGISTER(main);
 static int send_https_test(int64_t attempt_deadline_ms);
+static int send_health_report_request(int64_t attempt_deadline_ms);
 static bool button_is_pressed(void);
 static const struct device *gpio0_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 static const struct device *uart0_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -105,11 +108,105 @@ typedef enum {
 
 static app_state_t state = STATE_IDLE;
 static volatile bool button_wake_pending;
+static volatile bool health_wake_pending;
+static volatile bool date_time_valid_pending;
 static volatile bool request_lockout_active;
 static volatile int64_t request_lockout_deadline_ms;
 static struct gpio_callback button_cb;
 static struct gpio_callback vbus_cb;
 static K_SEM_DEFINE(wake_sem, 0, 1);
+
+#define HEALTH_REPORT_MAX_ATTEMPTS        2
+#define HEALTH_REPORT_ATTEMPT_TIMEOUT_MS  30000
+#define HEALTH_REPORT_RETRY_WINDOW_MS     90000
+
+/* Bounded wait for the date_time library to confirm authoritative UTC at
+ * boot (Correction 1). Modem-derived time is expected to resolve almost
+ * immediately once LTE is registered; this bound only guards against the
+ * rare case where it does not, so boot can still proceed deterministically.
+ */
+#define DATE_TIME_BOOT_WAIT_MS  15000
+
+/* RAM-only cache of the backend-supplied next scheduled Device Health report
+ * deadline (Unix epoch ms, UTC). No persistent storage across reset is
+ * implemented: a fresh deadline is (re)established by the boot bootstrap
+ * attempt and by every later successful authenticated response. Owned
+ * exclusively by the main thread (see date_time_evt_handler() below): the
+ * date_time library's own callback thread never reads or writes this 64-bit
+ * value, so no cross-thread synchronization is needed for it at all.
+ */
+static int64_t cached_next_health_report_at_ms = -1;
+
+static K_SEM_DEFINE(date_time_sem, 0, 1);
+
+static void health_timer_expiry(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+
+	/* ISR context: minimal work only, mirroring button_pressed_cb(). All
+	 * network/LTE/health-acquisition work happens later in thread context.
+	 */
+	health_wake_pending = true;
+	k_sem_give(&wake_sem);
+}
+
+K_TIMER_DEFINE(health_timer, health_timer_expiry, NULL);
+
+/* date_time library event handler (Correction 1, cross-thread-safe by
+ * construction): runs on the date_time library's own callback thread, and
+ * deliberately never reads or writes cached_next_health_report_at_ms or
+ * calls health_schedule_apply_deadline() itself -- doing so from this
+ * thread would risk a torn read/write of that 64-bit value racing against
+ * the main thread. Instead this handler only signals: it releases the
+ * bounded boot wait below, and (on any obtained event) sets
+ * date_time_valid_pending and gives the shared wake_sem so the main thread
+ * -- the sole owner of the cached deadline and the timer -- applies it.
+ * date_time_register_handler() only allows one globally registered
+ * handler, and this one stays registered for the process lifetime (via the
+ * one date_time_update_async() call in wait_for_authoritative_time()), so
+ * it also fires on every later periodic CONFIG_DATE_TIME_AUTO_UPDATE
+ * re-sync, not just at boot.
+ */
+static void date_time_evt_handler(const struct date_time_evt *evt)
+{
+	k_sem_give(&date_time_sem);
+
+	if (evt->type != DATE_TIME_NOT_OBTAINED) {
+		date_time_valid_pending = true;
+		k_sem_give(&wake_sem);
+	}
+}
+
+/* Establishes trustworthy UTC before any scheduled-wake calculation is
+ * trusted (Correction 1). Always registers date_time_evt_handler() (via
+ * date_time_update_async()) so later re-syncs keep arming a cached deadline
+ * even if this bounded wait times out. Never busy-polls: a single bounded
+ * k_sem_take() is the only wait, and a timeout here is not itself a
+ * failure -- it just means bootstrap communication proceeds without
+ * confirmed UTC, and health_schedule_apply_deadline()'s own date_time_now()
+ * check (plus this handler's later re-arm) remain the source of truth for
+ * whether a deadline actually gets armed.
+ */
+static void wait_for_authoritative_time(void)
+{
+	date_time_update_async(date_time_evt_handler);
+
+	if (date_time_is_valid()) {
+		LOG_INF("HEALTH_SCHEDULE: authoritative UTC already valid");
+		return;
+	}
+
+	LOG_INF("HEALTH_SCHEDULE: waiting up to %d ms for authoritative UTC",
+		DATE_TIME_BOOT_WAIT_MS);
+
+	if (k_sem_take(&date_time_sem, K_MSEC(DATE_TIME_BOOT_WAIT_MS)) != 0) {
+		LOG_WRN("HEALTH_SCHEDULE: authoritative UTC not confirmed within bounded boot wait");
+	} else if (date_time_is_valid()) {
+		LOG_INF("HEALTH_SCHEDULE: authoritative UTC established");
+	} else {
+		LOG_WRN("HEALTH_SCHEDULE: date_time event received but time still not valid");
+	}
+}
 
 /* USB/VBUS service hold: reuses the existing GPIO wake path to keep the
  * device out of its normal field WFI/PSM idle policy for as long as VBUS
@@ -214,6 +311,33 @@ static void health_battery_read(void)
 	health_snapshot.battery_soc_pct = vals[1].relative_state_of_charge;
 }
 
+/* Applies a freshly-parsed backend deadline: caches it in RAM and, only when
+ * authoritative UTC is currently available, (re)arms the scheduled-health
+ * k_timer from the newest deadline. If UTC is not currently valid, the
+ * deadline is still cached, but no timer is armed from it; a later valid
+ * deadline (from any subsequent authenticated communication) is required to
+ * actually schedule the wake.
+ */
+static void health_schedule_apply_deadline(int64_t new_deadline_unix_ms)
+{
+	int64_t now_unix_ms;
+	int64_t delta_ms;
+
+	cached_next_health_report_at_ms = new_deadline_unix_ms;
+
+	if (date_time_now(&now_unix_ms) != 0) {
+		LOG_WRN("HEALTH_SCHEDULE: deadline cached but UTC unavailable; timer not armed");
+		return;
+	}
+
+	delta_ms = health_schedule_delta_ms(new_deadline_unix_ms, now_unix_ms);
+
+	k_timer_start(&health_timer, K_MSEC(delta_ms), K_NO_WAIT);
+
+	LOG_INF("HEALTH_SCHEDULE: next_health_report_at applied, delta_ms=%lld",
+		(long long)delta_ms);
+}
+
 static void button_pressed_cb(const struct device *dev, struct gpio_callback *cb,
 			     uint32_t pins)
 {
@@ -299,16 +423,11 @@ static void configure_psm(void)
 
 static void low_power_idle(void)
 {
-	k_sem_take(&wake_sem, K_FOREVER);
-
-	/* button_wake_pending is left set here; the outer loop in main() is the
-	 * single point that clears it and invokes run_request_flow().
+	/* button_wake_pending / health_wake_pending are left set here; the
+	 * outer loop in main() is the single point that clears each flag and
+	 * invokes its corresponding flow.
 	 */
-	if (button_wake_pending) {
-		LOG_INF("BUTTON_WAKE detected");
-		LOG_INF("BUTTON_WAKE: invoking request flow");
-		return;
-	}
+	k_sem_take(&wake_sem, K_FOREVER);
 }
 
 static int apply_buck2_power_policy(bool vbus_present)
@@ -498,11 +617,16 @@ static int send_fairway_request(int64_t attempt_deadline_ms)
 	return 0;
 }
 
-static void run_request_flow(void)
+/* Resets and reacquires the Device Health snapshot (temperature, battery,
+ * connection-evaluation radio metrics), preserving registration/PSM state
+ * exactly as before. Shared by the golfer button flow and the scheduled
+ * health_report flow so both report the same underlying measurements.
+ */
+static void health_snapshot_acquire(void)
 {
-	int ret = -ETIMEDOUT;
 	struct lte_lc_conn_eval_params conn_eval = {0};
 	int temperature_ret;
+	int ret;
 
 	health_snapshot = (struct health_cellular_snapshot){
 		.registration_valid = health_snapshot.registration_valid,
@@ -546,6 +670,13 @@ static void run_request_flow(void)
 	} else {
 		LOG_WRN("Connection evaluation unavailable: %d", ret);
 	}
+}
+
+static void run_request_flow(void)
+{
+	int ret = -ETIMEDOUT;
+
+	health_snapshot_acquire();
 
 	set_state(STATE_TRANSMITTING);
 	show_transmitting_feedback();
@@ -596,6 +727,91 @@ static void run_request_flow(void)
 
 	set_state(STATE_IDLE);
 	ring_off();
+}
+
+/* Sends the scheduled health_report within its own two-attempt retry policy
+ * (see FIRMWARE_SPECIFICATION.md "Device Health Transport and Scheduling"):
+ * distinct from, and does not modify, REQUEST_MAX_ATTEMPTS/
+ * REQUEST_ATTEMPT_TIMEOUT_MS used by the golfer button flow.
+ */
+static int send_health_report(int64_t attempt_deadline_ms)
+{
+	int ret;
+
+	LOG_INF("Scheduled health_report send started");
+
+	ret = send_health_report_request(attempt_deadline_ms);
+	health_snapshot.https_result_valid = true;
+	health_snapshot.https_succeeded = (ret == 0);
+	if (ret) {
+		LOG_ERR("Scheduled health_report send failed: %d", ret);
+		return ret;
+	}
+
+	LOG_INF("Scheduled health_report send complete: success");
+
+	return 0;
+}
+
+/* Runs one scheduled Device Health reporting cycle: initial attempt plus at
+ * most one retry, the retry occurring within HEALTH_REPORT_RETRY_WINDOW_MS
+ * of the cycle start. After the second failure this stops entirely -- no
+ * third attempt and no ad-hoc follow-up retry schedule is created. This same
+ * function also serves as the boot bootstrap communication (see
+ * bootstrap_health_schedule()), since the bootstrap and scheduled-health
+ * retry envelopes are identical (2 attempts, retry within 90 seconds).
+ *
+ * Deliberately does not touch app_state_t/the LED ring: scheduled health
+ * reporting is a silent background operation, not golfer-facing UX.
+ */
+static void run_health_report_flow(void)
+{
+	int ret = -ETIMEDOUT;
+	int64_t cycle_start_ms = k_uptime_get();
+
+	health_snapshot_acquire();
+
+	for (int attempt = 0; attempt < HEALTH_REPORT_MAX_ATTEMPTS; attempt++) {
+		int64_t now_ms = k_uptime_get();
+		int64_t attempt_deadline = MIN(now_ms + HEALTH_REPORT_ATTEMPT_TIMEOUT_MS,
+						cycle_start_ms + HEALTH_REPORT_RETRY_WINDOW_MS);
+
+		health_snapshot.transaction_attempts = attempt + 1;
+
+		if (attempt_deadline <= now_ms) {
+			break;
+		}
+
+		ret = send_health_report(attempt_deadline);
+		if (ret == 0 || ret == -EACCES) {
+			break;
+		}
+	}
+
+	LOG_INF("Scheduled health report cycle complete: attempts=%u https=%d http=%d result=%d",
+		health_snapshot.transaction_attempts,
+		health_snapshot.https_succeeded,
+		health_snapshot.http_status,
+		ret);
+}
+
+/* Boot/reset bootstrap: attempts to obtain valid effective configuration
+ * (and, via health_schedule_apply_deadline(), arm the first scheduled-health
+ * wake) using the same 2-attempt/90-second envelope as an ordinary scheduled
+ * report. After a second bootstrap failure, no autonomous hourly or ad-hoc
+ * retry is scheduled; the device simply remains available for golfer button
+ * presses, and a later successful authenticated communication (button or
+ * scheduled health) may still refresh the schedule.
+ */
+static void bootstrap_health_schedule(void)
+{
+	LOG_INF("HEALTH_SCHEDULE: boot bootstrap starting (date_time_is_valid=%d)",
+		date_time_is_valid());
+
+	run_health_report_flow();
+
+	LOG_INF("HEALTH_SCHEDULE: boot bootstrap complete, cached_next_health_report_at_ms=%lld",
+		(long long)cached_next_health_report_at_ms);
 }
 
 static void bounded_recovery_delay(int attempt)
@@ -699,7 +915,26 @@ static int provision_fairway_ca_certificate(void)
 	return 0;
 }
 
-static int send_https_test(int64_t attempt_deadline_ms)
+/* Shared authenticated HTTPS transport primitive for both the golfer
+ * button_press flow and the scheduled health_report flow. Connects fresh,
+ * sends the pre-built request, and reads a single response into recv_buf.
+ * Populates the shared health_snapshot http_status fields exactly as
+ * before (status-line only), and additionally applies a fresh
+ * effective_config from the response body when the response is a
+ * successful (2xx) one -- this is the one shared config-refresh path for
+ * both event types described in FIRMWARE_SPECIFICATION.md "Device Health
+ * Transport and Scheduling".
+ *
+ * Return value convention (unchanged from the pre-WP4 button-only
+ * behavior):
+ *   0        HTTP 2xx.
+ *   -EACCES  HTTP 400/401/403/404 (terminal; caller does not retry).
+ *   -EPROTO  Any other received-but-unsuccessful HTTP response.
+ *   -errno   No response could be obtained at all (connect/send/recv/
+ *            timeout failure).
+ */
+static int send_http_request(const char *request, int request_len,
+			      int64_t attempt_deadline_ms)
 {
 	int fd;
 	int ret;
@@ -714,38 +949,6 @@ static int send_https_test(int64_t attempt_deadline_ms)
 	struct zsock_addrinfo *res = NULL;
 
 	const char *host = "fairway-button-receiver-936892386735.us-central1.run.app";
-
-	static char request_body[128];
-	int request_body_len;
-
-	request_body_len = snprintk(request_body, sizeof(request_body),
-		"{\"device_id\":\"%s\",\"event_type\":\"button_press\"}",
-		FAIRWAY_DEVICE_ID);
-
-	if (request_body_len < 0 || request_body_len >= sizeof(request_body)) {
-		LOG_ERR("HTTPS request body buffer too small");
-		return -ENOMEM;
-	}
-
-static char request[512];
-int request_len;
-
-request_len = snprintk(request, sizeof(request),
-	"POST / HTTP/1.1\r\n"
-	"Host: fairway-button-receiver-936892386735.us-central1.run.app\r\n"
-	"Content-Type: application/json\r\n"
-	"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
-	"Content-Length: %d\r\n"
-	"Connection: close\r\n"
-	"\r\n"
-	"%s",
-	request_body_len,
-	request_body);
-
-if (request_len < 0 || request_len >= sizeof(request)) {
-	LOG_ERR("HTTPS request buffer too small");
-	return -ENOMEM;
-}
 
 	static char recv_buf[4096];
 
@@ -869,6 +1072,24 @@ if (request_len < 0 || request_len >= sizeof(request)) {
 	health_snapshot.http_status_valid =
 		sscanf(recv_buf, "HTTP/%*u.%*u %d", &http_status) == 1;
 	health_snapshot.http_status = http_status;
+
+	if (health_snapshot.http_status_valid &&
+	    http_status >= 200 && http_status < 300) {
+		char *body = strstr(recv_buf, "\r\n\r\n");
+
+		if (body != NULL) {
+			body += 4;
+
+			size_t body_len = (size_t)ret - (size_t)(body - recv_buf);
+			int64_t new_deadline_unix_ms;
+
+			if (health_schedule_parse_effective_config(body, body_len,
+								    &new_deadline_unix_ms)) {
+				health_schedule_apply_deadline(new_deadline_unix_ms);
+			}
+		}
+	}
+
 	if (!health_snapshot.http_status_valid ||
 	    http_status < 200 || http_status >= 300) {
 		zsock_close(fd);
@@ -882,6 +1103,184 @@ if (request_len < 0 || request_len >= sizeof(request)) {
 
 	LOG_INF("Cloud Run HTTPS request succeeded");
 	return 0;
+}
+
+static int send_https_test(int64_t attempt_deadline_ms)
+{
+	static char request_body[128];
+	int request_body_len;
+
+	request_body_len = snprintk(request_body, sizeof(request_body),
+		"{\"device_id\":\"%s\",\"event_type\":\"button_press\"}",
+		FAIRWAY_DEVICE_ID);
+
+	if (request_body_len < 0 || request_body_len >= sizeof(request_body)) {
+		LOG_ERR("HTTPS request body buffer too small");
+		return -ENOMEM;
+	}
+
+	static char request[512];
+	int request_len;
+
+	request_len = snprintk(request, sizeof(request),
+		"POST / HTTP/1.1\r\n"
+		"Host: fairway-button-receiver-936892386735.us-central1.run.app\r\n"
+		"Content-Type: application/json\r\n"
+		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"Content-Length: %d\r\n"
+		"Connection: close\r\n"
+		"\r\n"
+		"%s",
+		request_body_len,
+		request_body);
+
+	if (request_len < 0 || request_len >= sizeof(request)) {
+		LOG_ERR("HTTPS request buffer too small");
+		return -ENOMEM;
+	}
+
+	return send_http_request(request, request_len, attempt_deadline_ms);
+}
+
+/* Formats one nullable integer health measurement into buf (decimal, base
+ * 10) when valid, or returns the JSON literal "null" when not -- mirrors
+ * the *_valid gating already used for local logging, now applied to the
+ * transmitted health_report contract (lib/fleet/health.js
+ * NULLABLE_INTEGER_FIELDS).
+ */
+static const char *health_field_or_null(char *buf, size_t buf_len, bool valid, int32_t value)
+{
+	if (!valid) {
+		return "null";
+	}
+
+	snprintk(buf, buf_len, "%d", value);
+	return buf;
+}
+
+/* serving_cell_id is the only unsigned nullable field (28-bit LTE ECI);
+ * formatted separately so a large cell ID can never be misrepresented via
+ * a signed cast.
+ */
+static const char *health_field_or_null_u32(char *buf, size_t buf_len, bool valid, uint32_t value)
+{
+	if (!valid) {
+		return "null";
+	}
+
+	snprintk(buf, buf_len, "%u", value);
+	return buf;
+}
+
+/* Serializes health_cellular_snapshot into the deployed backend health_report
+ * contract (docs/DEVICE_PROVISIONING_GUIDE.md / lib/fleet/health.js).
+ * conn_eval_error is firmware-local diagnostic only and is never
+ * transmitted, matching the current backend contract exactly.
+ */
+static int send_health_report_request(int64_t attempt_deadline_ms)
+{
+	char registration_state_buf[16];
+	char http_status_buf[16];
+	char temp_buf[16];
+	char rsrp_buf[16];
+	char rsrq_buf[16];
+	char snr_buf[16];
+	char cell_buf[16];
+	char band_buf[16];
+	char psm_tau_buf[16];
+	char psm_active_buf[16];
+	char batt_uv_buf[16];
+	char batt_soc_buf[16];
+	const char *https_succeeded_str;
+
+	static char health_body[512];
+	int health_body_len;
+
+	if (health_snapshot.https_result_valid) {
+		https_succeeded_str = health_snapshot.https_succeeded ? "true" : "false";
+	} else {
+		https_succeeded_str = "null";
+	}
+
+	health_body_len = snprintk(health_body, sizeof(health_body),
+		"{\"device_id\":\"%s\",\"event_type\":\"health_report\",\"health\":{"
+		"\"attempts\":%u,"
+		"\"registration_state\":%s,"
+		"\"http_status\":%s,"
+		"\"modem_temperature_m_c\":%s,"
+		"\"rsrp_dbm\":%s,"
+		"\"rsrq_db\":%s,"
+		"\"snr_db\":%s,"
+		"\"serving_cell_id\":%s,"
+		"\"serving_band\":%s,"
+		"\"psm_tau_s\":%s,"
+		"\"psm_active_time_s\":%s,"
+		"\"battery_voltage_u_v\":%s,"
+		"\"battery_soc_pct\":%s,"
+		"\"https_succeeded\":%s"
+		"}}",
+		FAIRWAY_DEVICE_ID,
+		(unsigned)health_snapshot.transaction_attempts,
+		health_field_or_null(registration_state_buf, sizeof(registration_state_buf),
+				      health_snapshot.registration_valid,
+				      (int32_t)health_snapshot.registration_state),
+		health_field_or_null(http_status_buf, sizeof(http_status_buf),
+				      health_snapshot.http_status_valid,
+				      health_snapshot.http_status),
+		health_field_or_null(temp_buf, sizeof(temp_buf),
+				      health_snapshot.temperature.valid,
+				      health_snapshot.temperature.temp_mC),
+		health_field_or_null(rsrp_buf, sizeof(rsrp_buf),
+				      health_snapshot.rsrp_valid, health_snapshot.rsrp_dbm),
+		health_field_or_null(rsrq_buf, sizeof(rsrq_buf),
+				      health_snapshot.rsrq_valid, health_snapshot.rsrq_db),
+		health_field_or_null(snr_buf, sizeof(snr_buf),
+				      health_snapshot.snr_valid, health_snapshot.snr_db),
+		health_field_or_null_u32(cell_buf, sizeof(cell_buf),
+					 health_snapshot.serving_cell_valid,
+					 health_snapshot.serving_cell_id),
+		health_field_or_null(band_buf, sizeof(band_buf),
+				      health_snapshot.serving_band_valid,
+				      health_snapshot.serving_band),
+		health_field_or_null(psm_tau_buf, sizeof(psm_tau_buf),
+				      health_snapshot.psm_valid, health_snapshot.psm_tau_s),
+		health_field_or_null(psm_active_buf, sizeof(psm_active_buf),
+				      health_snapshot.psm_valid,
+				      health_snapshot.psm_active_time_s),
+		health_field_or_null(batt_uv_buf, sizeof(batt_uv_buf),
+				      health_snapshot.battery_valid,
+				      health_snapshot.battery_voltage_uV),
+		health_field_or_null(batt_soc_buf, sizeof(batt_soc_buf),
+				      health_snapshot.battery_valid,
+				      (int32_t)health_snapshot.battery_soc_pct),
+		https_succeeded_str);
+
+	if (health_body_len < 0 || health_body_len >= sizeof(health_body)) {
+		LOG_ERR("health_report request body buffer too small");
+		return -ENOMEM;
+	}
+
+	static char health_request[1024];
+	int health_request_len;
+
+	health_request_len = snprintk(health_request, sizeof(health_request),
+		"POST / HTTP/1.1\r\n"
+		"Host: fairway-button-receiver-936892386735.us-central1.run.app\r\n"
+		"Content-Type: application/json\r\n"
+		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"Content-Length: %d\r\n"
+		"Connection: close\r\n"
+		"\r\n"
+		"%s",
+		health_body_len,
+		health_body);
+
+	if (health_request_len < 0 || health_request_len >= sizeof(health_request)) {
+		LOG_ERR("health_report request buffer too small");
+		return -ENOMEM;
+	}
+
+	return send_http_request(health_request, health_request_len, attempt_deadline_ms);
 }
 
 int main(void)
@@ -946,6 +1345,9 @@ int main(void)
 		} else {
 			LOG_INF("LTE registration succeeded");
 			LOG_INF("Network ready. GPIO wake path active.");
+
+			wait_for_authoritative_time();
+			bootstrap_health_schedule();
 		}
 	}
 
@@ -986,10 +1388,22 @@ int main(void)
 	LOG_INF("Ready. Waiting in low-power idle for button wake.");
 
 	while (1) {
-		low_power_idle();
+		/* Skip the blocking wait if a wake is already pending from a prior
+		 * iteration. The shared wake_sem has a max count of 1, so a
+		 * coincident button press, scheduled-health timer expiry, and/or
+		 * date_time event can coalesce into a single semaphore give;
+		 * checking all flags here (rather than unconditionally blocking
+		 * again) ensures a second pending flow is never silently lost.
+		 */
+		if (!button_wake_pending && !health_wake_pending && !date_time_valid_pending) {
+			low_power_idle();
+		}
 
 		if (button_wake_pending) {
 			button_wake_pending = false;
+
+			LOG_INF("BUTTON_WAKE detected");
+			LOG_INF("BUTTON_WAKE: invoking request flow");
 
 			/* Keep switch bounce from queuing a second request during the flow. */
 			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_DISABLE);
@@ -998,6 +1412,29 @@ int main(void)
 			continue;
 		}
 
+		if (health_wake_pending) {
+			health_wake_pending = false;
+
+			LOG_INF("HEALTH_WAKE detected");
+			LOG_INF("HEALTH_WAKE: invoking scheduled health report flow");
+
+			run_health_report_flow();
+			continue;
+		}
+
+		if (date_time_valid_pending) {
+			date_time_valid_pending = false;
+
+			/* Sole place cached_next_health_report_at_ms is read/armed from
+			 * on this path -- main thread only, per date_time_evt_handler()'s
+			 * signal-only design above.
+			 */
+			if (cached_next_health_report_at_ms >= 0) {
+				LOG_INF("DATE_TIME_WAKE: authoritative UTC available, arming cached deadline");
+				health_schedule_apply_deadline(cached_next_health_report_at_ms);
+			}
+			continue;
+		}
 	}
 
 	return 0;

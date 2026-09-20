@@ -184,7 +184,7 @@ test('a valid allowed-lifecycle Device with correct credential proceeds (not rej
 
 // --- button_press + duplicate suppression regression ---
 
-test('valid button_press creates a golfer request and returns the existing OK <id> body', async () => {
+test('valid button_press creates a golfer request and returns effective_config JSON', async () => {
   const db = new FakeFirestore();
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
@@ -205,17 +205,45 @@ test('valid button_press creates a golfer request and returns the existing OK <i
   }), res);
 
   assert.strictEqual(res.statusCode, 200);
-  assert.match(res.body, /^OK [^\s]+\n$/);
+  assert.strictEqual(res.body.status, 'accepted');
+  assert.strictEqual(res.body.event_type, 'button_press');
+  assert.strictEqual(typeof res.body.request_id, 'string');
+  assert.strictEqual(res.body.duplicate, undefined);
+  assert.strictEqual(res.body.effective_config.timezone, 'America/Los_Angeles');
+  assert.ok(res.body.effective_config.next_health_report_at);
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(requests.size, 1);
   assert.strictEqual(requests.docs[0].data().hole, 7);
   assert.strictEqual(requests.docs[0].data().status, 'new');
+  assert.strictEqual(requests.docs[0].id, res.body.request_id);
 });
 
-test('a second button_press while a request is open is suppressed as a duplicate', async () => {
+test('an unassigned Device button_press returns effective_config: null', async () => {
   const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  const secret = await setUpDeployedDevice(db, 'FRB-0001'); // no customer_id/course_id at all
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const res = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.body.effective_config, null);
+});
+
+test('a second button_press while a request is open is suppressed as a duplicate and still returns effective_config', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    health_report_schedule: { times: ['09:00', '17:00'] },
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+  });
   const { handleDeviceEvent } = createFairwayHandlers(db);
 
   const first = createResponse();
@@ -231,7 +259,11 @@ test('a second button_press while a request is open is suppressed as a duplicate
   }), second);
 
   assert.strictEqual(second.statusCode, 200);
-  assert.match(second.body, /^OK existing request /);
+  assert.strictEqual(second.body.status, 'accepted');
+  assert.strictEqual(second.body.event_type, 'button_press');
+  assert.strictEqual(second.body.request_id, first.body.request_id);
+  assert.strictEqual(second.body.duplicate, true);
+  assert.strictEqual(second.body.effective_config.timezone, 'America/Los_Angeles');
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(requests.size, 1, 'duplicate press must not create a second request document');
