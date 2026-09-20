@@ -13,4 +13,5 @@ module.exports = {
   ...require('./customers'),
   ...require('./courses'),
   ...require('./devices'),
+  ...require('./provisioning'),
 };

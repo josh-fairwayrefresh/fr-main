@@ -170,6 +170,31 @@ class FakeBatch {
   }
 }
 
+/*
+ * Minimal fake transaction: this in-memory double has no real concurrent
+ * writers, so no optimistic-retry logic is needed. `get`/`set`/`update`
+ * simply delegate straight to the referenced FakeDocRef; FakeDocRef's own
+ * operations already complete synchronously before returning their
+ * resolved Promise, so callers that call transaction.set()/update()
+ * without awaiting (as the real Firestore transaction API allows) still
+ * observe the write immediately, matching allocateNextId()'s usage.
+ */
+class FakeTransaction {
+  async get(ref) {
+    return ref.get();
+  }
+
+  set(ref, data, options) {
+    ref.set(data, options);
+    return this;
+  }
+
+  update(ref, data) {
+    ref.update(data);
+    return this;
+  }
+}
+
 class FakeFirestore {
   constructor() {
     this._docs = new Map();
@@ -181,6 +206,10 @@ class FakeFirestore {
 
   batch() {
     return new FakeBatch(this);
+  }
+
+  async runTransaction(updateFunction) {
+    return updateFunction(new FakeTransaction());
   }
 }
 

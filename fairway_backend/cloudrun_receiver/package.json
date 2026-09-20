@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "provision-device": "node scripts/provision_device.js"
+  },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.0.0",
     "@google-cloud/firestore": "^7.0.0"
