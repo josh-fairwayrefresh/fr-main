@@ -680,3 +680,70 @@ WP4 golfer-first correction.
 
 Repeated symptom fixes that preserve the underlying architectural
 dependency.
+
+## K-007 --- Capture and Reuse Verified Procedures for Repeated External Requests
+
+**Rule**
+
+When the Development Team is asked to repeat a request that depends on a
+tool, procedure, or environment fact previously discovered through search
+or trial and error (for example: locating an out-of-repository artifact,
+or finding a working document-conversion tool on this machine), the
+verified procedure shall be captured the first time it is confirmed
+working, rather than rediscovered from first principles on each
+subsequent request.
+
+Capture, at minimum: the identity/location of the artifact or tool, the
+verified working command(s), and any known-broken alternatives so they
+are not retried.
+
+**Verified Procedure --- Fairway Refresh SoT Summary PDF (External, CPO Command)**
+
+The CPO-facing "current canonical SoTs" PDF is a convenience export of
+the current tracked owner documents in `nfed/docs/`, kept outside the
+repository. It is not a repo file, is never committed, and is not part
+of the Fidelity Mandate's Major Engineering Document read path.
+
+There shall always be exactly one such export, and it always reflects the
+live current SoTs at the time the CPO requests an update.
+
+Canonical location: `~/Documents/feather_code/` (the parent workspace
+folder, outside the `nfed` repository). Do not create or leave the
+export in any other location (e.g. Desktop, Downloads), even if an older
+artifact is found there.
+
+Verified working procedure:
+
+1.  Confirm current git truth first (branch/HEAD) so the new export's
+    provenance header is accurate, explicitly noting when HEAD is on a
+    feature branch not yet merged to `main`.
+2.  Freshly read the current Major Engineering Documents in Fidelity
+    Mandate read order (README first, then the mandate's list, with any
+    newly-registered SoT such as Kaizen inserted at its Documentation Map
+    position) and concatenate them with a plain-text provenance header
+    (source commit, branch, milestone state, and an explicit "reference
+    export only, tracked Markdown remains canonical" disclaimer).
+3.  Convert the assembled text to PDF with `cupsfilter <file>.txt >
+    <file>.pdf` (verified working on this machine). `textutil -convert
+    pdf` does **not** support PDF output on this machine and should not
+    be retried; `pandoc`, `wkhtmltopdf`, and `weasyprint` are not
+    installed.
+4.  Verify fidelity with `pdftotext -layout` against the source text
+    (line-wrap differences are cosmetic and expected; content must
+    match).
+5.  Before writing the new file, delete every existing file in the
+    canonical location matching `Fairway_Refresh_Current_Canonical_SoTs_*.pdf`,
+    then write the new export named with the new source commit short SHA,
+    so exactly one export exists at any time.
+
+**Origin**
+
+Repeated CPO requests to regenerate the external SoT summary PDF, each of
+which required rediscovering the file's location and a working
+text-to-PDF conversion path from scratch.
+
+**Failure prevented**
+
+Repeated, avoidable rediscovery/troubleshooting time (file location,
+non-working tools such as `textutil -convert pdf`) spent re-solving an
+already-solved problem each time this recurring CPO request is made.
