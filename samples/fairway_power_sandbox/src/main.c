@@ -44,6 +44,7 @@
 #include <modem/lte_lc.h>
 #include <modem/modem_info.h>
 #include <zephyr/net/socket.h>
+#include <zephyr/posix/fcntl.h>
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
@@ -55,8 +56,9 @@
 #include <date_time.h>
 
 LOG_MODULE_REGISTER(main);
-static int send_https_test(int64_t attempt_deadline_ms);
-static int send_health_report_request(int64_t attempt_deadline_ms);
+struct health_cellular_snapshot;
+static int send_https_test(struct health_cellular_snapshot *snap, int64_t attempt_deadline_ms);
+static int send_health_report_request(struct health_cellular_snapshot *snap, int64_t attempt_deadline_ms);
 static bool button_is_pressed(void);
 static const struct device *gpio0_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 static const struct device *uart0_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -69,10 +71,11 @@ static const struct device *max17048_dev = DEVICE_DT_GET(DT_NODELABEL(max17048))
 #define BUTTON_PIN    31
 #define RING_LED_PIN  30
 
-#define REQUEST_MAX_ATTEMPTS        3
-#define REQUEST_ATTEMPT_TIMEOUT_MS  30000
-#define REQUEST_LOCKOUT_MS \
-	(REQUEST_MAX_ATTEMPTS * REQUEST_ATTEMPT_TIMEOUT_MS)
+#define GOLFER_TRANSACTION_BUDGET_MS      15000
+#define GOLFER_MAX_ATTEMPTS               2
+#define GOLFER_MIN_RETRY_RESERVE_MS       3000
+#define GOLFER_DNS_READINESS_TIMEOUT_MS   3000
+#define BUTTON_REARM_SETTLE_MS            250
 
 #define STARTUP_FLASH_COUNT      3
 #define STARTUP_FLASH_ON_MS      150
@@ -101,24 +104,216 @@ typedef enum {
 	STATE_FAILURE,
 } app_state_t;
 
-typedef enum {
-	WAKE_CAUSE_NONE = 0,
-	WAKE_CAUSE_BUTTON,
-} wake_cause_t;
+/* Golfer-vs-Health transaction scheduler states (observability only; the
+ * actual control flow is the sequential transaction_thread loop below).
+ */
+enum txn_state {
+	TXN_IDLE = 0,
+	TXN_HEALTH_PENDING,
+	TXN_HEALTH_ACTIVE,
+	TXN_GOLFER_PENDING,
+	TXN_GOLFER_ACTIVE,
+};
+
+static K_SEM_DEFINE(button_wake_sem, 0, 1);
+static K_SEM_DEFINE(txn_wake_sem, 0, 1);
+static K_SEM_DEFINE(network_wake_sem, 0, 1);
+static K_SEM_DEFINE(local_hw_ready_sem, 0, 1);
+static K_SEM_DEFINE(dns_request_wake_sem, 0, 1);
+static K_SEM_DEFINE(dns_result_sem, 0, 1);
+static K_SEM_DEFINE(telemetry_request_wake_sem, 0, 1);
+static K_SEM_DEFINE(telemetry_result_sem, 0, 1);
+
+#define TRANSACTION_THREAD_PRIORITY       1
+#define NETWORK_HEALTH_THREAD_PRIORITY    2
+#define DNS_RESOLVER_THREAD_PRIORITY      3
+#define TELEMETRY_HELPER_THREAD_PRIORITY  3
+
+BUILD_ASSERT(CONFIG_MAIN_THREAD_PRIORITY < TRANSACTION_THREAD_PRIORITY,
+	     "button thread must always outrank the transaction scheduler");
+BUILD_ASSERT(TRANSACTION_THREAD_PRIORITY < NETWORK_HEALTH_THREAD_PRIORITY,
+	     "transaction scheduler must always outrank background maintenance");
+BUILD_ASSERT(NETWORK_HEALTH_THREAD_PRIORITY < DNS_RESOLVER_THREAD_PRIORITY,
+	     "background maintenance must always outrank isolated helpers");
+
+/* Coherent golfer transaction handoff/completion state. Replaces a
+ * scattered set of independent volatiles: a reader must never observe a
+ * generation paired with a mismatched deadline/result, so every field is
+ * read/written as a single locked unit via the accessors below.
+ */
+struct golfer_txn {
+	uint32_t generation;
+	int64_t deadline_ms;
+	bool pending;
+	bool done;
+	bool done_result_ok;
+	uint32_t done_generation;
+};
+static struct golfer_txn golfer_txn;
+static struct k_spinlock golfer_txn_lock;
+
+/* Coherent scheduler control state (health-due flag + observability
+ * state), written from multiple contexts (network_health_thread and
+ * transaction_thread itself).
+ */
+struct scheduler_control {
+	bool health_due_pending;
+	enum txn_state state;
+};
+static struct scheduler_control sched_ctl;
+static struct k_spinlock sched_ctl_lock;
+
+/* button_thread: accept a newly-validated press. Allocates a fresh
+ * generation and commits the absolute deadline as one coherent unit.
+ */
+static uint32_t golfer_txn_accept(int64_t deadline_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&golfer_txn_lock);
+
+	golfer_txn.generation++;
+	uint32_t gen = golfer_txn.generation;
+
+	golfer_txn.deadline_ms = deadline_ms;
+	golfer_txn.pending = true;
+	golfer_txn.done = false;
+	k_spin_unlock(&golfer_txn_lock, key);
+	return gen;
+}
+
+/* transaction_thread: pick up a pending press, if any. */
+static bool golfer_txn_pickup(uint32_t *out_gen, int64_t *out_deadline_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&golfer_txn_lock);
+	bool has = golfer_txn.pending;
+
+	if (has) {
+		golfer_txn.pending = false;
+		*out_gen = golfer_txn.generation;
+		*out_deadline_ms = golfer_txn.deadline_ms;
+	}
+	k_spin_unlock(&golfer_txn_lock, key);
+	return has;
+}
+
+/* Health's yield checkpoints: true only while a press is accepted but not
+ * yet picked up by transaction_thread (i.e. still waiting its turn).
+ */
+static bool golfer_txn_is_pending(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&golfer_txn_lock);
+	bool p = golfer_txn.pending;
+
+	k_spin_unlock(&golfer_txn_lock, key);
+	return p;
+}
+
+/* transaction_thread: post a terminal result for a specific generation. */
+static void golfer_txn_complete(uint32_t gen, bool success)
+{
+	k_spinlock_key_t key = k_spin_lock(&golfer_txn_lock);
+
+	golfer_txn.done = true;
+	golfer_txn.done_result_ok = success;
+	golfer_txn.done_generation = gen;
+	k_spin_unlock(&golfer_txn_lock, key);
+}
+
+/* button_thread: consume a matching completion for gen, if one is ready.
+ * A completion tagged with any other (older) generation does not match and
+ * is left untouched -- it belongs to an already-expired transaction.
+ */
+static bool golfer_txn_check_done(uint32_t gen, bool *out_success)
+{
+	k_spinlock_key_t key = k_spin_lock(&golfer_txn_lock);
+	bool matched = golfer_txn.done && golfer_txn.done_generation == gen;
+
+	if (matched) {
+		*out_success = golfer_txn.done_result_ok;
+		golfer_txn.done = false;
+	}
+	k_spin_unlock(&golfer_txn_lock, key);
+	return matched;
+}
+
+static void sched_ctl_set_health_due(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&sched_ctl_lock);
+
+	sched_ctl.health_due_pending = true;
+	k_spin_unlock(&sched_ctl_lock, key);
+}
+
+static bool sched_ctl_take_health_due(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&sched_ctl_lock);
+	bool due = sched_ctl.health_due_pending;
+
+	sched_ctl.health_due_pending = false;
+	k_spin_unlock(&sched_ctl_lock, key);
+	return due;
+}
+
+static void sched_ctl_set_state(enum txn_state s)
+{
+	k_spinlock_key_t key = k_spin_lock(&sched_ctl_lock);
+
+	sched_ctl.state = s;
+	k_spin_unlock(&sched_ctl_lock, key);
+}
+
+/* Coherent single-owner handoff for a freshly-parsed effective_config
+ * deadline: network_health_thread is the sole owner of
+ * cached_next_health_report_at_ms/health_timer, regardless of which flow
+ * (golfer or Health) received the response containing it.
+ */
+struct pending_deadline_handoff {
+	bool valid;
+	int64_t deadline_unix_ms;
+};
+static struct pending_deadline_handoff pending_deadline;
+static struct k_spinlock pending_deadline_lock;
+
+static void pending_deadline_post(int64_t deadline_unix_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&pending_deadline_lock);
+
+	pending_deadline.deadline_unix_ms = deadline_unix_ms;
+	pending_deadline.valid = true;
+	k_spin_unlock(&pending_deadline_lock, key);
+	k_sem_give(&network_wake_sem);
+}
+
+static bool pending_deadline_take(int64_t *out_deadline_unix_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&pending_deadline_lock);
+	bool valid = pending_deadline.valid;
+
+	if (valid) {
+		*out_deadline_unix_ms = pending_deadline.deadline_unix_ms;
+		pending_deadline.valid = false;
+	}
+	k_spin_unlock(&pending_deadline_lock, key);
+	return valid;
+}
 
 static app_state_t state = STATE_IDLE;
 static volatile bool button_wake_pending;
 static volatile bool health_wake_pending;
 static volatile bool date_time_valid_pending;
-static volatile bool request_lockout_active;
-static volatile int64_t request_lockout_deadline_ms;
+static volatile bool lte_registered_pending;
 static struct gpio_callback button_cb;
 static struct gpio_callback vbus_cb;
-static K_SEM_DEFINE(wake_sem, 0, 1);
 
-#define HEALTH_REPORT_MAX_ATTEMPTS        2
-#define HEALTH_REPORT_ATTEMPT_TIMEOUT_MS  30000
-#define HEALTH_REPORT_RETRY_WINDOW_MS     90000
+#define HEALTH_REPORT_MAX_ATTEMPTS             2
+#define HEALTH_REPORT_ATTEMPT_TIMEOUT_MS       20000
+#define HEALTH_REPORT_RETRY_WINDOW_MS          45000
+#define HEALTH_DNS_READINESS_TIMEOUT_MS        2000
+#define HEALTH_TELEMETRY_READINESS_TIMEOUT_MS  2000
+#define HEALTH_YIELD_CONNECT_POLL_MS           3000
+#define HEALTH_YIELD_IO_POLL_MS                2000
+
+#define DNS_CACHE_MAX_AGE_MS               300000
+#define HEALTH_TELEMETRY_CACHE_MAX_AGE_MS  10000
 
 /* Bounded wait for the date_time library to confirm authoritative UTC at
  * boot (Correction 1). Modem-derived time is expected to resolve almost
@@ -144,28 +339,28 @@ static void health_timer_expiry(struct k_timer *timer)
 	ARG_UNUSED(timer);
 
 	/* ISR context: minimal work only, mirroring button_pressed_cb(). All
-	 * network/LTE/health-acquisition work happens later in thread context.
+	 * network/LTE/health-acquisition work happens later in thread context,
+	 * exclusively on network_health_thread.
 	 */
 	health_wake_pending = true;
-	k_sem_give(&wake_sem);
+	k_sem_give(&network_wake_sem);
 }
 
 K_TIMER_DEFINE(health_timer, health_timer_expiry, NULL);
 
-/* date_time library event handler (Correction 1, cross-thread-safe by
- * construction): runs on the date_time library's own callback thread, and
- * deliberately never reads or writes cached_next_health_report_at_ms or
- * calls health_schedule_apply_deadline() itself -- doing so from this
- * thread would risk a torn read/write of that 64-bit value racing against
- * the main thread. Instead this handler only signals: it releases the
- * bounded boot wait below, and (on any obtained event) sets
- * date_time_valid_pending and gives the shared wake_sem so the main thread
- * -- the sole owner of the cached deadline and the timer -- applies it.
- * date_time_register_handler() only allows one globally registered
- * handler, and this one stays registered for the process lifetime (via the
- * one date_time_update_async() call in wait_for_authoritative_time()), so
- * it also fires on every later periodic CONFIG_DATE_TIME_AUTO_UPDATE
- * re-sync, not just at boot.
+/* date_time library event handler (cross-thread-safe by construction):
+ * runs on the date_time library's own callback thread, and deliberately
+ * never reads or writes cached_next_health_report_at_ms or calls
+ * health_schedule_apply_deadline() itself -- doing so from this thread
+ * would risk a torn read/write of that 64-bit value racing against
+ * network_health_thread. Instead this handler only signals: it releases
+ * the bounded boot wait below, and (on any obtained event) sets
+ * date_time_valid_pending and gives network_wake_sem so
+ * network_health_thread -- the sole owner of the cached deadline and the
+ * timer -- applies it. date_time_register_handler() only allows one
+ * globally registered handler, and this one stays registered for the
+ * process lifetime, so it also fires on every later periodic
+ * CONFIG_DATE_TIME_AUTO_UPDATE re-sync, not just at boot.
  */
 static void date_time_evt_handler(const struct date_time_evt *evt)
 {
@@ -173,7 +368,7 @@ static void date_time_evt_handler(const struct date_time_evt *evt)
 
 	if (evt->type != DATE_TIME_NOT_OBTAINED) {
 		date_time_valid_pending = true;
-		k_sem_give(&wake_sem);
+		k_sem_give(&network_wake_sem);
 	}
 }
 
@@ -284,13 +479,263 @@ struct health_cellular_snapshot {
 	uint8_t battery_soc_pct;
 };
 
-static struct health_cellular_snapshot health_snapshot;
+static struct health_cellular_snapshot button_health_snapshot;
+static struct health_cellular_snapshot sched_health_snapshot;
+
+/* Registration/PSM radio state: written only by lte_evt_handler() (the LTE
+ * link-control library's own notification context); read by both snapshot
+ * flows as a whole-struct locked copy so a reader never observes a
+ * registration_state paired with a mismatched/stale PSM update or vice
+ * versa.
+ */
+struct radio_state {
+	bool registration_valid;
+	enum lte_lc_nw_reg_status registration_state;
+	bool psm_valid;
+	int psm_tau_s;
+	int psm_active_time_s;
+};
+static struct radio_state radio_state;
+static struct k_spinlock radio_state_lock;
+
+static void radio_state_write_registration(enum lte_lc_nw_reg_status status)
+{
+	k_spinlock_key_t key = k_spin_lock(&radio_state_lock);
+
+	radio_state.registration_valid = true;
+	radio_state.registration_state = status;
+	k_spin_unlock(&radio_state_lock, key);
+}
+
+#if defined(CONFIG_LTE_LC_MODEM_SLEEP_MODULE)
+static void radio_state_write_psm(int tau, int active_time)
+{
+	k_spinlock_key_t key = k_spin_lock(&radio_state_lock);
+
+	radio_state.psm_valid = true;
+	radio_state.psm_tau_s = tau;
+	radio_state.psm_active_time_s = active_time;
+	k_spin_unlock(&radio_state_lock, key);
+}
+#endif
+
+static struct radio_state radio_state_snapshot(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&radio_state_lock);
+	struct radio_state copy = radio_state;
+
+	k_spin_unlock(&radio_state_lock, key);
+	return copy;
+}
+
+/* Shared DNS cache for the fixed Cloud Run host, used by both the golfer
+ * and Health flows. A resolved address is not assumed valid forever
+ * (Cloud Run/GFE addresses are not permanent): entries expire after
+ * DNS_CACHE_MAX_AGE_MS and are invalidated outright on a connect failure
+ * using the cached address, forcing a fresh resolution next time.
+ */
+struct dns_cache_entry {
+	bool valid;
+	int64_t resolved_at_ms;
+	struct sockaddr_storage addr;
+};
+static struct dns_cache_entry dns_cache;
+static struct k_spinlock dns_cache_lock;
+static bool dns_resolver_busy;
+
+static bool dns_cache_get(struct sockaddr_storage *out, bool *out_stale)
+{
+	k_spinlock_key_t key = k_spin_lock(&dns_cache_lock);
+	bool valid = dns_cache.valid;
+	bool stale = valid && (k_uptime_get() - dns_cache.resolved_at_ms > DNS_CACHE_MAX_AGE_MS);
+
+	if (valid) {
+		*out = dns_cache.addr;
+	}
+	k_spin_unlock(&dns_cache_lock, key);
+	if (out_stale) {
+		*out_stale = stale;
+	}
+	return valid;
+}
+
+static void dns_cache_set(const struct sockaddr_storage *addr)
+{
+	k_spinlock_key_t key = k_spin_lock(&dns_cache_lock);
+
+	dns_cache.valid = true;
+	dns_cache.resolved_at_ms = k_uptime_get();
+	dns_cache.addr = *addr;
+	k_spin_unlock(&dns_cache_lock, key);
+}
+
+static void dns_cache_invalidate(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&dns_cache_lock);
+
+	dns_cache.valid = false;
+	k_spin_unlock(&dns_cache_lock, key);
+}
+
+/* Returns true and kicks off dns_resolver_thread if no resolution is
+ * already in flight. Never blocks.
+ */
+static bool dns_kickoff_if_idle(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&dns_cache_lock);
+	bool kicked = false;
+
+	if (!dns_resolver_busy) {
+		dns_resolver_busy = true;
+		kicked = true;
+	}
+	k_spin_unlock(&dns_cache_lock, key);
+	if (kicked) {
+		k_sem_reset(&dns_result_sem);
+		k_sem_give(&dns_request_wake_sem);
+	}
+	return kicked;
+}
+
+static void dns_resolver_thread_entry(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	while (1) {
+		k_sem_take(&dns_request_wake_sem, K_FOREVER);
+
+		struct zsock_addrinfo hints = { .ai_family = AF_INET, .ai_socktype = SOCK_STREAM };
+		struct zsock_addrinfo *res = NULL;
+		/* The one unbounded call in the firmware: no NCS 3.1.1 API
+		 * bounds it. Isolated here so its non-return can never strand
+		 * the golfer/Health transaction scheduler.
+		 */
+		int ret = zsock_getaddrinfo(
+			"fairway-button-receiver-936892386735.us-central1.run.app",
+			"443", &hints, &res);
+
+		if (ret == 0) {
+			struct sockaddr_storage addr = {0};
+
+			memcpy(&addr, res->ai_addr, res->ai_addrlen);
+			dns_cache_set(&addr);
+			zsock_freeaddrinfo(res);
+		}
+
+		k_spinlock_key_t key = k_spin_lock(&dns_cache_lock);
+
+		dns_resolver_busy = false;
+		k_spin_unlock(&dns_cache_lock, key);
+		k_sem_give(&dns_result_sem);
+	}
+}
+K_THREAD_DEFINE(dns_resolver_thread, CONFIG_MAIN_STACK_SIZE,
+		dns_resolver_thread_entry, NULL, NULL, NULL,
+		DNS_RESOLVER_THREAD_PRIORITY, 0, 0);
+
+/* Bounded accessor: never returns later than bound_ms. A cache hit (fresh
+ * or stale) returns immediately at zero wait; a stale hit also triggers a
+ * background refresh for next time.
+ */
+static int dns_get_address_bounded(struct sockaddr_storage *out, int64_t bound_ms)
+{
+	bool stale = false;
+
+	if (dns_cache_get(out, &stale)) {
+		if (stale) {
+			dns_kickoff_if_idle();
+		}
+		return 0;
+	}
+
+	dns_kickoff_if_idle();
+	if (bound_ms <= 0) {
+		return -ETIMEDOUT;
+	}
+	k_sem_take(&dns_result_sem, K_MSEC(bound_ms));
+	if (dns_cache_get(out, NULL)) {
+		return 0;
+	}
+	return -ETIMEDOUT;
+}
+
+/* Isolated connection-evaluation telemetry cache/helper: the golfer flow
+ * never uses this (no verified bound, no payload value); only Health's
+ * run_health_cycle() calls telemetry_get_bounded().
+ */
+struct telemetry_cache_entry {
+	bool valid;
+	int64_t captured_at_ms;
+	struct lte_lc_conn_eval_params params;
+};
+static struct telemetry_cache_entry telemetry_cache;
+static struct k_spinlock telemetry_cache_lock;
+static bool telemetry_busy;
+
+static void telemetry_helper_thread_entry(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	while (1) {
+		k_sem_take(&telemetry_request_wake_sem, K_FOREVER);
+
+		struct lte_lc_conn_eval_params tmp = {0};
+		/* The other unbounded call in the firmware: isolated here. */
+		int ret = lte_lc_conn_eval_params_get(&tmp);
+		k_spinlock_key_t key = k_spin_lock(&telemetry_cache_lock);
+
+		if (ret == 0) {
+			telemetry_cache.params = tmp;
+			telemetry_cache.captured_at_ms = k_uptime_get();
+			telemetry_cache.valid = true;
+		}
+		telemetry_busy = false;
+		k_spin_unlock(&telemetry_cache_lock, key);
+		k_sem_give(&telemetry_result_sem);
+	}
+}
+K_THREAD_DEFINE(telemetry_helper_thread, CONFIG_MAIN_STACK_SIZE,
+		telemetry_helper_thread_entry, NULL, NULL, NULL,
+		TELEMETRY_HELPER_THREAD_PRIORITY, 0, 0);
+
+static int telemetry_get_bounded(struct lte_lc_conn_eval_params *out, int64_t bound_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&telemetry_cache_lock);
+	bool kicked = false;
+
+	if (!telemetry_busy) {
+		telemetry_busy = true;
+		kicked = true;
+	}
+	k_spin_unlock(&telemetry_cache_lock, key);
+	if (kicked) {
+		k_sem_reset(&telemetry_result_sem);
+		k_sem_give(&telemetry_request_wake_sem);
+	}
+	if (bound_ms > 0) {
+		k_sem_take(&telemetry_result_sem, K_MSEC(bound_ms));
+	}
+
+	key = k_spin_lock(&telemetry_cache_lock);
+	bool ok = telemetry_cache.valid &&
+		  (k_uptime_get() - telemetry_cache.captured_at_ms) <= HEALTH_TELEMETRY_CACHE_MAX_AGE_MS;
+
+	if (ok) {
+		*out = telemetry_cache.params;
+	}
+	k_spin_unlock(&telemetry_cache_lock, key);
+	return ok ? 0 : -ETIMEDOUT;
+}
 
 /* Reads the installed Adafruit 5580 / MAX17048 via the native NCS fuel-gauge
  * API into the Device Health snapshot. Leaves battery_valid false on any
  * failure rather than reporting a stale or invented value.
  */
-static void health_battery_read(void)
+static void health_battery_read(struct health_cellular_snapshot *snap)
 {
 	if (!device_is_ready(max17048_dev)) {
 		return;
@@ -306,9 +751,9 @@ static void health_battery_read(void)
 		return;
 	}
 
-	health_snapshot.battery_valid = true;
-	health_snapshot.battery_voltage_uV = vals[0].voltage;
-	health_snapshot.battery_soc_pct = vals[1].relative_state_of_charge;
+	snap->battery_valid = true;
+	snap->battery_voltage_uV = vals[0].voltage;
+	snap->battery_soc_pct = vals[1].relative_state_of_charge;
 }
 
 /* Applies a freshly-parsed backend deadline: caches it in RAM and, only when
@@ -345,33 +790,42 @@ static void button_pressed_cb(const struct device *dev, struct gpio_callback *cb
 	ARG_UNUSED(cb);
 	ARG_UNUSED(pins);
 
-	int64_t now_ms = k_uptime_get();
-	if (request_lockout_active) {
-		if (now_ms < request_lockout_deadline_ms) {
-			return;
-		}
-		request_lockout_active = false;
-	}
-
 	if (!button_is_pressed()) {
 		return;
 	}
 
-	request_lockout_active = true;
-	request_lockout_deadline_ms = now_ms + REQUEST_LOCKOUT_MS;
 	button_wake_pending = true;
-	k_sem_give(&wake_sem);
+	k_sem_give(&button_wake_sem);
 }
 
-#if defined(CONFIG_LTE_LC_MODEM_SLEEP_MODULE)
-/* Diagnostic-only: observes PSM grant and actual modem sleep enter/exit. */
-static void lte_diag_evt_handler(const struct lte_lc_evt *const evt)
+/* Single globally-registered LTE event handler (lte_lc_connect_async() and
+ * lte_lc_register_handler() both only support one handler at a time, so
+ * PSM/modem-sleep diagnostics and network-registration handling are
+ * combined here). Runs on the LTE link-control library's own notification
+ * context, never button_thread/transaction_thread/network_health_thread.
+ * Only writes radio_state (spinlock-protected, single-word members per
+ * field but copied/read as a coherent whole); any follow-up requiring a
+ * particular thread is only ever signaled via lte_registered_pending +
+ * network_wake_sem, never performed directly here.
+ */
+static void lte_evt_handler(const struct lte_lc_evt *const evt)
 {
 	switch (evt->type) {
+	case LTE_LC_EVT_NW_REG_STATUS:
+		radio_state_write_registration(evt->nw_reg_status);
+
+		if (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
+		    evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
+			LOG_INF("LTE registered: status=%d", evt->nw_reg_status);
+			lte_registered_pending = true;
+			k_sem_give(&network_wake_sem);
+		} else {
+			LOG_INF("LTE registration status update: %d", evt->nw_reg_status);
+		}
+		break;
+#if defined(CONFIG_LTE_LC_MODEM_SLEEP_MODULE)
 	case LTE_LC_EVT_PSM_UPDATE:
-		health_snapshot.psm_valid = true;
-		health_snapshot.psm_tau_s = evt->psm_cfg.tau;
-		health_snapshot.psm_active_time_s = evt->psm_cfg.active_time;
+		radio_state_write_psm(evt->psm_cfg.tau, evt->psm_cfg.active_time);
 		LOG_INF("PSM granted: TAU=%d s, active_time=%d s",
 			evt->psm_cfg.tau, evt->psm_cfg.active_time);
 		break;
@@ -382,11 +836,11 @@ static void lte_diag_evt_handler(const struct lte_lc_evt *const evt)
 	case LTE_LC_EVT_MODEM_SLEEP_EXIT:
 		LOG_INF("MODEM_SLEEP_EXIT");
 		break;
+#endif /* CONFIG_LTE_LC_MODEM_SLEEP_MODULE */
 	default:
 		break;
 	}
 }
-#endif /* CONFIG_LTE_LC_MODEM_SLEEP_MODULE */
 
 /* Shared with vbus_event_callback() so VBUS insertion/removal reuses the
  * exact same PSM request API as the existing field policy, instead of a
@@ -423,11 +877,14 @@ static void configure_psm(void)
 
 static void low_power_idle(void)
 {
-	/* button_wake_pending / health_wake_pending are left set here; the
-	 * outer loop in main() is the single point that clears each flag and
-	 * invokes its corresponding flow.
+	/* button_wake_pending is left set here; the button thread's own loop
+	 * in main() is the single point that clears it. Health/date_time/LTE/
+	 * effective_config causes are serviced entirely by
+	 * network_health_thread on its own network_wake_sem; the golfer
+	 * transaction scheduler is serviced entirely by transaction_thread on
+	 * its own txn_wake_sem. Neither is ever observed here.
 	 */
-	k_sem_take(&wake_sem, K_FOREVER);
+	k_sem_take(&button_wake_sem, K_FOREVER);
 }
 
 static int apply_buck2_power_policy(bool vbus_present)
@@ -597,152 +1054,135 @@ static void show_failure_feedback(void)
 	ring_off();
 }
 
-/* Sends the current authenticated LTE/HTTPS request within the attempt deadline. */
-static int send_fairway_request(int64_t attempt_deadline_ms)
-{
-	int ret;
-
-	LOG_INF("Fairway HTTPS request send started");
-
-	ret = send_https_test(attempt_deadline_ms);
-	health_snapshot.https_result_valid = true;
-	health_snapshot.https_succeeded = (ret == 0);
-	if (ret) {
-		LOG_ERR("Fairway HTTPS request send failed: %d", ret);
-		return ret;
-	}
-
-	LOG_INF("Fairway HTTPS request send complete: success");
-
-	return 0;
-}
-
 /* Resets and reacquires the Device Health snapshot (temperature, battery,
  * connection-evaluation radio metrics), preserving registration/PSM state
- * exactly as before. Shared by the golfer button flow and the scheduled
- * health_report flow so both report the same underlying measurements.
+ * from the coherent radio_state snapshot. Shared by the golfer button flow
+ * and the scheduled health_report flow, each into its own owned struct
+ * instance, so both report the same underlying measurement shape without
+ * sharing mutable state.
  */
-static void health_snapshot_acquire(void)
+static void health_snapshot_acquire(struct health_cellular_snapshot *snap)
 {
+	struct radio_state radio = radio_state_snapshot();
 	struct lte_lc_conn_eval_params conn_eval = {0};
 	int temperature_ret;
 	int ret;
 
-	health_snapshot = (struct health_cellular_snapshot){
-		.registration_valid = health_snapshot.registration_valid,
-		.registration_state = health_snapshot.registration_state,
-		.psm_valid = health_snapshot.psm_valid,
-		.psm_tau_s = health_snapshot.psm_tau_s,
-		.psm_active_time_s = health_snapshot.psm_active_time_s,
+	*snap = (struct health_cellular_snapshot){
+		.registration_valid = radio.registration_valid,
+		.registration_state = radio.registration_state,
+		.psm_valid = radio.psm_valid,
+		.psm_tau_s = radio.psm_tau_s,
+		.psm_active_time_s = radio.psm_active_time_s,
 	};
 
-	temperature_ret = health_temperature_read(&health_snapshot.temperature);
+	temperature_ret = health_temperature_read(&snap->temperature);
 	if (temperature_ret) {
 		LOG_WRN("Device temperature unavailable: %d", temperature_ret);
 	}
 
-	health_battery_read();
+	health_battery_read(snap);
 
-	ret = lte_lc_conn_eval_params_get(&conn_eval);
-	health_snapshot.conn_eval_error = ret;
+	/* Isolated, bounded telemetry accessor (Health only -- the golfer flow
+	 * never calls this function's conn_eval portion at all, see
+	 * run_golfer_transaction()). lte_lc_conn_eval_params_get() itself has
+	 * no established application-level bound, so it never executes
+	 * directly here; telemetry_helper_thread is the sole caller.
+	 */
+	ret = telemetry_get_bounded(&conn_eval, HEALTH_TELEMETRY_READINESS_TIMEOUT_MS);
+	snap->conn_eval_error = ret;
 	if (ret == 0) {
-		health_snapshot.conn_eval_valid = true;
+		snap->conn_eval_valid = true;
 		if (conn_eval.rsrp != LTE_LC_CELL_RSRP_INVALID) {
-			health_snapshot.rsrp_valid = true;
-			health_snapshot.rsrp_dbm = RSRP_IDX_TO_DBM(conn_eval.rsrp);
+			snap->rsrp_valid = true;
+			snap->rsrp_dbm = RSRP_IDX_TO_DBM(conn_eval.rsrp);
 		}
 		if (conn_eval.rsrq != LTE_LC_CELL_RSRQ_INVALID) {
-			health_snapshot.rsrq_valid = true;
-			health_snapshot.rsrq_db = RSRQ_IDX_TO_DB(conn_eval.rsrq);
+			snap->rsrq_valid = true;
+			snap->rsrq_db = RSRQ_IDX_TO_DB(conn_eval.rsrq);
 		}
 		if (conn_eval.snr != 127) {
-			health_snapshot.snr_valid = true;
-			health_snapshot.snr_db = SNR_IDX_TO_DB(conn_eval.snr);
+			snap->snr_valid = true;
+			snap->snr_db = SNR_IDX_TO_DB(conn_eval.snr);
 		}
 		if (conn_eval.cell_id != 0) {
-			health_snapshot.serving_cell_valid = true;
-			health_snapshot.serving_cell_id = conn_eval.cell_id;
+			snap->serving_cell_valid = true;
+			snap->serving_cell_id = conn_eval.cell_id;
 		}
 		if (conn_eval.band != 0) {
-			health_snapshot.serving_band_valid = true;
-			health_snapshot.serving_band = conn_eval.band;
+			snap->serving_band_valid = true;
+			snap->serving_band = conn_eval.band;
 		}
 	} else {
-		LOG_WRN("Connection evaluation unavailable: %d", ret);
+		LOG_WRN("Connection evaluation unavailable within bound: %d", ret);
 	}
 }
 
-static void run_request_flow(void)
+/* Runs the golfer's accepted transaction to terminal disposition within the
+ * single absolute txn_deadline_ms established at acceptance time (see
+ * main()). Every attempt and every stage inside send_https_test() computes
+ * its own remaining time from this same deadline -- no attempt ever resets
+ * or extends it. Never yields to Health (Health always yields to this).
+ * Telemetry/connection-evaluation is intentionally never acquired here: it
+ * has no established bound and no value in the button_press payload: only
+ * best-effort temperature/battery logging happens, after disposition.
+ */
+static int run_golfer_transaction(int64_t txn_deadline_ms)
 {
 	int ret = -ETIMEDOUT;
 
-	health_snapshot_acquire();
-
-	set_state(STATE_TRANSMITTING);
-	show_transmitting_feedback();
-
-	for (size_t attempt = 0; attempt < REQUEST_MAX_ATTEMPTS; attempt++) {
-		health_snapshot.transaction_attempts = attempt + 1;
+	for (int attempt = 0; attempt < GOLFER_MAX_ATTEMPTS; attempt++) {
 		int64_t now_ms = k_uptime_get();
-		int64_t attempts_remaining = REQUEST_MAX_ATTEMPTS - attempt;
-		int64_t reserved_for_later =
-			(attempts_remaining - 1) * REQUEST_ATTEMPT_TIMEOUT_MS;
-		int64_t attempt_deadline = MIN(
-			now_ms + REQUEST_ATTEMPT_TIMEOUT_MS,
-			request_lockout_deadline_ms - reserved_for_later);
+		int64_t remaining_ms = txn_deadline_ms - now_ms;
 
-		if (attempt_deadline <= now_ms) {
+		if (remaining_ms <= 0) {
+			break;
+		}
+		if (attempt > 0 && remaining_ms < GOLFER_MIN_RETRY_RESERVE_MS) {
 			break;
 		}
 
-		ret = send_fairway_request(attempt_deadline);
+		button_health_snapshot.transaction_attempts = attempt + 1;
+		ret = send_https_test(&button_health_snapshot, txn_deadline_ms);
+		button_health_snapshot.https_result_valid = true;
+		button_health_snapshot.https_succeeded = (ret == 0);
 		if (ret == 0 || ret == -EACCES) {
 			break;
 		}
 	}
 
-	if (ret == 0) {
-		set_state(STATE_SUCCESS);
-		show_success_feedback();
-	} else {
-		set_state(STATE_FAILURE);
-		show_failure_feedback();
-	}
+	/* Best-effort, post-disposition-only local telemetry: never gates the
+	 * retry loop or terminal disposition above.
+	 */
+	(void)health_temperature_read(&button_health_snapshot.temperature);
+	health_battery_read(&button_health_snapshot);
 
-	LOG_INF("Health snapshot: attempts=%u https=%d http=%d temp_valid=%d temp_mC=%d conn_eval=%d rsrp=%d rsrq=%d snr=%d cell=%u band=%d batt_valid=%d batt_uV=%d batt_soc=%u",
-		health_snapshot.transaction_attempts,
-		health_snapshot.https_succeeded,
-		health_snapshot.http_status,
-		health_snapshot.temperature.valid,
-		health_snapshot.temperature.temp_mC,
-		health_snapshot.conn_eval_valid,
-			(int32_t)(health_snapshot.rsrp_valid ? health_snapshot.rsrp_dbm : INT32_MIN),
-			(int32_t)(health_snapshot.rsrq_valid ? health_snapshot.rsrq_db : INT32_MIN),
-			(int32_t)(health_snapshot.snr_valid ? health_snapshot.snr_db : INT32_MIN),
-		health_snapshot.serving_cell_valid ? health_snapshot.serving_cell_id : 0,
-		health_snapshot.serving_band_valid ? health_snapshot.serving_band : 0,
-		health_snapshot.battery_valid,
-		health_snapshot.battery_valid ? health_snapshot.battery_voltage_uV : 0,
-		health_snapshot.battery_valid ? health_snapshot.battery_soc_pct : 0U);
+	LOG_INF("Golfer transaction telemetry: attempts=%u https=%d http=%d temp_valid=%d temp_mC=%d "
+		"batt_valid=%d batt_uV=%d batt_soc=%u",
+		button_health_snapshot.transaction_attempts,
+		button_health_snapshot.https_succeeded,
+		button_health_snapshot.http_status,
+		button_health_snapshot.temperature.valid,
+		button_health_snapshot.temperature.temp_mC,
+		button_health_snapshot.battery_valid,
+		button_health_snapshot.battery_valid ? button_health_snapshot.battery_voltage_uV : 0,
+		button_health_snapshot.battery_valid ? button_health_snapshot.battery_soc_pct : 0U);
 
-	set_state(STATE_IDLE);
-	ring_off();
+	return ret;
 }
 
 /* Sends the scheduled health_report within its own two-attempt retry policy
- * (see FIRMWARE_SPECIFICATION.md "Device Health Transport and Scheduling"):
- * distinct from, and does not modify, REQUEST_MAX_ATTEMPTS/
- * REQUEST_ATTEMPT_TIMEOUT_MS used by the golfer button flow.
+ * (see FIRMWARE_SPECIFICATION.md "Device Health Transport and Scheduling").
  */
-static int send_health_report(int64_t attempt_deadline_ms)
+static int send_health_report(struct health_cellular_snapshot *snap, int64_t attempt_deadline_ms)
 {
 	int ret;
 
 	LOG_INF("Scheduled health_report send started");
 
-	ret = send_health_report_request(attempt_deadline_ms);
-	health_snapshot.https_result_valid = true;
-	health_snapshot.https_succeeded = (ret == 0);
+	ret = send_health_report_request(snap, attempt_deadline_ms);
+	snap->https_result_valid = true;
+	snap->https_succeeded = (ret == 0);
 	if (ret) {
 		LOG_ERR("Scheduled health_report send failed: %d", ret);
 		return ret;
@@ -753,115 +1193,61 @@ static int send_health_report(int64_t attempt_deadline_ms)
 	return 0;
 }
 
+enum health_cycle_result {
+	HEALTH_CYCLE_DONE = 0,
+	HEALTH_CYCLE_ABORTED,
+};
+
 /* Runs one scheduled Device Health reporting cycle: initial attempt plus at
  * most one retry, the retry occurring within HEALTH_REPORT_RETRY_WINDOW_MS
- * of the cycle start. After the second failure this stops entirely -- no
- * third attempt and no ad-hoc follow-up retry schedule is created. This same
- * function also serves as the boot bootstrap communication (see
- * bootstrap_health_schedule()), since the bootstrap and scheduled-health
- * retry envelopes are identical (2 attempts, retry within 90 seconds).
- *
+ * of the cycle start. Yields to the golfer at every checkpoint via
+ * golfer_txn_is_pending(): if a golfer press is accepted while this cycle is
+ * running, the cycle aborts immediately (no partial-attempt state is
+ * preserved) and re-arms itself as still due so a fresh, full two-attempt
+ * cycle runs again once the golfer transaction reaches terminal disposition.
  * Deliberately does not touch app_state_t/the LED ring: scheduled health
  * reporting is a silent background operation, not golfer-facing UX.
  */
-static void run_health_report_flow(void)
+static enum health_cycle_result run_health_cycle(void)
 {
 	int ret = -ETIMEDOUT;
 	int64_t cycle_start_ms = k_uptime_get();
 
-	health_snapshot_acquire();
+	health_snapshot_acquire(&sched_health_snapshot);
 
 	for (int attempt = 0; attempt < HEALTH_REPORT_MAX_ATTEMPTS; attempt++) {
+		if (golfer_txn_is_pending()) {
+			sched_ctl_set_health_due();
+			return HEALTH_CYCLE_ABORTED;
+		}
+
 		int64_t now_ms = k_uptime_get();
 		int64_t attempt_deadline = MIN(now_ms + HEALTH_REPORT_ATTEMPT_TIMEOUT_MS,
 						cycle_start_ms + HEALTH_REPORT_RETRY_WINDOW_MS);
 
-		health_snapshot.transaction_attempts = attempt + 1;
+		sched_health_snapshot.transaction_attempts = attempt + 1;
 
 		if (attempt_deadline <= now_ms) {
 			break;
 		}
 
-		ret = send_health_report(attempt_deadline);
+		ret = send_health_report(&sched_health_snapshot, attempt_deadline);
+		if (ret == -ECANCELED) {
+			sched_ctl_set_health_due();
+			return HEALTH_CYCLE_ABORTED;
+		}
 		if (ret == 0 || ret == -EACCES) {
 			break;
 		}
 	}
 
 	LOG_INF("Scheduled health report cycle complete: attempts=%u https=%d http=%d result=%d",
-		health_snapshot.transaction_attempts,
-		health_snapshot.https_succeeded,
-		health_snapshot.http_status,
+		sched_health_snapshot.transaction_attempts,
+		sched_health_snapshot.https_succeeded,
+		sched_health_snapshot.http_status,
 		ret);
-}
 
-/* Boot/reset bootstrap: attempts to obtain valid effective configuration
- * (and, via health_schedule_apply_deadline(), arm the first scheduled-health
- * wake) using the same 2-attempt/90-second envelope as an ordinary scheduled
- * report. After a second bootstrap failure, no autonomous hourly or ad-hoc
- * retry is scheduled; the device simply remains available for golfer button
- * presses, and a later successful authenticated communication (button or
- * scheduled health) may still refresh the schedule.
- */
-static void bootstrap_health_schedule(void)
-{
-	LOG_INF("HEALTH_SCHEDULE: boot bootstrap starting (date_time_is_valid=%d)",
-		date_time_is_valid());
-
-	run_health_report_flow();
-
-	LOG_INF("HEALTH_SCHEDULE: boot bootstrap complete, cached_next_health_report_at_ms=%lld",
-		(long long)cached_next_health_report_at_ms);
-}
-
-static void bounded_recovery_delay(int attempt)
-{
-	int delay_s = 2 + (attempt * 2);
-
-	if (delay_s > 30) {
-		delay_s = 30;
-	}
-
-	LOG_INF("Low-power recovery backoff: %d seconds", delay_s);
-	k_sleep(K_SECONDS(delay_s));
-}
-
-static int wait_for_lte_registration(void)
-{
-	int ret;
-	enum lte_lc_nw_reg_status status = LTE_LC_NW_REG_UNKNOWN;
-
-	LOG_INF("Connecting to LTE-M network");
-
-	ret = lte_lc_connect();
-	if (ret) {
-		LOG_ERR("lte_lc_connect failed: %d", ret);
-		return ret;
-	}
-
-	while (1) {
-		ret = lte_lc_nw_reg_status_get(&status);
-		if (ret) {
-			LOG_ERR("lte_lc_nw_reg_status_get failed: %d", ret);
-			return ret;
-		}
-
-		health_snapshot.registration_valid = true;
-		health_snapshot.registration_state = status;
-
-		if (status == LTE_LC_NW_REG_REGISTERED_HOME) {
-			LOG_INF("LTE registered: home network");
-			return 0;
-		}
-
-		if (status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
-			LOG_INF("LTE registered: roaming network");
-			return 0;
-		}
-
-		LOG_INF("Waiting for LTE registration, status: %d", status);
-		k_sleep(K_SECONDS(15));
-	}
+	return HEALTH_CYCLE_DONE;
 }
 
 static int provision_fairway_ca_certificate(void)
@@ -915,38 +1301,94 @@ static int provision_fairway_ca_certificate(void)
 	return 0;
 }
 
+/* Bounded poll-based stage wait: never blocks longer than remaining_ms,
+ * regardless of NCS socket-timeout-option semantics.
+ */
+static int socket_stage_deadline(int fd, short events, int64_t remaining_ms)
+{
+	if (remaining_ms <= 0) {
+		return -ETIMEDOUT;
+	}
+
+	struct zsock_pollfd pfd = { .fd = fd, .events = events };
+	int ret = zsock_poll(&pfd, 1, (int)remaining_ms);
+
+	if (ret <= 0) {
+		return -ETIMEDOUT;
+	}
+	if (pfd.revents & (ZSOCK_POLLERR | ZSOCK_POLLHUP)) {
+		return -ECONNRESET;
+	}
+	return 0;
+}
+
+/* NCS 3.1.1 does not document SO_SNDTIMEO/SO_RCVTIMEO as bounding
+ * zsock_connect() on this offloaded socket stack (only send/recv, per
+ * POSIX convention); a nonblocking connect plus zsock_poll()'s own
+ * timeout parameter is the only verified way to enforce a hard connect
+ * deadline.
+ */
+static int socket_connect_bounded(int fd, const struct sockaddr *addr, socklen_t len,
+				   int64_t remaining_ms)
+{
+	int flags = zsock_fcntl(fd, F_GETFL, 0);
+	int ret;
+
+	zsock_fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+	ret = zsock_connect(fd, addr, len);
+	if (ret == 0) {
+		return 0;
+	}
+	if (errno != EINPROGRESS) {
+		return -errno;
+	}
+	if (socket_stage_deadline(fd, ZSOCK_POLLOUT, remaining_ms) != 0) {
+		return -ETIMEDOUT;
+	}
+
+	int so_error = 0;
+	socklen_t elen = sizeof(so_error);
+
+	zsock_getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &elen);
+	return so_error ? -so_error : 0;
+}
+
 /* Shared authenticated HTTPS transport primitive for both the golfer
- * button_press flow and the scheduled health_report flow. Connects fresh,
- * sends the pre-built request, and reads a single response into recv_buf.
- * Populates the shared health_snapshot http_status fields exactly as
- * before (status-line only), and additionally applies a fresh
- * effective_config from the response body when the response is a
- * successful (2xx) one -- this is the one shared config-refresh path for
- * both event types described in FIRMWARE_SPECIFICATION.md "Device Health
- * Transport and Scheduling".
+ * button_press flow and the scheduled health_report flow.
+ *
+ * DNS is served from the shared, spinlock-protected dns_cache via
+ * dns_get_address_bounded(): zsock_getaddrinfo() itself only ever executes
+ * on the isolated dns_resolver_thread, never here.
+ *
+ * connect()/send()/recv() all use a nonblocking socket plus
+ * socket_stage_deadline()/socket_connect_bounded(), so no single stage can
+ * ever block longer than the remaining portion of attempt_deadline_ms.
+ *
+ * When yieldable is true (Health's own flow only), golfer_txn_is_pending()
+ * is checked before/after every stage; a pending golfer press aborts this
+ * call immediately with -ECANCELED so Health never holds the shared
+ * transport once a golfer transaction has been accepted. The golfer's own
+ * flow (yieldable=false) never checks this and is never itself aborted.
  *
  * Return value convention (unchanged from the pre-WP4 button-only
- * behavior):
- *   0        HTTP 2xx.
- *   -EACCES  HTTP 400/401/403/404 (terminal; caller does not retry).
- *   -EPROTO  Any other received-but-unsuccessful HTTP response.
- *   -errno   No response could be obtained at all (connect/send/recv/
- *            timeout failure).
+ * behavior), plus one new outcome:
+ *   0           HTTP 2xx.
+ *   -EACCES     HTTP 400/401/403/404 (terminal; caller does not retry).
+ *   -EPROTO     Any other received-but-unsuccessful HTTP response.
+ *   -ECANCELED  Health yielded to an accepted golfer press (yieldable only).
+ *   -errno/-ETIMEDOUT  No response could be obtained at all.
  */
 static int send_http_request(const char *request, int request_len,
-			      int64_t attempt_deadline_ms)
+			      int64_t attempt_deadline_ms,
+			      struct health_cellular_snapshot *snap,
+			      bool yieldable)
 {
-	int fd;
+	int fd = -1;
 	int ret;
-	int remaining_ms;
-	struct timeval timeout;
-
-	struct zsock_addrinfo hints = {
-		.ai_family = AF_INET,
-		.ai_socktype = SOCK_STREAM,
-	};
-
-	struct zsock_addrinfo *res = NULL;
+	int64_t remaining_ms;
+	struct sockaddr_storage addr;
+	socklen_t addr_len;
 
 	const char *host = "fairway-button-receiver-936892386735.us-central1.run.app";
 
@@ -956,29 +1398,31 @@ static int send_http_request(const char *request, int request_len,
 	sec_tag_t sec_tag_list[] = { FAIRWAY_TLS_SEC_TAG };
 
 	LOG_INF("Sending HTTPS request to Cloud Run");
-	remaining_ms = attempt_deadline_ms - k_uptime_get();
-	if (remaining_ms <= CONFIG_NET_SOCKETS_CONNECT_TIMEOUT) {
-		return -ETIMEDOUT;
+
+	if (yieldable && golfer_txn_is_pending()) {
+		return -ECANCELED;
 	}
 
-	ret = zsock_getaddrinfo(host, "443", &hints, &res);
+	remaining_ms = attempt_deadline_ms - k_uptime_get();
+	ret = dns_get_address_bounded(&addr,
+		yieldable ? MIN(remaining_ms, (int64_t)HEALTH_DNS_READINESS_TIMEOUT_MS)
+			  : MIN(remaining_ms, (int64_t)GOLFER_DNS_READINESS_TIMEOUT_MS));
 	if (ret != 0) {
-		LOG_ERR("HTTPS zsock_getaddrinfo failed: %d", ret);
+		LOG_WRN("HTTPS DNS not ready within bound: %d", ret);
 		return ret;
 	}
-
-	remaining_ms = attempt_deadline_ms - k_uptime_get();
-	if (remaining_ms <= CONFIG_NET_SOCKETS_CONNECT_TIMEOUT) {
-		zsock_freeaddrinfo(res);
-		return -ETIMEDOUT;
+	if (yieldable && golfer_txn_is_pending()) {
+		return -ECANCELED;
 	}
 
-	fd = zsock_socket(res->ai_family, res->ai_socktype, IPPROTO_TLS_1_2);
+	addr_len = (addr.ss_family == AF_INET) ? sizeof(struct sockaddr_in)
+						: sizeof(struct sockaddr_in6);
+
+	fd = zsock_socket(addr.ss_family, SOCK_STREAM, IPPROTO_TLS_1_2);
 	if (fd < 0) {
 		ret = -errno;
 		LOG_ERR("HTTPS zsock_socket failed: errno %d", errno);
-		zsock_freeaddrinfo(res);
-		return ret;
+		goto out;
 	}
 
 	ret = zsock_setsockopt(fd, SOL_TLS, TLS_PEER_VERIFY,
@@ -986,29 +1430,7 @@ static int send_http_request(const char *request, int request_len,
 	if (ret < 0) {
 		ret = -errno;
 		LOG_ERR("HTTPS TLS_PEER_VERIFY failed: errno %d", errno);
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
-	}
-
-	timeout.tv_sec = remaining_ms / 1000;
-	timeout.tv_usec = (remaining_ms % 1000) * 1000;
-	ret = zsock_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
-			       &timeout, sizeof(timeout));
-	if (ret < 0) {
-		ret = -errno;
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
-	}
-
-	ret = zsock_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
-			       &timeout, sizeof(timeout));
-	if (ret < 0) {
-		ret = -errno;
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
+		goto out;
 	}
 
 	ret = zsock_setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST,
@@ -1016,9 +1438,7 @@ static int send_http_request(const char *request, int request_len,
 	if (ret < 0) {
 		ret = -errno;
 		LOG_ERR("HTTPS TLS_SEC_TAG_LIST failed: errno %d", errno);
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
+		goto out;
 	}
 
 	ret = zsock_setsockopt(fd, SOL_TLS, TLS_HOSTNAME,
@@ -1026,86 +1446,121 @@ static int send_http_request(const char *request, int request_len,
 	if (ret < 0) {
 		ret = -errno;
 		LOG_ERR("HTTPS TLS_HOSTNAME failed: errno %d", errno);
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
+		goto out;
 	}
 
-	LOG_INF("Connecting to %s:443", host);
+	if (yieldable && golfer_txn_is_pending()) {
+		ret = -ECANCELED;
+		goto out;
+	}
 
-	ret = zsock_connect(fd, res->ai_addr, res->ai_addrlen);
-	if (ret < 0) {
-		ret = -errno;
-		LOG_ERR("HTTPS zsock_connect failed: errno %d", errno);
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
+	remaining_ms = attempt_deadline_ms - k_uptime_get();
+	LOG_INF("Connecting to %s:443", host);
+	ret = socket_connect_bounded(fd, (struct sockaddr *)&addr, addr_len,
+		yieldable ? MIN(remaining_ms, (int64_t)HEALTH_YIELD_CONNECT_POLL_MS)
+			  : remaining_ms);
+	if (ret != 0) {
+		LOG_ERR("HTTPS connect failed: %d", ret);
+		if (ret == -ECONNREFUSED || ret == -ETIMEDOUT) {
+			dns_cache_invalidate();
+		}
+		goto out;
 	}
 
 	LOG_INF("HTTPS socket connected");
+
+	if (yieldable && golfer_txn_is_pending()) {
+		ret = -ECANCELED;
+		goto out;
+	}
+
+	remaining_ms = attempt_deadline_ms - k_uptime_get();
+	ret = socket_stage_deadline(fd, ZSOCK_POLLOUT,
+		yieldable ? MIN(remaining_ms, (int64_t)HEALTH_YIELD_IO_POLL_MS) : remaining_ms);
+	if (ret != 0) {
+		goto out;
+	}
 
 	ret = zsock_send(fd, request, request_len, 0);
 	if (ret < 0) {
 		ret = -errno;
 		LOG_ERR("HTTPS zsock_send failed: errno %d", errno);
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
+		goto out;
 	}
 
 	LOG_INF("HTTPS request sent: %d bytes", ret);
+
+	if (yieldable && golfer_txn_is_pending()) {
+		ret = -ECANCELED;
+		goto out;
+	}
+
+	remaining_ms = attempt_deadline_ms - k_uptime_get();
+	ret = socket_stage_deadline(fd, ZSOCK_POLLIN,
+		yieldable ? MIN(remaining_ms, (int64_t)HEALTH_YIELD_IO_POLL_MS) : remaining_ms);
+	if (ret != 0) {
+		goto out;
+	}
 
 	ret = zsock_recv(fd, recv_buf, sizeof(recv_buf) - 1, 0);
 	if (ret < 0) {
 		ret = -errno;
 		LOG_ERR("HTTPS zsock_recv failed: errno %d", errno);
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return ret;
+		goto out;
 	}
 
 	recv_buf[ret] = '\0';
 	LOG_INF("HTTPS response received: %d bytes", ret);
 	LOG_INF("HTTPS response preview: %.80s", recv_buf);
 
-	int http_status = 0;
-	health_snapshot.http_status_valid =
-		sscanf(recv_buf, "HTTP/%*u.%*u %d", &http_status) == 1;
-	health_snapshot.http_status = http_status;
+	if (yieldable && golfer_txn_is_pending()) {
+		ret = -ECANCELED;
+		goto out;
+	}
 
-	if (health_snapshot.http_status_valid &&
-	    http_status >= 200 && http_status < 300) {
-		char *body = strstr(recv_buf, "\r\n\r\n");
+	{
+		int http_status = 0;
 
-		if (body != NULL) {
-			body += 4;
+		snap->http_status_valid =
+			sscanf(recv_buf, "HTTP/%*u.%*u %d", &http_status) == 1;
+		snap->http_status = http_status;
 
-			size_t body_len = (size_t)ret - (size_t)(body - recv_buf);
-			int64_t new_deadline_unix_ms;
+		if (snap->http_status_valid &&
+		    http_status >= 200 && http_status < 300) {
+			char *body = strstr(recv_buf, "\r\n\r\n");
 
-			if (health_schedule_parse_effective_config(body, body_len,
-								    &new_deadline_unix_ms)) {
-				health_schedule_apply_deadline(new_deadline_unix_ms);
+			if (body != NULL) {
+				body += 4;
+
+				size_t body_len = (size_t)ret - (size_t)(body - recv_buf);
+				int64_t new_deadline_unix_ms;
+
+				if (health_schedule_parse_effective_config(body, body_len,
+									    &new_deadline_unix_ms)) {
+					pending_deadline_post(new_deadline_unix_ms);
+				}
 			}
+		}
+
+		if (!snap->http_status_valid ||
+		    http_status < 200 || http_status >= 300) {
+			ret = (http_status == 400 || http_status == 401 ||
+			       http_status == 403 || http_status == 404) ? -EACCES : -EPROTO;
+			goto out;
 		}
 	}
 
-	if (!health_snapshot.http_status_valid ||
-	    http_status < 200 || http_status >= 300) {
-		zsock_close(fd);
-		zsock_freeaddrinfo(res);
-		return (http_status == 400 || http_status == 401 ||
-			http_status == 403 || http_status == 404) ? -EACCES : -EPROTO;
-	}
-
-	zsock_close(fd);
-	zsock_freeaddrinfo(res);
-
 	LOG_INF("Cloud Run HTTPS request succeeded");
-	return 0;
+	ret = 0;
+
+out:
+	if (fd >= 0) {
+		zsock_close(fd);
+	}
+	return ret;
 }
 
-static int send_https_test(int64_t attempt_deadline_ms)
+static int send_https_test(struct health_cellular_snapshot *snap, int64_t attempt_deadline_ms)
 {
 	static char request_body[128];
 	int request_body_len;
@@ -1139,7 +1594,7 @@ static int send_https_test(int64_t attempt_deadline_ms)
 		return -ENOMEM;
 	}
 
-	return send_http_request(request, request_len, attempt_deadline_ms);
+	return send_http_request(request, request_len, attempt_deadline_ms, snap, false);
 }
 
 /* Formats one nullable integer health measurement into buf (decimal, base
@@ -1177,7 +1632,7 @@ static const char *health_field_or_null_u32(char *buf, size_t buf_len, bool vali
  * conn_eval_error is firmware-local diagnostic only and is never
  * transmitted, matching the current backend contract exactly.
  */
-static int send_health_report_request(int64_t attempt_deadline_ms)
+static int send_health_report_request(struct health_cellular_snapshot *snap, int64_t attempt_deadline_ms)
 {
 	char registration_state_buf[16];
 	char http_status_buf[16];
@@ -1196,8 +1651,8 @@ static int send_health_report_request(int64_t attempt_deadline_ms)
 	static char health_body[512];
 	int health_body_len;
 
-	if (health_snapshot.https_result_valid) {
-		https_succeeded_str = health_snapshot.https_succeeded ? "true" : "false";
+	if (snap->https_result_valid) {
+		https_succeeded_str = snap->https_succeeded ? "true" : "false";
 	} else {
 		https_succeeded_str = "null";
 	}
@@ -1220,39 +1675,39 @@ static int send_health_report_request(int64_t attempt_deadline_ms)
 		"\"https_succeeded\":%s"
 		"}}",
 		FAIRWAY_DEVICE_ID,
-		(unsigned)health_snapshot.transaction_attempts,
+		(unsigned)snap->transaction_attempts,
 		health_field_or_null(registration_state_buf, sizeof(registration_state_buf),
-				      health_snapshot.registration_valid,
-				      (int32_t)health_snapshot.registration_state),
+				      snap->registration_valid,
+				      (int32_t)snap->registration_state),
 		health_field_or_null(http_status_buf, sizeof(http_status_buf),
-				      health_snapshot.http_status_valid,
-				      health_snapshot.http_status),
+				      snap->http_status_valid,
+				      snap->http_status),
 		health_field_or_null(temp_buf, sizeof(temp_buf),
-				      health_snapshot.temperature.valid,
-				      health_snapshot.temperature.temp_mC),
+				      snap->temperature.valid,
+				      snap->temperature.temp_mC),
 		health_field_or_null(rsrp_buf, sizeof(rsrp_buf),
-				      health_snapshot.rsrp_valid, health_snapshot.rsrp_dbm),
+				      snap->rsrp_valid, snap->rsrp_dbm),
 		health_field_or_null(rsrq_buf, sizeof(rsrq_buf),
-				      health_snapshot.rsrq_valid, health_snapshot.rsrq_db),
+				      snap->rsrq_valid, snap->rsrq_db),
 		health_field_or_null(snr_buf, sizeof(snr_buf),
-				      health_snapshot.snr_valid, health_snapshot.snr_db),
+				      snap->snr_valid, snap->snr_db),
 		health_field_or_null_u32(cell_buf, sizeof(cell_buf),
-					 health_snapshot.serving_cell_valid,
-					 health_snapshot.serving_cell_id),
+					 snap->serving_cell_valid,
+					 snap->serving_cell_id),
 		health_field_or_null(band_buf, sizeof(band_buf),
-				      health_snapshot.serving_band_valid,
-				      health_snapshot.serving_band),
+				      snap->serving_band_valid,
+				      snap->serving_band),
 		health_field_or_null(psm_tau_buf, sizeof(psm_tau_buf),
-				      health_snapshot.psm_valid, health_snapshot.psm_tau_s),
+				      snap->psm_valid, snap->psm_tau_s),
 		health_field_or_null(psm_active_buf, sizeof(psm_active_buf),
-				      health_snapshot.psm_valid,
-				      health_snapshot.psm_active_time_s),
+				      snap->psm_valid,
+				      snap->psm_active_time_s),
 		health_field_or_null(batt_uv_buf, sizeof(batt_uv_buf),
-				      health_snapshot.battery_valid,
-				      health_snapshot.battery_voltage_uV),
+				      snap->battery_valid,
+				      snap->battery_voltage_uV),
 		health_field_or_null(batt_soc_buf, sizeof(batt_soc_buf),
-				      health_snapshot.battery_valid,
-				      (int32_t)health_snapshot.battery_soc_pct),
+				      snap->battery_valid,
+				      (int32_t)snap->battery_soc_pct),
 		https_succeeded_str);
 
 	if (health_body_len < 0 || health_body_len >= sizeof(health_body)) {
@@ -1280,8 +1735,158 @@ static int send_health_report_request(int64_t attempt_deadline_ms)
 		return -ENOMEM;
 	}
 
-	return send_http_request(health_request, health_request_len, attempt_deadline_ms);
+	return send_http_request(health_request, health_request_len, attempt_deadline_ms, snap, true);
 }
+
+/* Owns all network/time/health background work. Blocks on local_hw_ready_sem
+ * until main() has finished local button/LED hardware setup, then performs
+ * the one-time modem/PSM/cert/connect sequence, then services
+ * lte_registered_pending / date_time_valid_pending / a freshly-parsed
+ * effective_config deadline / the scheduled-health timer for the process
+ * lifetime. Never touches button_wake_pending, button_wake_sem, or
+ * button_health_snapshot, and never itself performs HTTP work: a due health
+ * cycle is only ever executed by transaction_thread.
+ */
+static void network_health_thread_entry(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+	int ret;
+
+	k_sem_take(&local_hw_ready_sem, K_FOREVER);
+
+	LOG_INF("Initializing modem library");
+	ret = nrf_modem_lib_init();
+	if (ret) {
+		LOG_ERR("Modem library init failed: %d", ret);
+	} else {
+		LOG_INF("Modem library init succeeded");
+		modem_ready = true;
+
+		configure_psm();
+
+		ret = provision_fairway_ca_certificate();
+		if (ret) {
+			LOG_ERR("Cloud Run CA certificate provisioning failed: %d", ret);
+		} else {
+			LOG_INF("Cloud Run CA certificate ready");
+		}
+
+		LOG_INF("Starting LTE connection (asynchronous)");
+		ret = lte_lc_connect_async(lte_evt_handler);
+		if (ret) {
+			LOG_ERR("lte_lc_connect_async failed: %d", ret);
+			LOG_WRN("Continuing without an LTE connection attempt in progress; "
+				"the golfer path remains available and any request made "
+				"before connectivity is established reaches bounded FAILURE");
+		} else {
+			LOG_INF("LTE connection attempt started; registration reported asynchronously");
+		}
+	}
+
+	while (1) {
+		int64_t pending_deadline_unix_ms;
+
+		if (!lte_registered_pending && !date_time_valid_pending &&
+		    !health_wake_pending) {
+			k_sem_take(&network_wake_sem, K_FOREVER);
+		}
+
+		if (pending_deadline_take(&pending_deadline_unix_ms)) {
+			LOG_INF("HEALTH_SCHEDULE: applying deadline received from a request flow");
+			health_schedule_apply_deadline(pending_deadline_unix_ms);
+			continue;
+		}
+
+		if (lte_registered_pending) {
+			lte_registered_pending = false;
+
+			wait_for_authoritative_time();
+
+			/* One-time, non-blocking DNS pre-warm: never waited on here. */
+			dns_kickoff_if_idle();
+
+			LOG_INF("HEALTH_SCHEDULE: boot bootstrap due");
+			sched_ctl_set_health_due();
+			k_sem_give(&txn_wake_sem);
+			continue;
+		}
+
+		if (date_time_valid_pending) {
+			date_time_valid_pending = false;
+
+			/* Sole place cached_next_health_report_at_ms is read/armed
+			 * from on this path -- network_health_thread only, per
+			 * date_time_evt_handler()'s signal-only design above.
+			 */
+			if (cached_next_health_report_at_ms >= 0) {
+				LOG_INF("DATE_TIME_WAKE: authoritative UTC available, arming cached deadline");
+				health_schedule_apply_deadline(cached_next_health_report_at_ms);
+			}
+			continue;
+		}
+
+		if (health_wake_pending) {
+			health_wake_pending = false;
+
+			LOG_INF("HEALTH_WAKE detected");
+			sched_ctl_set_health_due();
+			k_sem_give(&txn_wake_sem);
+			continue;
+		}
+	}
+}
+K_THREAD_DEFINE(network_health_thread, CONFIG_MAIN_STACK_SIZE,
+		network_health_thread_entry, NULL, NULL, NULL,
+		NETWORK_HEALTH_THREAD_PRIORITY, 0, 0);
+
+/* Golfer-first transaction scheduler: the sole owner of the shared product
+ * network transport (DNS/socket/TLS/HTTP) for both the golfer and Health
+ * flows, one at a time. A golfer press always takes priority: it is picked
+ * up before any pending Health cycle, and an active Health cycle yields
+ * (aborts, re-arms itself as still due) as soon as one is accepted -- see
+ * run_health_cycle()'s golfer_txn_is_pending() checks.
+ */
+static void transaction_thread_entry(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	while (1) {
+		uint32_t gen;
+		int64_t deadline_ms;
+		bool have_golfer = golfer_txn_pickup(&gen, &deadline_ms);
+		bool have_health = !have_golfer && sched_ctl_take_health_due();
+
+		if (!have_golfer && !have_health) {
+			k_sem_take(&txn_wake_sem, K_FOREVER);
+			continue;
+		}
+
+		if (have_golfer) {
+			sched_ctl_set_state(TXN_GOLFER_ACTIVE);
+
+			int ret = run_golfer_transaction(deadline_ms);
+
+			golfer_txn_complete(gen, ret == 0);
+			k_sem_give(&button_wake_sem);
+
+			sched_ctl_set_state(TXN_IDLE);
+			continue;
+		}
+
+		sched_ctl_set_state(TXN_HEALTH_ACTIVE);
+
+		enum health_cycle_result r = run_health_cycle();
+
+		sched_ctl_set_state(r == HEALTH_CYCLE_ABORTED ? TXN_GOLFER_PENDING : TXN_IDLE);
+	}
+}
+K_THREAD_DEFINE(transaction_thread, CONFIG_MAIN_STACK_SIZE,
+		transaction_thread_entry, NULL, NULL, NULL,
+		TRANSACTION_THREAD_PRIORITY, 0, 0);
 
 int main(void)
 {
@@ -1316,41 +1921,12 @@ int main(void)
 
 	LOG_INF("Fairway Refresh state-machine feedback test starting");
 
-	LOG_INF("Initializing modem library");
-
-	ret = nrf_modem_lib_init();
-	if (ret) {
-		LOG_ERR("Modem library init failed: %d", ret);
-	} else {
-		LOG_INF("Modem library init succeeded");
-		modem_ready = true;
-
-#if defined(CONFIG_LTE_LC_MODEM_SLEEP_MODULE)
-		lte_lc_register_handler(lte_diag_evt_handler);
-#endif
-
-		configure_psm();
-
-		ret = provision_fairway_ca_certificate();
-		if (ret) {
-			LOG_ERR("Cloud Run CA certificate provisioning failed: %d", ret);
-		} else {
-			LOG_INF("Cloud Run CA certificate ready");
-		}
-
-		ret = wait_for_lte_registration();
-		if (ret) {
-			LOG_ERR("LTE registration failed: %d", ret);
-			bounded_recovery_delay(1);
-		} else {
-			LOG_INF("LTE registration succeeded");
-			LOG_INF("Network ready. GPIO wake path active.");
-
-			wait_for_authoritative_time();
-			bootstrap_health_schedule();
-		}
-	}
-
+	/* Local hardware first: button/LED GPIO, callback, and interrupt are
+	 * configured and armed, and this thread reaches its event loop,
+	 * before any modem/network call is made -- the golfer button is live
+	 * regardless of what network_health_thread does next or how long it
+	 * takes.
+	 */
 	if (!device_is_ready(gpio0_dev)) {
 		LOG_ERR("GPIO0 device is not ready");
 		return 0;
@@ -1385,56 +1961,96 @@ int main(void)
 
 	set_state(STATE_IDLE);
 
+	/* Releases network_health_thread to begin modem/PSM/cert/LTE work.
+	 * This is the only interaction between the two threads at boot; this
+	 * thread never waits on anything from network_health_thread.
+	 */
+	k_sem_give(&local_hw_ready_sem);
+
 	LOG_INF("Ready. Waiting in low-power idle for button wake.");
 
 	while (1) {
-		/* Skip the blocking wait if a wake is already pending from a prior
-		 * iteration. The shared wake_sem has a max count of 1, so a
-		 * coincident button press, scheduled-health timer expiry, and/or
-		 * date_time event can coalesce into a single semaphore give;
-		 * checking all flags here (rather than unconditionally blocking
-		 * again) ensures a second pending flow is never silently lost.
+		low_power_idle();
+
+		if (!button_wake_pending) {
+			continue;
+		}
+		button_wake_pending = false;
+
+		LOG_INF("BUTTON_WAKE detected");
+
+		/* Keep switch bounce from queuing a second press during the
+		 * active transaction; re-armed only after terminal feedback
+		 * plus BUTTON_REARM_SETTLE_MS below.
 		 */
-		if (!button_wake_pending && !health_wake_pending && !date_time_valid_pending) {
-			low_power_idle();
-		}
+		gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_DISABLE);
 
-		if (button_wake_pending) {
-			button_wake_pending = false;
+		/* Architect Correction 1: the hard 15-second deadline begins
+		 * at acceptance, before the acknowledgement animation runs.
+		 */
+		int64_t accept_time_ms = k_uptime_get();
+		int64_t deadline_ms = accept_time_ms + GOLFER_TRANSACTION_BUDGET_MS;
+		uint32_t my_gen = golfer_txn_accept(deadline_ms);
 
-			LOG_INF("BUTTON_WAKE detected");
-			LOG_INF("BUTTON_WAKE: invoking request flow");
+		set_state(STATE_TRANSMITTING);
 
-			/* Keep switch bounce from queuing a second request during the flow. */
-			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_DISABLE);
-			run_request_flow();
-			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
-			continue;
-		}
+		/* Canonical local acknowledgement begins here (the LED
+		 * physically turns on) -- strictly before the scheduler is
+		 * released, so network/transaction work can never start
+		 * ahead of the golfer's visible acknowledgement. The
+		 * 15-second deadline above is unaffected: it was already
+		 * fixed at acceptance, not here.
+		 */
+		ring_on();
+		k_sem_give(&txn_wake_sem);
 
-		if (health_wake_pending) {
-			health_wake_pending = false;
+		/* Completes the existing 3-flash acknowledgement pattern; its
+		 * own first ring_on() is a harmless redundant write (the LED
+		 * is already on), so the golfer-visible pattern/timing is
+		 * unchanged, it now simply runs concurrently with the
+		 * transaction that was just released above.
+		 */
+		show_transmitting_feedback();
 
-			LOG_INF("HEALTH_WAKE detected");
-			LOG_INF("HEALTH_WAKE: invoking scheduled health report flow");
+		bool got_result = false;
+		bool success = false;
 
-			run_health_report_flow();
-			continue;
-		}
+		while (1) {
+			int64_t remaining_ms = deadline_ms - k_uptime_get();
 
-		if (date_time_valid_pending) {
-			date_time_valid_pending = false;
-
-			/* Sole place cached_next_health_report_at_ms is read/armed from
-			 * on this path -- main thread only, per date_time_evt_handler()'s
-			 * signal-only design above.
-			 */
-			if (cached_next_health_report_at_ms >= 0) {
-				LOG_INF("DATE_TIME_WAKE: authoritative UTC available, arming cached deadline");
-				health_schedule_apply_deadline(cached_next_health_report_at_ms);
+			if (remaining_ms <= 0) {
+				break;
 			}
-			continue;
+			if (k_sem_take(&button_wake_sem, K_MSEC(remaining_ms)) != 0) {
+				break;
+			}
+			if (golfer_txn_check_done(my_gen, &success)) {
+				got_result = true;
+				break;
+			}
+			/* Spurious wake (e.g. a completion signal for an
+			 * already-expired generation): keep waiting within the
+			 * same bounded deadline.
+			 */
 		}
+
+		if (got_result && success) {
+			set_state(STATE_SUCCESS);
+			show_success_feedback();
+		} else {
+			/* Local defensive deadline (Architect Correction):
+			 * guarantees a terminal disposition even in the
+			 * unforeseen case that transaction_thread itself does
+			 * not report back in time.
+			 */
+			set_state(STATE_FAILURE);
+			show_failure_feedback();
+		}
+
+		k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
+		gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
+		set_state(STATE_IDLE);
+		ring_off();
 	}
 
 	return 0;
