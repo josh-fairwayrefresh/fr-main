@@ -79,3 +79,6 @@ log-*.txt
 
 # Local Fairway production credential
 /samples/fairway_power_sandbox/src/secrets/fairway_device_key.h
+
+# Node.js generated dependencies (backend)
+node_modules/
