@@ -143,6 +143,8 @@ Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/ids.js` (`allocateN
 
 Per CPO direction, a physical marker's `FRB-XXXX` ID is allocated only once build/test has reached "Ready for Deployment"; the Admin UI that will trigger that allocation is future work (see `docs/feature_backlog.md`), not implemented here.
 
+A reusable, production-validated provisioning utility now exists ahead of that future Admin UI: `fairway_backend/cloudrun_receiver/lib/fleet/provisioning.js` (`provisionNewDevice`, `issueCredentialForExistingDevice`) with a thin CLI invocation surface at `fairway_backend/cloudrun_receiver/scripts/provision_device.js` (`npm run provision-device`). It orchestrates the existing `createDevice`/`replaceDeviceCredential` primitives without duplicating their logic, allocates the Device ID through the existing allocator (never hardcoded), never persists or logs the plaintext credential, and includes a `--issue-credential-for` recovery path for the case where Device creation succeeds but credential issuance fails, so a partially-provisioned Device is never duplicated. This utility was used for FRB-0002's production provisioning (below) and remains available for future device provisioning events until the Admin UI supersedes it.
+
 ### Existing Reference Device: FRB-0001 (Live, Migrated, Physically Validated)
 
 The existing physical reference device is canonically designated **FRB-0001** and this migration is now complete. To reserve that identity, the Device allocator (`RESERVED_FLOORS` in `ids.js`) starts a fresh/uninitialized `counters/FRB` document at sequence `2` rather than `1`, so the allocator can never issue `FRB-0001` to a new device; the first device allocated through the future Add Device workflow will be `FRB-0002`. Customer and Course allocation are unaffected and continue to start at `CUST-0001` and `COURSE-0001` respectively.
@@ -170,6 +172,16 @@ Current live state (CPO-authorized bootstrap writes, separate from the repositor
 | (no legacy field) | The legacy record has no Customer association; migration must assign a `customer_id`/`customer_name` for the first time (a first-time assignment, not a reassignment) once the corresponding canonical `customers/CUST-0001` record exists |
 | `notes` | Canonical `comments` |
 | `model` (`"pv4"`) | Not migrated. CPO decision: `model = "pv4"` identifies the legacy E-Switch PV4 physical button model and is excluded from the canonical `FRB-0001` Device record; a future `button_type` field for multi-button-type support is deferred and not implemented. |
+
+### Second Deployed Device: FRB-0002 (Live, Independently Provisioned, Physically Commissioned)
+
+`FRB-0002` is the first device allocated through the reusable provisioning utility above, rather than through FRB-0001's direct CPO-authorized manual bootstrap writes. Current live state:
+
+- `devices/FRB-0002` exists live: `state = "deployed"`, `customer_id = "CUST-0001"` (Monarch Bay GC), `course_id = "COURSE-0001"` (Tony Lema Course), `location = { type: "hole", hole: 2 }`, `hardware_revision = "Prototype 1.2"` (the same 5580/MAX17048/6106 architecture as FRB-0001), `sim_iccid` recorded, `firmware_generation = "Golfer-First (Bounded Request Architecture)"`, and an issued unique credential verifier (never the plaintext secret).
+- `commissioning = { commissioned_at, commissioned_by }` is recorded, using the CPO's existing authenticated identity as `commissioned_by`; no new identity/role schema was introduced.
+- Golfer commissioning passed: an authenticated button transaction reached the operator app correctly attributed to Tony Lema Course / Hole 2, and the CPO confirmed and completed that request.
+- Device Health commissioning passed: `latest_health` is populated and matches the single `health_history` entry, with a server-owned `received_at`, establishing a completed authenticated Device Health exchange.
+- Hologram SIM activation succeeded end-to-end using the current firmware's existing configuration, which sets no explicit APN string, no explicit data-roaming flag, and no APN credentials (see `docs/FIRMWARE_SPECIFICATION.md`/`prj.conf`: only `CONFIG_PDN=y` is set). Explicit firmware APN configuration is therefore not currently established as a required provisioning step; modem/SIM default APN selection was sufficient for this device.
 
 ### Additional Normalization Candidates
 
