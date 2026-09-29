@@ -38,31 +38,196 @@ Official Circuit Dojo current hardware evidence verifies the following:
 
 This means the new Fairway feed using the onboard JST J4 connector is a physical interconnect refinement to the same VBAT/GND electrical domains as J1/1 and J2/4. The direct official PCB source confirms the shared net relationship and therefore closes the previous vendor-evidence gate for the current design state.
 
-## Approved Current Pilot-Build Architecture
+## Monarch Bay Pilot --- Final Hardware Architecture (Approved, v3.2 Pilot Ready)
 
-The CPO-approved pilot-build architecture is distinct from the current reference-device hardware evidence:
+The CPO has completed the Monarch Bay Pilot hardware architecture review and
+approved the following as final for the Monarch Bay Pilot build. "Final" here
+means final for the Monarch Bay Pilot configuration specifically, not a
+permanent freeze of Fairway Refresh hardware generally; a later pilot or
+production architecture may still evolve this design. This section supersedes
+the prior direct `5580 GND → J2/4` wiring and the PV4 + 220 Ω LED-resistor
+circuit as the active new-build hardware for this pilot. The reference-device
+evidence recorded elsewhere in this document remains historical and is not
+rewritten to reflect this architecture.
+
+Retained from the prior approved pilot-build path:
 
 - LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT
-- 5580 VIN → J2/2 3V3
-- 5580 GND → J2/4 GND
-- 5580 SCL → J1/11 / P0.01 / I2C2 SCL
-- 5580 SDA → J1/12 / P0.02 / I2C2 SDA
-- INT unused
-- QStart unused
-- SJ1 power LED jumper cut for pilot
+- 5580 VIN → Feather J2/2 3V3
+- 5580 SCL → Feather J1/11 / P0.01 / I2C2 SCL
+- 5580 SDA → Feather J1/12 / P0.02 / I2C2 SDA
+- 5580 INT unused
+- 5580 QStart unused
+- SJ1 power LED jumper cut
 - VDD = VCC retained
 - external polyfuse omitted
 - 1000 uF capacitor omitted
-- 220 Ω PV4 LED resistor retained
-- Fairway power feed for new builds uses Adafruit 261 into onboard JST J4 VBAT/GND; J1/3 VBUS remains separate and is not the new Fairway feed
 
-Actual component placement, Perma-Proto geometry, battery mount location, connector orientation, harness routing, and the exact final mechanical layout remain TBD.
+Superseded for this pilot:
+
+- 5580 GND no longer wires directly to Feather J2/4. **5580 GND → Perma-Proto
+  common GND rail.**
+- The PV4 illuminated pushbutton and its 220 Ω LED series resistor are retired
+  from this build. See the Pushbutton and Indicators subsections below for the
+  accepted replacement.
+
+### Power-Distribution Rails (New for This Pilot)
+
+The Perma-Proto rails are now canonicalized as the explicit system
+power-distribution buses, not just a Feather/battery return path:
+
+- Adafruit 6106 regulated positive output (TPS61023 5 V boost) → Perma-Proto
+  **+5 V rail**.
+- Adafruit 6106 GND output → Perma-Proto **common GND rail**.
+- Perma-Proto +5 V rail → Adafruit 261 JST pigtail → Feather onboard **J4/1
+  VBAT**.
+- Perma-Proto GND rail → Adafruit 261 JST pigtail → Feather onboard **J4/2
+  GND**.
+- No jumper is added from Feather J2/4 to the GND rail: J4/2 GND and J2/4 are
+  already the same Feather ground domain (see "Feather onboard battery JST
+  evidence" above), so a separate jumper would be redundant, not required.
+- Field power is not connected to Feather J1/3 VBUS.
+
+The common GND rail therefore serves: 6106 GND, Feather J4/2 GND, 5580 GND,
+PV8 lead 4, all three 2N3904 emitters, and all three 100 kΩ base pull-down
+returns. The +5 V rail therefore serves: the 6106 regulated positive output,
+Feather J4/1 VBAT (through the Adafruit 261), and all three indicator
+positive leads.
+
+### Pushbutton (Final: E-Switch PV8FWY0SS)
+
+Non-illuminated momentary pushbutton; the CPO physically continuity-tested
+the procured unit and confirmed leads 1 and 4 are open released / closed when
+pressed.
+
+- PV8 Lead 1 → Feather **J1/5 / P0.31 / D7**.
+- PV8 Lead 4 → Perma-Proto common GND rail.
+- PV8 Leads 2 and 3: unused, not connected.
+- The mechanical contact is non-polarized; the Lead 1/Lead 4 assignment above
+  is the canonical assembly convention for this build, not an electrical
+  requirement of the switch itself.
+
+### Indicators (Final: 3 x Dialight, Driven Through 2N3904 Transistors)
+
+| Color | Part | Golfer Meaning | GPIO |
+|---|---|---|---|
+| Orange | Dialight 656-3352-303F, 5 VDC | SENDING | Feather J1/6 / P0.30 / D6 |
+| Green | Dialight 656-3202-303F, 5 VDC | REQUEST RECEIVED | Feather J1/7 / P0.29 / D5 |
+| Red | Dialight 656-3102-303F, 5 VDC | TRY AGAIN | Feather J1/8 / P0.28 / D4 |
+
+These are integrated 5 V indicators and do not use the historical PV4 220 Ω
+series resistor. Each indicator is driven by its own ALLECIN 2N3904 NPN
+TO-92 transistor, identical topology per color:
+
+- Feather GPIO → 2.2 kΩ resistor → transistor base.
+- Transistor base → 100 kΩ resistor → common GND rail.
+- Transistor emitter → common GND rail.
+- Transistor collector → indicator negative lead.
+- Indicator positive lead → Perma-Proto +5 V rail.
+
+**Not yet canonicalized:** the physical E/B/C lead order for the purchased
+2N3904 is not established here. Verify the actual procured-device lead order
+(datasheet and/or continuity check) before soldering — see Validation
+Requirements below.
+
+### Indicator Termination (DIANN 12-Position Screw-Terminal Block)
+
+DIANN 12-position, 2.54 mm / 0.1-inch pitch PCB screw-terminal block, rated
+for 26–18 AWG. Six of the twelve positions are used:
+
+| Position | Assignment |
+|---|---|
+| 1 | Orange +5 V |
+| 2 | Orange switched negative (transistor collector return) |
+| 3 | Green +5 V |
+| 4 | Green switched negative (transistor collector return) |
+| 5 | Red +5 V |
+| 6 | Red switched negative (transistor collector return) |
+
+The terminal block accepts the Dialight factory leads directly; board-side
+wiring remains the approved Adafruit 288 22 AWG stranded silicone wire.
+
+### Solar Input Path (Retained, Unchanged)
+
+```
+Adafruit 5366 solar panel
+  -> Voltaic 3.5x1.1 mm extension
+  -> Adafruit 4287 3.5x1.1 to 5.5x2.1 mm adapter
+  -> Adafruit 368 barrel-to-screw-terminal adapter
+  -> Adafruit 6106 solar/DC input (observe polarity)
+```
+
+### Antenna / SIM Interfaces
+
+Unchanged from the existing installed configuration: Circuit Dojo
+FLEX-LTE-GPS-UFL antenna and Hologram SIM. Component identity is owned by
+`docs/HARDWARE_BOM.md`; device-specific SIM provisioning is owned by
+`docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+### Monarch Bay Pilot --- Final Wiring Record
+
+This table is the canonical, complete record of every active electrical
+connection for the Monarch Bay Pilot build, superseding the prior pilot-build
+bullet list above for wiring detail. Component identity/selection is owned by
+`docs/HARDWARE_BOM.md`; this table owns the connections themselves.
+
+| Function | Physical Installation | Electrical Purpose |
+|---|---|---|
+| Solar Input | Adafruit 5366 panel → Voltaic 3.5x1.1 mm extension → Adafruit 4287 adapter → Adafruit 368 barrel-to-screw-terminal adapter → Adafruit 6106 solar/DC input (observe polarity). | Solar charging input to the 6106 charger/power-path. |
+| Battery / Fuel Gauge Path | LiPo (Adafruit 328) → Adafruit 5580/MAX17048 → Adafruit 4714 interconnect → Adafruit 6106 BATT. | Protected battery feed with inline fuel-gauge sensing. |
+| 5580 VIN | 5580 VIN → Feather J2/2 (3V3). | Fuel-gauge logic supply. |
+| 5580 SCL | 5580 SCL → Feather J1/11 / P0.01 (I2C2 SCL). | Fuel-gauge I2C clock. |
+| 5580 SDA | 5580 SDA → Feather J1/12 / P0.02 (I2C2 SDA). | Fuel-gauge I2C data. |
+| 5580 GND | 5580 GND → Perma-Proto common GND rail. | Fuel-gauge ground return (supersedes direct J2/4 wiring). |
+| 5580 INT / QStart | Not connected. | Unused per approved architecture. |
+| 6106 Positive Output | Adafruit 6106 regulated +5 V (TPS61023) → Perma-Proto +5 V rail. | Establishes the system +5 V distribution bus. |
+| 6106 GND Output | Adafruit 6106 GND → Perma-Proto common GND rail. | Establishes the system GND distribution bus. |
+| Feather VBAT Feed | Perma-Proto +5 V rail → Adafruit 261 JST pigtail → Feather onboard J4/1 (VBAT). | Main battery feed into the Feather. |
+| Feather GND Feed | Perma-Proto GND rail → Adafruit 261 JST pigtail → Feather onboard J4/2 (GND). | Main Feather ground connection. |
+| Feather J2/4 | Not separately jumpered to the GND rail. | J4/2 and J2/4 are already the same Feather ground domain; a separate jumper is redundant. |
+| Feather J1/3 VBUS | Not connected to field power. | VBUS remains a separate domain from the Fairway field-power feed. |
+| PV8 Switch Input | PV8 Lead 1 → Feather J1/5 / P0.31 (D7). | Button input / wake signal. |
+| PV8 Switch Ground | PV8 Lead 4 → Perma-Proto common GND rail. | Switch common return. |
+| PV8 Leads 2, 3 | Not connected. | Unused per PV8FWY0SS pinout. |
+| Orange Indicator Driver | Feather J1/6 / P0.30 (D6) → 2.2 kΩ → transistor base; base → 100 kΩ → GND rail; emitter → GND rail; collector → orange indicator negative; orange indicator positive → +5 V rail. | Drives the orange (SENDING) indicator. |
+| Green Indicator Driver | Feather J1/7 / P0.29 (D5) → 2.2 kΩ → transistor base; base → 100 kΩ → GND rail; emitter → GND rail; collector → green indicator negative; green indicator positive → +5 V rail. | Drives the green (REQUEST RECEIVED) indicator. |
+| Red Indicator Driver | Feather J1/8 / P0.28 (D4) → 2.2 kΩ → transistor base; base → 100 kΩ → GND rail; emitter → GND rail; collector → red indicator negative; red indicator positive → +5 V rail. | Drives the red (TRY AGAIN) indicator. |
+| Indicator Termination | DIANN 12-position terminal block, positions 1–6 per the Indicator Termination table above. | Accepts Dialight factory leads; board-side wiring is 22 AWG. |
+| Antenna | Circuit Dojo FLEX-LTE-GPS-UFL, unchanged mounting. | LTE/GPS RF path. |
+| SIM | Hologram SIM, unchanged mounting. | LTE service identity; provisioning owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. |
+
+### PV8 Lead Identification
+
+Verify lead assignments with a continuity meter before soldering.
+
+| PV8 Lead | Connection |
+|---|---|
+| 1 | Switch input (to Feather J1/5) |
+| 2 | Not used |
+| 3 | Not used |
+| 4 | Ground (to common GND rail) |
+
+### Validation Requirements (Not Yet Established Evidence)
+
+These are assembly-validation requirements for this architecture, not already-
+established evidence:
+
+- Verify the actual procured ALLECIN 2N3904 E/B/C lead order (datasheet
+  and/or continuity check) before soldering; do not assume a standard
+  orientation.
+- After assembly, measure the regulated +5 V rail under representative
+  indicator load (all three indicators active) and confirm normal operation
+  of each 5 V Dialight indicator.
+
+Actual component placement, Perma-Proto geometry, battery mount location,
+connector orientation, harness routing, and the exact final mechanical
+layout remain TBD.
 
 ## Validation of CPO-Approved Pilot-Build Architecture
 
 Validated:
 
-- I2C electrical behavior and MAX17048 response at address 0x36: confirmed live through the existing Device Health snapshot, with the 5580 wired as VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11 / P0.01, SDA → J1/12 / P0.02.
+- I2C electrical behavior and MAX17048 response at address 0x36: confirmed live through the existing Device Health snapshot, with the 5580 wired as VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11 / P0.01, SDA → J1/12 / P0.02. This validation event predates the Monarch Bay Pilot GND-rail supersession above and is retained as historical evidence of the I2C signal path and address, not as current ground-wiring truth.
 - MAX17048 cell voltage compared with a DMM measurement at the actual LiPo node: MAX17048 reported 4.0125 V; CPO DMM measurement at the LiPo node was approximately 4.0 V; difference approximately 12.5 mV (approximately 0.31%). The CPO accepted this as adequate out-of-box battery-voltage calibration for the prototype. This validates voltage acquisition only; it does not establish long-term SOC model accuracy.
 
 Physical assembly lesson: Feather header references (for example J1/11, J1/12) and Perma-Proto board coordinates are separate coordinate systems and must not be conflated. An earlier I2C communication failure was traced to SCL/SDA being physically landed on incorrect Perma-Proto positions while intending to reference J1/11 and J1/12; correcting the physical landing resolved the failure.

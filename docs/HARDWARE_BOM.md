@@ -6,15 +6,24 @@ This document records the hardware installed in the Fairway Refresh prototype ac
 
 Prototype 1.1 is the current physical hardware generation. It replaces the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of this hardware generation; the current validated firmware generation remains LP 1.2 as recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
 
-## Approved Current Pilot-Build Hardware Architecture (New Builds)
+## Monarch Bay Pilot --- Final Hardware Architecture (Approved, v3.2 Pilot Ready)
 
-This is the current CPO-approved architecture for new Fairway builds. It is the engineering basis for the next build batch and is not a statement that the current reference device is already wired in this exact arrangement.
+This is the CPO-approved final hardware architecture and Bill of Materials for
+the Monarch Bay Pilot build ("Prototype Bill of Materials (v3.2 Pilot Ready)",
+approved 2026-09-29). "Final" applies to the Monarch Bay Pilot configuration
+specifically; it does not freeze Fairway Refresh hardware for all future
+builds. This supersedes the prior direct `5580 GND → J2/4` wiring and the
+PV4 + 220 Ω LED-resistor circuit as the active new-build hardware for this
+pilot. It is the engineering basis for the Monarch Bay Pilot build batch and
+is not a statement that the current reference device is already wired in
+this exact arrangement; that device's own history remains recorded
+separately below.
 
 ### Approved power / battery-health path
 
 - LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT
 - 5580 VIN → J2/2 3V3
-- 5580 GND → J2/4 GND
+- 5580 GND → Perma-Proto common GND rail (supersedes the prior direct J2/4 wiring for this pilot)
 - 5580 SCL → J1/11 / P0.01 / I2C2 SCL
 - 5580 SDA → J1/12 / P0.02 / I2C2 SDA
 - INT unused
@@ -23,8 +32,22 @@ This is the current CPO-approved architecture for new Fairway builds. It is the 
 - VDD = VCC retained
 - external polyfuse omitted
 - 1000 uF capacitor omitted
-- 220 Ω PV4 LED resistor retained
+- PV4 220 Ω LED resistor circuit retired from this build; see Pushbutton/Indicators below
 - actual LiPo voltage/trend remains the primary energy-health evidence; SOC is supplementary
+
+The Adafruit 6106 regulated output and GND now explicitly establish the
+Perma-Proto +5 V and GND rails as the system power-distribution buses, which
+in turn feed the Feather (via Adafruit 261 into onboard J4 VBAT/GND) and the
+indicator circuits below. Full connection-by-connection wiring is owned by
+`docs/HARDWARE_ASSEMBLY_GUIDE.md` ("Monarch Bay Pilot --- Final Wiring
+Record") and is not duplicated here.
+
+### Pushbutton and Indicators (Final, Supersedes Provisional Status)
+
+The pushbutton and three-indicator system previously recorded as provisional
+(see "Historical: Provisional Button / Indicator Proposal" below) is now the
+accepted final Monarch Bay Pilot hardware. The PV4 illuminated pushbutton is
+retired from this build; wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
 ### Approved Feath er J4 power feed refinement
 
@@ -34,13 +57,36 @@ The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to
 
 | Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
 |---|---|---|---|---|
+| Cellular MCU | Circuit Dojo | PASSY-NRF9151-FEATHER | Circuit Dojo | Circuit Dojo nRF9151 Feather development board. |
+| Solar panel | Adafruit | 5366 | Adafruit | Solar charging input for the 6106. |
+| Solar extension/interconnect | Voltaic | Not specified | Voltaic | 3.5 x 1.1 mm solar extension cable. |
+| LiPo battery | Adafruit | 328 | Adafruit | Protected 3.7 V / 2500 mAh LiPo. |
+| Solar/USB/DC charger with 5 V boost | Adafruit | 6106 | Adafruit | BQ25185 charger/power-path with TPS61023 5 V boost output; establishes the Perma-Proto +5 V/GND distribution rails. |
+| Antenna | Circuit Dojo | FLEX-LTE-GPS-UFL | Circuit Dojo | Must be LTE+GPS combo for 9151. |
+| Hologram SIM | Hologram | Hologram SIM Card | Hologram | Installed for LTE service. |
 | LiPo fuel gauge | Adafruit | 5580 / MAX17048 | Adafruit | Direct LiPo voltage and fuel-gauge sensing for Device Health; electrically between the protected LiPo and the Adafruit 6106 battery input through the approved JST path. Actual LiPo voltage/trend is the primary operational metric; SOC is supplementary. |
+| Barrel-to-screw-terminal adapter | Adafruit | 368 | Adafruit | 5.5 x 2.1 mm female barrel to screw-terminal adapter; solar input path. |
+| Panel connector adapter | Adafruit | 4287 | Adafruit | 3.5 x 1.1 mm to 5.5 x 2.1 mm adapter; solar input path. |
+| Cable gland | Voltaic | Appropriate IP67/68 gland | Voltaic | Enclosure cable penetration. |
+| Feather JST power pigtail | Adafruit | 261 | Adafruit | Used for the onboard J4 VBAT/GND feed from the Perma-Proto distribution rails. |
+| 5580 -> 6106 battery jumper | Adafruit | 4714 | Adafruit | Current approved battery jumper. |
+| Wiring | Adafruit | 288 | Adafruit | 22 AWG Stranded Silicone Wire. |
+| Project Board | Adafruit | 571 | Adafruit | Perma-Proto Half-Sized PCB. |
 | Feather female headers | Adafruit | 2940 | Adafruit | Short female headers for the board build. |
 | Feather male breakaway headers | Adafruit | 3009 | Adafruit | Short male breakaway headers. |
-| Feather JST power pigtail | Adafruit | 261 | Adafruit | Used for the onboard J4 VBAT/GND feed. |
-| 5580 → 6106 battery jumper | Adafruit | 4714 | Adafruit | Current approved battery jumper. |
+| Battery mounting | Not specified | Not specified | CPO-supplied | Closed-cell foam + soft hook-and-loop battery mounting. |
+| Pushbutton (final) | E-Switch | PV8FWY0SS | DigiKey/E-Switch | Non-illuminated momentary pushbutton. CPO physically continuity-tested the procured unit: leads 1 and 4 open released, closed when pressed. Retires the PV4 illuminated pushbutton for this build. |
+| Indicator, orange (final) | Dialight | 656-3352-303F | Dialight | 5 VDC. Golfer meaning: SENDING. |
+| Indicator, green (final) | Dialight | 656-3202-303F | Dialight | 5 VDC. Golfer meaning: REQUEST RECEIVED. |
+| Indicator, red (final) | Dialight | 656-3102-303F | Dialight | 5 VDC. Golfer meaning: TRY AGAIN. |
+| Indicator driver transistor | ALLECIN | 2N3904 | ALLECIN | NPN, TO-92. Qty 3 (one per indicator). E/B/C lead order not canonicalized pending procured-part verification; see `docs/HARDWARE_ASSEMBLY_GUIDE.md`. |
+| Base drive resistor | Not specified | 2.2 kΩ, 1/2 W, 5% | Not specified | Qty 3. Feather GPIO to each transistor base. |
+| Base pull-down resistor | Not specified | 100 kΩ, 1/4 W, ±1% | Not specified | Qty 3. Each transistor base to common GND. |
+| Indicator terminal block | DIANN | 12-position, 2.54 mm / 0.1 in pitch, 26-18 AWG | Not specified | Six of twelve positions used for the three indicators; see `docs/HARDWARE_ASSEMBLY_GUIDE.md`. |
 
 The canonical engineering BOM basis is the approved pilot-build configuration above. Inventory quantities, procurement status, and cost are intentionally not duplicated in canonical engineering truth unless a BOM owner requires those fields.
+
+**Removed from the final architecture:** the Adafruit 1131 battery/board disconnect (present historically on the reference device, see below) is not part of the Monarch Bay Pilot final BOM and must not be treated as an active pilot component.
 
 ### Retained historical field-power evidence
 
@@ -96,18 +142,15 @@ The Adafruit 5580 / MAX17048 fuel gauge is now physically installed and wired on
 
 These are historical alternatives and are not current alternatives for the approved pilot-build architecture.
 
-## Provisional Future Button / Indicator System — Not Yet Accepted
+## Historical: Provisional Button / Indicator Proposal (Superseded)
 
-This is a CPO-approved provisional future hardware direction, subject to physical/electrical/environmental testing and final acceptance. It is not accepted installed hardware, is not part of the locked pilot BOM above, and does not replace the current installed PV4 pushbutton (E-Switch `PV4F2B0SS-311`, "Retained from Prototype 1.0" above), which remains the current installed and functioning button hardware. No wiring or pinout for this system has been engineered or canonicalized.
-
-| Component | Manufacturer | Manufacturer Part # | Notes |
-|---|---|---|---|
-| Pushbutton (provisional) | E-Switch | PV8 family; non-illuminated, momentary, factory-wired version preferred/assumed, stainless body/actuator | Exact wired ordering part number is not yet confirmed and is not recorded here pending procurement/BOM canonicalization. |
-| Indicator, orange (provisional) | Dialight | 656-3352-303F | Domed, 5 VDC. Intended meaning: request/sending. |
-| Indicator, green (provisional) | Dialight | 656-3202-303F | Domed, 5 VDC. Intended meaning: successful network transmission. |
-| Indicator, red (provisional) | Dialight | 656-3102-303F | Domed, 5 VDC. Intended meaning: failed transmission / unavailable condition. |
-
-The complete golfer-facing light-state UX (timing, sequencing, repeated-press behavior) is not yet finalized; only the high-level color meanings above are established. See `docs/feature_backlog.md` (Future Backlog priority #5, "Final Golfer Button / LED UX") and `docs/UX_SPECIFICATION.md` for the current interim behavior and the future-UX boundary.
+This section previously recorded a CPO-approved provisional future hardware
+direction, not yet accepted, with the PV8 ordering part number unconfirmed.
+That proposal has now been accepted as final for the Monarch Bay Pilot — see
+"Monarch Bay Pilot --- Final Hardware Architecture" above for the accepted
+part numbers, wiring, and golfer-facing meanings. This section is retained
+only to preserve the provenance of the original proposal; it is not current
+BOM guidance.
 
 ## Prototype 1.0 (Historical, First Build, Pre-Pilot)
 
