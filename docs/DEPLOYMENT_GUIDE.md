@@ -171,6 +171,8 @@ west build \
 
 `-DBOARD_ROOT` is required so the installed NCS v3.1.1 workspace (whose own manifest does not include `nfed`) can resolve the Circuit Dojo `feather_nrf9151` board and Fairway's `sysbuild.cmake`-propagated MCUboot board root.
 
+Routine development, diagnostic, and validation builds shall use a disposable/reusable `<new-build-dir>` rather than creating a persistent, uniquely named top-level build directory for each investigation; reuse or `--pristine` the disposable location as appropriate between materially different builds. A generated build directory is not an evidence-retention mechanism: if a build produces an artifact that must be retained as canonical validation evidence, preserve that artifact and its provenance/hash in the existing artifact/provenance record (see the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`) rather than retaining the generated build tree itself.
+
 The build must exit successfully and produce `<new-build-dir>/merged.hex`.
 Record the artifact path, byte size, SHA-256, board target, configuration, and source commit in the build provenance record before flashing.
 
