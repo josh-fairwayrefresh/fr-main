@@ -209,6 +209,38 @@ function addCalendarDays({ year, month, day }, deltaDays) {
   return { year: base.getUTCFullYear(), month: base.getUTCMonth() + 1, day: base.getUTCDate() };
 }
 
+/*
+ * Extracts the Course-local wall-clock hour (0-23) for `instant` in
+ * `timeZone`, using the same Intl/ICU timezone database as the rest of this
+ * module's date/time primitives.
+ */
+function getLocalHour(instant, timeZone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    hour: '2-digit',
+  });
+
+  return Number(formatter.format(instant));
+}
+
+/*
+ * Resolves the Course-local calendar date ("YYYY-MM-DD") and wall-clock hour
+ * (0-23) for `instant` in the Course's IANA `timeZone`. Used to denormalize
+ * durable Course-local event-time facts onto a golfer request at creation
+ * time, so daily/hourly analytics never require repeated per-document
+ * timezone math later.
+ */
+function resolveCourseLocalDateHour(instant, timeZone) {
+  const { year, month, day } = getLocalDateParts(instant, timeZone);
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return {
+    date: `${year}-${pad(month)}-${pad(day)}`,
+    hour: getLocalHour(instant, timeZone),
+  };
+}
+
 const SCHEDULE_SEARCH_WINDOW_DAYS = 2;
 
 /*
@@ -336,4 +368,5 @@ module.exports = {
   computeNextHealthReportAt,
   resolveEffectiveDeviceConfig,
   resolveDeviceHierarchyConfig,
+  resolveCourseLocalDateHour,
 };

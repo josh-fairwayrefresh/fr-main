@@ -7,8 +7,9 @@ const {
   EVENT_TYPES,
   deriveHoleFromLocation,
   deriveDisplayLabelFromLocation,
+  DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
-const { isValidHealthObservation, recordHealthObservation, resolveDeviceHierarchyConfig } = require('./lib/fleet/health');
+const { isValidHealthObservation, recordHealthObservation, resolveDeviceHierarchyConfig, resolveCourseLocalDateHour } = require('./lib/fleet/health');
 
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 
@@ -43,7 +44,7 @@ function createFairwayHandlers(db) {
    * logic. HTTP 200 status and existing auth/state/hierarchy enforcement
    * (all in handleDeviceEvent, before this function runs) are unchanged.
    */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType, effectiveConfig) {
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, effectiveConfig, now) {
     const existingOpenRequests = await db.collection('requests')
       .where('device_id', '==', deviceId)
       .where('status', 'in', ['new', 'confirmed'])
@@ -67,7 +68,12 @@ function createFairwayHandlers(db) {
       });
     }
 
+    const courseLocalDateHour = effectiveConfig
+      ? resolveCourseLocalDateHour(now, effectiveConfig.timezone)
+      : null;
+
     const requestDoc = {
+      customer_id: device.customer_id || null,
       course_id: device.course_id || 'unknown_course',
       course_name: device.course_name || null,
       device_id: deviceId,
@@ -80,6 +86,12 @@ function createFairwayHandlers(db) {
       confirmed_at: null,
       completed_at: null,
       operator_id: null,
+      repeat_press_count: 0,
+      last_repeat_press_at: null,
+      demand_window_expires_at: new Date(now.getTime() + DEMAND_WINDOW_MS),
+      device_state_at_request: device.state,
+      course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
+      course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
       raw_payload: body
     };
 
@@ -137,6 +149,7 @@ function createFairwayHandlers(db) {
    * fails closed rather than being silently treated as button_press.
    */
   async function handleDeviceEvent(req, res) {
+    const now = new Date();
     const body = req.body || {};
 
     const deviceId = body.device_id || body.device || 'unknown_device';
@@ -172,7 +185,7 @@ function createFairwayHandlers(db) {
       return res.status(401).send('Unauthorized\n');
     }
 
-    const hierarchy = await resolveDeviceHierarchyConfig(db, device);
+    const hierarchy = await resolveDeviceHierarchyConfig(db, device, now);
 
     if (!hierarchy.valid) {
       console.warn('Rejected device request with invalid Customer/Course hierarchy:', {
@@ -195,7 +208,7 @@ function createFairwayHandlers(db) {
       return persistHealthReport(res, deviceId, body.health, hierarchy.effectiveConfig);
     }
 
-    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig);
+    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig, now);
   }
 
   async function updateRequestStatus(req, res, requestId, action) {

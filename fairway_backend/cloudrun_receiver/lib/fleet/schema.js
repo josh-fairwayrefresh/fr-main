@@ -126,6 +126,14 @@ function formatId(prefix, sequenceNumber) {
   return `${prefix}-${padded}`;
 }
 
+/*
+ * Canonical Monarch Bay Pilot golfer demand window (docs/UX_SPECIFICATION.md,
+ * "Five-Minute Golfer Demand Window"): the fixed duration after an accepted
+ * request during which a repeat physical press at the same marker belongs to
+ * the originating request rather than creating a new one.
+ */
+const DEMAND_WINDOW_MS = 5 * 60 * 1000;
+
 module.exports = {
   DEVICE_STATES,
   DEVICE_STATE_VALUES,
@@ -143,4 +151,5 @@ module.exports = {
   ID_PREFIXES,
   ID_PAD_LENGTH,
   formatId,
+  DEMAND_WINDOW_MS,
 };

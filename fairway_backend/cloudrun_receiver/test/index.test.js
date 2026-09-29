@@ -219,7 +219,48 @@ test('valid button_press creates a golfer request and returns effective_config J
   assert.strictEqual(requests.docs[0].id, res.body.request_id);
 });
 
-test('an unassigned Device button_press returns effective_config: null', async () => {
+test('a new golfer request durably records Stage A event-time facts (customer, demand window, deployed state, Course-local date/hour)', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    health_report_schedule: { times: ['09:00', '17:00'] },
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    course_name: 'Tony Lema Course',
+    location: { type: 'hole', hole: 7 },
+  });
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const res = createResponse();
+
+  const before = Date.now();
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+  const after = Date.now();
+
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  const data = requests.docs[0].data();
+
+  assert.strictEqual(data.customer_id, 'CUST-0001');
+  assert.strictEqual(data.repeat_press_count, 0);
+  assert.strictEqual(data.last_repeat_press_at, null);
+  assert.strictEqual(data.device_state_at_request, 'deployed');
+
+  assert.ok(data.demand_window_expires_at instanceof Date, 'demand_window_expires_at must be a concrete Date, not a FieldValue sentinel');
+  const expiresMs = data.demand_window_expires_at.getTime();
+  assert.ok(expiresMs >= before + 5 * 60 * 1000, 'demand window must be at least 5 minutes from request time');
+  assert.ok(expiresMs <= after + 5 * 60 * 1000, 'demand window must not exceed 5 minutes from request time');
+
+  // 2026-09-29 is outside US DST-transition edge cases for America/Los_Angeles (PDT, UTC-7).
+  assert.match(data.course_local_date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(Number.isInteger(data.course_local_hour) && data.course_local_hour >= 0 && data.course_local_hour <= 23);
+});
+
+test('an unassigned Device button_press records null customer/Course-local facts but still records deployed state and demand window', async () => {
   const db = new FakeFirestore();
   const secret = await setUpDeployedDevice(db, 'FRB-0001'); // no customer_id/course_id at all
   const { handleDeviceEvent } = createFairwayHandlers(db);
@@ -229,8 +270,32 @@ test('an unassigned Device button_press returns effective_config: null', async (
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
-  assert.strictEqual(res.statusCode, 200);
   assert.strictEqual(res.body.effective_config, null);
+
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  const data = requests.docs[0].data();
+
+  assert.strictEqual(data.customer_id, null);
+  assert.strictEqual(data.course_local_date, null);
+  assert.strictEqual(data.course_local_hour, null);
+  assert.strictEqual(data.device_state_at_request, 'deployed');
+  assert.ok(data.demand_window_expires_at instanceof Date);
+});
+
+test('an in_inventory (not yet deployed) Device button_press records device_state_at_request accordingly', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {});
+  await db.collection('devices').doc('FRB-0001').set({ state: 'in_inventory' }, { merge: true });
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const res = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+
+  assert.strictEqual(res.statusCode, 200);
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  assert.strictEqual(requests.docs[0].data().device_state_at_request, 'in_inventory');
 });
 
 test('a second button_press while a request is open is suppressed as a duplicate and still returns effective_config', async () => {
