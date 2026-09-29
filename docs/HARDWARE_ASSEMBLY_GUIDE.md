@@ -58,7 +58,7 @@ Retained from the prior approved pilot-build path:
 - 5580 SDA → Feather J1/12 / P0.02 / I2C2 SDA
 - 5580 INT unused
 - 5580 QStart unused
-- SJ1 power LED jumper cut
+- 5580 rear `LED` solder jumper CUT to disable the green power LED; the separate center `VIO` jumper is left unchanged
 - VDD = VCC retained
 - external polyfuse omitted
 - 1000 uF capacitor omitted
@@ -235,7 +235,7 @@ Physical assembly lesson: Feather header references (for example J1/11, J1/12) a
 Remaining forthcoming validation of the CPO-approved 5580/new-build architecture:
 
 - Verify LiPo → 5580 → 6106 continuity and polarity, with no battery-positive-to-ground short.
-- Verify 5580 VIN is tied only to Feather 3V3, and verify SJ1 cut state.
+- Verify 5580 VIN is tied only to Feather 3V3, and verify the rear `LED` jumper is cut (and `VIO` left unchanged).
 - Verify solar-present and battery-only operation, including a representative LTE/HTTPS transaction.
 - Verify return to LP1.2 low-power behavior, including incremental dormant-current and automatic-hibernate behavior.
 - Check for abnormal partial-power or back-power behavior throughout the validation.

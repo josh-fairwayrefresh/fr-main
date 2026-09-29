@@ -28,7 +28,7 @@ separately below.
 - 5580 SDA → J1/12 / P0.02 / I2C2 SDA
 - INT unused
 - QStart unused
-- SJ1 power LED jumper CUT for pilot
+- 5580 rear `LED` solder jumper CUT for pilot to disable the green power LED; the separate center `VIO` jumper is left unchanged
 - VDD = VCC retained
 - external polyfuse omitted
 - 1000 uF capacitor omitted
