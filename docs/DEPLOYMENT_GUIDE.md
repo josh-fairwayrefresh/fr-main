@@ -273,14 +273,18 @@ Current Backend Deployment Facts:
 - Documented deployed service name: fairway-button-receiver
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
 - Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
-- Confirm and complete status endpoints currently do not enforce equivalent endpoint authentication in backend implementation.
-- Authentication/authorization hardening for operator control endpoints remains unresolved and is not an approved production security model.
+- The deployed backend requires a Firebase bearer ID token on CONFIRM and COMPLETE, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The deployed dashboard sends the current signed-in user's token. This path has automated backend test evidence and was operationally validated during Stage B2.
+- This is identity authentication for the existing operator population, not a new role/claims authorization system; finer-grained operator/admin roles remain deferred.
 - Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
 - Supported request routes:
   - POST /
   - POST /api/v1/button-events
   - POST /api/v1/requests/{requestId}/confirm
   - POST /api/v1/requests/{requestId}/complete
+  - POST /api/v1/device-commands/poll
+  - POST /api/v1/device-commands/{commandId}/ack
+
+The command routes use the existing per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact active, pending, unexpired command, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay of an already-acknowledged command. The demand-window query requires the repository-controlled composite index in `fairway_webapp/cart_operator_dashboard/firestore.indexes.json`. The backend, dashboard, and index were deployed and validated during Stage B2; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local demand window early.
 
 The current working-tree backend source includes a fail-closed Device-state
 authorization correction made after revision
@@ -350,7 +354,7 @@ Collection schema is owned by the backend implementation.
 
 Indexes:
 
-- No repository firestore.indexes.json file is currently present; required composite indexes are not documented in repository-controlled artifacts.
+- `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` defines the deployed `requests` composite index required by demand-window-aware duplicate suppression (`device_id`, `status`, and `demand_window_expires_at`).
 
 ---
 

@@ -40,6 +40,9 @@ function matchesFilter(data, filter) {
   if (filter.op === 'in') {
     return Array.isArray(filter.value) && filter.value.includes(actual);
   }
+  if (filter.op === '>') {
+    return actual > filter.value;
+  }
   throw new Error(`Unsupported fake Firestore query operator: ${filter.op}`);
 }
 

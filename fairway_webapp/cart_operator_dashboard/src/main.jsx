@@ -94,8 +94,18 @@ function formatDuration(startTimestamp, endTimestamp) {
 }
 
 async function updateRequestStatus(requestId, action) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error('Operator is not authenticated');
+  }
+
+  const idToken = await user.getIdToken();
   const response = await fetch(`${API_BASE_URL}/api/v1/requests/${requestId}/${action}`, {
     method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
   });
 
   if (!response.ok) {

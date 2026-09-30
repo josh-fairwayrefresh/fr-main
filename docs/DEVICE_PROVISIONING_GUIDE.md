@@ -4,7 +4,7 @@
 
 - Status: Draft
 - Version: 0.2
-- Last Updated: 2026-09-18
+- Last Updated: 2026-09-30
 
 ## Purpose
 
@@ -212,6 +212,7 @@ Each device has exactly one active unique credential, bound to its permanent Dev
 - **Backend storage:** only a non-reversible SHA-256 verifier (`{ algorithm: 'sha256', digest, updated_at }`) is persisted on the device record's `credential` field. The plaintext secret is never written to Firestore, never logged, and never written into canonical documentation.
 - **One-time delivery:** the plaintext secret is returned exactly once, at generation time, to the caller performing device creation/credential replacement (the future Admin "Add Device"/"Replace Credential" workflow, WP5). It is not routinely re-displayed afterward; the Admin UI should show credential status/metadata (e.g., last-updated time), not the secret itself, since the backend no longer possesses the plaintext after that one response.
 - **Verification/binding:** the backend looks up the device strictly by the claimed `device_id` (the Firestore document ID), rejects unknown or Retired devices (per canonical `state`), and only then verifies the presented credential against that exact device's stored verifier using a constant-time comparison. A credential issued for one FRB identity can never authenticate a request claiming a different FRB identity.
+- **Command mailbox binding:** The deployed Stage B2 backend applies the same identity/state/credential checks to command poll and acknowledgement routes. A poll names the Device's exact active `request_id`; the backend returns only a pending, unexpired COMPLETE whose stored device and request identities match, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay. This behavior is automated-test verified and was physically validated on FRB-0002 through an exact correlated COMPLETE acknowledgement.
 - **Replacement:** a new credential can be issued for the same permanent `device_id` at any time (for example after suspected compromise); this replaces the stored verifier only and never changes the Device ID.
 - **Retirement and invalid state:** a Retired device, or a Device record with a missing, malformed, or unknown state, is rejected before credential verification is attempted, consistent with the fail-closed backend-access policy above.
 

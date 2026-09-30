@@ -57,12 +57,23 @@ function createResponse() {
   };
 }
 
-function createRequest({ body = {}, headers = {} } = {}) {
+function createRequest({ body = {}, headers = {}, method = 'POST', path = '/' } = {}) {
   return {
     body,
+    method,
+    path,
     get(name) {
       return headers[name.toLowerCase()] || headers[name];
     },
+  };
+}
+
+function operatorVerifier(validToken = 'valid-token', uid = 'operator-123') {
+  return async (token) => {
+    if (token !== validToken) {
+      throw new Error('invalid token');
+    }
+    return { uid };
   };
 }
 
@@ -334,6 +345,30 @@ test('a second button_press while a request is open is suppressed as a duplicate
   assert.strictEqual(requests.size, 1, 'duplicate press must not create a second request document');
 });
 
+test('an expired open request does not suppress a genuinely fresh golfer request', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  await db.collection('requests').doc('old-request').set({
+    device_id: 'FRB-0001',
+    status: 'confirmed',
+    demand_window_expires_at: new Date('2026-09-30T12:00:00.000Z'),
+  });
+  const { handleDeviceEvent } = createFairwayHandlers(db, {
+    now: () => new Date('2026-09-30T12:00:01.000Z'),
+  });
+  const res = createResponse();
+
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+
+  assert.strictEqual(res.statusCode, 200);
+  assert.notStrictEqual(res.body.request_id, 'old-request');
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  assert.strictEqual(requests.size, 2);
+});
+
 test('button_press creates no health_history entries', async () => {
   const db = new FakeFirestore();
   const secret = await setUpDeployedDevice(db, 'FRB-0001');
@@ -528,6 +563,222 @@ test('a partial assignment (course_id without customer_id) is rejected as an inv
   }), res);
 
   assert.strictEqual(res.statusCode, 422);
+});
+
+// --- Stage B2 operator authentication + COMPLETE command mailbox ---
+
+test('operator status endpoints reject missing and invalid Firebase ID tokens', async () => {
+  const db = new FakeFirestore();
+  await db.collection('requests').doc('request-a').set({
+    device_id: 'FRB-0001',
+    status: 'new',
+    demand_window_expires_at: new Date(Date.now() + 60000),
+  });
+  const { updateRequestStatus } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+  });
+
+  const missing = createResponse();
+  await updateRequestStatus(createRequest(), missing, 'request-a', 'confirm');
+  assert.strictEqual(missing.statusCode, 401);
+
+  const invalid = createResponse();
+  await updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer bad-token' },
+  }), invalid, 'request-a', 'complete');
+  assert.strictEqual(invalid.statusCode, 401);
+});
+
+test('authenticated CONFIRM records the verified Firebase uid', async () => {
+  const db = new FakeFirestore();
+  await db.collection('requests').doc('request-a').set({ status: 'new' });
+  const { updateRequestStatus } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier('valid-token', 'firebase-uid'),
+  });
+  const res = createResponse();
+
+  await updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer valid-token' },
+  }), res, 'request-a', 'confirm');
+
+  assert.strictEqual(res.statusCode, 200);
+  const request = await db.collection('requests').doc('request-a').get();
+  assert.strictEqual(request.data().status, 'confirmed');
+  assert.strictEqual(request.data().operator_id, 'firebase-uid');
+});
+
+test('authenticated COMPLETE atomically creates one deterministic correlated command', async () => {
+  const db = new FakeFirestore();
+  const expiresAt = new Date(Date.now() + 60000);
+  await db.collection('requests').doc('request-a').set({
+    device_id: 'FRB-0001',
+    status: 'new',
+    demand_window_expires_at: expiresAt,
+  });
+  const { updateRequestStatus } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const req = createRequest({ headers: { authorization: 'Bearer valid-token' } });
+
+  const first = createResponse();
+  await updateRequestStatus(req, first, 'request-a', 'complete');
+  const second = createResponse();
+  await updateRequestStatus(req, second, 'request-a', 'complete');
+
+  assert.strictEqual(first.statusCode, 200);
+  assert.strictEqual(second.statusCode, 200);
+  const request = await db.collection('requests').doc('request-a').get();
+  assert.strictEqual(request.data().status, 'completed');
+  assert.strictEqual(request.data().operator_id, 'operator-123');
+
+  const commands = await db.collection('devices').doc('FRB-0001').collection('commands').limit(10).get();
+  assert.strictEqual(commands.size, 1);
+  assert.strictEqual(commands.docs[0].id, 'complete__request-a');
+  assert.strictEqual(commands.docs[0].data().request_id, 'request-a');
+  assert.strictEqual(commands.docs[0].data().type, 'complete');
+  assert.strictEqual(commands.docs[0].data().status, 'pending');
+  assert.strictEqual(commands.docs[0].data().expires_at, expiresAt);
+});
+
+test('device command poll is credential-bound and returns only the exact active unexpired request command', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  await db.collection('requests').doc('request-a').set({ device_id: 'FRB-0001' });
+  await db.collection('requests').doc('request-b').set({ device_id: 'FRB-0001' });
+  await db.collection('devices').doc('FRB-0001').collection('commands').doc('complete__request-a').set({
+    command_id: 'complete__request-a',
+    device_id: 'FRB-0001',
+    type: 'complete',
+    request_id: 'request-a',
+    status: 'pending',
+    expires_at: new Date('2026-09-30T12:01:00.000Z'),
+  });
+  const { pollDeviceCommand } = createFairwayHandlers(db, {
+    now: () => new Date('2026-09-30T12:00:00.000Z'),
+  });
+
+  const unauthorized = createResponse();
+  await pollDeviceCommand(createRequest({
+    body: { device_id: 'FRB-0001', active_request_id: 'request-a' },
+  }), unauthorized);
+  assert.strictEqual(unauthorized.statusCode, 401);
+
+  const stale = createResponse();
+  await pollDeviceCommand(createRequest({
+    body: { device_id: 'FRB-0001', active_request_id: 'request-b' },
+    headers: { 'x-fairway-device-key': secret },
+  }), stale);
+  assert.strictEqual(stale.body.command, null);
+
+  const matching = createResponse();
+  await pollDeviceCommand(createRequest({
+    body: { device_id: 'FRB-0001', active_request_id: 'request-a' },
+    headers: { 'x-fairway-device-key': secret },
+  }), matching);
+  assert.strictEqual(matching.statusCode, 200);
+  assert.strictEqual(matching.body.command.command_id, 'complete__request-a');
+  assert.strictEqual(matching.body.command.request_id, 'request-a');
+  assert.strictEqual(matching.body.command.device_id, 'FRB-0001');
+});
+
+test('expired COMPLETE commands are not delivered', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  await db.collection('requests').doc('request-a').set({ device_id: 'FRB-0001' });
+  await db.collection('devices').doc('FRB-0001').collection('commands').doc('complete__request-a').set({
+    command_id: 'complete__request-a',
+    device_id: 'FRB-0001',
+    type: 'complete',
+    request_id: 'request-a',
+    status: 'pending',
+    expires_at: new Date('2026-09-30T12:00:00.000Z'),
+  });
+  const { pollDeviceCommand } = createFairwayHandlers(db, {
+    now: () => new Date('2026-09-30T12:00:01.000Z'),
+  });
+  const res = createResponse();
+
+  await pollDeviceCommand(createRequest({
+    body: { device_id: 'FRB-0001', active_request_id: 'request-a' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.body.command, null);
+});
+
+test('device acknowledgement is exact and idempotent', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  let currentTime = new Date('2026-09-30T12:00:00.000Z');
+  await db.collection('devices').doc('FRB-0001').collection('commands').doc('complete__request-a').set({
+    command_id: 'complete__request-a',
+    device_id: 'FRB-0001',
+    type: 'complete',
+    request_id: 'request-a',
+    status: 'pending',
+    expires_at: new Date('2026-09-30T12:01:00.000Z'),
+    acknowledged_at: null,
+  });
+  const { acknowledgeDeviceCommand } = createFairwayHandlers(db, {
+    now: () => currentTime,
+  });
+  const req = createRequest({
+    body: { device_id: 'FRB-0001', request_id: 'request-a' },
+    headers: { 'x-fairway-device-key': secret },
+  });
+
+  const first = createResponse();
+  await acknowledgeDeviceCommand(req, first, 'complete__request-a');
+  currentTime = new Date('2026-09-30T12:02:00.000Z');
+  const second = createResponse();
+  await acknowledgeDeviceCommand(req, second, 'complete__request-a');
+
+  assert.strictEqual(first.statusCode, 200);
+  assert.strictEqual(second.statusCode, 200);
+  const command = await db.collection('devices').doc('FRB-0001')
+    .collection('commands').doc('complete__request-a').get();
+  assert.strictEqual(command.data().status, 'acknowledged');
+});
+
+test('device acknowledgement transactionally rejects an expired pending command', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  await db.collection('devices').doc('FRB-0001').collection('commands').doc('complete__request-a').set({
+    command_id: 'complete__request-a',
+    device_id: 'FRB-0001',
+    type: 'complete',
+    request_id: 'request-a',
+    status: 'pending',
+    expires_at: new Date('2026-09-30T12:00:00.000Z'),
+    acknowledged_at: null,
+  });
+  const { acknowledgeDeviceCommand } = createFairwayHandlers(db, {
+    now: () => new Date('2026-09-30T12:00:01.000Z'),
+  });
+  const res = createResponse();
+
+  await acknowledgeDeviceCommand(createRequest({
+    body: { device_id: 'FRB-0001', request_id: 'request-a' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res, 'complete__request-a');
+
+  assert.strictEqual(res.statusCode, 409);
+  assert.match(res.body, /expired/i);
+  const command = await db.collection('devices').doc('FRB-0001')
+    .collection('commands').doc('complete__request-a').get();
+  assert.strictEqual(command.data().status, 'pending');
+  assert.strictEqual(command.data().acknowledged_at, null);
+});
+
+test('CORS permits the operator Authorization header', async () => {
+  const { fairwayButtonReceiver } = createFairwayHandlers(new FakeFirestore());
+  const res = createResponse();
+
+  await fairwayButtonReceiver(createRequest({ method: 'OPTIONS' }), res);
+
+  assert.strictEqual(res.statusCode, 204);
+  assert.match(res.headers['Access-Control-Allow-Headers'], /Authorization/);
 });
 
 run();

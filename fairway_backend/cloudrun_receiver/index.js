@@ -12,11 +12,40 @@ const {
 const { isValidHealthObservation, recordHealthObservation, resolveDeviceHierarchyConfig, resolveCourseLocalDateHour } = require('./lib/fleet/health');
 
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
+const OPERATOR_AUTH_HEADER = 'authorization';
+const COMPLETE_COMMAND_TYPE = 'complete';
+
+async function verifyFirebaseIdToken(token) {
+  const { getApps, initializeApp } = require('firebase-admin/app');
+  const { getAuth } = require('firebase-admin/auth');
+
+  if (getApps().length === 0) {
+    initializeApp();
+  }
+
+  return getAuth().verifyIdToken(token);
+}
+
+function completeCommandId(requestId) {
+  return `${COMPLETE_COMMAND_TYPE}__${requestId}`;
+}
+
+function toDate(value) {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+
+  return null;
+}
 
 function setCorsHeaders(res) {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
 function sendCorsOk(res) {
@@ -31,7 +60,10 @@ function sendCorsOk(res) {
  * Firestore double so the identical handler logic executes in both cases
  * (no test-only duplicate handler).
  */
-function createFairwayHandlers(db) {
+function createFairwayHandlers(db, {
+  verifyOperatorToken = verifyFirebaseIdToken,
+  now = () => new Date(),
+} = {}) {
   /*
    * Persists a golfer button_press request. Request persistence, duplicate
    * suppression, and the `requests` document shape are byte-for-byte
@@ -48,13 +80,14 @@ function createFairwayHandlers(db) {
     const existingOpenRequests = await db.collection('requests')
       .where('device_id', '==', deviceId)
       .where('status', 'in', ['new', 'confirmed'])
+      .where('demand_window_expires_at', '>', now)
       .limit(1)
       .get();
 
     if (!existingOpenRequests.empty) {
       const existingRequest = existingOpenRequests.docs[0];
 
-      console.log('Suppressed duplicate button request because an open request already exists:', {
+      console.log('Suppressed duplicate button request because its demand window remains active:', {
         device_id: deviceId,
         existing_request_id: existingRequest.id,
       });
@@ -149,7 +182,7 @@ function createFairwayHandlers(db) {
    * fails closed rather than being silently treated as button_press.
    */
   async function handleDeviceEvent(req, res) {
-    const now = new Date();
+    const requestTime = now();
     const body = req.body || {};
 
     const deviceId = body.device_id || body.device || 'unknown_device';
@@ -185,7 +218,7 @@ function createFairwayHandlers(db) {
       return res.status(401).send('Unauthorized\n');
     }
 
-    const hierarchy = await resolveDeviceHierarchyConfig(db, device, now);
+    const hierarchy = await resolveDeviceHierarchyConfig(db, device, requestTime);
 
     if (!hierarchy.valid) {
       console.warn('Rejected device request with invalid Customer/Course hierarchy:', {
@@ -208,7 +241,55 @@ function createFairwayHandlers(db) {
       return persistHealthReport(res, deviceId, body.health, hierarchy.effectiveConfig);
     }
 
-    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig, now);
+    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig, requestTime);
+  }
+
+  async function authenticateOperator(req, res) {
+    const authorization = req.get(OPERATOR_AUTH_HEADER) || '';
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+
+    if (!match) {
+      res.status(401).send('Unauthorized\n');
+      return null;
+    }
+
+    try {
+      const identity = await verifyOperatorToken(match[1]);
+
+      if (!identity || typeof identity.uid !== 'string' || identity.uid.length === 0) {
+        res.status(401).send('Unauthorized\n');
+        return null;
+      }
+
+      return identity;
+    } catch (error) {
+      console.warn('Rejected operator request with invalid Firebase ID token');
+      res.status(401).send('Unauthorized\n');
+      return null;
+    }
+  }
+
+  async function authenticateDevice(req, res, deviceId) {
+    const deviceSnap = await db.collection('devices').doc(deviceId).get();
+
+    if (!deviceSnap.exists) {
+      res.status(404).send('Unknown device\n');
+      return null;
+    }
+
+    const device = deviceSnap.data();
+
+    if (!isDeviceCommunicationAllowed(device.state)) {
+      res.status(403).send('Inactive device\n');
+      return null;
+    }
+
+    if (!authenticateDeviceCredential(device, req.get(DEVICE_KEY_HEADER))) {
+      res.status(401).send('Unauthorized\n');
+      return null;
+    }
+
+    return device;
   }
 
   async function updateRequestStatus(req, res, requestId, action) {
@@ -229,18 +310,78 @@ function createFairwayHandlers(db) {
       return res.status(404).send('Not Found\n');
     }
 
-    const requestRef = db.collection('requests').doc(requestId);
-    const requestSnap = await requestRef.get();
+    const operator = await authenticateOperator(req, res);
 
-    if (!requestSnap.exists) {
-      return res.status(404).send('Request not found\n');
+    if (!operator) {
+      return res;
     }
 
-    await requestRef.update({
-      status: actionConfig.status,
-      [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-      operator_id: 'local_dashboard'
-    });
+    const requestRef = db.collection('requests').doc(requestId);
+
+    if (action === COMPLETE_COMMAND_TYPE) {
+      const result = await db.runTransaction(async (transaction) => {
+        const requestSnap = await transaction.get(requestRef);
+
+        if (!requestSnap.exists) {
+          return { notFound: true };
+        }
+
+        const requestData = requestSnap.data();
+        const expiresAt = toDate(requestData.demand_window_expires_at);
+
+        if (typeof requestData.device_id !== 'string' || !expiresAt) {
+          return { invalid: true };
+        }
+
+        const commandId = completeCommandId(requestId);
+        const commandRef = db.collection('devices').doc(requestData.device_id)
+          .collection('commands').doc(commandId);
+        const commandSnap = await transaction.get(commandRef);
+
+        if (requestData.status !== actionConfig.status) {
+          transaction.update(requestRef, {
+            status: actionConfig.status,
+            [actionConfig.timestampField]: FieldValue.serverTimestamp(),
+            operator_id: operator.uid,
+          });
+        }
+
+        if (!commandSnap.exists) {
+          transaction.set(commandRef, {
+            command_id: commandId,
+            device_id: requestData.device_id,
+            type: COMPLETE_COMMAND_TYPE,
+            request_id: requestId,
+            status: 'pending',
+            created_at: FieldValue.serverTimestamp(),
+            expires_at: requestData.demand_window_expires_at,
+            created_by: operator.uid,
+            acknowledged_at: null,
+          });
+        }
+
+        return { commandId };
+      });
+
+      if (result.notFound) {
+        return res.status(404).send('Request not found\n');
+      }
+      if (result.invalid) {
+        return res.status(422).send('Request is missing command correlation data\n');
+      }
+    } else {
+      const requestSnap = await requestRef.get();
+
+      if (!requestSnap.exists) {
+        return res.status(404).send('Request not found\n');
+      }
+
+      await requestRef.update({
+        status: actionConfig.status,
+        [actionConfig.timestampField]: FieldValue.serverTimestamp(),
+        operator_id: operator.uid,
+      });
+    }
 
     console.log('Fairway request status updated:', {
       request_id: requestId,
@@ -248,6 +389,127 @@ function createFairwayHandlers(db) {
     });
 
     return res.status(200).send(`OK ${requestId} ${actionConfig.status}\n`);
+  }
+
+  async function pollDeviceCommand(req, res) {
+    const body = req.body || {};
+    const deviceId = body.device_id;
+    const activeRequestId = body.active_request_id;
+
+    if (typeof deviceId !== 'string' || typeof activeRequestId !== 'string') {
+      return res.status(400).send('Invalid command poll\n');
+    }
+
+    if (!await authenticateDevice(req, res, deviceId)) {
+      return res;
+    }
+
+    const requestSnap = await db.collection('requests').doc(activeRequestId).get();
+
+    if (!requestSnap.exists || requestSnap.data().device_id !== deviceId) {
+      return res.status(200).json({ status: 'accepted', command: null });
+    }
+
+    const commandId = completeCommandId(activeRequestId);
+    const commandSnap = await db.collection('devices').doc(deviceId)
+      .collection('commands').doc(commandId).get();
+
+    if (!commandSnap.exists) {
+      return res.status(200).json({ status: 'accepted', command: null });
+    }
+
+    const command = commandSnap.data();
+    const expiresAt = toDate(command.expires_at);
+    const matches = command.command_id === commandId &&
+      command.device_id === deviceId &&
+      command.type === COMPLETE_COMMAND_TYPE &&
+      command.request_id === activeRequestId &&
+      command.status === 'pending' &&
+      expiresAt && expiresAt.getTime() > now().getTime();
+
+    if (!matches) {
+      return res.status(200).json({ status: 'accepted', command: null });
+    }
+
+    return res.status(200).json({
+      status: 'accepted',
+      command: {
+        command_id: command.command_id,
+        device_id: command.device_id,
+        type: command.type,
+        request_id: command.request_id,
+        expires_at: expiresAt.toISOString(),
+      },
+    });
+  }
+
+  async function acknowledgeDeviceCommand(req, res, commandId) {
+    const body = req.body || {};
+    const deviceId = body.device_id;
+    const requestId = body.request_id;
+
+    if (typeof deviceId !== 'string' || typeof requestId !== 'string') {
+      return res.status(400).send('Invalid command acknowledgement\n');
+    }
+
+    if (!await authenticateDevice(req, res, deviceId)) {
+      return res;
+    }
+
+    const expectedCommandId = completeCommandId(requestId);
+
+    if (commandId !== expectedCommandId) {
+      return res.status(409).send('Command correlation mismatch\n');
+    }
+
+    const commandRef = db.collection('devices').doc(deviceId)
+      .collection('commands').doc(commandId);
+    const result = await db.runTransaction(async (transaction) => {
+      const commandSnap = await transaction.get(commandRef);
+
+      if (!commandSnap.exists) {
+        return { notFound: true };
+      }
+
+      const command = commandSnap.data();
+      const matches = command.command_id === commandId &&
+        command.device_id === deviceId &&
+        command.type === COMPLETE_COMMAND_TYPE &&
+        command.request_id === requestId;
+
+      if (!matches) {
+        return { mismatch: true };
+      }
+
+      if (command.status === 'acknowledged') {
+        return {};
+      }
+
+      const expiresAt = toDate(command.expires_at);
+
+      if (!expiresAt || expiresAt.getTime() <= now().getTime()) {
+        return { expired: true };
+      }
+
+      transaction.update(commandRef, {
+        status: 'acknowledged',
+        acknowledged_at: FieldValue.serverTimestamp(),
+      });
+
+      return {};
+    });
+
+    if (result.notFound) {
+      return res.status(404).send('Command not found\n');
+    }
+    if (result.mismatch) {
+      return res.status(409).send('Command correlation mismatch\n');
+    }
+    if (result.expired) {
+      return res.status(409).send('Command expired\n');
+    }
+
+    return res.status(200).json({ status: 'acknowledged', command_id: commandId });
   }
 
   async function fairwayButtonReceiver(req, res) {
@@ -263,6 +525,15 @@ function createFairwayHandlers(db) {
       }
 
       const path = req.path || '/';
+
+      if (path === '/api/v1/device-commands/poll') {
+        return await pollDeviceCommand(req, res);
+      }
+
+      const commandAckMatch = path.match(/^\/api\/v1\/device-commands\/([^/]+)\/ack$/);
+      if (commandAckMatch) {
+        return await acknowledgeDeviceCommand(req, res, commandAckMatch[1]);
+      }
 
       const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete)$/);
       if (statusMatch) {
@@ -283,7 +554,13 @@ function createFairwayHandlers(db) {
     }
   }
 
-  return { fairwayButtonReceiver, handleDeviceEvent, updateRequestStatus };
+  return {
+    fairwayButtonReceiver,
+    handleDeviceEvent,
+    updateRequestStatus,
+    pollDeviceCommand,
+    acknowledgeDeviceCommand,
+  };
 }
 
 const { fairwayButtonReceiver } = createFairwayHandlers(new Firestore());

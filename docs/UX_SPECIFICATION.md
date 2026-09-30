@@ -10,7 +10,7 @@ Scope
 -----
 - This document defines only observable product behavior (what a golfer sees and does).
 - It intentionally excludes implementation details such as GPIOs, timing constants, transistor driver circuits, interrupt names, PWM values, firmware function names, or backend transport/persistence mechanisms.
-- The local marker behavior below is implemented and physically validated on FRB-0002. Backend transport/persistence of repeat presses and status-independent post-window request creation remain Stage B2 work; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md`.
+- The behavior below is implemented and physically validated on FRB-0002, including Stage B2 early window termination after the marker learns of and acknowledges an exactly correlated operator COMPLETE. Repeat-press transport/persistence remains deferred; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md`.
 
 Purpose of the button marker UX
 -------------------------------
@@ -59,12 +59,14 @@ After the originating request has succeeded, any subsequent valid physical butto
 
 The firmware-local window and count are implemented. Transporting a repeat press and persisting it against the originating request are not yet implemented. The approved persisted factual metric remains `repeat_press_count`; "Frustration Presses" is a possible Admin-facing product interpretation/KPI label, not the canonical stored event meaning.
 
-Operator CONFIRM and COMPLETE actions do not alter this five-minute marker behavior; the marker's eligibility to create a new request after five minutes is independent of whether the previous request is NEW, CONFIRMED, or COMPLETE.
+Operator CONFIRM does not alter this five-minute marker behavior. Operator COMPLETE creates a best-effort command for the exact originating request. If the marker learns of and acknowledges that matching command while the window is active, it terminates the window early and returns to normal eligibility for a fresh golfer request. Until then, or if the command is missing, delayed, stale, expired, mismatched, or unreachable, the validated in-window behavior continues and the local five-minute expiry remains authoritative.
 
 ### Approved End-to-End Example
 
 - T=0:00 Group A initial press → orange → Request A accepted → green → five-minute window begins.
 - T=0:30 operator CONFIRMS Request A → no marker-behavior change.
+- T=0:45 operator COMPLETES Request A; after the marker's next successful matching check, Request A's local window ends early.
+- The next valid press after that acknowledgement follows the normal orange transaction path and may create a fresh request.
 - T=1:15 Group A presses again → immediate green; Request A `repeat_press_count = 1`; no new operator request.
 - T=2:10 Group A presses twice more → immediate green each time; Request A `repeat_press_count = 3`; no new operator request.
 - T=5:00 Request A's demand window expires.

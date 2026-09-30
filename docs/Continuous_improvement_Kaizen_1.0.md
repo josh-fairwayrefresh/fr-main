@@ -747,3 +747,17 @@ text-to-PDF conversion path from scratch.
 Repeated, avoidable rediscovery/troubleshooting time (file location,
 non-working tools such as `textutil -convert pdf`) spent re-solving an
 already-solved problem each time this recurring CPO request is made.
+
+## K-008 --- Keep Bounded Local Control on Monotonic Time
+
+**Rule**
+
+Bounded local control behavior shall use relative monotonic time and the native width of the platform timing API. Do not introduce wall-clock or externally supplied absolute timestamps into local control decisions unless a product requirement or authoritative external interface requires the device to interpret that instant. Use narrower duration or state representations only when they preserve indefinite-runtime rollover safety and do not add conversion, synchronization, or maintenance complexity. Absolute external time remains owned and validated at its authoritative boundary; convert it to local monotonic timing only where device behavior genuinely requires it.
+
+**Origin**
+
+Stage B2 COMPLETE timing-ownership correction.
+
+**Failure prevented**
+
+Unnecessary wall-clock dependencies, duplicate timing authority, rollover hazards, and cross-module coupling in bounded local control paths.

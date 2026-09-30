@@ -3,7 +3,7 @@
 ## Document Status
 - Status: Draft
 - Version: 0.3
-- Last updated: 2026-09-29
+- Last updated: 2026-09-30
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
@@ -162,7 +162,7 @@ Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing 
 
 Prototype 3.2 is the current validated Monarch Bay Pilot firmware generation. It preserves the golfer-first bounded transaction/Device Health architecture and implements the final local PV8/three-indicator golfer UX plus the firmware-local five-minute demand window. Exact implementation and artifact provenance are owned by `docs/FIRMWARE_SPECIFICATION.md`; externally observable behavior is owned by `docs/UX_SPECIFICATION.md`; hardware and validation detail are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
-CPO-confirmed physical validation on FRB-0002 established orange startup and unresolved-transaction pulsing, green success and green-only in-window repeat behavior, red terminal-failure feedback, button re-arm, operator-dashboard request creation, and post-expiry return to the normal orange transaction path. Repeat-press transport/persistence and status-independent post-window backend request creation remain Stage B2 work in `docs/feature_backlog.md`.
+CPO-confirmed physical validation on FRB-0002 established orange startup and unresolved-transaction pulsing, green success and green-only in-window repeat behavior, red terminal-failure feedback, button re-arm, operator-dashboard request creation, and post-expiry return to the normal orange transaction path. Stage B2 adds a request-correlated, device-initiated HTTPS COMPLETE mailbox and status-independent post-window backend request creation. Its backend and dashboard were deployed and validated, and corrected firmware with a dedicated 3,072-byte transaction-thread stack was built, flashed, and physically validated on FRB-0002: COMPLETE terminated the active demand window early and the next press created a fresh request before the five-minute fallback. Repeat-press transport/persistence remains deferred in `docs/feature_backlog.md`.
 
 ## Documentation Philosophy
 
@@ -236,13 +236,13 @@ Firmware generation identity and accepted checkpoint provenance are owned exclus
 
 ### Fleet data foundation
 
-The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The live request-ingestion handler (`index.js`) verifies per-device credentials via this module instead of a single fleet-wide shared key and initializes new request documents with five-minute-window analytics fields. Stage B2 remains unresolved: firmware-local repeat presses are not transported/persisted, and status-only duplicate suppression still blocks a post-window request while an earlier request is `new` or `confirmed`. See `docs/feature_backlog.md` (priority #12).
+The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The backend verifies per-device credentials for event ingestion and Device command poll/ack routes. Stage B2 source changes make duplicate suppression demand-window-aware and add exact request-correlated COMPLETE commands; repeat-press transport/persistence remains deferred. See `docs/feature_backlog.md`.
 
 ### Cart operator webapp
 
 - The webapp is implemented in `fairway_webapp/cart_operator_dashboard/`.
 - It is a Firebase/Vite React dashboard that listens to Firestore request state.
-- It calls Cloud Run status endpoints to confirm or complete requests.
+- It sends the signed-in user's Firebase ID token when calling Cloud Run CONFIRM or COMPLETE endpoints; the deployed backend verifies that identity and records its UID as `operator_id`. This path was operationally validated during Stage B2.
 
 #### Backend and webapp evidence
 - `fairway_backend/cloudrun_receiver/index.js`
