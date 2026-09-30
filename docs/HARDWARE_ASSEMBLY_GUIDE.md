@@ -251,13 +251,17 @@ Validated:
 
 - I2C electrical behavior and MAX17048 response at address 0x36: confirmed live through the existing Device Health snapshot, with the 5580 wired as VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11 / P0.01, SDA → J1/12 / P0.02. This validation event predates the Monarch Bay Pilot GND-rail supersession above and is retained as historical evidence of the I2C signal path and address, not as current ground-wiring truth.
 - MAX17048 cell voltage compared with a DMM measurement at the actual LiPo node: MAX17048 reported 4.0125 V; CPO DMM measurement at the LiPo node was approximately 4.0 V; difference approximately 12.5 mV (approximately 0.31%). The CPO accepted this as adequate out-of-box battery-voltage calibration for the prototype. This validates voltage acquisition only; it does not establish long-term SOC model accuracy.
+- FRB-0002 Monarch Bay Pilot assembly: regulated rail measured approximately 5.2 V at Feather J1/1 (VBAT) relative to J2/4 (GND), and J2/2 measured 3.3 V after correcting 5580 VIN to J2/2. PV8 input and each indicator channel were then physically validated through normal firmware behavior: orange startup/transmitting, green success/repeat, and red failure.
+- FRB-0002 completed an authenticated LTE/HTTPS button transaction from field power and produced the expected operator-dashboard request. This is representative functional validation of the assembled pilot path; it is not simultaneous-three-indicator load characterization or a dormant-current measurement.
 
 Physical assembly lesson: Feather header references (for example J1/11, J1/12) and Perma-Proto board coordinates are separate coordinate systems and must not be conflated. An earlier I2C communication failure was traced to SCL/SDA being physically landed on incorrect Perma-Proto positions while intending to reference J1/11 and J1/12; correcting the physical landing resolved the failure.
+
+FRB-0002 assembly initially omitted the three 100 kΩ base-pull-down returns to the common GND rail and landed 5580 VIN on Feather J2/1 (`~RST`) instead of J2/2 (`3V3`). The resulting symptoms included absent indicator behavior and a held/non-running Feather. Correcting both connections restored normal operation. Assembly inspection must verify each base pull-down reaches common GND, 5580 VIN reaches J2/2 only, and J2/1 remains unconnected.
 
 Remaining forthcoming validation of the CPO-approved 5580/new-build architecture:
 
 - Verify LiPo → 5580 → 6106 continuity and polarity, with no battery-positive-to-ground short.
-- Verify 5580 VIN is tied only to Feather 3V3, and verify the rear `LED` jumper is cut (and `VIO` left unchanged).
+- Verify the 5580 rear `LED` jumper is cut (and `VIO` left unchanged) on each production assembly.
 - Verify solar-present and battery-only operation, including a representative LTE/HTTPS transaction.
 - Verify return to LP1.2 low-power behavior, including incremental dormant-current and automatic-hibernate behavior.
 - Check for abnormal partial-power or back-power behavior throughout the validation.
@@ -510,7 +514,7 @@ Observed battery behavior and engineering risks are maintained in:
 
 # Prototype 1.1 — Solar Power Integration (Current Field-Power Architecture)
 
-Prototype 1.1 is the current physical hardware generation. It replaces the historical Prototype 1.0 AA/VBAT field-power architecture recorded above with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of this hardware generation; the current validated firmware generation remains LP 1.2 as recorded in `docs/FIRMWARE_SPECIFICATION.md`.
+Prototype 1.1 is the reference-device solar-power generation. It replaced the historical Prototype 1.0 AA/VBAT field-power architecture recorded above with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
 This section documents the current reference-device hardware evidence. The CPO-approved pilot-build architecture above remains a separate design-state record for new builds and must not be described as already installed in the current reference unit.
 

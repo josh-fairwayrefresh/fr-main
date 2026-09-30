@@ -2,22 +2,22 @@
 
 Purpose
 -------
-- Describe the CPO-approved final Monarch Bay Pilot externally observable
-   golfer-facing behavior, and preserve the current interim firmware-
-   implemented behavior as historical/provenance where it differs.
+- Describe the implemented and CPO-validated Monarch Bay Pilot externally
+   observable golfer-facing behavior, and preserve the superseded interim
+   behavior as historical provenance.
 
 Scope
 -----
 - This document defines only observable product behavior (what a golfer sees and does).
 - It intentionally excludes implementation details such as GPIOs, timing constants, transistor driver circuits, interrupt names, PWM values, firmware function names, or backend transport/persistence mechanisms.
-- The final Monarch Bay Pilot behavior below is CPO-approved target product behavior. Firmware/backend implementation of this target is not yet complete; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md` for the current implementation gap.
+- The local marker behavior below is implemented and physically validated on FRB-0002. Backend transport/persistence of repeat presses and status-independent post-window request creation remain Stage B2 work; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md`.
 
 Purpose of the button marker UX
 -------------------------------
 - Provide a simple, immediate way for a golfer in the field to create a service request.
 - Give clear, unambiguous feedback to the golfer that a request was received, transmitted, and processed.
 
-## Final Monarch Bay Pilot Golfer UX (Approved Target)
+## Final Monarch Bay Pilot Golfer UX (Implemented and Validated Locally)
 
 Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **red** (TRY AGAIN). Indicator hardware identity and wiring are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` and are not duplicated here.
 
@@ -44,7 +44,7 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - After the failure indication completes, the button is enabled again; the next valid press begins a completely new bounded golfer transaction.
 - There is no long retry lockout.
 
-## Five-Minute Golfer Demand Window (Approved Target)
+## Five-Minute Golfer Demand Window (Implemented and Validated Locally)
 
 For the Monarch Bay Pilot, a fixed five-minute window from the initial accepted press is the canonical operational proxy for presses attributable to the same golfer group at that marker. This is a pilot product assumption, not a claim that every group occupies every tee box for exactly five minutes; per-hole, par-specific, or administrator-configurable windows are not introduced at this stage.
 
@@ -54,14 +54,14 @@ After the originating request has succeeded, any subsequent valid physical butto
 - does not show orange;
 - does not initiate another network service-request transaction;
 - does not create another operator-facing service request;
-- remains associated with the originating accepted request;
-- increments that request's repeat-press count by one.
+- remains locally associated with the originating accepted transaction;
+- increments the firmware-local repeat-press count by one.
 
-The underlying factual metric is `repeat_press_count`. This is the observed fact; "Frustration Presses" is a possible Admin-facing product interpretation/KPI label for that metric, not the canonical stored event meaning.
+The firmware-local window and count are implemented. Transporting a repeat press and persisting it against the originating request are not yet implemented. The approved persisted factual metric remains `repeat_press_count`; "Frustration Presses" is a possible Admin-facing product interpretation/KPI label, not the canonical stored event meaning.
 
 Operator CONFIRM and COMPLETE actions do not alter this five-minute marker behavior; the marker's eligibility to create a new request after five minutes is independent of whether the previous request is NEW, CONFIRMED, or COMPLETE.
 
-### Example
+### Approved End-to-End Example
 
 - T=0:00 Group A initial press → orange → Request A accepted → green → five-minute window begins.
 - T=0:30 operator CONFIRMS Request A → no marker-behavior change.
@@ -72,25 +72,24 @@ Operator CONFIRM and COMPLETE actions do not alter this five-minute marker behav
 
 Request A may still be CONFIRMED but not COMPLETE when Request B is created; that is valid. The operator may have multiple legitimate requests from successive golfer groups at the same marker/hole in the queue simultaneously.
 
-## Product / Data Semantics (Approved Target)
+## Product / Data Semantics (Approved End-to-End Target)
 
 - The canonical analytical demand unit remains one successfully accepted golfer service request.
 - Internal transport retries and repeat presses within the originating five-minute demand window must not inflate service-request volume.
 - `repeat_press_count` belongs to the originating accepted request. The cart operator does not need to see each repeat press as a new request or notification.
 - How repeat presses are communicated from the marker and persisted against the originating request is an engineering/implementation decision, not specified by this document; see `docs/feature_backlog.md`.
 
-## Currently Implemented Interim Behavior (Historical/Current Firmware — Superseded as Target)
+## Superseded Single-Indicator Behavior (Historical)
 
-The following single-indicator interim behavior remains the current firmware-
-implemented behavior, preserved here as historical/current-provenance. It is
-superseded as the Monarch Bay Pilot target by the approved behavior above and
-does not define the target's blink counts, colors, durations, sequencing,
-feedback states, or button interaction logic.
+The pre-Prototype-3.2 firmware used one indicator: three brief transmitting
+blinks, three rapid success blinks, and a long solid failure indication. This
+is retained only as historical provenance and is not current firmware or
+current golfer guidance.
 
-Current interim interaction sequence
-------------------------------------
+Historical interim interaction sequence
+----------------------------------------
 1. Button pressed
-   - During current request processing, the device performs three brief blinks
+   - During request processing, the device performs three brief blinks
      before the first backend transmission attempt.
 
 2. Request initiated
@@ -102,14 +101,14 @@ Current interim interaction sequence
 4. Request failed
    - The LED holds a long solid illumination to indicate the request failed.
 
-LED meanings (golfer-level, current interim implementation)
--------------------------------------------------------------
+Historical LED meanings
+-----------------------
 - Initial three brief blinks: button press accepted and request processing begun.
 - Three rapid blinks: success — the request has been acknowledged by the backend.
 - Long solid illumination: failure — the request did not complete successfully.
 
-Expected user behavior (current interim implementation)
------------------------------------------------------------
+Historical expected user behavior
+---------------------------------
 - Press the physical marker button once to create a request.
 - Observe the LED sequence; only one press is needed for a single request when the device is idle.
 - If the LED indicates success (three rapid blinks), no further action is required.
@@ -118,9 +117,8 @@ Expected user behavior (current interim implementation)
 
 Notes
 -----
-- Current timing constants and blink durations, and firmware/backend
-   implementation of the approved target above, are intentionally omitted
-   from this user-behavior document; implementation is owned by
+- Current timing constants and backend implementation status are intentionally
+   omitted from this user-behavior document; implementation is owned by
    `docs/FIRMWARE_SPECIFICATION.md`, `docs/feature_backlog.md`, and source.
 - This spec assumes the indicators are visible to the user in normal operating conditions.
 - Indicator hardware identity and wiring are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.

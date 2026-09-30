@@ -2,9 +2,9 @@
 
 This document records the hardware installed in the Fairway Refresh prototype across physical hardware generations.
 
-## Prototype 1.1 — Solar Power Integration (Current Physical Hardware Generation)
+## Prototype 1.1 — Solar Power Integration (Reference-Device Generation)
 
-Prototype 1.1 is the current physical hardware generation. It replaces the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of this hardware generation; the current validated firmware generation remains LP 1.2 as recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
+Prototype 1.1 replaced the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture on the reference device. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
 ## Monarch Bay Pilot --- Final Hardware Architecture (Approved, v3.2 Pilot Ready)
 
@@ -18,6 +18,12 @@ pilot. It is the engineering basis for the Monarch Bay Pilot build batch and
 is not a statement that the current reference device is already wired in
 this exact arrangement; that device's own history remains recorded
 separately below.
+
+FRB-0002 has now been assembled in this Monarch Bay Pilot configuration and
+functionally validated with the PV8 button, all three indicator channels, and
+an end-to-end LTE/HTTPS request. This establishes one validated pilot-build
+instance; it does not redefine the separate FRB-0001 reference-device history
+or establish batch-wide manufacturing validation.
 
 ### Approved power / battery-health path
 

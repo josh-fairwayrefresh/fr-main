@@ -61,9 +61,9 @@ Current:
 - `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
 
 Current-state notes:
-- LP 1.2 remains the validated firmware generation.
-- Prototype 1.2 is the current validated integrated product/system milestone, built on the Prototype 1.1 solar/LiPo/6106 hardware architecture with the validated USB service-awake behavior, Device Health acquisition layer, and MAX17048 battery-health integration now confirmed working together on the reference device.
-- The current pilot-build hardware architecture retains the 5580 battery-health path and the new onboard J4 VBAT/GND feed, while actual physical placement remains TBD.
+- Prototype 3.2 for Pilot is the current validated pilot firmware generation; exact source/artifact provenance and validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`.
+- Prototype 1.2 remains the earlier validated Device Reliability Integration milestone and LP 1.2 remains the accepted dormant-power/NCS baseline; neither is the latest golfer-facing firmware generation.
+- One Monarch Bay Pilot instance (FRB-0002) has now been assembled and functionally validated with the 5580 battery-health path, onboard J4 VBAT/GND feed, PV8 button, and three-indicator system. Batch-wide physical placement and manufacturing validation remain TBD.
 
 Planned during documentation migration:
 

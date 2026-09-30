@@ -2,8 +2,8 @@
 
 ## Document Status
 - Status: Draft
-- Version: 0.2
-- Last updated: 2026-09-18
+- Version: 0.3
+- Last updated: 2026-09-29
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
@@ -78,7 +78,7 @@ Product strategy material, milestone notes, and historical business documents ma
 
 ## LP1.3 — Repository Cleanup Milestone
 
-LP1.3 is a repository/workspace engineering milestone. It is not a firmware generation and does not supersede LP1.2 as the validated firmware implementation. The validated firmware implementation remains the LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) generation recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`; that record is unchanged by LP1.3.
+LP1.3 is a repository/workspace engineering milestone. It is not a firmware generation and did not supersede LP1.2 as the validated firmware implementation at that milestone. Later firmware generations are recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
 
 LP1.3 records that:
 
@@ -90,7 +90,7 @@ LP1.3 records that:
 
 ## Prototype 1.1 — Solar Power Integration (Hardware Milestone)
 
-Prototype 1.1 is a physical hardware milestone. It is not a firmware generation and does not change the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`. The current validated firmware generation remains LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade), unchanged by this milestone.
+Prototype 1.1 is a physical hardware milestone. It is not a firmware generation and did not change the then-current LP 1.2 Firmware Generation Registry entry in `docs/FIRMWARE_SPECIFICATION.md`.
 
 Prototype 1.1 replaces the historical Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed solar / LiPo / Adafruit 6106 field-power architecture. Installed components and part numbers are owned by `docs/HARDWARE_BOM.md`; physical wiring detail is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
@@ -139,11 +139,11 @@ The historical 1000 uF bulk capacitor was present during the original Prototype 
 
 The historical LP 1.2 approximately 23.25 uA dormant-current measurement remains a whole-device measurement at the previously accepted 5.0 V boundary with AA batteries and USB disconnected; it is not reinterpreted as a measurement of the Prototype 1.1 solar/LiPo/6106 system.
 
-Prototype 1.1 establishes the current physical hardware baseline for the next Device Health / Reliability engineering sprint, alongside the unchanged LP 1.2 validated firmware generation and the LP1.3 repository/workspace cleanup milestone above.
+Prototype 1.1 established the physical hardware baseline for the subsequent Device Health / Reliability engineering sprint, alongside the then-current LP 1.2 firmware generation and the LP1.3 repository/workspace cleanup milestone above.
 
 ## Prototype 1.2 — Device Reliability Integration (Hardware/System Milestone)
 
-Prototype 1.2 is the validated integrated product/system milestone. It is not a new firmware generation; the validated firmware implementation remains the LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) generation recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`, unchanged by this milestone.
+Prototype 1.2 is a validated integrated product/system milestone. It was not a new firmware generation; its validation used the LP 1.2 lineage recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
 
 Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 6106 field-power architecture:
 
@@ -154,9 +154,15 @@ Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 
 
 CPO-confirmed validation: the integrated candidate built cleanly under the canonical NCS 3.1.1 procedure, flashed successfully, and operated correctly from the current field-power architecture with one normal Fairway button interaction producing the expected behavior.
 
-Backend Device Health persistence and an admin-facing Device Health view are not part of Prototype 1.2. Current Prototype 1.2 behavior remains acquisition/logging only, with no backend persistence and no admin UI. The approved target architecture for Device Health transport, scheduling, backend persistence, thresholds, and alerts is recorded in `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Approved Target, Not Yet Implemented)") and `docs/DEVICE_PROVISIONING_GUIDE.md` ("Device Health: Latest State, History, Thresholds, and Alerts (Approved Target)"); the approved admin capability target is recorded in `docs/feature_backlog.md` (WP4/WP5/WP6). None of that approved target architecture is implemented as of Prototype 1.2.
+Backend Device Health persistence and an admin-facing Device Health view were not part of Prototype 1.2. At that milestone, behavior remained acquisition/logging only. Later Device Health transport, scheduling, and backend persistence implementation is owned by `docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`; admin and alert work remains tracked in `docs/feature_backlog.md`.
 
 Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing details (exact component placement, Perma-Proto geometry, and mechanical layout), which remain owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as previously recorded.
+
+## Prototype 3.2 for Pilot — Working Button and Lights
+
+Prototype 3.2 is the current validated Monarch Bay Pilot firmware generation. It preserves the golfer-first bounded transaction/Device Health architecture and implements the final local PV8/three-indicator golfer UX plus the firmware-local five-minute demand window. Exact implementation and artifact provenance are owned by `docs/FIRMWARE_SPECIFICATION.md`; externally observable behavior is owned by `docs/UX_SPECIFICATION.md`; hardware and validation detail are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+CPO-confirmed physical validation on FRB-0002 established orange startup and unresolved-transaction pulsing, green success and green-only in-window repeat behavior, red terminal-failure feedback, button re-arm, operator-dashboard request creation, and post-expiry return to the normal orange transaction path. Repeat-press transport/persistence and status-independent post-window backend request creation remain Stage B2 work in `docs/feature_backlog.md`.
 
 ## Documentation Philosophy
 
@@ -230,7 +236,7 @@ Firmware generation identity and accepted checkpoint provenance are owned exclus
 
 ### Fleet data foundation
 
-The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The live request-ingestion handler (`index.js`) verifies per-device credentials via this module instead of a single fleet-wide shared key; the duplicate-suppression logic is unchanged, but request-document `hole`/`device_label` fields are now derived from the device's canonical `location` field rather than reading independent duplicate Device fields. This unchanged duplicate-suppression logic (suppresses any new request while an existing request for the same device has status `new` or `confirmed`, with no time-window awareness) now materially conflicts with the CPO-approved Monarch Bay Pilot five-minute golfer demand window in `docs/UX_SPECIFICATION.md`; see `docs/feature_backlog.md` (priority #12) for the identified target requirement and implementation gap. This is not yet resolved and is not silently reconciled here.
+The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The live request-ingestion handler (`index.js`) verifies per-device credentials via this module instead of a single fleet-wide shared key and initializes new request documents with five-minute-window analytics fields. Stage B2 remains unresolved: firmware-local repeat presses are not transported/persisted, and status-only duplicate suppression still blocks a post-window request while an earlier request is `new` or `confirmed`. See `docs/feature_backlog.md` (priority #12).
 
 ### Cart operator webapp
 
@@ -278,7 +284,7 @@ interpretation are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### Current Observed or Repository-Verified Risks
 
-- Blocking network operations in the golfer button request path were resolved by the golfer-first transaction architecture in `fde1aade63ac62650709e7ea6aead6f817b71b58`; see `docs/FIRMWARE_SPECIFICATION.md` ("Golfer Transaction Architecture"). Remaining desk/source-verified-only scenarios (forced-FAILURE timing, Health-vs-golfer concurrency, repeated boot determinism) are tracked as WP4 follow-up validation, not an open architectural risk.
+- Blocking network operations in the golfer button request path were resolved by the golfer-first transaction architecture in `fde1aade63ac62650709e7ea6aead6f817b71b58`; see `docs/FIRMWARE_SPECIFICATION.md` ("Golfer Transaction Architecture"). Prototype 3.2 physically validated terminal FAILURE feedback; Health-vs-golfer concurrency and repeated-boot determinism remain source/desk-verified follow-up scenarios.
 - Battery behavior under LTE load remains uncharacterized.
 - CPO-observed whole-device idle-power regression (approximately an order of magnitude versus the LP 1.2 ~23.25 uA baseline) coincident with the 5580/6106 power-architecture integration; deferred and unresolved, see `docs/feature_backlog.md`.
 
