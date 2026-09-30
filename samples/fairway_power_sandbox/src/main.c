@@ -1,31 +1,46 @@
 /*
  * Fairway Refresh button-request state machine
  *
- * Confirmed hardware mappings:
+ * Confirmed hardware mappings (Monarch Bay Pilot final architecture; see
+ * docs/HARDWARE_ASSEMBLY_GUIDE.md and docs/HARDWARE_BOM.md):
  *
- * PV4 switch:
- *   PV4 C  -> GND
- *   PV4 NO -> J9
- *   J9     -> nRF GPIO P0.31 -> Zephyr gpio0 pin 31
+ * PV8 switch:
+ *   PV8 Lead 4 -> common GND rail
+ *   PV8 Lead 1 -> Feather J1/5 -> nRF GPIO P0.31 -> Zephyr gpio0 pin 31
+ *   PV8 Leads 2, 3 -> not connected
  *
- * PV4 red LED ring:
- *   PV4 LED - -> GND
- *   PV4 LED + -> 220 ohm resistor -> J10
- *   J10       -> nRF GPIO P0.30 -> Zephyr gpio0 pin 30
+ * Three indicator driver circuits (identical low-side 2N3904 topology per
+ * color; GPIO drives the transistor base through 2.2 kOhm, base also has
+ * 100 kOhm to common GND, emitter to common GND, collector to the
+ * indicator's negative lead, indicator positive lead to the regulated
+ * +5 V rail). GPIO logical 1 = indicator lit, logical 0 = indicator off
+ * (unchanged active-level convention from the prior single-LED circuit,
+ * reused as-is for all three pins -- same topology, same GPIO_OUTPUT_INACTIVE
+ * configuration, no ACTIVE_LOW flag):
+ *   Orange (SENDING)          -> Feather J1/6 -> nRF GPIO P0.30 -> gpio0 pin 30
+ *   Green  (REQUEST RECEIVED) -> Feather J1/7 -> nRF GPIO P0.29 -> gpio0 pin 29
+ *   Red    (TRY AGAIN)        -> Feather J1/8 -> nRF GPIO P0.28 -> gpio0 pin 28
  *
- * Current interim behavior (future final golfer UX is backlog work):
+ * Approved Monarch Bay Pilot golfer UX (see docs/UX_SPECIFICATION.md,
+ * "Final Monarch Bay Pilot Golfer UX"):
  *   Startup:
- *     Ring flashes 3 times
+ *     Orange flashes 3 times
  *
  *   IDLE:
- *     Ring off
+ *     All three indicators off
  *
- *   Button press:
- *     Capture the current Device Health snapshot
- *     TRANSMITTING: 3 brief flashes before the first HTTPS attempt
- *     SUCCESS: 3 quick flashes
- *     FAILURE: long solid illumination
+ *   Valid press, no active demand window:
+ *     Orange begins immediately and pulses for the unresolved transaction
+ *     SUCCESS: orange off; green blink-blink then ~5 s solid; starts a local
+ *       5-minute demand window from the original accepted press time
+ *     FAILURE: orange off; red blink-blink then ~5 s solid; no demand window
  *     Return to IDLE
+ *
+ *   Valid press during an active 5-minute demand window:
+ *     No orange, no new transaction, no new request; immediate green
+ *     blink-blink then ~5 s solid; increments a local repeat-press counter
+ *     on the originating transaction (preparatory state only; backend
+ *     transport/persistence is a later work package, not implemented here)
  */
 
 #include <zephyr/kernel.h>
@@ -69,7 +84,9 @@ static const struct device *buck2_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_buck2
 static const struct device *max17048_dev = DEVICE_DT_GET(DT_NODELABEL(max17048));
 
 #define BUTTON_PIN    31
-#define RING_LED_PIN  30
+#define ORANGE_PIN    30
+#define GREEN_PIN     29
+#define RED_PIN       28
 
 #define GOLFER_TRANSACTION_BUDGET_MS      15000
 #define GOLFER_MAX_ATTEMPTS               2
@@ -81,14 +98,26 @@ static const struct device *max17048_dev = DEVICE_DT_GET(DT_NODELABEL(max17048))
 #define STARTUP_FLASH_ON_MS      150
 #define STARTUP_FLASH_OFF_MS     150
 
-#define INITIAL_FLASH_ON_MS      80
-#define INITIAL_FLASH_OFF_MS     85
+/* Continuous orange pulse cadence while a golfer transaction is unresolved;
+ * reuses the previously validated initial-acknowledgement flash timing.
+ */
+#define ORANGE_PULSE_ON_MS       80
+#define ORANGE_PULSE_OFF_MS      85
 
-#define SUCCESS_FLASH_COUNT      3
-#define SUCCESS_FLASH_ON_MS      40
-#define SUCCESS_FLASH_OFF_MS     40
+/* Shared green/red "blink-blink then solid" terminal feedback timing;
+ * reuses the previously validated quick-flash cadence, just at count 2
+ * ("blink-blink") instead of the superseded 3-blink pattern. */
+#define FEEDBACK_BLINK_COUNT     2
+#define FEEDBACK_BLINK_ON_MS     40
+#define FEEDBACK_BLINK_OFF_MS    40
+#define FEEDBACK_SOLID_MS        5000
 
-#define FAILURE_SOLID_MS         5000
+/* Canonical Monarch Bay Pilot golfer demand window (docs/UX_SPECIFICATION.md,
+ * "Five-Minute Golfer Demand Window"), mirroring the backend's DEMAND_WINDOW_MS
+ * (fairway_backend/cloudrun_receiver/lib/fleet/schema.js). Firmware-local
+ * only; no shared code with the backend.
+ */
+#define DEMAND_WINDOW_MS         (5 * 60 * 1000)
 
 #define FAIRWAY_TLS_SEC_TAG 42
 
@@ -102,6 +131,7 @@ typedef enum {
 	STATE_TRANSMITTING,
 	STATE_SUCCESS,
 	STATE_FAILURE,
+	STATE_REPEAT_PRESS,
 } app_state_t;
 
 /* Golfer-vs-Health transaction scheduler states (observability only; the
@@ -303,6 +333,23 @@ static volatile bool date_time_valid_pending;
 static volatile bool lte_registered_pending;
 static struct gpio_callback button_cb;
 static struct gpio_callback vbus_cb;
+
+/* Local (firmware-only, not yet transported/persisted) Monarch Bay Pilot
+ * five-minute golfer demand window, read and written exclusively by
+ * button_thread (main()'s own loop below) -- no other thread ever touches
+ * it, so unlike golfer_txn/sched_ctl/pending_deadline above it needs no
+ * spinlock. `expires_at_ms` is measured from the same k_uptime_get() clock
+ * as golfer_txn's own deadline_ms, anchored at the original accepted press
+ * time, not the end of the network transaction. `repeat_press_count` is
+ * preparatory state only for this work package: no backend transport or
+ * persistence is implemented here.
+ */
+struct demand_window {
+	bool active;
+	int64_t expires_at_ms;
+	uint32_t repeat_press_count;
+};
+static struct demand_window demand_window;
 
 #define HEALTH_REPORT_MAX_ATTEMPTS             2
 #define HEALTH_REPORT_ATTEMPT_TIMEOUT_MS       20000
@@ -978,24 +1025,31 @@ static int configure_buck2_power_policy(void)
 	return apply_buck2_power_policy(vbus_hold_active);
 }
 
-static void ring_on(void)
+static void indicator_on(int pin)
 {
-	gpio_pin_set(gpio0_dev, RING_LED_PIN, 1);
+	gpio_pin_set(gpio0_dev, pin, 1);
 }
 
-static void ring_off(void)
+static void indicator_off(int pin)
 {
-	gpio_pin_set(gpio0_dev, RING_LED_PIN, 0);
+	gpio_pin_set(gpio0_dev, pin, 0);
 }
 
-static void ring_flash(int count, int on_ms, int off_ms)
+static void indicator_flash(int pin, int count, int on_ms, int off_ms)
 {
 	for (int i = 0; i < count; i++) {
-		ring_on();
+		indicator_on(pin);
 		k_sleep(K_MSEC(on_ms));
-		ring_off();
+		indicator_off(pin);
 		k_sleep(K_MSEC(off_ms));
 	}
+}
+
+static void all_indicators_off(void)
+{
+	indicator_off(ORANGE_PIN);
+	indicator_off(GREEN_PIN);
+	indicator_off(RED_PIN);
 }
 
 static bool button_is_pressed(void)
@@ -1030,28 +1084,29 @@ static void set_state(app_state_t new_state)
 	case STATE_FAILURE:
 		LOG_INF("STATE_FAILURE");
 		break;
+	case STATE_REPEAT_PRESS:
+		LOG_INF("STATE_REPEAT_PRESS");
+		break;
 	default:
 		LOG_WRN("Unknown state: %d", state);
 		break;
 	}
 }
 
-static void show_transmitting_feedback(void)
-{
-	ring_flash(3, INITIAL_FLASH_ON_MS, INITIAL_FLASH_OFF_MS);
-}
-
 static void show_success_feedback(void)
 {
-	ring_flash(SUCCESS_FLASH_COUNT, SUCCESS_FLASH_ON_MS, SUCCESS_FLASH_OFF_MS);
-	ring_off();
+	indicator_flash(GREEN_PIN, FEEDBACK_BLINK_COUNT, FEEDBACK_BLINK_ON_MS, FEEDBACK_BLINK_OFF_MS);
+	indicator_on(GREEN_PIN);
+	k_sleep(K_MSEC(FEEDBACK_SOLID_MS));
+	indicator_off(GREEN_PIN);
 }
 
 static void show_failure_feedback(void)
 {
-	ring_on();
-	k_sleep(K_MSEC(FAILURE_SOLID_MS));
-	ring_off();
+	indicator_flash(RED_PIN, FEEDBACK_BLINK_COUNT, FEEDBACK_BLINK_ON_MS, FEEDBACK_BLINK_OFF_MS);
+	indicator_on(RED_PIN);
+	k_sleep(K_MSEC(FEEDBACK_SOLID_MS));
+	indicator_off(RED_PIN);
 }
 
 /* Resets and reacquires the Device Health snapshot (temperature, battery,
@@ -1938,9 +1993,21 @@ int main(void)
 		return 0;
 	}
 
-	ret = gpio_pin_configure(gpio0_dev, RING_LED_PIN, GPIO_OUTPUT_INACTIVE);
+	ret = gpio_pin_configure(gpio0_dev, ORANGE_PIN, GPIO_OUTPUT_INACTIVE);
 	if (ret < 0) {
-		LOG_ERR("Failed to configure LED ring GPIO P0.%d: %d", RING_LED_PIN, ret);
+		LOG_ERR("Failed to configure orange indicator GPIO P0.%d: %d", ORANGE_PIN, ret);
+		return 0;
+	}
+
+	ret = gpio_pin_configure(gpio0_dev, GREEN_PIN, GPIO_OUTPUT_INACTIVE);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure green indicator GPIO P0.%d: %d", GREEN_PIN, ret);
+		return 0;
+	}
+
+	ret = gpio_pin_configure(gpio0_dev, RED_PIN, GPIO_OUTPUT_INACTIVE);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure red indicator GPIO P0.%d: %d", RED_PIN, ret);
 		return 0;
 	}
 
@@ -1957,7 +2024,7 @@ int main(void)
 		return 0;
 	}
 
-	ring_flash(STARTUP_FLASH_COUNT, STARTUP_FLASH_ON_MS, STARTUP_FLASH_OFF_MS);
+	indicator_flash(ORANGE_PIN, STARTUP_FLASH_COUNT, STARTUP_FLASH_ON_MS, STARTUP_FLASH_OFF_MS);
 
 	set_state(STATE_IDLE);
 
@@ -1979,6 +2046,34 @@ int main(void)
 
 		LOG_INF("BUTTON_WAKE detected");
 
+		int64_t press_time_ms = k_uptime_get();
+
+		/* Active five-minute golfer demand window (docs/UX_SPECIFICATION.md,
+		 * "Five-Minute Golfer Demand Window"): a valid press before the
+		 * window's expiry is a same-group repeat, not a new golfer demand
+		 * event. It never touches golfer_txn/txn_wake_sem -- no new
+		 * transaction, no new request -- and is purely a local indicator
+		 * echo plus a local counter increment. Naturally becomes false
+		 * once press_time_ms reaches expires_at_ms, regardless of the
+		 * stale `active` flag left over from the originating success.
+		 */
+		if (demand_window.active && press_time_ms < demand_window.expires_at_ms) {
+			demand_window.repeat_press_count++;
+
+			LOG_INF("REPEAT_PRESS within demand window: count=%u",
+				demand_window.repeat_press_count);
+
+			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_DISABLE);
+
+			set_state(STATE_REPEAT_PRESS);
+			show_success_feedback();
+
+			k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
+			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
+			set_state(STATE_IDLE);
+			continue;
+		}
+
 		/* Keep switch bounce from queuing a second press during the
 		 * active transaction; re-armed only after terminal feedback
 		 * plus BUTTON_REARM_SETTLE_MS below.
@@ -1988,60 +2083,83 @@ int main(void)
 		/* Architect Correction 1: the hard 15-second deadline begins
 		 * at acceptance, before the acknowledgement animation runs.
 		 */
-		int64_t accept_time_ms = k_uptime_get();
+		int64_t accept_time_ms = press_time_ms;
 		int64_t deadline_ms = accept_time_ms + GOLFER_TRANSACTION_BUDGET_MS;
 		uint32_t my_gen = golfer_txn_accept(deadline_ms);
 
 		set_state(STATE_TRANSMITTING);
 
-		/* Canonical local acknowledgement begins here (the LED
-		 * physically turns on) -- strictly before the scheduler is
-		 * released, so network/transaction work can never start
-		 * ahead of the golfer's visible acknowledgement. The
-		 * 15-second deadline above is unaffected: it was already
-		 * fixed at acceptance, not here.
+		/* Canonical local acknowledgement begins here (orange physically
+		 * turns on) -- strictly before the scheduler is released, so
+		 * network/transaction work can never start ahead of the golfer's
+		 * visible acknowledgement. The 15-second deadline above is
+		 * unaffected: it was already fixed at acceptance, not here.
 		 */
-		ring_on();
+		indicator_on(ORANGE_PIN);
 		k_sem_give(&txn_wake_sem);
-
-		/* Completes the existing 3-flash acknowledgement pattern; its
-		 * own first ring_on() is a harmless redundant write (the LED
-		 * is already on), so the golfer-visible pattern/timing is
-		 * unchanged, it now simply runs concurrently with the
-		 * transaction that was just released above.
-		 */
-		show_transmitting_feedback();
 
 		bool got_result = false;
 		bool success = false;
+		bool orange_lit = true;
 
+		/* Orange pulses continuously for the whole unresolved transaction
+		 * (docs/UX_SPECIFICATION.md: "pulses while the transaction is
+		 * unresolved"), reusing the previously validated brief-flash
+		 * cadence. Waiting is chunked to one pulse half-cycle at a time
+		 * instead of the full remaining budget so the indicator can keep
+		 * toggling; golfer_txn_check_done() is still checked on every
+		 * wake (whether from a genuine completion signal or a pulse-phase
+		 * timeout), so a real completion is still reacted to immediately,
+		 * exactly as before this change. Only reaching the outer
+		 * 15-second deadline itself (not a pulse-phase timeout) produces
+		 * the defensive FAILURE fallback.
+		 */
 		while (1) {
 			int64_t remaining_ms = deadline_ms - k_uptime_get();
 
 			if (remaining_ms <= 0) {
 				break;
 			}
-			if (k_sem_take(&button_wake_sem, K_MSEC(remaining_ms)) != 0) {
-				break;
+
+			int64_t phase_ms = orange_lit ? ORANGE_PULSE_ON_MS : ORANGE_PULSE_OFF_MS;
+			int64_t wait_ms = (remaining_ms < phase_ms) ? remaining_ms : phase_ms;
+
+			if (k_sem_take(&button_wake_sem, K_MSEC(wait_ms)) == 0) {
+				if (golfer_txn_check_done(my_gen, &success)) {
+					got_result = true;
+					break;
+				}
+				/* Spurious wake (e.g. a completion signal for an
+				 * already-expired generation): keep pulsing within
+				 * the same bounded deadline.
+				 */
+				continue;
 			}
-			if (golfer_txn_check_done(my_gen, &success)) {
-				got_result = true;
-				break;
+
+			/* This pulse phase elapsed with no completion yet. */
+			orange_lit = !orange_lit;
+			if (orange_lit) {
+				indicator_on(ORANGE_PIN);
+			} else {
+				indicator_off(ORANGE_PIN);
 			}
-			/* Spurious wake (e.g. a completion signal for an
-			 * already-expired generation): keep waiting within the
-			 * same bounded deadline.
-			 */
 		}
+
+		indicator_off(ORANGE_PIN);
 
 		if (got_result && success) {
 			set_state(STATE_SUCCESS);
 			show_success_feedback();
+
+			demand_window.active = true;
+			demand_window.expires_at_ms = accept_time_ms + DEMAND_WINDOW_MS;
+			demand_window.repeat_press_count = 0;
 		} else {
 			/* Local defensive deadline (Architect Correction):
 			 * guarantees a terminal disposition even in the
 			 * unforeseen case that transaction_thread itself does
-			 * not report back in time.
+			 * not report back in time. Failure never establishes a
+			 * demand window.
 			 */
 			set_state(STATE_FAILURE);
 			show_failure_feedback();
@@ -2050,7 +2168,7 @@ int main(void)
 		k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
 		gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
 		set_state(STATE_IDLE);
-		ring_off();
+		all_indicators_off();
 	}
 
 	return 0;
