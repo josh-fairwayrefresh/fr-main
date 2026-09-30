@@ -125,10 +125,22 @@ TO-92 transistor, identical topology per color:
 - Transistor collector → indicator negative lead.
 - Indicator positive lead → Perma-Proto +5 V rail.
 
-**Not yet canonicalized:** the physical E/B/C lead order for the purchased
-2N3904 is not established here. Verify the actual procured-device lead order
-(datasheet and/or continuity check) before soldering — see Validation
-Requirements below.
+**CPO bench-verified lead order:** with the flat face toward the viewer and
+leads pointing downward, LEFT = Collector (C), MIDDLE = Base (B), RIGHT =
+Emitter (E), for the actual procured ALLECIN 2N3904 batch. This resolves the
+previously open E/B/C verification requirement; see 2N3904 Lead
+Identification below.
+
+### 2N3904 Lead Identification
+
+CPO bench-verified for the actual procured ALLECIN 2N3904 batch. Orientation:
+flat face toward the viewer, leads pointing downward.
+
+| Position | Lead | Fairway Connection |
+|---|---|---|
+| LEFT | Collector (C) | Corresponding Dialight indicator negative lead |
+| MIDDLE | Base (B) | 2.2 kΩ to the assigned Feather GPIO; 100 kΩ to the common GND rail |
+| RIGHT | Emitter (E) | Common GND rail |
 
 ### Indicator Termination (DIANN 12-Position Screw-Terminal Block)
 
@@ -147,7 +159,7 @@ for 26–18 AWG. Six of the twelve positions are used:
 The terminal block accepts the Dialight factory leads directly; board-side
 wiring remains the approved Adafruit 288 22 AWG stranded silicone wire.
 
-### Solar Input Path (Retained, Unchanged)
+### Solar Input Path (Retained Component Chain; Ground Boundary Clarified)
 
 ```
 Adafruit 5366 solar panel
@@ -156,6 +168,18 @@ Adafruit 5366 solar panel
   -> Adafruit 368 barrel-to-screw-terminal adapter
   -> Adafruit 6106 solar/DC input (observe polarity)
 ```
+
+- Adafruit 368 `+` terminal → 6106 solar/DC input positive.
+- Adafruit 368 `-` terminal → 6106 solar/DC input GND.
+
+The 6106 is the physical boundary between solar-input wiring and the system
+distribution rails: its own regulated-output GND (a separate wire from the
+368 `-` terminal) is the single connection to the Perma-Proto common GND
+rail, and its regulated positive output is the single connection to the
+Perma-Proto +5 V rail. Do not add a separate jumper from Adafruit 368 `-`
+directly to the Perma-Proto GND rail; the solar-input ground path and the
+system distribution ground path are joined only inside the 6106, not by an
+additional external wire.
 
 ### Antenna / SIM Interfaces
 
@@ -173,7 +197,8 @@ bullet list above for wiring detail. Component identity/selection is owned by
 
 | Function | Physical Installation | Electrical Purpose |
 |---|---|---|
-| Solar Input | Adafruit 5366 panel → Voltaic 3.5x1.1 mm extension → Adafruit 4287 adapter → Adafruit 368 barrel-to-screw-terminal adapter → Adafruit 6106 solar/DC input (observe polarity). | Solar charging input to the 6106 charger/power-path. |
+| Solar Input | Adafruit 5366 panel → Voltaic 3.5x1.1 mm extension → Adafruit 4287 adapter → Adafruit 368 barrel-to-screw-terminal adapter (`+` → 6106 solar/DC input positive, `-` → 6106 solar/DC input GND). | Solar charging input to the 6106 charger/power-path. |
+| Solar-to-System Ground Boundary | Adafruit 368 `-` is not separately jumpered to the Perma-Proto GND rail. | The 6106 is the sole boundary between solar-input ground and the system GND rail; only its own regulated-output GND connects to the rail (see "6106 GND Output" below). |
 | Battery / Fuel Gauge Path | LiPo (Adafruit 328) → Adafruit 5580/MAX17048 → Adafruit 4714 interconnect → Adafruit 6106 BATT. | Protected battery feed with inline fuel-gauge sensing. |
 | 5580 VIN | 5580 VIN → Feather J2/2 (3V3). | Fuel-gauge logic supply. |
 | 5580 SCL | 5580 SCL → Feather J1/11 / P0.01 (I2C2 SCL). | Fuel-gauge I2C clock. |
@@ -212,9 +237,6 @@ Verify lead assignments with a continuity meter before soldering.
 These are assembly-validation requirements for this architecture, not already-
 established evidence:
 
-- Verify the actual procured ALLECIN 2N3904 E/B/C lead order (datasheet
-  and/or continuity check) before soldering; do not assume a standard
-  orientation.
 - After assembly, measure the regulated +5 V rail under representative
   indicator load (all three indicators active) and confirm normal operation
   of each 5 V Dialight indicator.

@@ -79,7 +79,7 @@ The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to
 | Indicator, orange (final) | Dialight | 656-3352-303F | Dialight | 5 VDC. Golfer meaning: SENDING. |
 | Indicator, green (final) | Dialight | 656-3202-303F | Dialight | 5 VDC. Golfer meaning: REQUEST RECEIVED. |
 | Indicator, red (final) | Dialight | 656-3102-303F | Dialight | 5 VDC. Golfer meaning: TRY AGAIN. |
-| Indicator driver transistor | ALLECIN | 2N3904 | ALLECIN | NPN, TO-92. Qty 3 (one per indicator). E/B/C lead order not canonicalized pending procured-part verification; see `docs/HARDWARE_ASSEMBLY_GUIDE.md`. |
+| Indicator driver transistor | ALLECIN | 2N3904 | ALLECIN | NPN, TO-92. Qty 3 (one per indicator). E/B/C lead order CPO bench-verified; see `docs/HARDWARE_ASSEMBLY_GUIDE.md` ("2N3904 Lead Identification"). |
 | Base drive resistor | Not specified | 2.2 kΩ, 1/2 W, 5% | Not specified | Qty 3. Feather GPIO to each transistor base. |
 | Base pull-down resistor | Not specified | 100 kΩ, 1/4 W, ±1% | Not specified | Qty 3. Each transistor base to common GND. |
 | Indicator terminal block | DIANN | 12-position, 2.54 mm / 0.1 in pitch, 26-18 AWG | Not specified | Six of twelve positions used for the three indicators; see `docs/HARDWARE_ASSEMBLY_GUIDE.md`. |
