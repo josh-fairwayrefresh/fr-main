@@ -65,12 +65,9 @@ Operator CONFIRM does not alter this five-minute marker behavior. Operator COMPL
 
 - T=0:00 Group A initial press → orange → Request A accepted → green → five-minute window begins.
 - T=0:30 operator CONFIRMS Request A → no marker-behavior change.
-- T=0:45 operator COMPLETES Request A; after the marker's next successful matching check, Request A's local window ends early.
-- The next valid press after that acknowledgement follows the normal orange transaction path and may create a fresh request.
-- T=1:15 Group A presses again → immediate green; Request A `repeat_press_count = 1`; no new operator request.
-- T=2:10 Group A presses twice more → immediate green each time; Request A `repeat_press_count = 3`; no new operator request.
-- T=5:00 Request A's demand window expires.
-- T=6:00 Group B presses → normal orange transaction → new Request B → green on success.
+- If Request A is not completed, an in-window press at T=1:15 gives immediate green and remains associated with Request A; the local window expires at T=5:00, and a later press follows the normal orange transaction path.
+- Alternatively, if the operator COMPLETES Request A at T=0:45, the marker ends Request A's local window after learning of and acknowledging that exact matching command.
+- The next valid press after that acknowledgement follows the normal orange transaction path and may create a fresh Request B before T=5:00.
 
 Request A may still be CONFIRMED but not COMPLETE when Request B is created; that is valid. The operator may have multiple legitimate requests from successive golfer groups at the same marker/hole in the queue simultaneously.
 

@@ -25,8 +25,9 @@ backlog items.
 Recently completed pilot work: Final Golfer Button / LED UX was implemented in
 `ce25e0f0b3f21fcc0af6a79e2c4aa5c2677d2c1f` and physically validated on
 FRB-0002. Current implementation and validation truth is owned by
-`docs/FIRMWARE_SPECIFICATION.md` and `docs/UX_SPECIFICATION.md`; only the
-distinct Stage B2 backend work remains below.
+`docs/FIRMWARE_SPECIFICATION.md` and `docs/UX_SPECIFICATION.md`. Stage B2
+COMPLETE was subsequently implemented and validated end-to-end; the remaining
+repeat-press transport/persistence work is tracked separately below.
 
 | Priority | Feature | Notes |
 |----------|---------|-------|
@@ -40,7 +41,7 @@ distinct Stage B2 backend work remains below.
 | 9 | Pilot-build validation / deployment | Validate the CPO-approved 5580 / J4 VBAT-GND architecture, LiPo trend evidence, and end-to-end battery-health behavior on the new build set before any broader rollout. |
 | 10 | NCS 3.4 Upgrade — Post-Field Deployment | Do not begin until the current engineering/feature backlog is complete AND pilot units are deployed and operating successfully in the field. At that point: evaluate migration from NCS 3.1.1 to NCS 3.4; reassess nRF9151 Errata 36 / AP-protect handling using mechanisms supported by the newer SDK; preserve validated Fairway behavior during migration. |
 | 11 | Whole-device idle-power regression investigation | CPO-observed: whole-device idle/dormant current increased by approximately an order of magnitude versus the LP 1.2 ~23.25 uA baseline, coincident with the approved pilot-build 5580/MAX17048 + Adafruit 6106 power-architecture integration (see `docs/HARDWARE_BOM.md`). Deferred and unresolved: cause not yet diagnosed, no replacement dormant-current target adopted. Not corrected or investigated as part of WP4 closeout. |
-| 12 | Stage B2 five-minute demand-window backend mechanism | COMPLETE sub-path complete and validated: Firebase-authenticated operator COMPLETE transactionally creates one deterministic request-correlated command; authenticated Device poll/ack is exact and idempotent, with backend-owned absolute expiry checked at both boundaries; firmware retains the generation-matched request ID and native monotonic local deadline, checks every 15 seconds only during the active local window, and preserves five-minute fallback and golfer-first priority; duplicate suppression is demand-window-aware. Backend/dashboard deployment and automated tests passed. Corrected firmware with a dedicated 3,072-byte transaction-thread stack was built, flashed, and physically validated on FRB-0002; exact COMPLETE acknowledgement ended the window early and allowed a fresh request before fallback expiry. Remaining separate work: marker-to-backend repeat transport and atomic originating-request count/last-repeat persistence. |
+| 12 | Repeat-press transport and persistence | Transport firmware-local in-window repeat presses and atomically update the originating request's `repeat_press_count` and `last_repeat_press_at`. This is separate deferred work; Stage B2 COMPLETE is implemented and validated. |
 | 13 | Pilot COMPLETE-check cadence reevaluation | Reevaluate the period between completion checks using pilot field evidence. The implemented 15-second active-window period is an explicit pilot hypothesis, not a permanently optimized production constant; active-window energy characterization is not an acceptance criterion for the Stage B2 implementation itself. |
 
 Historical alternatives (TMUX1101, MAX4544, switched-SAADC/divider paths) remain archived and are not active backlog items for the current pilot-build architecture.
