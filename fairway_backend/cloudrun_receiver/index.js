@@ -1,5 +1,6 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
+require('./notifier');
 const { resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, updateCourse } = require('./lib/fleet/courses');
@@ -25,6 +26,10 @@ const {
   DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
 const { isValidHealthObservation, recordHealthObservation, resolveDeviceHierarchyConfig, resolveCourseLocalDateHour } = require('./lib/fleet/health');
+const {
+  getOperatorAssignment,
+  registerPushSubscription,
+} = require('./lib/operator_notifications');
 
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
@@ -103,6 +108,8 @@ function createFairwayHandlers(db, {
   verifyOperatorToken = verifyFirebaseIdToken,
   now = () => new Date(),
   allowedAdminOrigin = null,
+  vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
+  vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
 } = {}) {
   /*
    * Persists a golfer button_press request. Request persistence, duplicate
@@ -322,6 +329,62 @@ function createFairwayHandlers(db, {
     }
 
     return identity;
+  }
+
+  async function authorizeOperator(req, res) {
+    const identity = await authenticateOperator(req, res);
+    if (!identity) return null;
+
+    const assignment = await getOperatorAssignment(db, identity.uid);
+    if (!assignment) {
+      res.status(403).send('Operator course access required\n');
+      return null;
+    }
+
+    return { identity, assignment };
+  }
+
+  async function getOperatorBootstrap(req, res) {
+    const operator = await authorizeOperator(req, res);
+    if (!operator) return res;
+    if (!vapidPublicKey || !vapidKeyVersion) {
+      return res.status(503).send('Push notifications are not configured\n');
+    }
+
+    return res.status(200).json({
+      courses: operator.assignment.courses,
+      push: {
+        vapid_public_key: vapidPublicKey,
+        vapid_key_version: vapidKeyVersion,
+      },
+    });
+  }
+
+  async function postOperatorPushSubscription(req, res) {
+    const operator = await authorizeOperator(req, res);
+    if (!operator) return res;
+    if (!vapidKeyVersion) {
+      return res.status(503).send('Push notifications are not configured\n');
+    }
+
+    try {
+      const result = await registerPushSubscription(db, operator.identity.uid, {
+        courseId: req.body?.course_id,
+        subscription: req.body?.subscription,
+        userAgent: req.get('user-agent'),
+        vapidKeyVersion,
+        now: now(),
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      if (/not authorized/.test(error.message)) {
+        return res.status(403).send(`${error.message}\n`);
+      }
+      if (/Invalid push subscription/.test(error.message)) {
+        return res.status(400).send(`${error.message}\n`);
+      }
+      throw error;
+    }
   }
 
   function requireBodyFields(body, allowedFields) {
@@ -703,7 +766,7 @@ function createFairwayHandlers(db, {
       return res.status(404).send('Not Found\n');
     }
 
-    const operator = await authenticateOperator(req, res);
+    const operator = await authorizeOperator(req, res);
 
     if (!operator) {
       return res;
@@ -720,6 +783,9 @@ function createFairwayHandlers(db, {
         }
 
         const requestData = requestSnap.data();
+        if (!operator.assignment.courses.some((course) => course.course_id === requestData.course_id)) {
+          return { forbidden: true };
+        }
         const expiresAt = toDate(requestData.demand_window_expires_at);
 
         if (typeof requestData.device_id !== 'string' || !expiresAt) {
@@ -735,7 +801,7 @@ function createFairwayHandlers(db, {
           transaction.update(requestRef, {
             status: actionConfig.status,
             [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-            operator_id: operator.uid,
+            operator_id: operator.identity.uid,
           });
         }
 
@@ -748,7 +814,7 @@ function createFairwayHandlers(db, {
             status: 'pending',
             created_at: FieldValue.serverTimestamp(),
             expires_at: requestData.demand_window_expires_at,
-            created_by: operator.uid,
+            created_by: operator.identity.uid,
             acknowledged_at: null,
           });
         }
@@ -758,6 +824,9 @@ function createFairwayHandlers(db, {
 
       if (result.notFound) {
         return res.status(404).send('Request not found\n');
+      }
+      if (result.forbidden) {
+        return res.status(403).send('Operator is not authorized for this Course\n');
       }
       if (result.invalid) {
         return res.status(422).send('Request is missing command correlation data\n');
@@ -769,10 +838,14 @@ function createFairwayHandlers(db, {
         return res.status(404).send('Request not found\n');
       }
 
+      if (!operator.assignment.courses.some((course) => course.course_id === requestSnap.data().course_id)) {
+        return res.status(403).send('Operator is not authorized for this Course\n');
+      }
+
       await requestRef.update({
         status: actionConfig.status,
         [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-        operator_id: operator.uid,
+        operator_id: operator.identity.uid,
       });
     }
 
@@ -917,6 +990,13 @@ function createFairwayHandlers(db, {
 
       if (path.startsWith('/api/v1/admin/')) {
         return res.status(404).send('Not Found\n');
+      }
+
+      if (req.method === 'GET' && path === '/api/v1/operator/bootstrap') {
+        return await getOperatorBootstrap(req, res);
+      }
+      if (req.method === 'POST' && path === '/api/v1/operator/push-subscriptions') {
+        return await postOperatorPushSubscription(req, res);
       }
 
       if (req.method !== 'POST') {

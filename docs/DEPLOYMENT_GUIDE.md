@@ -19,6 +19,8 @@ The documented deployment architecture consists of:
 - A Firebase-hosted operator web application.
 - Firestore for request state and operator workflow state transitions.
 - Operator actions in the web application that call Cloud Run status endpoints.
+- A Firestore document-created Eventarc trigger that invokes a dedicated Web
+  Push sender for authorized course subscriptions.
 
 Context references:
 
@@ -40,8 +42,8 @@ Context references:
 | Cloud Run Region | Current Operational Evidence | us-central1 |
 | Cloud Run Service | Current Operational Evidence | fairway-button-receiver |
 | Cloud Run URL | Repository + Current Operational Evidence | https://fairway-button-receiver-936892386735.us-central1.run.app |
-| Firebase Hosting URL | Historical Working State | https://savvy-kit-496703-r5.web.app |
-| Firestore Database | Current Operational Evidence | Cloud Firestore (Native mode); database ID is not recorded in current repository-controlled artifacts. |
+| Firebase Hosting URL | Current Operational Evidence | https://savvy-kit-496703-r5.web.app |
+| Firestore Database | Current Operational Evidence | `(default)`, Native mode, `nam5` |
 
 WP3 deployment validation on 2026-09-18 established that Cloud Run revision
 `fairway-button-receiver-00009-c5j` was healthy and receiving 100% of service
@@ -453,6 +455,37 @@ Current Backend Deployment Facts:
   - POST /api/v1/requests/{requestId}/complete
   - POST /api/v1/device-commands/poll
   - POST /api/v1/device-commands/{commandId}/ack
+  - GET /api/v1/operator/bootstrap
+  - POST /api/v1/operator/push-subscriptions
+
+### Cart Operator Web Push
+
+The production Cart Operator notification path uses the standards-based Push
+API, Notifications API, a root service worker, and VAPID. It does not use FCM,
+a native application, Apple ID addressing, or an Apple account as a push
+destination.
+
+- `operator_course_assignments/{uid}` is the server-owned operator entitlement.
+  Each enabled record contains canonical `courses` for backend authorization
+  and `course_ids` for Firestore Rules query authorization.
+- `course_push_subscriptions/{courseId}/subscriptions/{subscriptionId}` stores
+  endpoint and encryption material server-side. Browser bootstrap responses are
+  redacted and never return stored subscription secrets.
+- `notification_dispatches/{requestId}/subscriptions/{subscriptionId}` records
+  deterministic delivery state. Request-created trigger retries cannot produce
+  a second dispatch for an already accepted request/subscription pair.
+- The `fairway-request-notifier` generation-2 function runs in `us-central1` and
+  is triggered from Firestore events in `nam5`. The trigger identity is
+  `fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com`; it has
+  Eventarc receiver permission and service-level invoke permission only on the
+  notifier. The sender identity is
+  `fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`; it has
+  Firestore access and Secret Manager access only to the private VAPID key.
+- The VAPID private key is stored in Secret Manager. The public key and key
+  version are supplied through operator bootstrap and may be present in public
+  client configuration.
+- Firestore document events are delivered as `application/protobuf`; the sender
+  obtains the request document path from the CloudEvent `subject` envelope.
 
 WP5 admin routes (implemented, test-verified, and deployed to the isolated sandbox and dedicated production Admin service):
 
@@ -468,12 +501,6 @@ WP5 admin routes (implemented, test-verified, and deployed to the isolated sandb
 The Admin UI calls these backend routes with the current Firebase ID token. It does not read or write fleet collections directly, and the repository Firestore rules continue to deny browser access to those collections. Admin responses redact credential verifier digests; new-device provisioning returns the plaintext credential only in the one successful creation response.
 
 The command routes use the existing per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact active, pending, unexpired command, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay of an already-acknowledged command. The demand-window query requires the repository-controlled composite index in `fairway_webapp/cart_operator_dashboard/firestore.indexes.json`. The backend, dashboard, and index were deployed and validated during Stage B2; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local demand window early.
-
-The current working-tree backend source includes a fail-closed Device-state
-authorization correction made after revision
-`fairway-button-receiver-00009-c5j` was validated. Redeployment and bounded
-backend regression validation are required before the WP3 source can be
-committed; this guide does not claim that correction is already live.
 
 Operational lesson (established during WP3 per-device credential deployment): read-only Cloud Run inspection commands (for example `gcloud run services describe`) return full container environment variable values, including secrets, unless the output is field-restricted. Always use a field-restricted `--format=value(...)` (or equivalent) query that excludes environment variable values when inspecting a service that may hold secret-bearing configuration; only request variable names, never values, unless a value is explicitly required and authorized.
 
@@ -498,22 +525,27 @@ validate the operator webapp or its confirm/complete flow.
 Repository-Derived and Historical Web Deployment Facts:
 
 - Web app source path: fairway_webapp/cart_operator_dashboard/
+- Production build command: npm run build:production
 - Sandbox build command: npm run build:sandbox (package.json)
 - Sandbox local dev command: npm run dev:sandbox (package.json)
 - Firebase Hosting config present in firebase.json with SPA rewrite to /index.html
 - Validated WP5-S1 sandbox deployment command:
   - npx firebase-tools deploy --only hosting --project fairway-refresh-sandbox-260930 --non-interactive
-- Historical deployment command (pending independent revalidation):
+- Validated production deployment command:
   - npx firebase-tools deploy --only hosting --project savvy-kit-496703-r5
 
 Deployment process status:
 
-Repository-controlled artifacts define web build behavior, and historical records capture a firebase-tools deployment command.
-The currently approved web deployment release command is not yet published as a repository-controlled operational standard.
+Repository-controlled artifacts define web build behavior and the production
+Hosting deployment command above was validated on 2026-10-01.
 
 Deployment Verification:
 
-- Historical Working State indicates hosted dashboard URL is reachable and live request flow is validated (pending independent revalidation).
+- Production Hosting, manifest, service worker, and 192/512 icons were verified
+  byte-for-byte against the validated production build on 2026-10-01.
+- The iPhone Home Screen application was physically validated for authenticated
+  queue access, push subscription registration, notification display, and
+  notification-click deep linking.
 
 ---
 
@@ -523,7 +555,8 @@ Repository-Derived Firestore Configuration:
 
 - Rules file path: fairway_webapp/cart_operator_dashboard/firestore.rules
 - Current rule behavior in repository:
-  - requests collection is readable when request.auth is not null
+  - requests are readable only when the authenticated UID has an enabled
+    `operator_course_assignments` record containing the request's `course_id`
   - Browser writes are denied by rules
   - Catch-all deny for other document paths
 
@@ -534,6 +567,9 @@ Repository-Derived collection usage in repository code:
 - `devices/{FRB-XXXX}` (Device registry, metadata, state-derived communication permission, and credential verifier)
 - `counters/CUST`, `counters/COURSE`, and `counters/FRB` (central ID allocation)
 - `requests/{requestId}` (request creation, lookup, and status updates)
+- `operator_course_assignments/{uid}` (server-owned operator/course entitlement)
+- `course_push_subscriptions/{courseId}/subscriptions/{subscriptionId}` (private push subscription material)
+- `notification_dispatches/{requestId}/subscriptions/{subscriptionId}` (effective-once dispatch state)
 
 Collection schema is owned by the backend implementation.
 
@@ -573,6 +609,15 @@ A full-system or pilot operational validation is complete only after all six
 steps succeed. A bounded backend deployment can be validated against its own
 approved backend acceptance criteria without claiming unperformed operator UI
 validation.
+
+The first production Cart Operator Web Push workflow was physically accepted on
+2026-10-01 with FRB-0002 at Hole 2. One authoritative request
+`clBCgv0UGm9jsBL1DIy6` was persisted at `07:32:36.169Z`; its one active iPhone
+subscription dispatch was accepted on attempt 1 at `07:32:36.692Z`, 0.523
+seconds later. The CPO observed exactly one visible notification, and tapping it
+opened/focused the authenticated application at the actionable Hole 2 request.
+A second physical press during the same demand window produced no additional
+request or visible notification. The original request remained actionable.
 
 ---
 

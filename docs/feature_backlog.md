@@ -29,10 +29,17 @@ FRB-0002. Current implementation and validation truth is owned by
 COMPLETE was subsequently implemented and validated end-to-end; the remaining
 repeat-press transport/persistence work is tracked separately below.
 
+Cart Operator UX + notifications was completed and physically accepted in
+production on 2026-10-01. The standards-based iPhone Home Screen Web Push path
+uses course-scoped authorization, durable subscriptions, effective-once dispatch,
+and request deep linking. FRB-0002 produced one visible Hole 2 notification; an
+in-window duplicate produced no additional request or notification. Deployment
+truth is owned by `docs/DEPLOYMENT_GUIDE.md`, and observable behavior is owned by
+`docs/UX_SPECIFICATION.md`.
+
 | Priority | Feature | Notes |
 |----------|---------|-------|
 | 1 | Remote / on-demand Device Health | Remote wake/downlink health-check request; deferred per CPO direction (visible-but-disabled admin placeholder is in scope for WP5). |
-| 2 | Cart operator UX + notifications | Cart-operator-facing notifications; separate from the admin-only email/SMS missed-report notification owned by WP6 above. |
 | 3 | Request/network robustness & remaining security hardening | Incorporates former items: Payload/API alignment; Backend payload contract decision (aliases/defaults); finer-grained operator/admin authorization beyond the implemented Firebase identity check; Request timeout and retry handling. |
 | 5 | Fleet Security Procedure & Credential Lifecycle | Credential compromise response, replacement/re-provisioning procedure, device credential revocation, administrator secret-handling rules, storage-policy hardening, and future consideration of routine rotation and stronger device-side protected storage (e.g. TF-M PS/ITS) if justified. |
 | 6 | Watchdog + fault recovery / reset diagnostics | Incorporates former items: Watchdog and fault recovery; Reset reason logging. |

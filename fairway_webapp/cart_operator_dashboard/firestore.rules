@@ -3,7 +3,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /requests/{requestId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null
+        && get(/databases/$(database)/documents/operator_course_assignments/$(request.auth.uid)).data.enabled == true
+        && resource.data.course_id in get(/databases/$(database)/documents/operator_course_assignments/$(request.auth.uid)).data.course_ids;
       allow write: if false;
     }
 

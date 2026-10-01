@@ -3,12 +3,13 @@
 Purpose
 -------
 - Describe the implemented and CPO-validated Monarch Bay Pilot externally
-   observable golfer-facing behavior, and preserve the superseded interim
-   behavior as historical provenance.
+   observable golfer and Cart Operator behavior, and preserve the superseded
+   interim behavior as historical provenance.
 
 Scope
 -----
-- This document defines only observable product behavior (what a golfer sees and does).
+- This document defines only observable product behavior (what a golfer or Cart
+   Operator sees and does).
 - It intentionally excludes implementation details such as GPIOs, timing constants, transistor driver circuits, interrupt names, PWM values, firmware function names, or backend transport/persistence mechanisms.
 - The behavior below is implemented and physically validated on FRB-0002, including Stage B2 early window termination after the marker learns of and acknowledges an exactly correlated operator COMPLETE. Repeat-press transport/persistence remains deferred; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md`.
 
@@ -77,6 +78,23 @@ Request A may still be CONFIRMED but not COMPLETE when Request B is created; tha
 - Internal transport retries and repeat presses within the originating five-minute demand window must not inflate service-request volume.
 - `repeat_press_count` belongs to the originating accepted request. The cart operator does not need to see each repeat press as a new request or notification.
 - How repeat presses are communicated from the marker and persisted against the originating request is an engineering/implementation decision, not specified by this document; see `docs/feature_backlog.md`.
+
+## Cart Operator Push Notifications (Implemented and Physically Validated)
+
+- The Cart Operator installs Fairway from Safari as an iPhone Home Screen web
+   application, signs in with an approved Fairway account, and explicitly enables
+   notifications.
+- One newly accepted golfer request produces one visible notification for each
+   active, authorized course subscription. The notification identifies the
+   request location.
+- Tapping the notification opens or focuses the authenticated Fairway
+   application at the originating request and course. The request remains
+   actionable through the normal operator workflow.
+- A press suppressed by the marker's active five-minute demand window does not
+   produce another request or notification.
+- Physical production acceptance on 2026-10-01 used FRB-0002 at Hole 2. The CPO
+   observed exactly one notification for one authoritative request, successful
+   deep-link focus, and no notification for the in-window duplicate press.
 
 ## Superseded Single-Indicator Behavior (Historical)
 

@@ -7,8 +7,9 @@
     "sandbox:seed": "node scripts/seed_sandbox.js"
   },
   "dependencies": {
-    "@google-cloud/functions-framework": "^3.0.0",
     "@google-cloud/firestore": "^7.0.0",
-    "firebase-admin": "^13.0.0"
+    "@google-cloud/functions-framework": "^3.0.0",
+    "firebase-admin": "^13.0.0",
+    "web-push": "3.6.7"
   }
 }

@@ -77,6 +77,17 @@ function operatorVerifier(validToken = 'valid-token', uid = 'operator-123') {
   };
 }
 
+async function setUpOperatorAssignment(db, uid = 'operator-123', courseId = 'COURSE-0001') {
+  await db.collection('operator_course_assignments').doc(uid).set({
+    enabled: true,
+    courses: [{
+      customer_id: 'CUST-0001',
+      course_id: courseId,
+      course_name: 'Tony Lema Course',
+    }],
+  });
+}
+
 const VALID_OBSERVATION = Object.freeze({
   attempts: 1,
   registration_state: 1,
@@ -591,7 +602,11 @@ test('operator status endpoints reject missing and invalid Firebase ID tokens', 
 
 test('authenticated CONFIRM records the verified Firebase uid', async () => {
   const db = new FakeFirestore();
-  await db.collection('requests').doc('request-a').set({ status: 'new' });
+  await setUpOperatorAssignment(db, 'firebase-uid');
+  await db.collection('requests').doc('request-a').set({
+    course_id: 'COURSE-0001',
+    status: 'new',
+  });
   const { updateRequestStatus } = createFairwayHandlers(db, {
     verifyOperatorToken: operatorVerifier('valid-token', 'firebase-uid'),
   });
@@ -609,8 +624,10 @@ test('authenticated CONFIRM records the verified Firebase uid', async () => {
 
 test('authenticated COMPLETE atomically creates one deterministic correlated command', async () => {
   const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
   const expiresAt = new Date(Date.now() + 60000);
   await db.collection('requests').doc('request-a').set({
+    course_id: 'COURSE-0001',
     device_id: 'FRB-0001',
     status: 'new',
     demand_window_expires_at: expiresAt,
@@ -638,6 +655,70 @@ test('authenticated COMPLETE atomically creates one deterministic correlated com
   assert.strictEqual(commands.docs[0].data().type, 'complete');
   assert.strictEqual(commands.docs[0].data().status, 'pending');
   assert.strictEqual(commands.docs[0].data().expires_at, expiresAt);
+});
+
+test('operator bootstrap and push subscription are restricted to assigned Courses', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
+  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+    vapidPublicKey: 'public-vapid-key',
+    vapidKeyVersion: 'v1',
+  });
+
+  const bootstrap = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/bootstrap',
+    headers: { authorization: 'Bearer valid-token' },
+  }), bootstrap);
+  assert.strictEqual(bootstrap.statusCode, 200);
+  assert.deepStrictEqual(bootstrap.body.courses.map((course) => course.course_id), ['COURSE-0001']);
+  assert.strictEqual(bootstrap.body.push.vapid_public_key, 'public-vapid-key');
+
+  const subscription = {
+    endpoint: 'https://push.example.test/device-1',
+    keys: { auth: 'auth-key', p256dh: 'p256dh-key' },
+  };
+  const allowed = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'POST',
+    path: '/api/v1/operator/push-subscriptions',
+    body: { course_id: 'COURSE-0001', subscription },
+    headers: { authorization: 'Bearer valid-token', 'user-agent': 'Pilot iPhone' },
+  }), allowed);
+  assert.strictEqual(allowed.statusCode, 200);
+  assert.strictEqual(allowed.body.course_id, 'COURSE-0001');
+  assert.strictEqual(allowed.body.status, 'active');
+
+  const denied = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'POST',
+    path: '/api/v1/operator/push-subscriptions',
+    body: { course_id: 'COURSE-9999', subscription },
+    headers: { authorization: 'Bearer valid-token' },
+  }), denied);
+  assert.strictEqual(denied.statusCode, 403);
+});
+
+test('operator cannot mutate a request outside assigned Courses', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
+  await db.collection('requests').doc('request-other').set({
+    course_id: 'COURSE-0002',
+    status: 'new',
+  });
+  const { updateRequestStatus } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const response = createResponse();
+  await updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer valid-token' },
+  }), response, 'request-other', 'confirm');
+
+  assert.strictEqual(response.statusCode, 403);
+  const request = await db.collection('requests').doc('request-other').get();
+  assert.strictEqual(request.data().status, 'new');
 });
 
 test('device command poll is credential-bound and returns only the exact active unexpired request command', async () => {

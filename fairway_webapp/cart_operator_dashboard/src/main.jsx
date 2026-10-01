@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, limit, where } from 'firebase/firestore';
 import {
   getRedirectResult,
   getIdTokenResult,
@@ -13,6 +13,8 @@ import { CheckCircle, Grid2X2, History, Settings, Map, Circle, ShieldCheck } fro
 import { auth, db, googleProvider } from './lib/firebase';
 import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
 import AdminApp from './admin/AdminApp';
+import NotificationSetup from './NotificationSetup';
+import { operatorRequest } from './lib/operator';
 import './styles.css';
 
 export const API_BASE_URL = apiBaseUrl;
@@ -233,7 +235,7 @@ function CompletionScreen({ completedRequest, activeRequests, onReturn }) {
   );
 }
 
-function RequestCard({ request, onCompleted }) {
+function RequestCard({ request, onCompleted, focused }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState('');
 
@@ -259,7 +261,7 @@ function RequestCard({ request, onCompleted }) {
   }
 
   return (
-    <section className={`request-card ${isNew ? 'request-card-new' : ''}`}>
+    <section id={`request-${request.id}`} className={`request-card ${isNew ? 'request-card-new' : ''} ${focused ? 'request-card-focused' : ''}`}>
       <div className="request-header">
         <div>
           <h2>Hole {request.hole ?? 'Unknown'}</h2>
@@ -365,9 +367,15 @@ function AppFrame({ children, activeTab, onTabChange, user, isAdmin, onOpenAdmin
   );
 }
 
-function DashboardScreen({ activeRequests, loadState, onCompleted }) {
+function DashboardScreen({ activeRequests, loadState, loadError, onCompleted, focusedRequestId, notificationSetup }) {
+  useEffect(() => {
+    if (!focusedRequestId) return;
+    document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
+  }, [activeRequests, focusedRequestId]);
+
   return (
     <section className="content">
+      {notificationSetup}
       <h3>NEW REQUESTS</h3>
 
       {loadState === 'loading' && (
@@ -376,7 +384,7 @@ function DashboardScreen({ activeRequests, loadState, onCompleted }) {
 
       {loadState === 'error' && (
         <p className="empty-state error-state">
-          Unable to load requests. Check Firestore permissions.
+          Unable to load requests ({loadError || 'unknown'}).
         </p>
       )}
 
@@ -389,6 +397,7 @@ function DashboardScreen({ activeRequests, loadState, onCompleted }) {
           key={request.id}
           request={request}
           onCompleted={onCompleted}
+          focused={request.id === focusedRequestId}
         />
       ))}
     </section>
@@ -492,8 +501,15 @@ function App() {
   const [authState, setAuthState] = useState('checking');
   const [requests, setRequests] = useState([]);
   const [loadState, setLoadState] = useState('loading');
+  const [loadError, setLoadError] = useState('');
   const [completedRequest, setCompletedRequest] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [operatorConfig, setOperatorConfig] = useState(null);
+  const [operatorError, setOperatorError] = useState('');
+  const [focusedRequestId] = useState(() => {
+    const match = window.location.pathname.match(/^\/requests\/([^/]+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -508,6 +524,7 @@ function App() {
         setIsAdmin(false);
         setAdminMode(false);
         setAuthState('signed_out');
+        setOperatorConfig(null);
         return;
       }
 
@@ -549,14 +566,32 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) {
+    if (!user) return undefined;
+    let active = true;
+    setOperatorError('');
+    operatorRequest(user, API_BASE_URL, '/api/v1/operator/bootstrap')
+      .then((config) => { if (active) setOperatorConfig(config); })
+      .catch((error) => {
+        if (active) {
+          setOperatorConfig(null);
+          setOperatorError(error.message);
+        }
+      });
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !operatorConfig) {
       setRequests([]);
       setLoadState('loading');
       return undefined;
     }
 
+    const courseIds = operatorConfig.courses.map((course) => course.course_id);
+
     const requestsQuery = query(
       collection(db, 'requests'),
+      where('course_id', 'in', courseIds),
       orderBy('received_at', 'desc'),
       limit(100)
     );
@@ -576,6 +611,7 @@ function App() {
             completed_at: data.completed_at,
             device_id: data.device_id,
             course_id: data.course_id,
+            course_name: data.course_name,
             age: formatRequestAge(data.received_at),
           };
         });
@@ -585,12 +621,13 @@ function App() {
       },
       (error) => {
         console.error('Failed to load requests:', error);
+        setLoadError(error.code || 'unknown');
         setLoadState('error');
       }
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [operatorConfig, user]);
 
   async function handleGoogleSignIn() {
     setAuthState('checking');
@@ -628,6 +665,10 @@ function App() {
     );
   }
 
+  if (operatorError) {
+    return <main className="page"><div className="phone-shell"><section className="content"><p className="empty-state error-state">{operatorError}</p></section></div></main>;
+  }
+
   if (completedRequest) {
     return (
       <CompletionScreen
@@ -649,7 +690,10 @@ function App() {
       <DashboardScreen
         activeRequests={activeRequests}
         loadState={loadState}
+        loadError={loadError}
         onCompleted={setCompletedRequest}
+        focusedRequestId={focusedRequestId}
+        notificationSetup={operatorConfig && <NotificationSetup user={user} apiBaseUrl={API_BASE_URL} operatorConfig={operatorConfig} />}
       />
     );
   } else if (activeTab === 'history') {
