@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "validate:sandbox": "node --env-file-if-exists=.env.sandbox scripts/validate_frontend_config.js",
+    "validate:production": "node --env-file-if-exists=.env.production scripts/validate_frontend_config.js",
+    "dev:sandbox": "npm run validate:sandbox && vite --mode sandbox --host 0.0.0.0",
+    "build:sandbox": "npm run validate:sandbox && vite build --mode sandbox",
+    "build:production": "npm run validate:production && vite build --mode production",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

@@ -8,7 +8,6 @@ const { DEVICE_STATES, MARKER_LOCATION_TYPES } = require('../lib/fleet/schema');
 const {
   provisionNewDevice,
   issueCredentialForExistingDevice,
-  CURRENT_FIRMWARE_GENERATION,
   ProvisioningError,
 } = require('../lib/fleet/provisioning');
 
@@ -59,6 +58,7 @@ test('provisionNewDevice allocates a real device_id, creates the device, and iss
     courseId,
     location: { type: MARKER_LOCATION_TYPES.HOLE, hole: 2 },
     hardwareRevision: 'Prototype 1.2',
+    firmwareGeneration: 'Synthetic Sandbox Firmware',
     simIccid: '89464278206108309162',
   });
 
@@ -79,7 +79,7 @@ test('provisionNewDevice allocates a real device_id, creates the device, and iss
   assert.strictEqual(device.hardware_revision, 'Prototype 1.2');
   assert.strictEqual(device.sim_iccid, '89464278206108309162');
   assert.strictEqual(device.state, DEVICE_STATES.IN_INVENTORY, 'must not transition state; deployment is a later step');
-  assert.strictEqual(device.firmware_generation, CURRENT_FIRMWARE_GENERATION, 'must default to the canonical Firmware Generation Registry value');
+  assert.strictEqual(device.firmware_generation, 'Synthetic Sandbox Firmware');
 
   // The stored credential must be a non-reversible verifier only.
   assert.strictEqual(device.credential.algorithm, 'sha256');
@@ -92,17 +92,36 @@ test('provisionNewDevice does not hardcode the allocated id across repeated call
   const db = new FakeFirestore();
   const { customerId, courseId } = await seedCustomerAndCourse(db);
 
-  const first = await provisionNewDevice(db, { customerId, courseId, location: null });
-  const second = await provisionNewDevice(db, { customerId, courseId, location: null });
+  const first = await provisionNewDevice(db, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic A' });
+  const second = await provisionNewDevice(db, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic B' });
 
   assert.notStrictEqual(first.deviceId, second.deviceId);
+});
+
+test('provisionNewDevice requires explicit firmware generation metadata', async () => {
+  const db = new FakeFirestore();
+  const { customerId, courseId } = await seedCustomerAndCourse(db);
+
+  await assert.rejects(
+    () => provisionNewDevice(db, { customerId, courseId, location: null }),
+    (error) => {
+      assert.ok(error instanceof ProvisioningError);
+      assert.strictEqual(error.stage, 'create_device');
+      assert.strictEqual(error.deviceId, null);
+      assert.match(error.message, /firmwareGeneration is required/);
+      return true;
+    }
+  );
+
+  const devicesSnap = await db.collection('devices').get();
+  assert.strictEqual(devicesSnap.empty, true);
 });
 
 test('provisionNewDevice fails safely (ProvisioningError, deviceId null) when device creation fails', async () => {
   const db = new FakeFirestore();
 
   await assert.rejects(
-    () => provisionNewDevice(db, { customerId: 'CUST-9999', courseId: null, location: null }),
+    () => provisionNewDevice(db, { customerId: 'CUST-9999', courseId: null, location: null, firmwareGeneration: 'Synthetic' }),
     (error) => {
       assert.ok(error instanceof ProvisioningError);
       assert.strictEqual(error.stage, 'create_device');
@@ -152,7 +171,7 @@ test('provisionNewDevice surfaces the created device_id (not a silent failure) i
   };
 
   await assert.rejects(
-    () => provisionNewDevice(brokenDb, { customerId, courseId, location: null }),
+    () => provisionNewDevice(brokenDb, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic' }),
     (error) => {
       assert.ok(error instanceof ProvisioningError);
       assert.strictEqual(error.stage, 'issue_credential');
@@ -203,7 +222,7 @@ test('issueCredentialForExistingDevice recovers a partially-provisioned device w
   let deviceId;
   await assert.rejects(async () => {
     try {
-      await provisionNewDevice(brokenDb, { customerId, courseId, location: null });
+      await provisionNewDevice(brokenDb, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic' });
     } catch (error) {
       deviceId = error.deviceId;
       throw error;

@@ -1,6 +1,21 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
-const { authenticateDeviceCredential } = require('./lib/fleet/devices');
+const { resolveRuntimeEnvironment } = require('./lib/environment');
+const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
+const { createCourse, updateCourse } = require('./lib/fleet/courses');
+const {
+  authenticateDeviceCredential,
+  updateDeviceAssignment,
+  updateDeviceState,
+  updateDeviceMetadata,
+  recordDeviceService,
+  recordDeviceCommissioning,
+} = require('./lib/fleet/devices');
+const {
+  provisionNewDevice,
+  issueCredentialForExistingDevice,
+  ProvisioningError,
+} = require('./lib/fleet/provisioning');
 const {
   isDeviceCommunicationAllowed,
   isValidEventType,
@@ -14,6 +29,30 @@ const { isValidHealthObservation, recordHealthObservation, resolveDeviceHierarch
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
 const COMPLETE_COMMAND_TYPE = 'complete';
+const DISPLAYED_HEALTH_FIELDS = Object.freeze([
+  'received_at', 'battery_soc_pct', 'battery_voltage_u_v', 'rsrp_dbm', 'rsrq_db',
+  'snr_db', 'modem_temperature_m_c', 'https_succeeded', 'attempts',
+]);
+const KNOWN_STALE_DEVICE_FIELDS = Object.freeze({
+  'FRB-0002': new Set(['hardware_revision', 'firmware_generation']),
+});
+
+function availability(value, stale = false, unavailableAtAcquisition = false) {
+  if (stale) return 'known_stale';
+  if (value === null || value === undefined) {
+    return unavailableAtAcquisition ? 'unavailable_at_acquisition' : 'not_recorded';
+  }
+  return 'available';
+}
+
+function healthReadModel(health) {
+  if (!health) return null;
+  const values = Object.fromEntries(DISPLAYED_HEALTH_FIELDS.map((field) => [field, health[field] ?? null]));
+  values.field_status = Object.fromEntries(DISPLAYED_HEALTH_FIELDS.map((field) => [
+    field, availability(values[field], false, true),
+  ]));
+  return values;
+}
 
 async function verifyFirebaseIdToken(token) {
   const { getApps, initializeApp } = require('firebase-admin/app');
@@ -44,7 +83,7 @@ function toDate(value) {
 
 function setCorsHeaders(res) {
   res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
@@ -63,6 +102,7 @@ function sendCorsOk(res) {
 function createFairwayHandlers(db, {
   verifyOperatorToken = verifyFirebaseIdToken,
   now = () => new Date(),
+  allowedAdminOrigin = null,
 } = {}) {
   /*
    * Persists a golfer button_press request. Request persistence, duplicate
@@ -266,6 +306,353 @@ function createFairwayHandlers(db, {
       console.warn('Rejected operator request with invalid Firebase ID token');
       res.status(401).send('Unauthorized\n');
       return null;
+    }
+  }
+
+  async function authenticateAdmin(req, res) {
+    const identity = await authenticateOperator(req, res);
+
+    if (!identity) {
+      return null;
+    }
+
+    if (identity.admin !== true) {
+      res.status(403).send('Admin access required\n');
+      return null;
+    }
+
+    return identity;
+  }
+
+  function requireBodyFields(body, allowedFields) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new Error('Invalid JSON body');
+    }
+
+    const fields = Object.keys(body);
+    if (fields.length === 0 || fields.some((field) => !allowedFields.includes(field))) {
+      throw new Error('Invalid request fields');
+    }
+  }
+
+  function sendAdminError(res, error) {
+    if (error instanceof ProvisioningError) {
+      if (error.cause?.message === 'Device already has a credential') {
+        return res.status(409).json({ error: error.cause.message });
+      }
+      return res.status(error.deviceId ? 409 : 400).json({
+        error: 'Device provisioning failed',
+        stage: error.stage,
+        device_id: error.deviceId,
+        recovery_required: Boolean(error.deviceId),
+      });
+    }
+
+    if (/^Unknown (customer_id|course_id|device_id)/.test(error.message)) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (/cross-customer|does not belong to customer/.test(error.message)) {
+      return res.status(409).json({ error: error.message });
+    }
+    if (/Invalid|required|must be assigned|Valid Course|Health report schedule/.test(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    throw error;
+  }
+
+  function deviceReadModel(deviceSnap, customersById, coursesByPath) {
+    const device = deviceSnap.data();
+    const staleFields = KNOWN_STALE_DEVICE_FIELDS[deviceSnap.id] || new Set();
+    const customer = device.customer_id ? customersById.get(device.customer_id) : null;
+    const course = device.customer_id && device.course_id
+      ? coursesByPath.get(`${device.customer_id}/${device.course_id}`)
+      : null;
+    const values = {
+      device_id: deviceSnap.id,
+      state: device.state ?? null,
+      customer_id: device.customer_id ?? null,
+      customer_name: customer?.customer_name ?? null,
+      course_id: device.course_id ?? null,
+      course_name: course?.course_name ?? null,
+      location: device.location ?? null,
+      comments: device.comments ?? null,
+      sim_iccid: device.sim_iccid ?? null,
+      hardware_revision: device.hardware_revision ?? null,
+      firmware_generation: device.firmware_generation ?? null,
+      commissioning: device.commissioning ?? null,
+      service: device.service ?? null,
+      credential_status: device.credential ? {
+        algorithm: device.credential.algorithm,
+        updated_at: device.credential.updated_at,
+      } : null,
+      latest_health: healthReadModel(device.latest_health),
+      created_at: device.created_at ?? null,
+      updated_at: device.updated_at ?? null,
+    };
+    values.field_status = Object.fromEntries(Object.keys(values)
+      .filter((field) => field !== 'device_id')
+      .map((field) => [field, availability(values[field], staleFields.has(field))]));
+    return values;
+  }
+
+  async function listAdminFleet(req, res) {
+    const [customersSnap, devicesSnap] = await Promise.all([
+      db.collection('customers').limit(500).get(),
+      db.collection('devices').limit(500).get(),
+    ]);
+
+    const customersById = new Map();
+    const coursesByPath = new Map();
+    const customers = await Promise.all(customersSnap.docs.map(async (customerSnap) => {
+      const source = customerSnap.data();
+      const coursesSnap = await customerSnap.ref.collection('courses').limit(500).get();
+      const courses = coursesSnap.docs.map((courseSnap) => {
+        const courseSource = courseSnap.data();
+        const course = {
+          course_id: courseSnap.id,
+          course_name: courseSource.course_name ?? null,
+          timezone: courseSource.timezone ?? null,
+          health_report_schedule: courseSource.health_report_schedule ?? null,
+          comments: courseSource.comments ?? null,
+        };
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'health_report_schedule', 'comments']
+          .map((field) => [field, availability(course[field])]));
+        coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
+        return course;
+      });
+      const customer = {
+        customer_id: customerSnap.id,
+        customer_name: source.customer_name ?? null,
+        comments: source.comments ?? null,
+        field_status: {
+          customer_name: availability(source.customer_name),
+          comments: availability(source.comments),
+        },
+        courses,
+      };
+      customersById.set(customerSnap.id, customer);
+      return customer;
+    }));
+
+    const devices = devicesSnap.docs.map((deviceSnap) =>
+      deviceReadModel(deviceSnap, customersById, coursesByPath));
+
+    return res.status(200).json({
+      review_mode: 'production_admin',
+      field_status_values: ['available', 'not_recorded', 'unavailable_at_acquisition', 'known_stale'],
+      customers,
+      devices,
+    });
+  }
+
+  async function getAdminHealthHistory(res, deviceId) {
+    const deviceSnap = await db.collection('devices').doc(deviceId).get();
+    if (!deviceSnap.exists) {
+      return res.status(404).send('Unknown device\n');
+    }
+
+    const historySnap = await deviceSnap.ref.collection('health_history')
+      .orderBy('received_at', 'desc')
+      .limit(100)
+      .get();
+    const history = historySnap.docs
+      .map((historySnap) => ({ history_id: historySnap.id, ...healthReadModel(historySnap.data()) }));
+
+    return res.status(200).json({ device_id: deviceId, history });
+  }
+
+  async function createAdminCustomer(req, res) {
+    requireBodyFields(req.body, ['customer_name', 'comments']);
+    const customer = await createCustomer(db, {
+      customerName: req.body.customer_name,
+      comments: req.body.comments,
+    });
+    return res.status(201).json(customer);
+  }
+
+  async function patchAdminCustomer(req, res, customerId) {
+    requireBodyFields(req.body, ['customer_name', 'comments']);
+    const customer = await updateCustomer(db, customerId, {
+      customerName: req.body.customer_name,
+      comments: req.body.comments,
+    });
+    return res.status(200).json(customer);
+  }
+
+  async function createAdminCourse(req, res, customerId) {
+    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'comments']);
+    const course = await createCourse(db, {
+      customerId,
+      courseName: req.body.course_name,
+      timezone: req.body.timezone,
+      healthReportSchedule: req.body.health_report_schedule,
+      comments: req.body.comments,
+    });
+    return res.status(201).json(course);
+  }
+
+  async function patchAdminCourse(req, res, customerId, courseId) {
+    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'comments']);
+    const course = await updateCourse(db, customerId, courseId, {
+      courseName: req.body.course_name,
+      timezone: req.body.timezone,
+      healthReportSchedule: req.body.health_report_schedule,
+      comments: req.body.comments,
+    });
+    return res.status(200).json(course);
+  }
+
+  async function provisionAdminDevice(req, res) {
+    requireBodyFields(req.body, [
+      'customer_id', 'course_id', 'location', 'comments', 'sim_iccid',
+      'hardware_revision', 'firmware_generation',
+    ]);
+    const result = await provisionNewDevice(db, {
+      customerId: req.body.customer_id,
+      courseId: req.body.course_id,
+      location: req.body.location,
+      comments: req.body.comments,
+      simIccid: req.body.sim_iccid,
+      hardwareRevision: req.body.hardware_revision,
+      firmwareGeneration: req.body.firmware_generation,
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.status(201).json({
+      device_id: result.deviceId,
+      one_time_credential: result.plaintextCredential,
+    });
+  }
+
+  async function recoverAdminDeviceCredential(res, deviceId) {
+    const result = await issueCredentialForExistingDevice(db, deviceId);
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({
+      device_id: result.deviceId,
+      one_time_credential: result.plaintextCredential,
+    });
+  }
+
+  async function patchAdminDeviceAssignment(req, res, deviceId) {
+    requireBodyFields(req.body, ['customer_id', 'course_id', 'location']);
+    const device = await updateDeviceAssignment(db, deviceId, {
+      customerId: req.body.customer_id,
+      courseId: req.body.course_id,
+      location: req.body.location,
+    });
+    return res.status(200).json(redactDeviceResult(device));
+  }
+
+  async function patchAdminDeviceState(req, res, deviceId) {
+    requireBodyFields(req.body, ['state']);
+    const device = await updateDeviceState(db, deviceId, req.body.state);
+    return res.status(200).json(redactDeviceResult(device));
+  }
+
+  async function patchAdminDeviceMetadata(req, res, deviceId) {
+    requireBodyFields(req.body, ['comments', 'sim_iccid']);
+    const device = await updateDeviceMetadata(db, deviceId, req.body);
+    return res.status(200).json(redactDeviceResult(device));
+  }
+
+  function redactDeviceResult(device) {
+    const { credential, ...redacted } = device;
+    return redacted;
+  }
+
+  async function recordAdminDeviceEvent(res, deviceId, admin, event) {
+    const recordedAt = FieldValue.serverTimestamp();
+    const device = event === 'service'
+      ? await recordDeviceService(db, deviceId, admin.uid, recordedAt)
+      : await recordDeviceCommissioning(db, deviceId, admin.uid, recordedAt);
+    return res.status(200).json(redactDeviceResult(device));
+  }
+
+  function csvValue(value) {
+    const text = value === null || value === undefined ? '' : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  async function exportDeviceSimCsv(res) {
+    const devicesSnap = await db.collection('devices').limit(5000).get();
+    const columns = [
+      'device_id', 'sim_iccid', 'customer_id', 'customer_name',
+      'course_id', 'course_name', 'state',
+    ];
+    const rows = devicesSnap.docs.map((deviceSnap) => {
+      const device = deviceSnap.data();
+      return columns.map((column) => csvValue(column === 'device_id' ? deviceSnap.id : device[column])).join(',');
+    });
+
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', 'attachment; filename="fairway-device-sim.csv"');
+    return res.status(200).send(`${columns.join(',')}\n${rows.join('\n')}\n`);
+  }
+
+  async function handleAdminRequest(req, res, path) {
+    const admin = await authenticateAdmin(req, res);
+    if (!admin) {
+      return res;
+    }
+
+    try {
+      if (req.method === 'GET' && path === '/api/v1/admin/fleet') {
+        return await listAdminFleet(req, res);
+      }
+      if (req.method === 'GET' && path === '/api/v1/admin/export/device-sim') {
+        return await exportDeviceSimCsv(res);
+      }
+
+      const healthHistoryMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/health-history$/);
+      if (req.method === 'GET' && healthHistoryMatch) {
+        return await getAdminHealthHistory(res, healthHistoryMatch[1]);
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/customers') {
+        return await createAdminCustomer(req, res);
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/devices') {
+        return await provisionAdminDevice(req, res);
+      }
+
+      const customerMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)$/);
+      if (req.method === 'PATCH' && customerMatch) {
+        return await patchAdminCustomer(req, res, customerMatch[1]);
+      }
+
+      const coursesMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses$/);
+      if (req.method === 'POST' && coursesMatch) {
+        return await createAdminCourse(req, res, coursesMatch[1]);
+      }
+      const courseMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)$/);
+      if (req.method === 'PATCH' && courseMatch) {
+        return await patchAdminCourse(req, res, courseMatch[1], courseMatch[2]);
+      }
+
+      const deviceActionMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/(assignment|state|metadata|service|commission)$/);
+      if (deviceActionMatch) {
+        const [, deviceId, action] = deviceActionMatch;
+        if (req.method === 'PATCH' && action === 'assignment') {
+          return await patchAdminDeviceAssignment(req, res, deviceId);
+        }
+        if (req.method === 'PATCH' && action === 'state') {
+          return await patchAdminDeviceState(req, res, deviceId);
+        }
+        if (req.method === 'PATCH' && action === 'metadata') {
+          return await patchAdminDeviceMetadata(req, res, deviceId);
+        }
+        if (req.method === 'POST' && (action === 'service' || action === 'commission')) {
+          return await recordAdminDeviceEvent(res, deviceId, admin, action);
+        }
+      }
+
+      const credentialRecoveryMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/credential-recovery$/);
+      if (req.method === 'POST' && credentialRecoveryMatch) {
+        return await recoverAdminDeviceCredential(res, credentialRecoveryMatch[1]);
+      }
+
+      return res.status(404).send('Not Found\n');
+    } catch (error) {
+      return sendAdminError(res, error);
     }
   }
 
@@ -520,11 +907,15 @@ function createFairwayHandlers(db, {
         return sendCorsOk(res);
       }
 
+      const path = req.path || '/';
+
+      if (path.startsWith('/api/v1/admin/')) {
+        return await handleAdminRequest(req, res, path);
+      }
+
       if (req.method !== 'POST') {
         return res.status(405).send('Method Not Allowed\n');
       }
-
-      const path = req.path || '/';
 
       if (path === '/api/v1/device-commands/poll') {
         return await pollDeviceCommand(req, res);
@@ -549,22 +940,57 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error && error.type === 'entity.parse.failed') {
+        return res.status(400).send('Invalid JSON\n');
+      }
       console.error('Failed to handle Fairway request:', error);
       return res.status(500).send('Internal Server Error\n');
     }
   }
 
+  async function fairwayAdmin(req, res) {
+    res.set('Cache-Control', 'no-store');
+    res.set('Vary', 'Origin');
+    res.set('X-Content-Type-Options', 'nosniff');
+    const origin = req.get('origin');
+    if (origin && origin !== allowedAdminOrigin) {
+      return res.status(403).send('Origin not allowed\n');
+    }
+    if (origin === allowedAdminOrigin) {
+      res.set('Access-Control-Allow-Origin', allowedAdminOrigin);
+    }
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH');
+      res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      return res.status(204).send('');
+    }
+    const path = req.path || '/';
+    if (!path.startsWith('/api/v1/admin/')) {
+      return res.status(404).send('Not Found\n');
+    }
+    return handleAdminRequest(req, res, path);
+  }
+
   return {
+    fairwayAdmin,
     fairwayButtonReceiver,
     handleDeviceEvent,
     updateRequestStatus,
+    listAdminFleet,
     pollDeviceCommand,
     acknowledgeDeviceCommand,
   };
 }
 
-const { fairwayButtonReceiver } = createFairwayHandlers(new Firestore());
+const runtimeEnvironment = resolveRuntimeEnvironment();
+const handlers = createFairwayHandlers(new Firestore({
+  projectId: runtimeEnvironment.projectId,
+}), { allowedAdminOrigin: runtimeEnvironment.allowedAdminOrigin });
 
-functions.http('fairwayButtonReceiver', fairwayButtonReceiver);
+if (runtimeEnvironment.serviceMode === 'admin') {
+  functions.http('fairwayAdmin', handlers.fairwayAdmin);
+} else {
+  functions.http('fairwayButtonReceiver', handlers.fairwayButtonReceiver);
+}
 
 module.exports = { createFairwayHandlers };

@@ -1,6 +1,10 @@
 {
   "scripts": {
-    "provision-device": "node scripts/provision_device.js"
+    "start": "functions-framework --target=${FUNCTION_TARGET:-fairwayButtonReceiver}",
+    "test": "env FAIRWAY_ENV=sandbox FAIRWAY_GCP_PROJECT=fairway-refresh-sandbox-test GOOGLE_CLOUD_PROJECT=fairway-refresh-sandbox-test sh -c 'for test_file in test/*.test.js; do node \"$test_file\" || exit 1; done'",
+    "provision-device": "node scripts/provision_device.js",
+    "sandbox:configure-admin": "node scripts/configure_sandbox_admin.js",
+    "sandbox:seed": "node scripts/seed_sandbox.js"
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.0.0",

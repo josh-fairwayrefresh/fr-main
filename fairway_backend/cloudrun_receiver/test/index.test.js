@@ -781,4 +781,43 @@ test('CORS permits the operator Authorization header', async () => {
   assert.match(res.headers['Access-Control-Allow-Headers'], /Authorization/);
 });
 
+test('admin fleet endpoint requires admin true and redacts credential verifier data', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    health_report_schedule: { times: ['09:00', '17:00'] },
+  });
+  await db.collection('devices').doc('FRB-0001').set({
+    state: 'deployed',
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    credential: { algorithm: 'sha256', digest: 'must-not-leave-backend', updated_at: new Date() },
+  });
+  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+    verifyOperatorToken: async (token) => ({ uid: 'cpo', admin: token === 'admin-token' }),
+  });
+
+  const denied = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/admin/fleet',
+    headers: { authorization: 'Bearer operator-token' },
+  }), denied);
+  assert.strictEqual(denied.statusCode, 403);
+
+  const allowed = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/admin/fleet',
+    headers: { authorization: 'Bearer admin-token' },
+  }), allowed);
+  assert.strictEqual(allowed.statusCode, 200);
+  assert.strictEqual(allowed.body.customers[0].courses[0].course_id, 'COURSE-0001');
+  assert.strictEqual(allowed.body.devices[0].device_id, 'FRB-0001');
+  assert.strictEqual(allowed.body.devices[0].credential, undefined);
+  assert.strictEqual(allowed.body.devices[0].credential_status.algorithm, 'sha256');
+  assert.strictEqual(JSON.stringify(allowed.body).includes('must-not-leave-backend'), false);
+});
+
 run();

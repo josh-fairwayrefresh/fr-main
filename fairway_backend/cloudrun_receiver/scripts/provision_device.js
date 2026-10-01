@@ -23,7 +23,8 @@
  * New-device provisioning:
  *   node scripts/provision_device.js \
  *     --customer CUST-0001 --course COURSE-0001 --hole 2 \
- *     --hardware "Prototype 1.2" --sim 89464278206108309162 \
+ *     --hardware "Prototype 1.2" --firmware "Prototype 3.2" \
+ *     --sim 89464278206108309162 \
  *     [--custom-location "Practice Green"] [--comments "..."]
  *
  * Partial-provisioning recovery (device already created, credential issuance
@@ -41,7 +42,6 @@ const { MARKER_LOCATION_TYPES } = require('../lib/fleet/schema');
 const {
   provisionNewDevice,
   issueCredentialForExistingDevice,
-  CURRENT_FIRMWARE_GENERATION,
   ProvisioningError,
 } = require('../lib/fleet/provisioning');
 
@@ -71,7 +71,8 @@ function buildLocation(args) {
 function printUsage() {
   console.error(
     'Usage: node scripts/provision_device.js --customer CUST-XXXX --course COURSE-XXXX '
-    + '[--hole N | --custom-location NAME] [--hardware "..."] [--sim ICCID] [--comments "..."]'
+    + '--firmware "..." [--hole N | --custom-location NAME] '
+    + '[--hardware "..."] [--sim ICCID] [--comments "..."]'
   );
   console.error(
     '   or: node scripts/provision_device.js --issue-credential-for FRB-XXXX   '
@@ -110,7 +111,7 @@ async function main() {
     return;
   }
 
-  if (!args.customer || !args.course) {
+  if (!args.customer || !args.course || !args.firmware) {
     printUsage();
     process.exitCode = 1;
     return;
@@ -123,6 +124,7 @@ async function main() {
       courseId: args.course,
       location: buildLocation(args),
       hardwareRevision: args.hardware || null,
+      firmwareGeneration: args.firmware,
       simIccid: args.sim || null,
       comments: args.comments || null,
     });
@@ -137,7 +139,7 @@ async function main() {
   }
 
   console.log('Provisioning succeeded.');
-  console.log(`Firmware generation recorded: ${CURRENT_FIRMWARE_GENERATION}`);
+  console.log(`Firmware generation recorded: ${args.firmware}`);
   printCredentialForPaste(result);
   console.log('Device state is "in_inventory"; transition to "deployed" separately after commissioning.');
 }

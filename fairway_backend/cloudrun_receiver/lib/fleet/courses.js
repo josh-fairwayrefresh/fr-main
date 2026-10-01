@@ -10,6 +10,33 @@ const DEFAULT_HEALTH_REPORT_SCHEDULE = Object.freeze({
   times: ['09:00', '17:00'],
 });
 
+const HEALTH_REPORT_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidIanaTimezone(timezone) {
+  if (typeof timezone !== 'string' || timezone.length === 0) {
+    return false;
+  }
+
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format();
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isValidHealthReportSchedule(schedule) {
+  return Boolean(
+    schedule &&
+    typeof schedule === 'object' &&
+    !Array.isArray(schedule) &&
+    Object.keys(schedule).length === 1 &&
+    Array.isArray(schedule.times) &&
+    schedule.times.length > 0 &&
+    schedule.times.every((time) => typeof time === 'string' && HEALTH_REPORT_TIME_PATTERN.test(time))
+  );
+}
+
 /*
  * Course schema. Courses are stored as a subcollection of their owning
  * Customer (customers/{customerId}/courses/{courseId}); the parent path
@@ -48,11 +75,17 @@ async function createCourse(db, {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
   }
-  if (!courseName || typeof courseName !== 'string') {
+  if (typeof courseName !== 'string' || courseName.trim().length === 0) {
     throw new Error('Course name is required');
   }
-  if (!timezone || typeof timezone !== 'string') {
-    throw new Error('Course timezone (IANA name) is required');
+  if (!isValidIanaTimezone(timezone)) {
+    throw new Error('Valid Course timezone (IANA name) is required');
+  }
+  if (healthReportSchedule !== undefined && !isValidHealthReportSchedule(healthReportSchedule)) {
+    throw new Error('Health report schedule requires one or more HH:MM times');
+  }
+  if (comments !== null && typeof comments !== 'string') {
+    throw new Error('Course comments must be a string or null');
   }
 
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
@@ -93,10 +126,74 @@ async function getCourseForCustomer(db, customerId, courseId) {
   return { course_id: courseId, customer_id: customerId, ...courseSnap.data() };
 }
 
+async function updateCourse(db, customerId, courseId, {
+  courseName,
+  timezone,
+  healthReportSchedule,
+  comments,
+} = {}) {
+  const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
+  if (!customerSnap.exists) {
+    throw new Error(`Unknown customer_id: ${customerId}`);
+  }
+
+  const courseRef = coursesCollection(db, customerId).doc(courseId);
+  const courseSnap = await courseRef.get();
+  if (!courseSnap.exists) {
+    throw new Error(`Unknown course_id: ${courseId}`);
+  }
+  if (courseName !== undefined && (typeof courseName !== 'string' || courseName.trim().length === 0)) {
+    throw new Error('Course name is required');
+  }
+  if (timezone !== undefined && !isValidIanaTimezone(timezone)) {
+    throw new Error('Valid Course timezone (IANA name) is required');
+  }
+  if (healthReportSchedule !== undefined && !isValidHealthReportSchedule(healthReportSchedule)) {
+    throw new Error('Health report schedule requires one or more HH:MM times');
+  }
+  if (comments !== undefined && comments !== null && typeof comments !== 'string') {
+    throw new Error('Course comments must be a string or null');
+  }
+
+  const updatedAt = new Date();
+  const update = { updated_at: updatedAt };
+  if (courseName !== undefined) {
+    update.course_name = courseName;
+  }
+  if (timezone !== undefined) {
+    update.timezone = timezone;
+  }
+  if (healthReportSchedule !== undefined) {
+    update.health_report_schedule = healthReportSchedule;
+  }
+  if (comments !== undefined) {
+    update.comments = comments;
+  }
+
+  const batch = db.batch();
+  batch.update(courseRef, update);
+
+  if (courseName !== undefined) {
+    const devicesSnap = await db.collection('devices')
+      .where('customer_id', '==', customerId)
+      .where('course_id', '==', courseId)
+      .get();
+    for (const deviceSnap of devicesSnap.docs) {
+      batch.update(deviceSnap.ref, { course_name: courseName, updated_at: updatedAt });
+    }
+  }
+
+  await batch.commit();
+  return { course_id: courseId, customer_id: customerId, ...courseSnap.data(), ...update };
+}
+
 module.exports = {
   COURSES_SUBCOLLECTION,
   DEFAULT_HEALTH_REPORT_SCHEDULE,
+  isValidIanaTimezone,
+  isValidHealthReportSchedule,
   coursesCollection,
   createCourse,
   getCourseForCustomer,
+  updateCourse,
 };

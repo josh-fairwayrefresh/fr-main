@@ -85,8 +85,24 @@ button {
 .logo-strip {
   height: 70px;
   display: grid;
-  grid-template-columns: 1fr 140px;
+  grid-template-columns: 1fr auto 140px;
   background: #1e1e1e;
+}
+
+.admin-entry-button {
+  align-self: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #396c4b;
+  border-radius: 6px;
+  background: #173522;
+  color: #7ee29a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .course-logo {

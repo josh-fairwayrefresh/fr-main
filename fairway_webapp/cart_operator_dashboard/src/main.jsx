@@ -3,16 +3,19 @@ import { createRoot } from 'react-dom/client';
 import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestore';
 import {
   getRedirectResult,
+  getIdTokenResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
-import { CheckCircle, Grid2X2, History, Settings, Map, Circle } from 'lucide-react';
+import { CheckCircle, Grid2X2, History, Settings, Map, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
+import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
+import AdminApp from './admin/AdminApp';
 import './styles.css';
 
-const API_BASE_URL = 'https://fairway-button-receiver-936892386735.us-central1.run.app';
+export const API_BASE_URL = apiBaseUrl;
 
 function timestampToDate(timestamp) {
   if (!timestamp?.toDate) {
@@ -292,7 +295,7 @@ function RequestCard({ request, onCompleted }) {
   );
 }
 
-function AppFrame({ children, activeTab, onTabChange, user }) {
+function AppFrame({ children, activeTab, onTabChange, user, isAdmin, onOpenAdmin }) {
   return (
     <main className="page">
       <div className="phone-shell">
@@ -315,6 +318,12 @@ function AppFrame({ children, activeTab, onTabChange, user }) {
           <div className="signed-in-line">
             {user?.email}
           </div>
+          {isAdmin && (
+            <button className="admin-entry-button" type="button" onClick={onOpenAdmin}>
+              <ShieldCheck size={15} />
+              Admin
+            </button>
+          )}
           <div className="course-logo">
             Monarch Bay
             <br />
@@ -478,6 +487,8 @@ function PlaceholderScreen({ title }) {
 
 function App() {
   const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
   const [authState, setAuthState] = useState('checking');
   const [requests, setRequests] = useState([]);
   const [loadState, setLoadState] = useState('loading');
@@ -487,18 +498,31 @@ function App() {
   useEffect(() => {
     let isMounted = true;
 
-    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       if (!isMounted) {
         return;
       }
 
       if (!nextUser) {
         setUser(null);
+        setIsAdmin(false);
+        setAdminMode(false);
         setAuthState('signed_out');
         return;
       }
 
       setUser(nextUser);
+      try {
+        const tokenResult = await getIdTokenResult(nextUser);
+        if (isMounted) {
+          setIsAdmin(tokenResult.claims.admin === true);
+        }
+      } catch (error) {
+        console.error('Unable to inspect account permissions:', error);
+        if (isMounted) {
+          setIsAdmin(false);
+        }
+      }
       setAuthState('signed_in');
     });
 
@@ -614,6 +638,10 @@ function App() {
     );
   }
 
+  if (adminMode && isAdmin) {
+    return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onExit={() => setAdminMode(false)} />;
+  }
+
   let screen = null;
 
   if (activeTab === 'dashboard') {
@@ -635,6 +663,8 @@ function App() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       user={user}
+      isAdmin={isAdmin}
+      onOpenAdmin={() => setAdminMode(true)}
     >
       {screen}
     </AppFrame>

@@ -1,17 +1,7 @@
 'use strict';
 
 const { DEVICE_STATES } = require('./schema');
-const { createDevice, replaceDeviceCredential } = require('./devices');
-
-/*
- * Canonical current firmware generation, from the Firmware Generation
- * Registry in docs/FIRMWARE_SPECIFICATION.md (source commit
- * fde1aade63ac62650709e7ea6aead6f817b71b58, "Validated production
- * generation"). This is the single owned source for the value written to
- * a new Device's `firmware_generation` field; update this constant only
- * when that Registry records a new validated generation.
- */
-const CURRENT_FIRMWARE_GENERATION = 'Golfer-First (Bounded Request Architecture)';
+const { createDevice, replaceDeviceCredential, issueDeviceCredentialIfMissing } = require('./devices');
 
 /*
  * Bounded provisioning-event error. Always distinguishes whether a Device
@@ -49,11 +39,18 @@ async function provisionNewDevice(db, {
   courseId,
   location,
   hardwareRevision = null,
-  firmwareGeneration = CURRENT_FIRMWARE_GENERATION,
+  firmwareGeneration,
   simIccid = null,
   comments = null,
   state = DEVICE_STATES.IN_INVENTORY,
 } = {}) {
+  if (typeof firmwareGeneration !== 'string' || firmwareGeneration.trim().length === 0) {
+    throw new ProvisioningError(
+      'Device creation failed; no device was created: firmwareGeneration is required',
+      { deviceId: null, stage: 'create_device' }
+    );
+  }
+
   let deviceId;
 
   try {
@@ -102,7 +99,7 @@ async function provisionNewDevice(db, {
  */
 async function issueCredentialForExistingDevice(db, deviceId) {
   try {
-    const { secret } = await replaceDeviceCredential(db, deviceId);
+    const { secret } = await issueDeviceCredentialIfMissing(db, deviceId);
     return { deviceId, plaintextCredential: secret };
   } catch (cause) {
     throw new ProvisioningError(
@@ -113,7 +110,6 @@ async function issueCredentialForExistingDevice(db, deviceId) {
 }
 
 module.exports = {
-  CURRENT_FIRMWARE_GENERATION,
   ProvisioningError,
   provisionNewDevice,
   issueCredentialForExistingDevice,

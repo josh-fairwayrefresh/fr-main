@@ -49,6 +49,127 @@ traffic. The revision identifies that validation event only; deployment and
 operational procedures target the durable service name, not a permanent
 revision ID.
 
+### WP5-S1 Isolated Sandbox Environment
+
+WP5-S1 established a dedicated non-production environment on 2026-09-30. It
+does not reuse production Auth users, Firestore data, counters, credentials,
+claims, sessions, or runtime identities.
+
+| Item | Established Sandbox Value |
+|------|---------------------------|
+| Google Cloud / Firebase Project | `fairway-refresh-sandbox-260930` |
+| Project Number | `269424081919` |
+| Region | `us-central1` |
+| Firestore Database | `(default)`, Native mode |
+| Cloud Run Service | `fairway-button-receiver-sandbox` |
+| Cloud Run Revision | `fairway-button-receiver-sandbox-00002-vh7` (100% traffic at validation) |
+| Cloud Run API URL | `https://fairway-button-receiver-sandbox-269424081919.us-central1.run.app` |
+| Runtime Identity | `fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com` |
+| Firebase Hosting URL | `https://fairway-refresh-sandbox-260930.web.app` |
+
+The backend requires `FAIRWAY_ENV=sandbox`, matching
+`FAIRWAY_GCP_PROJECT`/`GOOGLE_CLOUD_PROJECT` values, and a project ID beginning
+with `fairway-refresh-sandbox-` before initializing Firestore. Frontend build
+and runtime guards require the same sandbox prefix and the separately named
+sandbox Cloud Run service. Missing, mismatched, or production-targeted values
+fail before deployment/runtime traffic. The local `.env.sandbox` deployment
+configuration is gitignored; `.env.sandbox.example` is the tracked template.
+
+The sandbox has a distinct Firebase web application and email/password Auth
+configuration. The sandbox Auth record for `admin@fairwayrefresh.com` has the
+`admin: true` custom claim; this is a sandbox-local UID and does not establish
+or modify a production claim. Firestore rules and indexes were deployed from
+the repository. The runtime identity has `roles/datastore.user`; the sandbox
+build identity has `roles/run.builder`. Organization policy rejected an
+`allUsers` IAM binding, so the sandbox Cloud Run service uses the supported
+no-invoker-IAM-check service setting while application authentication remains
+enforced on device, operator, and Admin routes.
+
+Validation established: unauthenticated Admin API `401`, authenticated
+non-admin `403`, admin `200`; direct unauthenticated fleet-document access
+`403`; unknown Device ingestion `404`; concurrent credential recovery and
+first-Customer assignment each produced exactly one `200` and one `409`; Health
+history returned the newest 100 of 105 observations in descending order; the
+stored Device credential contained SHA-256 verifier metadata only; and the
+hosted bundle contained the sandbox API identity and no production project,
+number, Hosting, or Cloud Run identifiers. Temporary validation users and data
+were removed.
+
+The retained dataset is synthetic only: one Customer, one Course, Device
+`FRB-0002`, one Health observation, one request, and sandbox-local counters.
+The Device is explicitly marked `WP5-S1 SYNTHETIC SANDBOX DATA - NOT A PHYSICAL
+DEVICE`; its plaintext generated credential was discarded. Numerical FRB ID
+overlap has no relationship to a physical or production Device.
+
+The sandbox remains available for synthetic workflow testing. Its Hosting build
+now calls only the isolated sandbox backend; it no longer reads production data.
+
+### WP5 Production Fleet Administration
+
+The CPO accepted the live production-data information architecture and
+presentation during the WP5 read-only review. On 2026-09-30, that accepted UI
+was advanced to a dedicated production Admin API supporting the approved WP5
+read and write workflows without exposing Firestore or service credentials to
+the browser.
+
+| Item | Production Value |
+|------|------------------|
+| Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
+| Cloud Run Admin Service | `fairway-admin` |
+| Validated Admin Revision | `fairway-admin-00002-dcw` (100% traffic) |
+| Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
+| Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
+| Runtime IAM | `roles/datastore.user` only |
+| Allowed Browser Origin | `https://savvy-kit-496703-r5.web.app` |
+
+The production service uses the canonical fleet modules in
+`fairway_backend/cloudrun_receiver/lib/fleet/` through the dedicated
+`fairwayAdmin` target. Runtime initialization fails unless
+`FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=admin`, both project variables
+equal `savvy-kit-496703-r5`, and the allowed origin equals production Hosting.
+The target exposes only `/api/v1/admin/*`; device and operator routes return
+`404`. Every Admin request requires a production Firebase ID token with the
+server-verified `admin: true` claim. Production `admin@fairwayrefresh.com`
+retains its password provider and has that claim. Responses use `no-store`,
+exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
+
+The production UI supports Customer/Course create and edit, Course timezone and
+Health schedule, permanent Device provisioning and bounded one-time credential
+recovery, immutable first-Customer ownership, within-Customer Course/location
+reassignment, lifecycle state, SIM/comments, service and commissioning records,
+read-only hardware/firmware identity, read-only current Device Health/history,
+and Device-to-SIM export. Hardware revision and firmware generation are captured
+at provisioning but cannot be changed through the ordinary metadata route.
+Request Health Check and WP6 Alerts remain visible and non-operational.
+
+Validation established: 88/88 backend tests; exact production and sandbox
+frontend configuration validation/builds; production Hosting artifact equality;
+unauthenticated `401`; authenticated non-admin `403`; wrong-origin `403`;
+approved preflight `204`; non-Admin route `404`; authenticated fleet, FRB-0002
+Health history, and Device-to-SIM export `200`; authenticated malformed Customer
+creation and invalid lifecycle state `400` with no write; two authoritative
+production Devices and two export rows; no credential digest in the fleet
+response; and zero retained temporary validation users. The dedicated Admin
+identity has only `roles/datastore.user`; the production device receiver stayed
+on revision `fairway-button-receiver-00013-zhj`.
+
+Production validation created no Customer, Course, Device, credential, counter,
+service, commissioning, metadata, assignment, state, or Health mutation. The
+fleet hash changed from 105 to 109 documents only because four authenticated
+real Device Health observations arrived while validation was in progress;
+allocation counters remained exactly `CUST=2`, `COURSE=2`, and `FRB=3`. No
+legitimate deployed-device fact was altered for testing.
+
+The temporary sandbox production-read broker, its Cloud Run service, production
+`roles/datastore.viewer` binding, sandbox runtime identity, frontend review
+configuration/routes, and source package were removed after production rollout.
+
+The CPO accepted the production-backed Admin experience and the final ownership
+boundary between administrative data and system/device truth. Acceptance does
+not require a fictitious or audit-distorting production write. Integrated-browser
+visual/network automation was unavailable during the original rollout; the CPO's
+direct review is the visual acceptance evidence on record. WP5 is complete.
+
 ### Historical Deployment Environment (Pending Independent Revalidation)
 
 - Historical deployment workflow and environment details are captured in the Working State document.
@@ -274,7 +395,7 @@ Current Backend Deployment Facts:
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
 - Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
 - The deployed backend requires a Firebase bearer ID token on CONFIRM and COMPLETE, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The deployed dashboard sends the current signed-in user's token. This path has automated backend test evidence and was operationally validated during Stage B2.
-- This is identity authentication for the existing operator population, not a new role/claims authorization system; finer-grained operator/admin roles remain deferred.
+- CONFIRM and COMPLETE continue to require authenticated operator identity without an admin claim. The WP5 admin API requires the out-of-band-assigned Firebase custom claim `admin: true` on every `/api/v1/admin/*` route and returns HTTP 403 before fleet reads or writes for authenticated non-admins. It is deployed to both the isolated WP5-S1 sandbox and the dedicated production Admin service described above.
 - Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
 - Supported request routes:
   - POST /
@@ -283,6 +404,19 @@ Current Backend Deployment Facts:
   - POST /api/v1/requests/{requestId}/complete
   - POST /api/v1/device-commands/poll
   - POST /api/v1/device-commands/{commandId}/ack
+
+WP5 admin routes (implemented, test-verified, and deployed to the isolated sandbox and dedicated production Admin service):
+
+- `GET /api/v1/admin/fleet`
+- `GET /api/v1/admin/devices/{deviceId}/health-history`
+- `GET /api/v1/admin/export/device-sim`
+- `POST|PATCH /api/v1/admin/customers...` for Customer/Course creation and configuration
+- `POST /api/v1/admin/devices` for permanent-ID allocation and one-time credential issuance
+- `POST /api/v1/admin/devices/{deviceId}/credential-recovery` only when a partial provisioning event left that exact Device without a credential
+- `PATCH /api/v1/admin/devices/{deviceId}/{assignment|state|metadata}`; metadata permits only SIM association and comments after provisioning
+- `POST /api/v1/admin/devices/{deviceId}/{service|commission}`
+
+The Admin UI calls these backend routes with the current Firebase ID token. It does not read or write fleet collections directly, and the repository Firestore rules continue to deny browser access to those collections. Admin responses redact credential verifier digests; new-device provisioning returns the plaintext credential only in the one successful creation response.
 
 The command routes use the existing per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact active, pending, unexpired command, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay of an already-acknowledged command. The demand-window query requires the repository-controlled composite index in `fairway_webapp/cart_operator_dashboard/firestore.indexes.json`. The backend, dashboard, and index were deployed and validated during Stage B2; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local demand window early.
 
@@ -315,9 +449,11 @@ validate the operator webapp or its confirm/complete flow.
 Repository-Derived and Historical Web Deployment Facts:
 
 - Web app source path: fairway_webapp/cart_operator_dashboard/
-- Build command: npm run build (package.json)
-- Local dev command: npm run dev (package.json)
+- Sandbox build command: npm run build:sandbox (package.json)
+- Sandbox local dev command: npm run dev:sandbox (package.json)
 - Firebase Hosting config present in firebase.json with SPA rewrite to /index.html
+- Validated WP5-S1 sandbox deployment command:
+  - npx firebase-tools deploy --only hosting --project fairway-refresh-sandbox-260930 --non-interactive
 - Historical deployment command (pending independent revalidation):
   - npx firebase-tools deploy --only hosting --project savvy-kit-496703-r5
 

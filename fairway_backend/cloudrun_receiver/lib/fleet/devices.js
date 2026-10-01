@@ -64,8 +64,7 @@ const DEVICES_COLLECTION = 'devices';
 /*
  * Creates a Device document. Per CPO direction, a physical marker receives
  * its FRB id only after build/test reaches "Ready for Deployment"; this is
- * the backend primitive the future Admin "Add Device" workflow (WP5) will
- * call at that point. It is not wired into any exposed route in WP2/WP3.
+ * the backend primitive the Admin "Add Device" workflow calls at that point.
  * The returned object includes `device_id` for caller convenience only; the
  * persisted Firestore document itself does not contain that field.
  *
@@ -157,63 +156,69 @@ async function updateDeviceAssignment(db, deviceId, {
   location,
 } = {}) {
   const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
-  const deviceSnap = await deviceRef.get();
-  if (!deviceSnap.exists) {
-    throw new Error(`Unknown device_id: ${deviceId}`);
-  }
 
   if (location !== undefined && location !== null && !isValidMarkerLocation(location)) {
     throw new Error('Invalid marker location');
   }
 
-  const current = deviceSnap.data();
-  const update = { updated_at: new Date() };
-
-  if (location !== undefined) {
-    update.location = location;
-  }
-
-  let effectiveCustomerId = current.customer_id;
-
-  if (customerId !== undefined && customerId !== current.customer_id) {
-    if (current.customer_id) {
-      throw new Error(
-        `Device ${deviceId} is already assigned to customer ${current.customer_id}; cross-customer reassignment is not supported`
-      );
+  return db.runTransaction(async (transaction) => {
+    const deviceSnap = await transaction.get(deviceRef);
+    if (!deviceSnap.exists) {
+      throw new Error(`Unknown device_id: ${deviceId}`);
     }
 
-    const customer = await getCustomer(db, customerId);
-    if (!customer) {
-      throw new Error(`Unknown customer_id: ${customerId}`);
+    const current = deviceSnap.data();
+    const update = { updated_at: new Date() };
+
+    if (location !== undefined) {
+      update.location = location;
     }
 
-    update.customer_id = customerId;
-    update.customer_name = customer.customer_name;
-    effectiveCustomerId = customerId;
-  }
+    let effectiveCustomerId = current.customer_id;
 
-  if (courseId !== undefined) {
-    if (courseId === null) {
-      update.course_id = null;
-      update.course_name = null;
-    } else {
-      if (!effectiveCustomerId) {
-        throw new Error('Device must be assigned to a customer before a course can be assigned');
+    if (customerId !== undefined && customerId !== current.customer_id) {
+      if (current.customer_id) {
+        throw new Error(
+          `Device ${deviceId} is already assigned to customer ${current.customer_id}; cross-customer reassignment is not supported`
+        );
       }
 
-      const course = await getCourseForCustomer(db, effectiveCustomerId, courseId);
-      if (!course) {
-        throw new Error(`Course ${courseId} does not belong to customer ${effectiveCustomerId}`);
+      const customerRef = db.collection('customers').doc(customerId);
+      const customerSnap = await transaction.get(customerRef);
+      if (!customerSnap.exists) {
+        throw new Error(`Unknown customer_id: ${customerId}`);
       }
 
-      update.course_id = courseId;
-      update.course_name = course.course_name;
+      update.customer_id = customerId;
+      update.customer_name = customerSnap.data().customer_name;
+      effectiveCustomerId = customerId;
     }
-  }
 
-  await deviceRef.update(update);
+    if (courseId !== undefined) {
+      if (courseId === null) {
+        update.course_id = null;
+        update.course_name = null;
+      } else {
+        if (!effectiveCustomerId) {
+          throw new Error('Device must be assigned to a customer before a course can be assigned');
+        }
 
-  return { device_id: deviceId, ...current, ...update };
+        const courseRef = db.collection('customers').doc(effectiveCustomerId)
+          .collection('courses').doc(courseId);
+        const courseSnap = await transaction.get(courseRef);
+        if (!courseSnap.exists) {
+          throw new Error(`Course ${courseId} does not belong to customer ${effectiveCustomerId}`);
+        }
+
+        update.course_id = courseId;
+        update.course_name = courseSnap.data().course_name;
+      }
+    }
+
+    transaction.update(deviceRef, update);
+
+    return { device_id: deviceId, ...current, ...update };
+  });
 }
 
 /*
@@ -244,6 +249,65 @@ async function updateDeviceState(db, deviceId, nextState) {
   await deviceRef.update(update);
 
   return { device_id: deviceId, ...current, ...update };
+}
+
+const DEVICE_METADATA_FIELDS = Object.freeze([
+  'comments',
+  'sim_iccid',
+]);
+
+async function updateDeviceMetadata(db, deviceId, metadata) {
+  const keys = Object.keys(metadata || {});
+  if (keys.length === 0 || keys.some((key) => !DEVICE_METADATA_FIELDS.includes(key))) {
+    throw new Error('Invalid device metadata fields');
+  }
+  if (keys.some((key) => metadata[key] !== null && typeof metadata[key] !== 'string')) {
+    throw new Error('Invalid device metadata values');
+  }
+
+  const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
+  const deviceSnap = await deviceRef.get();
+  if (!deviceSnap.exists) {
+    throw new Error(`Unknown device_id: ${deviceId}`);
+  }
+
+  const update = { ...metadata, updated_at: new Date() };
+  await deviceRef.update(update);
+  return { device_id: deviceId, ...deviceSnap.data(), ...update };
+}
+
+async function recordDeviceService(db, deviceId, adminUid, recordedAt) {
+  return recordDeviceAdminEvent(
+    db, deviceId, 'service', 'last_service_at', 'last_service_by', adminUid, recordedAt
+  );
+}
+
+async function recordDeviceCommissioning(db, deviceId, adminUid, recordedAt) {
+  return recordDeviceAdminEvent(
+    db, deviceId, 'commissioning', 'commissioned_at', 'commissioned_by', adminUid, recordedAt
+  );
+}
+
+async function recordDeviceAdminEvent(db, deviceId, field, timeField, actorField, adminUid, recordedAt) {
+  if (typeof adminUid !== 'string' || adminUid.length === 0) {
+    throw new Error('Authenticated admin uid is required');
+  }
+
+  const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
+  const deviceSnap = await deviceRef.get();
+  if (!deviceSnap.exists) {
+    throw new Error(`Unknown device_id: ${deviceId}`);
+  }
+
+  const update = {
+    [field]: {
+      [timeField]: recordedAt,
+      [actorField]: adminUid,
+    },
+    updated_at: recordedAt,
+  };
+  await deviceRef.update(update);
+  return { device_id: deviceId, ...deviceSnap.data(), ...update };
 }
 
 /*
@@ -297,6 +361,28 @@ async function replaceDeviceCredential(db, deviceId) {
   return { device_id: deviceId, secret };
 }
 
+async function issueDeviceCredentialIfMissing(db, deviceId) {
+  const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
+  const { secret, verifier } = generateDeviceCredential();
+
+  await db.runTransaction(async (transaction) => {
+    const deviceSnap = await transaction.get(deviceRef);
+    if (!deviceSnap.exists) {
+      throw new Error(`Unknown device_id: ${deviceId}`);
+    }
+    if (deviceSnap.data().credential) {
+      throw new Error('Device already has a credential');
+    }
+
+    transaction.update(deviceRef, {
+      credential: verifier,
+      updated_at: new Date(),
+    });
+  });
+
+  return { device_id: deviceId, secret };
+}
+
 /*
  * Live request-authentication lookup: retrieves exactly the fields needed to
  * bind a presented credential to the exact claimed device_id and to enforce
@@ -337,11 +423,16 @@ function authenticateDeviceCredential(device, presentedSecret) {
 
 module.exports = {
   DEVICES_COLLECTION,
+  DEVICE_METADATA_FIELDS,
   createDevice,
   updateDeviceAssignment,
   updateDeviceState,
+  updateDeviceMetadata,
+  recordDeviceService,
+  recordDeviceCommissioning,
   getDeviceForRequestIngestion,
   replaceDeviceCredential,
+  issueDeviceCredentialIfMissing,
   getDeviceForAuthentication,
   authenticateDeviceCredential,
 };

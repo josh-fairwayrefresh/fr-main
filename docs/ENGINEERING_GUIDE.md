@@ -19,8 +19,9 @@ FAIRWAY REFRESH — FIDELITY MANDATE
 Before acting:
 
 1. Establish current truth from the canonical Fairway repository. Confirm Git
-   branch, HEAD, upstream and working-tree status. Read docs/README.md first,
-   then freshly read all current Major Engineering Documents:
+   branch, HEAD, upstream and working-tree status. When canonical context has
+   not yet been established for the active work context, read docs/README.md
+   first, then read all current Major Engineering Documents:
 
    docs/ENGINEERING_GUIDE.md
    docs/Continuous_improvement_Kaizen_1.0.md
@@ -31,6 +32,11 @@ Before acting:
    docs/DEVICE_PROVISIONING_GUIDE.md
    docs/feature_backlog.md
    docs/UX_SPECIFICATION.md
+
+   Retain and reuse established canonical context for bounded follow-up work.
+   Freshly read a document only when the task needs canonical truth not already
+   established in the active context or when relevant state may have changed;
+   a new task or prompt alone does not require another full-document read.
 
 2. Follow the README-defined owner-document hierarchy. Current tracked
    source/configuration is authoritative for implementation; owner documents
@@ -183,6 +189,11 @@ It also minimizes documentation drift by ensuring updates are made in one locati
 - Do not mix unrelated firmware, backend, and generated webapp changes in one task.
 
 ### VS Code Integrated-Terminal Shell Safety
+
+Toolchain-specific environment mutation, including `PATH` changes, must remain
+task-scoped and must not return to a persistent engineering shell. Commands
+outside that toolchain context must retain reliable access to the normal system
+environment.
 
 VSC and engineers must not enable `set -u`, `setopt nounset`, `set -e`,
 `setopt errexit`, or `set -euo pipefail` in a persistent VS Code integrated

@@ -17,7 +17,8 @@ class FakeQuerySnapshot {
 }
 
 class FakeDocSnapshot {
-  constructor(path, value) {
+  constructor(db, path, value) {
+    this.ref = new FakeDocRef(db, path);
     this.id = path.split('/').pop();
     this.exists = value !== undefined;
     this._value = value;
@@ -47,19 +48,24 @@ function matchesFilter(data, filter) {
 }
 
 class FakeQuery {
-  constructor(db, collectionPath, filters, limitCount) {
+  constructor(db, collectionPath, filters, limitCount, ordering) {
     this.db = db;
     this.collectionPath = collectionPath;
     this.filters = filters || [];
     this.limitCount = limitCount || null;
+    this.ordering = ordering || null;
   }
 
   where(field, op, value) {
-    return new FakeQuery(this.db, this.collectionPath, [...this.filters, { field, op, value }], this.limitCount);
+    return new FakeQuery(this.db, this.collectionPath, [...this.filters, { field, op, value }], this.limitCount, this.ordering);
+  }
+
+  orderBy(field, direction = 'asc') {
+    return new FakeQuery(this.db, this.collectionPath, this.filters, this.limitCount, { field, direction });
   }
 
   limit(count) {
-    return new FakeQuery(this.db, this.collectionPath, this.filters, count);
+    return new FakeQuery(this.db, this.collectionPath, this.filters, count, this.ordering);
   }
 
   async get() {
@@ -77,15 +83,24 @@ class FakeQuery {
       }
 
       if (this.filters.every((filter) => matchesFilter(value, filter))) {
-        matches.push(new FakeDocSnapshot(path, value));
+        matches.push(new FakeDocSnapshot(this.db, path, value));
       }
 
-      if (this.limitCount && matches.length >= this.limitCount) {
-        break;
-      }
     }
 
-    return new FakeQuerySnapshot(matches);
+    if (this.ordering) {
+      const { field, direction } = this.ordering;
+      matches.sort((left, right) => {
+        const leftValue = left.data()[field];
+        const rightValue = right.data()[field];
+        const leftComparable = leftValue instanceof Date ? leftValue.getTime() : leftValue;
+        const rightComparable = rightValue instanceof Date ? rightValue.getTime() : rightValue;
+        const comparison = leftComparable < rightComparable ? -1 : leftComparable > rightComparable ? 1 : 0;
+        return direction === 'desc' ? -comparison : comparison;
+      });
+    }
+
+    return new FakeQuerySnapshot(this.limitCount ? matches.slice(0, this.limitCount) : matches);
   }
 }
 
@@ -107,7 +122,7 @@ class FakeDocRef {
   }
 
   async get() {
-    return new FakeDocSnapshot(this.path, this.db._docs.get(this.path));
+    return new FakeDocSnapshot(this.db, this.path, this.db._docs.get(this.path));
   }
 
   async set(data, options) {
@@ -145,8 +160,16 @@ class FakeCollectionRef {
     return ref;
   }
 
+  async get() {
+    return new FakeQuery(this.db, this.path).get();
+  }
+
   where(field, op, value) {
     return new FakeQuery(this.db, this.path, [{ field, op, value }]);
+  }
+
+  orderBy(field, direction) {
+    return new FakeQuery(this.db, this.path).orderBy(field, direction);
   }
 
   limit(count) {
@@ -165,10 +188,15 @@ class FakeBatch {
     return this;
   }
 
+  update(ref, data) {
+    this._ops.push({ ref, data, update: true });
+    return this;
+  }
+
   async commit() {
-    for (const { ref, data, options } of this._ops) {
+    for (const { ref, data, options, update } of this._ops) {
       // eslint-disable-next-line no-await-in-loop
-      await ref.set(data, options);
+      await (update ? ref.update(data) : ref.set(data, options));
     }
   }
 }
@@ -201,6 +229,7 @@ class FakeTransaction {
 class FakeFirestore {
   constructor() {
     this._docs = new Map();
+    this._transactionTail = Promise.resolve();
   }
 
   collection(name) {
@@ -212,7 +241,9 @@ class FakeFirestore {
   }
 
   async runTransaction(updateFunction) {
-    return updateFunction(new FakeTransaction());
+    const transactionRun = this._transactionTail.then(() => updateFunction(new FakeTransaction()));
+    this._transactionTail = transactionRun.catch(() => undefined);
+    return transactionRun;
   }
 }
 

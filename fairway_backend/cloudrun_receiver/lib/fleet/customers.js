@@ -17,11 +17,14 @@ const CUSTOMERS_COLLECTION = 'customers';
 
 /*
  * Creates a Customer document with a centrally allocated CUST-XXXX id.
- * Intended for future Admin UI (WP5) use; not wired into any exposed route.
+ * Used by the authenticated WP5 admin API.
  */
 async function createCustomer(db, { customerName, comments = null } = {}) {
-  if (!customerName || typeof customerName !== 'string') {
+  if (typeof customerName !== 'string' || customerName.trim().length === 0) {
     throw new Error('Customer name is required');
+  }
+  if (comments !== null && typeof comments !== 'string') {
+    throw new Error('Customer comments must be a string or null');
   }
 
   const customerId = await allocateNextId(db, ID_PREFIXES.CUSTOMER);
@@ -53,8 +56,45 @@ async function getCustomer(db, customerId) {
   return { customer_id: customerId, ...customerSnap.data() };
 }
 
+async function updateCustomer(db, customerId, { customerName, comments } = {}) {
+  const customerRef = db.collection(CUSTOMERS_COLLECTION).doc(customerId);
+  const customerSnap = await customerRef.get();
+  if (!customerSnap.exists) {
+    throw new Error(`Unknown customer_id: ${customerId}`);
+  }
+  if (customerName !== undefined && (typeof customerName !== 'string' || customerName.trim().length === 0)) {
+    throw new Error('Customer name is required');
+  }
+  if (comments !== undefined && comments !== null && typeof comments !== 'string') {
+    throw new Error('Customer comments must be a string or null');
+  }
+
+  const updatedAt = new Date();
+  const update = { updated_at: updatedAt };
+  if (customerName !== undefined) {
+    update.customer_name = customerName;
+  }
+  if (comments !== undefined) {
+    update.comments = comments;
+  }
+
+  const batch = db.batch();
+  batch.update(customerRef, update);
+
+  if (customerName !== undefined) {
+    const devicesSnap = await db.collection('devices').where('customer_id', '==', customerId).get();
+    for (const deviceSnap of devicesSnap.docs) {
+      batch.update(deviceSnap.ref, { customer_name: customerName, updated_at: updatedAt });
+    }
+  }
+
+  await batch.commit();
+  return { customer_id: customerId, ...customerSnap.data(), ...update };
+}
+
 module.exports = {
   CUSTOMERS_COLLECTION,
   createCustomer,
   getCustomer,
+  updateCustomer,
 };

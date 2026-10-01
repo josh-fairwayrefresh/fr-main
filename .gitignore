@@ -82,3 +82,10 @@ log-*.txt
 
 # Node.js generated dependencies (backend)
 node_modules/
+dist/
+.firebase/
+
+# Local environment configuration
+.env
+.env.*
+!.env.*.example
