@@ -574,14 +574,20 @@ Deployment Verification:
 - Production Hosting, manifest, service worker, and 180/192/512 icons were verified
   byte-for-byte against the validated production build on 2026-10-01.
 - The independent Admin/Operator entry release deployed production asset
-  `assets/index-BGbFYyr2.js` (SHA-256
-  `b95334fc020b848ec389dcff4f337a8fb15fbdf1440063780dc3987f58257f87`).
+  `assets/index-B7nqMQ1i.js` (SHA-256
+  `e1ac15b62ccacbea179dd33eb08de943ba90d87e53ebe8f3db3981c10c74716d`).
   The live index and JavaScript were byte-identical to the validated local
   build. Direct `/admin` and `/requests/{requestId}?course=...` requests returned
   the SPA, and browser inspection confirmed role-specific logged-out entry,
   preserved operator deep-link URLs, and no horizontal overflow at a 390 by 844
-  viewport. The deterministic frontend entry-policy matrix passed 6/6 and the
+  viewport. The deterministic frontend test suite passed 7/7 and the
   unchanged backend authorization/receiver suite passed 101/101.
+- The initially deployed entry release omitted the imported `X` icon while
+  retaining deferred references in Device and Course overlays. Opening either
+  overlay therefore raised `ReferenceError: X is not defined` and left only its
+  dark backdrop visible. The corrected asset above restores that dependency;
+  production Chrome acceptance confirmed that Device and Course overlays open
+  normally after the browser loads the corrected bundle.
 - Real-account production acceptance confirmed the independent role paths.
   `admin@fairwayrefresh.com` loaded the live fleet from `/admin` with Admin API
   requests and zero operator-bootstrap requests; the same persistent session

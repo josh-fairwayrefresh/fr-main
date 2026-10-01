@@ -3,7 +3,7 @@ import {
   Activity, BatteryMedium, Building2, Check, ChevronRight,
   Clipboard, Download, FileDown, Gauge, HardDrive, LayoutDashboard, MapPin,
   LogOut, Plus, Radio, RefreshCw, Save, Search, ShieldCheck, Signal, Thermometer,
-  Wrench,
+  Wrench, X,
 } from 'lucide-react';
 import { adminRequest, downloadBlob } from './adminApi';
 import './admin.css';
