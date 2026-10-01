@@ -541,7 +541,7 @@ Hosting deployment command above was validated on 2026-10-01.
 
 Deployment Verification:
 
-- Production Hosting, manifest, service worker, and 192/512 icons were verified
+- Production Hosting, manifest, service worker, and 180/192/512 icons were verified
   byte-for-byte against the validated production build on 2026-10-01.
 - The iPhone Home Screen application was physically validated for authenticated
   queue access, push subscription registration, notification display, and
