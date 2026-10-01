@@ -351,10 +351,10 @@ function createFairwayHandlers(db, {
     if (/^Unknown (customer_id|course_id|device_id)/.test(error.message)) {
       return res.status(404).json({ error: error.message });
     }
-    if (/cross-customer|does not belong to customer/.test(error.message)) {
+    if (/cross-customer|does not belong to customer|cannot have an active assignment/.test(error.message)) {
       return res.status(409).json({ error: error.message });
     }
-    if (/Invalid|required|must be assigned|Valid Course|Health report schedule/.test(error.message)) {
+    if (/Invalid|require(?:d|s)?|must be assigned|Valid Course|Health report schedule/.test(error.message)) {
       return res.status(400).json({ error: error.message });
     }
 
@@ -513,12 +513,9 @@ function createFairwayHandlers(db, {
 
   async function provisionAdminDevice(req, res) {
     requireBodyFields(req.body, [
-      'customer_id', 'course_id', 'location', 'comments', 'sim_iccid',
+      'comments', 'sim_iccid',
     ]);
     const result = await provisionNewDevice(db, {
-      customerId: req.body.customer_id,
-      courseId: req.body.course_id,
-      location: req.body.location,
       comments: req.body.comments,
       simIccid: req.body.sim_iccid,
     });
@@ -549,8 +546,12 @@ function createFairwayHandlers(db, {
   }
 
   async function patchAdminDeviceState(req, res, deviceId) {
-    requireBodyFields(req.body, ['state']);
-    const device = await updateDeviceState(db, deviceId, req.body.state);
+    requireBodyFields(req.body, ['state', 'customer_id', 'course_id', 'location']);
+    const device = await updateDeviceState(db, deviceId, req.body.state, {
+      customerId: req.body.customer_id,
+      courseId: req.body.course_id,
+      location: req.body.location,
+    });
     return res.status(200).json(redactDeviceResult(device));
   }
 

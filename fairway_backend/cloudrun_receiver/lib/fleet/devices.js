@@ -38,7 +38,8 @@ const DEVICES_COLLECTION = 'devices';
  *   course_name            synchronized display copy of the assigned
  *                          Course's `course_name`; never independently
  *                          editable, always sourced from the Course record
- *   location                { type: 'hole', hole: 1-18 } or
+ *   location                null while in_inventory; otherwise
+ *                          { type: 'hole', hole: 1-18 } or
  *                          { type: 'custom', name: string }; hole number and
  *                          display text are always derived from this field
  *                          (see deriveHoleFromLocation/
@@ -70,8 +71,9 @@ const DEVICES_COLLECTION = 'devices';
  *
  * customer_name/course_name are always sourced from the authoritative
  * Customer/Course records; the caller cannot supply arbitrary display names.
- * A Device may be created without a Customer/Course assignment (In
- * Inventory) and assigned later via updateDeviceAssignment().
+ * A Device is created without a Course/location assignment (In Inventory),
+ * with optional permanent Customer ownership, and deployed later through
+ * updateDeviceState().
  */
 async function createDevice(db, {
   customerId = null,
@@ -85,6 +87,10 @@ async function createDevice(db, {
 } = {}) {
   if (!isValidDeviceState(state)) {
     throw new Error(`Invalid device state: ${state}`);
+  }
+  if (state === DEVICE_STATES.IN_INVENTORY
+      && (customerId !== null || courseId !== null || location !== null)) {
+    throw new Error('In Inventory devices cannot have an active assignment');
   }
   if (location !== null && !isValidMarkerLocation(location)) {
     throw new Error('Invalid marker location');
@@ -171,6 +177,13 @@ async function updateDeviceAssignment(db, deviceId, {
     const current = deviceSnap.data();
     const update = { updated_at: new Date() };
 
+    if (current.state === DEVICE_STATES.IN_INVENTORY
+        && (customerId !== undefined && customerId !== null
+          || courseId !== undefined && courseId !== null
+          || location !== undefined && location !== null)) {
+      throw new Error('In Inventory devices cannot have an active assignment');
+    }
+
     if (location !== undefined) {
       update.location = location;
     }
@@ -216,6 +229,14 @@ async function updateDeviceAssignment(db, deviceId, {
       }
     }
 
+    if (current.state === DEVICE_STATES.DEPLOYED) {
+      const effectiveCourseId = courseId === undefined ? current.course_id : courseId;
+      const effectiveLocation = location === undefined ? current.location : location;
+      if (!effectiveCourseId || !isValidMarkerLocation(effectiveLocation)) {
+        throw new Error('Deployed devices require a Course and valid location');
+      }
+    }
+
     transaction.update(deviceRef, update);
 
     return { device_id: deviceId, ...current, ...update };
@@ -229,27 +250,66 @@ async function updateDeviceAssignment(db, deviceId, {
  * always derived from `state` (isDeviceCommunicationAllowed); no separate
  * `active` field is stored or updated.
  */
-async function updateDeviceState(db, deviceId, nextState) {
+async function updateDeviceState(db, deviceId, nextState, {
+  customerId,
+  courseId,
+  location,
+} = {}) {
   if (!isValidDeviceState(nextState)) {
     throw new Error(`Invalid device state: ${nextState}`);
   }
-
-  const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
-  const deviceSnap = await deviceRef.get();
-  if (!deviceSnap.exists) {
-    throw new Error(`Unknown device_id: ${deviceId}`);
+  if (location !== undefined && location !== null && !isValidMarkerLocation(location)) {
+    throw new Error('Invalid marker location');
   }
 
-  const current = deviceSnap.data();
+  const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
 
-  const update = {
-    state: nextState,
-    updated_at: new Date(),
-  };
+  return db.runTransaction(async (transaction) => {
+    const deviceSnap = await transaction.get(deviceRef);
+    if (!deviceSnap.exists) {
+      throw new Error(`Unknown device_id: ${deviceId}`);
+    }
 
-  await deviceRef.update(update);
+    const current = deviceSnap.data();
+    const update = { state: nextState, updated_at: new Date() };
 
-  return { device_id: deviceId, ...current, ...update };
+    if (nextState === DEVICE_STATES.IN_INVENTORY) {
+      update.customer_id = null;
+      update.customer_name = null;
+      update.course_id = null;
+      update.course_name = null;
+      update.location = null;
+    } else if (nextState === DEVICE_STATES.DEPLOYED) {
+      const effectiveCustomerId = customerId === undefined ? current.customer_id : customerId;
+      const effectiveCourseId = courseId === undefined ? current.course_id : courseId;
+      const effectiveLocation = location === undefined ? current.location : location;
+      if (!effectiveCustomerId || !effectiveCourseId || !isValidMarkerLocation(effectiveLocation)) {
+        throw new Error('Deployed devices require a Customer, Course, and valid location');
+      }
+
+      const customerRef = db.collection('customers').doc(effectiveCustomerId);
+      const customerSnap = await transaction.get(customerRef);
+      if (!customerSnap.exists) {
+        throw new Error(`Unknown customer_id: ${effectiveCustomerId}`);
+      }
+
+      const courseRef = customerRef
+        .collection('courses').doc(effectiveCourseId);
+      const courseSnap = await transaction.get(courseRef);
+      if (!courseSnap.exists) {
+        throw new Error(`Course ${effectiveCourseId} does not belong to customer ${effectiveCustomerId}`);
+      }
+
+      update.customer_id = effectiveCustomerId;
+      update.customer_name = customerSnap.data().customer_name;
+      update.course_id = effectiveCourseId;
+      update.course_name = courseSnap.data().course_name;
+      update.location = effectiveLocation;
+    }
+
+    transaction.update(deviceRef, update);
+    return { device_id: deviceId, ...current, ...update };
+  });
 }
 
 const DEVICE_METADATA_FIELDS = Object.freeze([

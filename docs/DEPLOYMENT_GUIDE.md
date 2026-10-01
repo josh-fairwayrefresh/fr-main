@@ -136,8 +136,8 @@ exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
 
 The production UI supports Customer/Course create and edit, Course timezone and
 Health schedule, permanent Device provisioning and bounded one-time credential
-recovery, immutable first-Customer ownership, within-Customer Course/location
-reassignment, lifecycle state, SIM/comments, service and commissioning records,
+recovery, atomic Customer/Course/location deployment assignment, lifecycle
+state, SIM/comments, service and commissioning records,
 read-only hardware/firmware identity, read-only current Device Health/history,
 and Device-to-SIM export. Hardware revision and firmware generation start unknown
 at provisioning; authenticated Device Health populates both atomically
@@ -168,6 +168,27 @@ their normalized SHA-256 fingerprint was
 both before and after the transaction. Current validation passes 91/91 backend
 tests, exact-origin CORS, route isolation, receiver unknown-device rejection,
 and byte-identical Hosting artifact verification.
+
+The final WP5 lifecycle/assignment correction deployed Admin revision
+`fairway-admin-00006-n87` at 100% traffic and Hosting asset
+`assets/index-Bn8RWJ55.js` (SHA-256
+`d72c456eb2ab190fe0fdeaaa30fa92c6def1ce244f05b5ce890090bb73987925`). The
+backend now atomically clears Customer, Course, and location when a Device enters
+`in_inventory`, requires a valid Customer, a Course belonging to that Customer,
+and a valid location before accepting `deployed`, and prevents a deployed
+assignment from being cleared independently. New provisioning creates a
+completely unassigned inventory Device. Backend tests pass 91/91; the production
+bundle is byte-identical to the validated local artifact, and Admin
+authorization/CORS checks return the expected `401`, `403`, and `204`.
+FRB-0002 was reconciled through the corrected lifecycle primitive to
+`state = "in_inventory"` with null `customer_id`, `customer_name`, `course_id`,
+`course_name`, and `location`. Its SIM, credential verifier, system identity,
+Health, commissioning metadata, and unrelated fleet data were preserved. The
+normalized seven-record preservation fingerprint, excluding those authorized
+assignment fields and their write timestamp, remained
+`833e0c9765cac04202a1ef7f939444c43dddf560ee3e4483928e4677d190649b` before and
+after correction. No errors were logged for the Admin revision, and the receiver
+remained on revision `fairway-button-receiver-00016-djx`.
 
 The original WP5 rollout validation established: 88/88 backend tests; exact production and sandbox
 frontend configuration validation/builds; production Hosting artifact equality;

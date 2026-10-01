@@ -35,9 +35,6 @@ class ProvisioningError extends Error {
  * header).
  */
 async function provisionNewDevice(db, {
-  customerId,
-  courseId,
-  location,
   simIccid = null,
   comments = null,
   state = DEVICE_STATES.IN_INVENTORY,
@@ -46,9 +43,6 @@ async function provisionNewDevice(db, {
 
   try {
     const device = await createDevice(db, {
-      customerId,
-      courseId,
-      location,
       simIccid,
       comments,
       state,

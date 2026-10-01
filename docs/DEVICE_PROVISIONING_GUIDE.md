@@ -4,7 +4,7 @@
 
 - Status: Draft
 - Version: 0.2
-- Last Updated: 2026-09-30
+- Last Updated: 2026-10-01
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Customer -> Course -> Device
 
 - **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style; the readable name is a separate `customer_name` field. Stored at `customers/{customerId}`; the Firestore document ID is the canonical identity and is not duplicated as a `customer_id` field inside the document.
 - **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time); this timezone and schedule are stored/configured on the Course record and used by the implemented autonomous firmware Device Health scheduling described in `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Implemented)"). A Device's effective timezone and Device Health reporting schedule are inherited from its currently assigned Course, are not independently stored/authoritative on the Device, and follow automatically whenever the Device is reassigned to a different Course.
-- **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below), stored at the top level (`devices/{deviceId}`). A Device is assigned to a Customer, a Course belonging to that Customer, and a marker location; that assignment is mutable, but the Device ID itself never changes. The Device record stores both `customer_id`/`course_id` (authoritative) and `customer_name`/`course_name` (synchronized display copies sourced from the Customer/Course records, never independently editable) for administrator readability. Per current product policy, once a Device has a `customer_id` it is not reassigned to a different Customer; only Course (within the same Customer) and location may change through normal reassignment.
+- **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below), stored at the top level (`devices/{deviceId}`). Its active deployment assignment comprises `customer_id`/`customer_name`, `course_id`/`course_name`, and `location`. An `in_inventory` Device has all assignment fields null. The Device ID itself never changes. Deployment atomically assigns a valid Customer, a Course belonging to that Customer, and a marker location.
 
 This hierarchy, the canonical ID formats, and the backend allocation mechanism are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/` (`schema.js`, `ids.js`, `customers.js`, `courses.js`, `devices.js`). WP5 adds an internal Admin UI and dedicated production Admin API over these primitives. The CPO accepted the production-backed experience, and the deployed service's authorization, read, write-policy, redaction, CORS, route-isolation, and rejection paths are validated. Production acceptance does not require a synthetic or manufactured fleet mutation.
 
@@ -76,9 +76,9 @@ Each provisioned device requires a provisioning record with the fields below.
 | Field | Purpose |
 |---|---|
 | Firestore document ID | Permanent logical identifier (`devices/{FRB-XXXX}`); not duplicated as `device_id` |
-| `customer_id` / `customer_name` | Authoritative Customer ID and synchronized readable name; Customer assignment is set once |
-| `course_id` / `course_name` | Current Course ID within that Customer and synchronized readable name |
-| `location` | `{ type: "hole", hole: 1-18 }` or `{ type: "custom", name }` |
+| `customer_id` / `customer_name` | Active deployed Customer and synchronized readable name; null while `in_inventory` |
+| `course_id` / `course_name` | Active deployed Course and synchronized readable name; null while `in_inventory` |
+| `location` | Active deployed `{ type: "hole", hole: 1-18 }` or `{ type: "custom", name }`; null while `in_inventory` |
 | `state` | One exact canonical stored value: `in_inventory`, `deployed`, `maintenance`, or `retired` |
 | `hardware_revision` | Prototype or production hardware revision |
 | `firmware_generation` | Installed firmware generation |
@@ -112,10 +112,10 @@ Device ID remains unchanged when:
 - batteries are replaced
 - the SIM is replaced
 - the device moves between courses or holes
-- the device is reassigned to a different course (within the same Customer) or marker location
+- the device is returned to inventory or redeployed to a different Customer, Course, or marker location
 - the device's administrative state changes
 
-Similarly, once a Device has been assigned a `customer_id`, that Customer association is not changed by normal reassignment; only Course (within that Customer) and marker location may change. There is no cross-Customer Device transfer workflow.
+An active deployed assignment cannot be transferred directly across Customers. The Device must first return to `in_inventory`, which clears the complete assignment, and may then be redeployed with a valid Customer, Course, and location.
 
 If the physical device itself is replaced, assign a new Device ID.
 
@@ -133,6 +133,9 @@ There is no normal delete workflow. A Retired device remains permanently in the 
 Administrative state and backend/device communication access are related but distinct concepts:
 
 - `state` is the sole canonical field representing operational/admin lifecycle (the four values above). There is no independent `active` field in the canonical Device schema.
+- Transitioning to `in_inventory` atomically clears `customer_id`, `customer_name`, `course_id`, `course_name`, and `location` while preserving all unrelated Device data. Admin displays the Device as completely unassigned.
+- Transitioning to `deployed` is accepted only with a valid Customer, a Course belonging to that Customer, and a valid marker location; the state and complete assignment are written atomically. A deployed assignment cannot subsequently be cleared without first transitioning to `in_inventory`.
+- Historical request documents retain their event-time Customer, Course, and location facts; lifecycle reassignment does not rewrite or delete that existing operational provenance.
 - Backend communication permission is always derived from `state` via `isDeviceCommunicationAllowed(state)`: `in_inventory`, `deployed`, and `maintenance` permit communication. `retired`, missing, malformed, and unknown values deny communication. The policy fails closed.
 
 Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/schema.js` (`DEVICE_STATES`, `isDeviceCommunicationAllowed`) and `devices.js` (`updateDeviceState`). The live request-ingestion handler (`index.js`) derives communication permission from `state` directly.
@@ -143,7 +146,7 @@ Customer, Course, and Device IDs (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`) are al
 
 Implementation: `fairway_backend/cloudrun_receiver/lib/fleet/ids.js` (`allocateNextId`), used by `customers.js`, `courses.js`, and `devices.js`.
 
-Per CPO direction, a physical marker's `FRB-XXXX` ID is allocated only once build/test has reached "Ready for Deployment". The WP5 Admin provisioning workflow invokes this backend allocation and always creates the Device in `in_inventory`; lifecycle transition remains a separate action after commissioning.
+Per CPO direction, a physical marker's `FRB-XXXX` ID is allocated only once build/test has reached "Ready for Deployment". The WP5 Admin provisioning workflow invokes this backend allocation and always creates the Device in `in_inventory` with Customer, Course, and location fields null; lifecycle transition remains a separate action after commissioning.
 
 A reusable, production-validated provisioning utility exists at `fairway_backend/cloudrun_receiver/lib/fleet/provisioning.js` (`provisionNewDevice`, `issueCredentialForExistingDevice`) with a thin CLI invocation surface at `fairway_backend/cloudrun_receiver/scripts/provision_device.js` (`npm run provision-device`). The WP5 Admin API reuses `provisionNewDevice` rather than duplicating its logic. It allocates the Device ID through the existing allocator (never hardcoded), never persists or logs the plaintext credential, and preserves bounded partial-failure recovery when Device creation succeeds but credential issuance fails. This utility was used for FRB-0002's production provisioning (below).
 
@@ -179,7 +182,7 @@ Current live state (CPO-authorized bootstrap writes, separate from the repositor
 
 `FRB-0002` is the first device allocated through the reusable provisioning utility above, rather than through FRB-0001's direct CPO-authorized manual bootstrap writes. Current live state:
 
-- `devices/FRB-0002` exists live with `state = "in_inventory"`, which is correct while the physical unit remains on the CPO's desk awaiting completion of the five-device pilot build. Its prior `customer_id = "CUST-0001"` (Monarch Bay GC), `course_id = "COURSE-0001"` (Tony Lema Course), and `location = { type: "hole", hole: 2 }` remain stored, with `sim_iccid` recorded and an issued unique credential verifier (never the plaintext secret). The WP5 Admin UI continues to present that prior assignment as active and provides no approved way to clear or appropriately change it after the lifecycle transition to `in_inventory`; this is a deferred WP5 defect recorded in `docs/feature_backlog.md`, not a reason to change lifecycle or assignment data during system-identity validation.
+- `devices/FRB-0002` exists live with `state = "in_inventory"`, which is correct while the physical unit remains on the CPO's desk awaiting completion of the five-device pilot build. The corrected lifecycle workflow cleared `customer_id`, `customer_name`, `course_id`, `course_name`, and `location` to null. Its SIM, credential verifier, system identity, commissioning metadata, Health data, and other unrelated fields were preserved. Prior golfer-request records retain their event-time Monarch Bay GC / Tony Lema Course / Hole 2 facts.
 - The self-reporting artifact recorded in `docs/FIRMWARE_SPECIFICATION.md` was flashed to FRB-0002 on 2026-10-01. Authenticated Device Health then atomically promoted `hardware_revision = "Monarch Bay Pilot v3.2"` and `firmware_generation = "Prototype 3.2 for Pilot — Working Button and Lights"` with `system_identity.source = "device_health"` and `observed_at = 2026-10-01T03:57:38.827Z`, superseding the temporary `verified_provenance` bridge without CPO-entered identity metadata. The production Admin read model marks both fields available, and the CPO confirmed those device-reported values and Device Health provenance in the production UI.
 - `commissioning = { commissioned_at, commissioned_by }` is recorded, using the CPO's existing authenticated identity as `commissioned_by`; no new identity/role schema was introduced.
 - Golfer commissioning passed: an authenticated button transaction reached the operator app correctly attributed to Tony Lema Course / Hole 2, and the CPO confirmed and completed that request.
@@ -294,7 +297,9 @@ A deployment-ready device may be associated with:
 - a marker location: either a standard Hole 1 through Hole 18 selection, or a "Custom" free-text location name (for example "Driving Range", "Practice Green", "Clubhouse Patio"). Hole number and any display text (e.g. "Hole 7") are always derived from this single `location` field; no independent `hole`/`label` fields are stored on the Device document.
 - administrator comments
 
-`customer_name` and `course_name` are always sourced from the authoritative Customer/Course records at assignment time; a caller cannot supply an arbitrary or conflicting display name. A Course can only be assigned if it belongs to the Device's own Customer; a Course belonging to a different Customer is rejected. Once a Device has a `customer_id`, normal reassignment only moves it between Courses belonging to that same Customer — there is no cross-Customer Device transfer workflow. Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
+`customer_name` and `course_name` are always sourced from the authoritative Customer/Course records at assignment time; a caller cannot supply an arbitrary or conflicting display name. A Course can only be assigned if it belongs to the selected Customer. Direct cross-Customer mutation of an active assignment is rejected; returning the Device to inventory clears the complete assignment before a later deployment may select another Customer. Physical identity remains constant even if Customer, Course, or location assignment changes. Future GPS coordinates may be added to the location model later without requiring a breaking schema change; GPS is not implemented in the current schema.
+
+Customer, Course, and location fields represent only the active deployment. `in_inventory` Devices are completely unassigned. Admin collects a valid Customer, Course, and marker location before accepting a transition to `deployed`, then persists the lifecycle and complete assignment atomically. Returning a Device to `in_inventory` atomically clears all assignment fields.
 
 ## Device Health: Latest State, History, Thresholds, and Alerts
 

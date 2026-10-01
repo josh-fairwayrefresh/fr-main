@@ -5,9 +5,7 @@
  * Bounded, reusable CLI for provisioning exactly one new Fairway Refresh
  * device through the existing canonical fleet primitives
  * (lib/fleet/provisioning.js -> createDevice() / replaceDeviceCredential()).
- * Duplicates no fleet business logic; this is a thin invocation surface
- * only, since none currently exists (no Admin UI, no exposed admin route,
- * no npm script) to exercise those already-implemented functions.
+ * Duplicates no fleet business logic; this is a thin invocation surface.
  *
  * Prints the allocated Device ID and one-time plaintext credential to
  * STDOUT only, for the operator to paste directly into that unit's local
@@ -22,9 +20,8 @@
  *
  * New-device provisioning:
  *   node scripts/provision_device.js \
- *     --customer CUST-0001 --course COURSE-0001 --hole 2 \
  *     --sim 89464278206108309162 \
- *     [--custom-location "Practice Green"] [--comments "..."]
+ *     [--comments "..."]
  *
  * Partial-provisioning recovery (device already created, credential issuance
  * previously failed): issues/replaces the credential for that exact,
@@ -37,7 +34,6 @@
  */
 
 const { Firestore } = require('@google-cloud/firestore');
-const { MARKER_LOCATION_TYPES } = require('../lib/fleet/schema');
 const {
   provisionNewDevice,
   issueCredentialForExistingDevice,
@@ -57,20 +53,9 @@ function parseArgs(argv) {
   return args;
 }
 
-function buildLocation(args) {
-  if (args['custom-location']) {
-    return { type: MARKER_LOCATION_TYPES.CUSTOM, name: args['custom-location'] };
-  }
-  if (args.hole) {
-    return { type: MARKER_LOCATION_TYPES.HOLE, hole: Number(args.hole) };
-  }
-  return null;
-}
-
 function printUsage() {
   console.error(
-    'Usage: node scripts/provision_device.js --customer CUST-XXXX --course COURSE-XXXX '
-    + '[--hole N | --custom-location NAME] [--sim ICCID] [--comments "..."]'
+    'Usage: node scripts/provision_device.js [--sim ICCID] [--comments "..."]'
   );
   console.error(
     '   or: node scripts/provision_device.js --issue-credential-for FRB-XXXX   '
@@ -109,18 +94,9 @@ async function main() {
     return;
   }
 
-  if (!args.customer || !args.course) {
-    printUsage();
-    process.exitCode = 1;
-    return;
-  }
-
   let result;
   try {
     result = await provisionNewDevice(db, {
-      customerId: args.customer,
-      courseId: args.course,
-      location: buildLocation(args),
       simIccid: args.sim || null,
       comments: args.comments || null,
     });
@@ -137,7 +113,7 @@ async function main() {
   console.log('Provisioning succeeded.');
   console.log('Hardware and firmware identity will populate from authenticated Device Health.');
   printCredentialForPaste(result);
-  console.log('Device state is "in_inventory"; transition to "deployed" separately after commissioning.');
+  console.log('Device state is "in_inventory" and completely unassigned; deploy separately after commissioning.');
 }
 
 main().catch((error) => {

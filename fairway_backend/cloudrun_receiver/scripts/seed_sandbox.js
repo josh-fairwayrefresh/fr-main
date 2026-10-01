@@ -5,7 +5,7 @@ const { Firestore, FieldValue } = require('@google-cloud/firestore');
 const { resolveSandboxEnvironment } = require('../lib/environment');
 const { createCustomer } = require('../lib/fleet/customers');
 const { createCourse } = require('../lib/fleet/courses');
-const { createDevice, replaceDeviceCredential } = require('../lib/fleet/devices');
+const { createDevice, replaceDeviceCredential, updateDeviceState } = require('../lib/fleet/devices');
 const { recordHealthObservation } = require('../lib/fleet/health');
 
 const SYNTHETIC_MARKER = 'WP5-S1 SYNTHETIC SANDBOX DATA - NOT A PHYSICAL DEVICE';
@@ -34,13 +34,15 @@ async function main() {
     comments: SYNTHETIC_MARKER,
   });
   const device = await createDevice(db, {
-    customerId: customer.customer_id,
-    courseId: course.course_id,
-    location: { type: 'hole', hole: 4 },
     comments: SYNTHETIC_MARKER,
     simIccid: '8900000000000000000',
     hardwareRevision: 'Synthetic WP5-S1',
     firmwareGeneration: 'Synthetic WP5-S1',
+  });
+  await updateDeviceState(db, device.device_id, 'deployed', {
+    customerId: customer.customer_id,
+    courseId: course.course_id,
+    location: { type: 'hole', hole: 4 },
   });
 
   const credential = await replaceDeviceCredential(db, device.device_id);
@@ -86,7 +88,7 @@ async function main() {
     repeat_press_count: 0,
     last_repeat_press_at: null,
     demand_window_expires_at: new Date(Date.now() + 5 * 60 * 1000),
-    device_state_at_request: 'in_inventory',
+    device_state_at_request: 'deployed',
     course_local_date: null,
     course_local_hour: null,
     raw_payload: { synthetic: true },

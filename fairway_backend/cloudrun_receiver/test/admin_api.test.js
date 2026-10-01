@@ -322,9 +322,6 @@ test('device provisioning returns plaintext once and never exposes or persists a
     method: 'POST',
     path: '/api/v1/admin/devices',
     body: {
-      customer_id: 'CUST-0001',
-      course_id: 'COURSE-0001',
-      location: { type: 'hole', hole: 2 },
       sim_iccid: '8900000000000000001',
     },
   });
@@ -338,6 +335,10 @@ test('device provisioning returns plaintext once and never exposes or persists a
 
   const stored = await db.collection('devices').doc(provisioned.body.device_id).get();
   assert.strictEqual(stored.data().credential.algorithm, 'sha256');
+  assert.strictEqual(stored.data().customer_id, null);
+  assert.strictEqual(stored.data().customer_name, null);
+  assert.strictEqual(stored.data().course_id, null);
+  assert.strictEqual(stored.data().location, null);
   assert.strictEqual(JSON.stringify(stored.data()).includes(provisioned.body.one_time_credential), false);
 
   const fleet = await request({ method: 'GET', path: '/api/v1/admin/fleet' });
@@ -385,11 +386,7 @@ test('partial provisioning failure returns the allocated Device ID and bounded r
   const res = await createAdminApi(brokenDb)({
     method: 'POST',
     path: '/api/v1/admin/devices',
-    body: {
-      customer_id: 'CUST-0001',
-      course_id: 'COURSE-0001',
-      location: { type: 'hole', hole: 2 },
-    },
+    body: { sim_iccid: null },
   });
 
   assert.strictEqual(res.statusCode, 409);
@@ -434,7 +431,7 @@ test('concurrent credential recovery returns exactly one one-time credential', a
   assert.strictEqual(typeof success.body.one_time_credential, 'string');
 });
 
-test('concurrent first-Customer assignments preserve one immutable Customer', async () => {
+test('inventory assignment route rejects Customer assignment', async () => {
   const db = new FakeFirestore();
   await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Synthetic One' });
   await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Synthetic Two' });
@@ -445,22 +442,15 @@ test('concurrent first-Customer assignments preserve one immutable Customer', as
   });
   const request = createAdminApi(db);
 
-  const responses = await Promise.all([
-    request({
-      method: 'PATCH',
-      path: '/api/v1/admin/devices/FRB-0099/assignment',
-      body: { customer_id: 'CUST-0001' },
-    }),
-    request({
-      method: 'PATCH',
-      path: '/api/v1/admin/devices/FRB-0099/assignment',
-      body: { customer_id: 'CUST-0002' },
-    }),
-  ]);
+  const response = await request({
+    method: 'PATCH',
+    path: '/api/v1/admin/devices/FRB-0099/assignment',
+    body: { customer_id: 'CUST-0001' },
+  });
 
-  assert.deepStrictEqual(responses.map((response) => response.statusCode).sort(), [200, 409]);
+  assert.strictEqual(response.statusCode, 409);
   const stored = await db.collection('devices').doc('FRB-0099').get();
-  assert.ok(['CUST-0001', 'CUST-0002'].includes(stored.data().customer_id));
+  assert.strictEqual(stored.data().customer_id, null);
 });
 
 test('assignment, state, metadata, service, and commission routes enforce canonical Device behavior', async () => {
@@ -474,24 +464,46 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
   await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Other Customer' });
   await db.collection('devices').doc('FRB-0001').set({
     state: 'in_inventory',
-    customer_id: 'CUST-0001',
-    customer_name: 'Old Customer',
-    course_id: 'COURSE-0001',
-    course_name: 'Old Course',
-    location: { type: 'hole', hole: 1 },
+    customer_id: null,
+    customer_name: null,
+    course_id: null,
+    course_name: null,
+    location: null,
     credential: { algorithm: 'sha256', digest: 'never-return-this', updated_at: new Date() },
   });
   const request = createAdminApi(db);
 
-  const assignment = await request({
+  const inventoryAssignment = await request({
     method: 'PATCH',
     path: '/api/v1/admin/devices/FRB-0001/assignment',
-    body: { course_id: 'COURSE-0002', location: { type: 'custom', name: 'Practice Green' } },
+    body: { customer_id: 'CUST-0001', course_id: 'COURSE-0002', location: { type: 'custom', name: 'Practice Green' } },
+  });
+  assert.strictEqual(inventoryAssignment.statusCode, 409);
+
+  const missingDeployment = await request({
+    method: 'PATCH',
+    path: '/api/v1/admin/devices/FRB-0001/state',
+    body: { state: 'deployed', customer_id: null, course_id: null, location: null },
+  });
+  assert.strictEqual(missingDeployment.statusCode, 400);
+
+  const assignment = await request({
+    method: 'PATCH',
+    path: '/api/v1/admin/devices/FRB-0001/state',
+    body: { state: 'deployed', customer_id: 'CUST-0001', course_id: 'COURSE-0002', location: { type: 'custom', name: 'Practice Green' } },
   });
   assert.strictEqual(assignment.statusCode, 200);
+  assert.strictEqual(assignment.body.customer_name, 'Old Customer');
   assert.strictEqual(assignment.body.course_name, 'Second Course');
   assert.strictEqual(assignment.body.device_id, 'FRB-0001');
   assert.strictEqual(assignment.body.credential, undefined);
+
+  const clearedDeployment = await request({
+    method: 'PATCH',
+    path: '/api/v1/admin/devices/FRB-0001/assignment',
+    body: { course_id: null, location: null },
+  });
+  assert.strictEqual(clearedDeployment.statusCode, 400);
 
   const transfer = await request({
     method: 'PATCH',
@@ -503,10 +515,15 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
   const state = await request({
     method: 'PATCH',
     path: '/api/v1/admin/devices/FRB-0001/state',
-    body: { state: 'maintenance' },
+    body: { state: 'in_inventory' },
   });
   assert.strictEqual(state.statusCode, 200);
-  assert.strictEqual(state.body.state, 'maintenance');
+  assert.strictEqual(state.body.state, 'in_inventory');
+  assert.strictEqual(state.body.customer_id, null);
+  assert.strictEqual(state.body.customer_name, null);
+  assert.strictEqual(state.body.course_id, null);
+  assert.strictEqual(state.body.course_name, null);
+  assert.strictEqual(state.body.location, null);
 
   const invalidState = await request({
     method: 'PATCH',

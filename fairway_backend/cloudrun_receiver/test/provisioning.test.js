@@ -4,7 +4,7 @@ const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { createCustomer } = require('../lib/fleet/customers');
 const { createCourse } = require('../lib/fleet/courses');
-const { DEVICE_STATES, MARKER_LOCATION_TYPES } = require('../lib/fleet/schema');
+const { DEVICE_STATES } = require('../lib/fleet/schema');
 const {
   provisionNewDevice,
   issueCredentialForExistingDevice,
@@ -49,14 +49,10 @@ async function seedCustomerAndCourse(db) {
   return { customerId: customer.customer_id, courseId: course.course_id };
 }
 
-test('provisionNewDevice allocates a real device_id, creates the device, and issues a credential', async () => {
+test('provisionNewDevice creates an unassigned inventory device and issues a credential', async () => {
   const db = new FakeFirestore();
-  const { customerId, courseId } = await seedCustomerAndCourse(db);
 
   const result = await provisionNewDevice(db, {
-    customerId,
-    courseId,
-    location: { type: MARKER_LOCATION_TYPES.HOLE, hole: 2 },
     simIccid: '89464278206108309162',
   });
 
@@ -69,11 +65,11 @@ test('provisionNewDevice allocates a real device_id, creates the device, and iss
   assert.strictEqual(deviceSnap.exists, true);
 
   const device = deviceSnap.data();
-  assert.strictEqual(device.customer_id, customerId);
-  assert.strictEqual(device.customer_name, 'Monarch Bay GC');
-  assert.strictEqual(device.course_id, courseId);
-  assert.strictEqual(device.course_name, 'Tony Lema Course');
-  assert.deepStrictEqual(device.location, { type: 'hole', hole: 2 });
+  assert.strictEqual(device.customer_id, null);
+  assert.strictEqual(device.customer_name, null);
+  assert.strictEqual(device.course_id, null);
+  assert.strictEqual(device.course_name, null);
+  assert.strictEqual(device.location, null);
   assert.strictEqual(device.hardware_revision, null);
   assert.strictEqual(device.sim_iccid, '89464278206108309162');
   assert.strictEqual(device.state, DEVICE_STATES.IN_INVENTORY, 'must not transition state; deployment is a later step');
@@ -89,19 +85,23 @@ test('provisionNewDevice allocates a real device_id, creates the device, and iss
 
 test('provisionNewDevice does not hardcode the allocated id across repeated calls', async () => {
   const db = new FakeFirestore();
-  const { customerId, courseId } = await seedCustomerAndCourse(db);
 
-  const first = await provisionNewDevice(db, { customerId, courseId, location: null });
-  const second = await provisionNewDevice(db, { customerId, courseId, location: null });
+  const first = await provisionNewDevice(db, {});
+  const second = await provisionNewDevice(db, {});
 
   assert.notStrictEqual(first.deviceId, second.deviceId);
 });
 
 test('provisionNewDevice fails safely (ProvisioningError, deviceId null) when device creation fails', async () => {
   const db = new FakeFirestore();
+  const brokenDb = {
+    collection: () => {
+      throw new Error('simulated create failure');
+    },
+  };
 
   await assert.rejects(
-    () => provisionNewDevice(db, { customerId: 'CUST-9999', courseId: null, location: null }),
+    () => provisionNewDevice(brokenDb, {}),
     (error) => {
       assert.ok(error instanceof ProvisioningError);
       assert.strictEqual(error.stage, 'create_device');
@@ -110,13 +110,12 @@ test('provisionNewDevice fails safely (ProvisioningError, deviceId null) when de
     }
   );
 
-  const devicesSnap = await db.collection('devices').where('customer_id', '==', 'CUST-9999').get();
+  const devicesSnap = await db.collection('devices').get();
   assert.strictEqual(devicesSnap.empty, true, 'no device should exist after a failed creation');
 });
 
 test('provisionNewDevice surfaces the created device_id (not a silent failure) if credential issuance fails', async () => {
   const db = new FakeFirestore();
-  const { customerId, courseId } = await seedCustomerAndCourse(db);
 
   // Explicit method delegation (not object spread, which would drop the
   // FakeFirestore/FakeCollectionRef/FakeDocRef prototype methods): every
@@ -151,7 +150,7 @@ test('provisionNewDevice surfaces the created device_id (not a silent failure) i
   };
 
   await assert.rejects(
-    () => provisionNewDevice(brokenDb, { customerId, courseId, location: null }),
+    () => provisionNewDevice(brokenDb, {}),
     (error) => {
       assert.ok(error instanceof ProvisioningError);
       assert.strictEqual(error.stage, 'issue_credential');
@@ -161,14 +160,13 @@ test('provisionNewDevice surfaces the created device_id (not a silent failure) i
     }
   );
 
-  const deviceQuery = await db.collection('devices').where('customer_id', '==', customerId).get();
+  const deviceQuery = await db.collection('devices').get();
   const deviceSnap = await db.collection('devices').doc(deviceQuery.docs[0].id).get();
   assert.strictEqual(deviceSnap.data().credential, null, 'no credential should be stored when issuance failed');
 });
 
 test('issueCredentialForExistingDevice recovers a partially-provisioned device without allocating a second device', async () => {
   const db = new FakeFirestore();
-  const { customerId, courseId } = await seedCustomerAndCourse(db);
 
   // Reproduce the exact partial-provisioning scenario: device created via
   // the broken-db credential-update failure above, leaving `credential: null`.
@@ -202,14 +200,14 @@ test('issueCredentialForExistingDevice recovers a partially-provisioned device w
   let deviceId;
   await assert.rejects(async () => {
     try {
-      await provisionNewDevice(brokenDb, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic' });
+      await provisionNewDevice(brokenDb, {});
     } catch (error) {
       deviceId = error.deviceId;
       throw error;
     }
   });
 
-  const beforeSnap = await db.collection('devices').where('customer_id', '==', customerId).get();
+  const beforeSnap = await db.collection('devices').get();
   assert.strictEqual(beforeSnap.size, 1, 'exactly one device must exist before recovery');
   assert.strictEqual(beforeSnap.docs[0].data().credential, null, 'credential must be null before recovery');
 
@@ -220,7 +218,7 @@ test('issueCredentialForExistingDevice recovers a partially-provisioned device w
   assert.strictEqual(typeof recovered.plaintextCredential, 'string');
   assert.ok(recovered.plaintextCredential.length > 0);
 
-  const afterSnap = await db.collection('devices').where('customer_id', '==', customerId).get();
+  const afterSnap = await db.collection('devices').get();
   assert.strictEqual(afterSnap.size, 1, 'recovery must not allocate/create a second device');
   assert.strictEqual(afterSnap.docs[0].id, deviceId, 'the single existing device must be unchanged in identity');
 
