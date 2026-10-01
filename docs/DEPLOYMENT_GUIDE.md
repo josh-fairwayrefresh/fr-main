@@ -152,9 +152,16 @@ The WP5 system-metadata closeout deployed Admin revision
 `assets/index-0JzD1L0J.js`. The receiver now requires explicit fail-closed
 production mode and project configuration and accepts the build-owned identity
 pair on authenticated Device Health. The Admin DTO exposes only redacted
-provenance source/time. FRB-0001 and FRB-0002 use `verified_provenance` for
-their installed legacy images; future valid self-reporting Health replaces that
-provenance atomically. The authorized two-record provenance reconciliation left
+provenance source/time. FRB-0001 retains `verified_provenance` for its installed
+legacy image. FRB-0002 was flashed with the exact artifact recorded in the
+Firmware Generation Registry; authenticated Device Health at
+`2026-10-01T03:57:38.827Z` replaced its bridge atomically with `device_health`
+provenance and the build-owned `Monarch Bay Pilot v3.2` / `Prototype 3.2 for
+Pilot — Working Button and Lights` identity pair. The CPO confirmed normal boot
+and the resulting available identity/provenance in production Admin. The flash
+required separately authorized canonical erase-all after the non-destructive
+physical-RESET service-entry response failed to restore Memory AP access.
+The authorized two-record provenance reconciliation and subsequent runtime promotion left
 all unrelated production Customer, Course, Device, and counter facts unchanged:
 their normalized SHA-256 fingerprint was
 `c330b8df195c2de5c6aaacf6d4fe21fd6ba39e6534e1cf8addaa682933333ade`
