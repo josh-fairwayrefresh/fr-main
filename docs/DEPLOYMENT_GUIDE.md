@@ -193,7 +193,7 @@ The authorized two-record provenance reconciliation and subsequent runtime promo
 all unrelated production Customer, Course, Device, and counter facts unchanged:
 their normalized SHA-256 fingerprint was
 `c330b8df195c2de5c6aaacf6d4fe21fd6ba39e6534e1cf8addaa682933333ade`
-both before and after the transaction. Current validation passes 91/91 backend
+both before and after the transaction. That checkpoint passed 91/91 backend
 tests, exact-origin CORS, route isolation, receiver unknown-device rejection,
 and byte-identical Hosting artifact verification.
 
@@ -205,7 +205,7 @@ backend now atomically clears Customer, Course, and location when a Device enter
 `in_inventory`, requires a valid Customer, a Course belonging to that Customer,
 and a valid location before accepting `deployed`, and prevents a deployed
 assignment from being cleared independently. New provisioning creates a
-completely unassigned inventory Device. Backend tests pass 91/91; the production
+completely unassigned inventory Device. That deployment passed 91/91 backend tests; the production
 bundle is byte-identical to the validated local artifact, and Admin
 authorization/CORS checks return the expected `401`, `403`, and `204`.
 FRB-0002 was reconciled through the corrected lifecycle primitive to
