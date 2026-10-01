@@ -3,6 +3,15 @@
 const PRODUCTION_PROJECT_ID = 'savvy-kit-496703-r5';
 const SANDBOX_PROJECT_PREFIX = 'fairway-refresh-sandbox-';
 const PRODUCTION_HOSTING_ORIGIN = `https://${PRODUCTION_PROJECT_ID}.web.app`;
+const PRODUCTION_CUSTOM_DOMAIN_ORIGIN = 'https://app.fairwayrefresh.com';
+const PRODUCTION_ADMIN_ORIGINS = Object.freeze([
+  PRODUCTION_HOSTING_ORIGIN,
+  PRODUCTION_CUSTOM_DOMAIN_ORIGIN,
+]);
+
+function parseAllowedOrigins(value) {
+  return value ? value.split(',').map((origin) => origin.trim()).filter(Boolean) : [];
+}
 
 function resolveSandboxEnvironment(env = process.env) {
   const fairwayEnvironment = env.FAIRWAY_ENV;
@@ -36,7 +45,7 @@ function resolveRuntimeEnvironment(env = process.env) {
     return {
       ...resolveSandboxEnvironment(env),
       serviceMode: env.FAIRWAY_SERVICE_MODE || 'receiver',
-      allowedAdminOrigin: env.FAIRWAY_ALLOWED_ORIGIN || null,
+      allowedAdminOrigins: parseAllowedOrigins(env.FAIRWAY_ALLOWED_ORIGIN),
     };
   }
 
@@ -49,8 +58,11 @@ function resolveRuntimeEnvironment(env = process.env) {
   if (expectedProjectId !== PRODUCTION_PROJECT_ID || runtimeProjectId !== PRODUCTION_PROJECT_ID) {
     throw new Error('Production project configuration must match the production project');
   }
-  if (serviceMode === 'admin' && env.FAIRWAY_ALLOWED_ORIGIN !== PRODUCTION_HOSTING_ORIGIN) {
-    throw new Error('Production Admin origin must match production Hosting');
+  const configuredAdminOrigins = parseAllowedOrigins(env.FAIRWAY_ALLOWED_ORIGIN);
+  if (serviceMode === 'admin'
+      && (configuredAdminOrigins.length !== PRODUCTION_ADMIN_ORIGINS.length
+        || PRODUCTION_ADMIN_ORIGINS.some((origin) => !configuredAdminOrigins.includes(origin)))) {
+    throw new Error('Production Admin origins must match the canonical production origins');
   }
   if (serviceMode === 'receiver' && env.FAIRWAY_ALLOWED_ORIGIN) {
     throw new Error('Production receiver must not configure an Admin browser origin');
@@ -60,11 +72,13 @@ function resolveRuntimeEnvironment(env = process.env) {
     environment: 'production',
     projectId: PRODUCTION_PROJECT_ID,
     serviceMode,
-    allowedAdminOrigin: serviceMode === 'admin' ? PRODUCTION_HOSTING_ORIGIN : null,
+    allowedAdminOrigins: serviceMode === 'admin' ? PRODUCTION_ADMIN_ORIGINS : [],
   });
 }
 
 module.exports = {
+  PRODUCTION_ADMIN_ORIGINS,
+  PRODUCTION_CUSTOM_DOMAIN_ORIGIN,
   PRODUCTION_PROJECT_ID,
   PRODUCTION_HOSTING_ORIGIN,
   SANDBOX_PROJECT_PREFIX,

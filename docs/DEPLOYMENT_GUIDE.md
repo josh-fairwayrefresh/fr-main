@@ -118,18 +118,19 @@ the browser.
 |------|------------------|
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Validated Admin Revision | `fairway-admin-00002-dcw` (100% traffic) |
+| Validated Admin Revision | `fairway-admin-00007-znz` (100% traffic) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user` only |
-| Allowed Browser Origin | `https://savvy-kit-496703-r5.web.app` |
+| Allowed Browser Origins | `https://savvy-kit-496703-r5.web.app`, `https://app.fairwayrefresh.com` |
 
 The production services use the canonical fleet modules in
 `fairway_backend/cloudrun_receiver/lib/fleet/` through dedicated Admin and
 receiver targets. Runtime initialization requires `FAIRWAY_ENV=production`, an
 explicit supported `FAIRWAY_SERVICE_MODE`, and both project variables equal to
 `savvy-kit-496703-r5`. Admin mode additionally requires the exact production
-Hosting origin; receiver mode rejects any Admin browser origin. The Admin target
+origin allowlist (Firebase Hosting and `app.fairwayrefresh.com`); receiver mode
+rejects any Admin browser origin. The Admin target
 exposes only `/api/v1/admin/*`, and the receiver returns `404` for that surface.
 Every Admin request requires a production Firebase ID token with the
 server-verified `admin: true` claim. Production `admin@fairwayrefresh.com`
@@ -148,6 +149,16 @@ without the Admin claim receives an access-denied response at `/admin`. Login
 and redirect flows retain the current path and query so Admin entry and operator
 notification deep links return to their original destinations. Backend claim,
 assignment, and Firestore Rules enforcement remain the security boundaries.
+
+Admin revision `fairway-admin-00007-znz` corrected the custom-domain CORS
+configuration after mobile Admin requests from `app.fairwayrefresh.com` were
+rejected while the Firebase Hosting origin succeeded. Production now reflects
+only the exact matched canonical origin. Preflight returns `204` for both
+canonical origins and `403` for an arbitrary origin; unauthenticated requests
+from either canonical origin retain the expected `401` boundary. The receiver
+was not deployed or changed by this correction. The CPO refreshed the existing
+authenticated mobile Admin session on `app.fairwayrefresh.com` and confirmed
+that the production fleet loaded without the prior `Load failed` state.
 
 The production UI supports Customer/Course create and edit, Course timezone and
 Health schedule, permanent Device provisioning and bounded one-time credential

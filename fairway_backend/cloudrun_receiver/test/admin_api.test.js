@@ -129,7 +129,7 @@ test('production Admin environment and dedicated handler fail closed', async () 
     FAIRWAY_SERVICE_MODE: 'admin',
     FAIRWAY_GCP_PROJECT: 'savvy-kit-496703-r5',
     GOOGLE_CLOUD_PROJECT: 'savvy-kit-496703-r5',
-    FAIRWAY_ALLOWED_ORIGIN: 'https://savvy-kit-496703-r5.web.app',
+    FAIRWAY_ALLOWED_ORIGIN: 'https://savvy-kit-496703-r5.web.app,https://app.fairwayrefresh.com',
   };
   assert.strictEqual(resolveRuntimeEnvironment(production).serviceMode, 'admin');
   const receiver = {
@@ -138,15 +138,19 @@ test('production Admin environment and dedicated handler fail closed', async () 
     FAIRWAY_ALLOWED_ORIGIN: '',
   };
   assert.strictEqual(resolveRuntimeEnvironment(receiver).serviceMode, 'receiver');
-  assert.strictEqual(resolveRuntimeEnvironment(receiver).allowedAdminOrigin, null);
+  assert.deepStrictEqual(resolveRuntimeEnvironment(receiver).allowedAdminOrigins, []);
   assert.throws(() => resolveRuntimeEnvironment({
     ...receiver,
     FAIRWAY_ALLOWED_ORIGIN: production.FAIRWAY_ALLOWED_ORIGIN,
   }), /must not configure/);
-  assert.throws(() => resolveRuntimeEnvironment({ ...production, FAIRWAY_ALLOWED_ORIGIN: 'https://example.com' }), /production Hosting/);
+  assert.throws(() => resolveRuntimeEnvironment({ ...production, FAIRWAY_ALLOWED_ORIGIN: 'https://example.com' }), /canonical production origins/);
+  assert.throws(() => resolveRuntimeEnvironment({
+    ...production,
+    FAIRWAY_ALLOWED_ORIGIN: 'https://savvy-kit-496703-r5.web.app',
+  }), /canonical production origins/);
 
   const { fairwayAdmin } = createFairwayHandlers(new FakeFirestore(), {
-    allowedAdminOrigin: production.FAIRWAY_ALLOWED_ORIGIN,
+    allowedAdminOrigins: resolveRuntimeEnvironment(production).allowedAdminOrigins,
     verifyOperatorToken: async () => ({ uid: 'admin-uid', admin: true }),
   });
   const wrongOrigin = createResponse();
@@ -157,12 +161,14 @@ test('production Admin environment and dedicated handler fail closed', async () 
   const nonAdminPath = createResponse();
   await fairwayAdmin(createRequest({ method: 'POST', path: '/api/v1/button-events' }), nonAdminPath);
   assert.strictEqual(nonAdminPath.statusCode, 404);
-  const preflight = createResponse();
-  await fairwayAdmin(createRequest({
-    method: 'OPTIONS', path: '/api/v1/admin/fleet', headers: { origin: production.FAIRWAY_ALLOWED_ORIGIN },
-  }), preflight);
-  assert.strictEqual(preflight.statusCode, 204);
-  assert.strictEqual(preflight.headers['Access-Control-Allow-Origin'], production.FAIRWAY_ALLOWED_ORIGIN);
+  for (const origin of resolveRuntimeEnvironment(production).allowedAdminOrigins) {
+    const preflight = createResponse();
+    await fairwayAdmin(createRequest({
+      method: 'OPTIONS', path: '/api/v1/admin/fleet', headers: { origin },
+    }), preflight);
+    assert.strictEqual(preflight.statusCode, 204);
+    assert.strictEqual(preflight.headers['Access-Control-Allow-Origin'], origin);
+  }
 });
 
 const ADMIN_ROUTES = [

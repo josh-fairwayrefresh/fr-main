@@ -107,7 +107,7 @@ function sendCorsOk(res) {
 function createFairwayHandlers(db, {
   verifyOperatorToken = verifyFirebaseIdToken,
   now = () => new Date(),
-  allowedAdminOrigin = null,
+  allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
 } = {}) {
@@ -1039,11 +1039,11 @@ function createFairwayHandlers(db, {
     res.set('Vary', 'Origin');
     res.set('X-Content-Type-Options', 'nosniff');
     const origin = req.get('origin');
-    if (origin && origin !== allowedAdminOrigin) {
+    if (origin && !allowedAdminOrigins.includes(origin)) {
       return res.status(403).send('Origin not allowed\n');
     }
-    if (origin === allowedAdminOrigin) {
-      res.set('Access-Control-Allow-Origin', allowedAdminOrigin);
+    if (origin && allowedAdminOrigins.includes(origin)) {
+      res.set('Access-Control-Allow-Origin', origin);
     }
     if (req.method === 'OPTIONS') {
       res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH');
@@ -1071,7 +1071,7 @@ function createFairwayHandlers(db, {
 const runtimeEnvironment = resolveRuntimeEnvironment();
 const handlers = createFairwayHandlers(new Firestore({
   projectId: runtimeEnvironment.projectId,
-}), { allowedAdminOrigin: runtimeEnvironment.allowedAdminOrigin });
+}), { allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins });
 
 if (runtimeEnvironment.serviceMode === 'admin') {
   functions.http('fairwayAdmin', handlers.fairwayAdmin);
