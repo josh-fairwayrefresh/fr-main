@@ -42,21 +42,25 @@ function resolveRuntimeEnvironment(env = process.env) {
 
   const expectedProjectId = env.FAIRWAY_GCP_PROJECT;
   const runtimeProjectId = env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT;
-  if (env.FAIRWAY_ENV !== 'production' || env.FAIRWAY_SERVICE_MODE !== 'admin') {
-    throw new Error('Production runtime is permitted only for the dedicated Admin service');
+  const serviceMode = env.FAIRWAY_SERVICE_MODE;
+  if (env.FAIRWAY_ENV !== 'production' || !['admin', 'receiver'].includes(serviceMode)) {
+    throw new Error('Production runtime requires an explicit supported service mode');
   }
   if (expectedProjectId !== PRODUCTION_PROJECT_ID || runtimeProjectId !== PRODUCTION_PROJECT_ID) {
-    throw new Error('Production Admin project configuration must match the production project');
+    throw new Error('Production project configuration must match the production project');
   }
-  if (env.FAIRWAY_ALLOWED_ORIGIN !== PRODUCTION_HOSTING_ORIGIN) {
+  if (serviceMode === 'admin' && env.FAIRWAY_ALLOWED_ORIGIN !== PRODUCTION_HOSTING_ORIGIN) {
     throw new Error('Production Admin origin must match production Hosting');
+  }
+  if (serviceMode === 'receiver' && env.FAIRWAY_ALLOWED_ORIGIN) {
+    throw new Error('Production receiver must not configure an Admin browser origin');
   }
 
   return Object.freeze({
     environment: 'production',
     projectId: PRODUCTION_PROJECT_ID,
-    serviceMode: 'admin',
-    allowedAdminOrigin: PRODUCTION_HOSTING_ORIGIN,
+    serviceMode,
+    allowedAdminOrigin: serviceMode === 'admin' ? PRODUCTION_HOSTING_ORIGIN : null,
   });
 }
 

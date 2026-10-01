@@ -23,7 +23,6 @@
  * New-device provisioning:
  *   node scripts/provision_device.js \
  *     --customer CUST-0001 --course COURSE-0001 --hole 2 \
- *     --hardware "Prototype 1.2" --firmware "Prototype 3.2" \
  *     --sim 89464278206108309162 \
  *     [--custom-location "Practice Green"] [--comments "..."]
  *
@@ -71,8 +70,7 @@ function buildLocation(args) {
 function printUsage() {
   console.error(
     'Usage: node scripts/provision_device.js --customer CUST-XXXX --course COURSE-XXXX '
-    + '--firmware "..." [--hole N | --custom-location NAME] '
-    + '[--hardware "..."] [--sim ICCID] [--comments "..."]'
+    + '[--hole N | --custom-location NAME] [--sim ICCID] [--comments "..."]'
   );
   console.error(
     '   or: node scripts/provision_device.js --issue-credential-for FRB-XXXX   '
@@ -111,7 +109,7 @@ async function main() {
     return;
   }
 
-  if (!args.customer || !args.course || !args.firmware) {
+  if (!args.customer || !args.course) {
     printUsage();
     process.exitCode = 1;
     return;
@@ -123,8 +121,6 @@ async function main() {
       customerId: args.customer,
       courseId: args.course,
       location: buildLocation(args),
-      hardwareRevision: args.hardware || null,
-      firmwareGeneration: args.firmware,
       simIccid: args.sim || null,
       comments: args.comments || null,
     });
@@ -139,7 +135,7 @@ async function main() {
   }
 
   console.log('Provisioning succeeded.');
-  console.log(`Firmware generation recorded: ${args.firmware}`);
+  console.log('Hardware and firmware identity will populate from authenticated Device Health.');
   printCredentialForPaste(result);
   console.log('Device state is "in_inventory"; transition to "deployed" separately after commissioning.');
 }

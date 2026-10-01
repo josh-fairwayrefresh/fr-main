@@ -38,6 +38,8 @@ async function run() {
 }
 
 const VALID_OBSERVATION = Object.freeze({
+  hardware_revision: 'Monarch Bay Pilot v3.2',
+  firmware_generation: 'Prototype 3.2 for Pilot — Working Button and Lights',
   attempts: 1,
   registration_state: 1,
   http_status: 200,
@@ -55,6 +57,8 @@ const VALID_OBSERVATION = Object.freeze({
 });
 
 const MINIMAL_NULL_OBSERVATION = Object.freeze({
+  hardware_revision: 'Monarch Bay Pilot v3.2',
+  firmware_generation: 'Prototype 3.2 for Pilot — Working Button and Lights',
   attempts: 3,
   registration_state: null,
   http_status: null,
@@ -79,6 +83,18 @@ test('valid observation accepted', () => {
 
 test('minimal observation with all nullable fields null accepted', () => {
   assert.strictEqual(isValidHealthObservation(MINIMAL_NULL_OBSERVATION), true);
+});
+
+test('legacy observation without system identity remains accepted during rollout', () => {
+  const { hardware_revision, firmware_generation, ...legacy } = VALID_OBSERVATION;
+  assert.strictEqual(isValidHealthObservation(legacy), true);
+});
+
+test('partial or invalid system identity is rejected', () => {
+  const { firmware_generation, ...partial } = VALID_OBSERVATION;
+  assert.strictEqual(isValidHealthObservation(partial), false);
+  assert.strictEqual(isValidHealthObservation({ ...VALID_OBSERVATION, hardware_revision: '' }), false);
+  assert.strictEqual(isValidHealthObservation({ ...VALID_OBSERVATION, firmware_generation: 32 }), false);
 });
 
 // --- WP4 pre-build CHECK 3: literal firmware-constructed payload shapes ---
@@ -206,6 +222,14 @@ test('valid health_report updates latest_health and appends exactly one history 
   assert.strictEqual(latest.received_at, receivedAt);
   assert.strictEqual(latest.attempts, VALID_OBSERVATION.attempts);
   assert.strictEqual(deviceDoc.data().state, 'deployed', 'unrelated Device fields must be untouched');
+  assert.strictEqual(deviceDoc.data().hardware_revision, VALID_OBSERVATION.hardware_revision);
+  assert.strictEqual(deviceDoc.data().firmware_generation, VALID_OBSERVATION.firmware_generation);
+  assert.deepStrictEqual(deviceDoc.data().system_identity, {
+    hardware_revision: VALID_OBSERVATION.hardware_revision,
+    firmware_generation: VALID_OBSERVATION.firmware_generation,
+    source: 'device_health',
+    observed_at: receivedAt,
+  });
 
   const historySnap = await db.collection('devices').doc('FRB-TEST').collection('health_history').where('attempts', '==', 1).get();
   assert.strictEqual(historySnap.size, 1);
@@ -228,6 +252,23 @@ test('repeated health reports append history rather than overwrite it', async ()
     '2026-01-15T17:00:00.000Z',
     'latest_health must reflect only the most recent observation'
   );
+});
+
+test('legacy health report preserves established system identity', async () => {
+  const db = new FakeFirestore();
+  await db.collection('devices').doc('FRB-TEST').set({
+    hardware_revision: 'Prototype 1.2',
+    firmware_generation: 'LP 1.2',
+    system_identity: { source: 'verified_provenance' },
+  });
+  const { hardware_revision, firmware_generation, ...legacy } = VALID_OBSERVATION;
+
+  await recordHealthObservation(db, 'FRB-TEST', legacy, new Date('2026-01-15T17:00:00.000Z'));
+
+  const device = (await db.collection('devices').doc('FRB-TEST').get()).data();
+  assert.strictEqual(device.hardware_revision, 'Prototype 1.2');
+  assert.strictEqual(device.firmware_generation, 'LP 1.2');
+  assert.deepStrictEqual(device.system_identity, { source: 'verified_provenance' });
 });
 
 test('malformed report is rejected before touching latest_health or history', async () => {

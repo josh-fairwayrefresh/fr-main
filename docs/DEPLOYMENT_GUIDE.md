@@ -122,13 +122,14 @@ the browser.
 | Runtime IAM | `roles/datastore.user` only |
 | Allowed Browser Origin | `https://savvy-kit-496703-r5.web.app` |
 
-The production service uses the canonical fleet modules in
-`fairway_backend/cloudrun_receiver/lib/fleet/` through the dedicated
-`fairwayAdmin` target. Runtime initialization fails unless
-`FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=admin`, both project variables
-equal `savvy-kit-496703-r5`, and the allowed origin equals production Hosting.
-The target exposes only `/api/v1/admin/*`; device and operator routes return
-`404`. Every Admin request requires a production Firebase ID token with the
+The production services use the canonical fleet modules in
+`fairway_backend/cloudrun_receiver/lib/fleet/` through dedicated Admin and
+receiver targets. Runtime initialization requires `FAIRWAY_ENV=production`, an
+explicit supported `FAIRWAY_SERVICE_MODE`, and both project variables equal to
+`savvy-kit-496703-r5`. Admin mode additionally requires the exact production
+Hosting origin; receiver mode rejects any Admin browser origin. The Admin target
+exposes only `/api/v1/admin/*`, and the receiver returns `404` for that surface.
+Every Admin request requires a production Firebase ID token with the
 server-verified `admin: true` claim. Production `admin@fairwayrefresh.com`
 retains its password provider and has that claim. Responses use `no-store`,
 exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
@@ -138,11 +139,30 @@ Health schedule, permanent Device provisioning and bounded one-time credential
 recovery, immutable first-Customer ownership, within-Customer Course/location
 reassignment, lifecycle state, SIM/comments, service and commissioning records,
 read-only hardware/firmware identity, read-only current Device Health/history,
-and Device-to-SIM export. Hardware revision and firmware generation are captured
-at provisioning but cannot be changed through the ordinary metadata route.
+and Device-to-SIM export. Hardware revision and firmware generation start unknown
+at provisioning; authenticated Device Health populates both atomically
+from build-owned firmware values. Installed legacy images use controlled verified
+provenance until a self-reporting artifact is flashed. Neither field can be
+changed through an administrative metadata route.
 Request Health Check and WP6 Alerts remain visible and non-operational.
 
-Validation established: 88/88 backend tests; exact production and sandbox
+The WP5 system-metadata closeout deployed Admin revision
+`fairway-admin-00004-mz5`, receiver revision
+`fairway-button-receiver-00016-djx`, and Hosting asset
+`assets/index-0JzD1L0J.js`. The receiver now requires explicit fail-closed
+production mode and project configuration and accepts the build-owned identity
+pair on authenticated Device Health. The Admin DTO exposes only redacted
+provenance source/time. FRB-0001 and FRB-0002 use `verified_provenance` for
+their installed legacy images; future valid self-reporting Health replaces that
+provenance atomically. The authorized two-record provenance reconciliation left
+all unrelated production Customer, Course, Device, and counter facts unchanged:
+their normalized SHA-256 fingerprint was
+`c330b8df195c2de5c6aaacf6d4fe21fd6ba39e6534e1cf8addaa682933333ade`
+both before and after the transaction. Current validation passes 91/91 backend
+tests, exact-origin CORS, route isolation, receiver unknown-device rejection,
+and byte-identical Hosting artifact verification.
+
+The original WP5 rollout validation established: 88/88 backend tests; exact production and sandbox
 frontend configuration validation/builds; production Hosting artifact equality;
 unauthenticated `401`; authenticated non-admin `403`; wrong-origin `403`;
 approved preflight `204`; non-Admin route `404`; authenticated fleet, FRB-0002
@@ -150,8 +170,8 @@ Health history, and Device-to-SIM export `200`; authenticated malformed Customer
 creation and invalid lifecycle state `400` with no write; two authoritative
 production Devices and two export rows; no credential digest in the fleet
 response; and zero retained temporary validation users. The dedicated Admin
-identity has only `roles/datastore.user`; the production device receiver stayed
-on revision `fairway-button-receiver-00013-zhj`.
+identity has only `roles/datastore.user`; the receiver revision at that original
+validation checkpoint was `fairway-button-receiver-00013-zhj`.
 
 Production validation created no Customer, Course, Device, credential, counter,
 service, commissioning, metadata, assignment, state, or Health mutation. The
@@ -201,7 +221,8 @@ Current deployment depends on:
 
 | Item | Source | Status | Notes |
 |------|--------|--------|-------|
-| Per-device firmware identity and credential | Local provisioning material | Required | `FAIRWAY_DEVICE_ID` and the per-device `FAIRWAY_DEVICE_KEY` macro are supplied by the local gitignored provisioning header; values are intentionally omitted. |
+| Per-device ID and credential | Local provisioning material | Required | `FAIRWAY_DEVICE_ID` and the per-device `FAIRWAY_DEVICE_KEY` macro are supplied by the local gitignored provisioning header; values are intentionally omitted. |
+| Hardware/firmware system identity | Approved firmware build | Required | `FAIRWAY_HARDWARE_REVISION` and `FAIRWAY_FIRMWARE_GENERATION` are build-owned compile definitions transmitted together in authenticated Device Health; they are not CPO-entered provisioning fields. |
 | Firebase web configuration | Repository | Repository-managed | Web app configuration is maintained in source; this guide does not duplicate values. |
 | TLS CA chain certificates | Repository | Repository-managed | Firmware trust material is maintained in the firmware certificate directory. |
 | Cloud Run service account IAM | Historical Working State | Pending Live Verification | Historical source reports Firestore write role assignment; exact service account identity is not recorded in current repository-controlled artifacts. |

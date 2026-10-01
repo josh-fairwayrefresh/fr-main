@@ -125,6 +125,7 @@ async function createDevice(db, {
     sim_iccid: simIccid,
     hardware_revision: hardwareRevision,
     firmware_generation: firmwareGeneration,
+    system_identity: null,
     commissioning: null,
     service: null,
     credential: null,

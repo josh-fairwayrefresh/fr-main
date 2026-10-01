@@ -38,19 +38,10 @@ async function provisionNewDevice(db, {
   customerId,
   courseId,
   location,
-  hardwareRevision = null,
-  firmwareGeneration,
   simIccid = null,
   comments = null,
   state = DEVICE_STATES.IN_INVENTORY,
 } = {}) {
-  if (typeof firmwareGeneration !== 'string' || firmwareGeneration.trim().length === 0) {
-    throw new ProvisioningError(
-      'Device creation failed; no device was created: firmwareGeneration is required',
-      { deviceId: null, stage: 'create_device' }
-    );
-  }
-
   let deviceId;
 
   try {
@@ -58,8 +49,6 @@ async function provisionNewDevice(db, {
       customerId,
       courseId,
       location,
-      hardwareRevision,
-      firmwareGeneration,
       simIccid,
       comments,
       state,

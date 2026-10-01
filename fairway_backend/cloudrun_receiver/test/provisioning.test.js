@@ -57,8 +57,6 @@ test('provisionNewDevice allocates a real device_id, creates the device, and iss
     customerId,
     courseId,
     location: { type: MARKER_LOCATION_TYPES.HOLE, hole: 2 },
-    hardwareRevision: 'Prototype 1.2',
-    firmwareGeneration: 'Synthetic Sandbox Firmware',
     simIccid: '89464278206108309162',
   });
 
@@ -76,10 +74,11 @@ test('provisionNewDevice allocates a real device_id, creates the device, and iss
   assert.strictEqual(device.course_id, courseId);
   assert.strictEqual(device.course_name, 'Tony Lema Course');
   assert.deepStrictEqual(device.location, { type: 'hole', hole: 2 });
-  assert.strictEqual(device.hardware_revision, 'Prototype 1.2');
+  assert.strictEqual(device.hardware_revision, null);
   assert.strictEqual(device.sim_iccid, '89464278206108309162');
   assert.strictEqual(device.state, DEVICE_STATES.IN_INVENTORY, 'must not transition state; deployment is a later step');
-  assert.strictEqual(device.firmware_generation, 'Synthetic Sandbox Firmware');
+  assert.strictEqual(device.firmware_generation, null);
+  assert.strictEqual(device.system_identity, null);
 
   // The stored credential must be a non-reversible verifier only.
   assert.strictEqual(device.credential.algorithm, 'sha256');
@@ -92,36 +91,17 @@ test('provisionNewDevice does not hardcode the allocated id across repeated call
   const db = new FakeFirestore();
   const { customerId, courseId } = await seedCustomerAndCourse(db);
 
-  const first = await provisionNewDevice(db, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic A' });
-  const second = await provisionNewDevice(db, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic B' });
+  const first = await provisionNewDevice(db, { customerId, courseId, location: null });
+  const second = await provisionNewDevice(db, { customerId, courseId, location: null });
 
   assert.notStrictEqual(first.deviceId, second.deviceId);
-});
-
-test('provisionNewDevice requires explicit firmware generation metadata', async () => {
-  const db = new FakeFirestore();
-  const { customerId, courseId } = await seedCustomerAndCourse(db);
-
-  await assert.rejects(
-    () => provisionNewDevice(db, { customerId, courseId, location: null }),
-    (error) => {
-      assert.ok(error instanceof ProvisioningError);
-      assert.strictEqual(error.stage, 'create_device');
-      assert.strictEqual(error.deviceId, null);
-      assert.match(error.message, /firmwareGeneration is required/);
-      return true;
-    }
-  );
-
-  const devicesSnap = await db.collection('devices').get();
-  assert.strictEqual(devicesSnap.empty, true);
 });
 
 test('provisionNewDevice fails safely (ProvisioningError, deviceId null) when device creation fails', async () => {
   const db = new FakeFirestore();
 
   await assert.rejects(
-    () => provisionNewDevice(db, { customerId: 'CUST-9999', courseId: null, location: null, firmwareGeneration: 'Synthetic' }),
+    () => provisionNewDevice(db, { customerId: 'CUST-9999', courseId: null, location: null }),
     (error) => {
       assert.ok(error instanceof ProvisioningError);
       assert.strictEqual(error.stage, 'create_device');
@@ -171,7 +151,7 @@ test('provisionNewDevice surfaces the created device_id (not a silent failure) i
   };
 
   await assert.rejects(
-    () => provisionNewDevice(brokenDb, { customerId, courseId, location: null, firmwareGeneration: 'Synthetic' }),
+    () => provisionNewDevice(brokenDb, { customerId, courseId, location: null }),
     (error) => {
       assert.ok(error instanceof ProvisioningError);
       assert.strictEqual(error.stage, 'issue_credential');

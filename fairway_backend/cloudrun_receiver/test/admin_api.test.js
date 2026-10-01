@@ -69,7 +69,7 @@ function createRequest({ body = {}, headers = {}, method = 'GET', path } = {}) {
 }
 
 function createAdminApi(db) {
-  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+  const { fairwayAdmin } = createFairwayHandlers(db, {
     verifyOperatorToken: async (token) => ({
       uid: token === 'admin-token' ? 'admin-uid' : 'operator-uid',
       admin: token === 'admin-token',
@@ -78,7 +78,7 @@ function createAdminApi(db) {
 
   return async ({ method, path, body, token = 'admin-token' }) => {
     const res = createResponse();
-    await fairwayButtonReceiver(createRequest({
+    await fairwayAdmin(createRequest({
       method,
       path,
       body,
@@ -132,7 +132,17 @@ test('production Admin environment and dedicated handler fail closed', async () 
     FAIRWAY_ALLOWED_ORIGIN: 'https://savvy-kit-496703-r5.web.app',
   };
   assert.strictEqual(resolveRuntimeEnvironment(production).serviceMode, 'admin');
-  assert.throws(() => resolveRuntimeEnvironment({ ...production, FAIRWAY_SERVICE_MODE: 'receiver' }), /dedicated Admin/);
+  const receiver = {
+    ...production,
+    FAIRWAY_SERVICE_MODE: 'receiver',
+    FAIRWAY_ALLOWED_ORIGIN: '',
+  };
+  assert.strictEqual(resolveRuntimeEnvironment(receiver).serviceMode, 'receiver');
+  assert.strictEqual(resolveRuntimeEnvironment(receiver).allowedAdminOrigin, null);
+  assert.throws(() => resolveRuntimeEnvironment({
+    ...receiver,
+    FAIRWAY_ALLOWED_ORIGIN: production.FAIRWAY_ALLOWED_ORIGIN,
+  }), /must not configure/);
   assert.throws(() => resolveRuntimeEnvironment({ ...production, FAIRWAY_ALLOWED_ORIGIN: 'https://example.com' }), /production Hosting/);
 
   const { fairwayAdmin } = createFairwayHandlers(new FakeFirestore(), {
@@ -278,6 +288,32 @@ test('health history returns at most 100 records sorted newest first', async () 
   assert.strictEqual(res.body.history[99].attempts, 5);
 });
 
+test('fleet identity availability requires explicit authoritative provenance', async () => {
+  const db = new FakeFirestore();
+  await db.collection('devices').doc('FRB-0001').set({
+    hardware_revision: 'Prototype 1.2',
+    firmware_generation: 'LP 1.2',
+    system_identity: {
+      source: 'verified_provenance',
+      observed_at: new Date('2026-09-12T00:00:00.000Z'),
+    },
+  });
+  await db.collection('devices').doc('FRB-0002').set({
+    hardware_revision: 'stale hardware',
+    firmware_generation: 'stale firmware',
+  });
+
+  const res = await createAdminApi(db)({ method: 'GET', path: '/api/v1/admin/fleet' });
+  const verified = res.body.devices.find((device) => device.device_id === 'FRB-0001');
+  const unverified = res.body.devices.find((device) => device.device_id === 'FRB-0002');
+  assert.strictEqual(verified.field_status.hardware_revision, 'available');
+  assert.strictEqual(verified.field_status.firmware_generation, 'available');
+  assert.strictEqual(verified.system_identity.source, 'verified_provenance');
+  assert.strictEqual(unverified.field_status.hardware_revision, 'known_stale');
+  assert.strictEqual(unverified.field_status.firmware_generation, 'known_stale');
+  assert.strictEqual(unverified.system_identity, null);
+});
+
 test('device provisioning returns plaintext once and never exposes or persists a digest', async () => {
   const db = new FakeFirestore();
   await seedHierarchy(db);
@@ -289,7 +325,6 @@ test('device provisioning returns plaintext once and never exposes or persists a
       customer_id: 'CUST-0001',
       course_id: 'COURSE-0001',
       location: { type: 'hole', hole: 2 },
-      firmware_generation: 'Synthetic Sandbox Firmware',
       sim_iccid: '8900000000000000001',
     },
   });
@@ -354,7 +389,6 @@ test('partial provisioning failure returns the allocated Device ID and bounded r
       customer_id: 'CUST-0001',
       course_id: 'COURSE-0001',
       location: { type: 'hole', hole: 2 },
-      firmware_generation: 'Synthetic Sandbox Firmware',
     },
   });
 

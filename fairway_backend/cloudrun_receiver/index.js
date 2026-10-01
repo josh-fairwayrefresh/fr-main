@@ -363,7 +363,8 @@ function createFairwayHandlers(db, {
 
   function deviceReadModel(deviceSnap, customersById, coursesByPath) {
     const device = deviceSnap.data();
-    const staleFields = KNOWN_STALE_DEVICE_FIELDS[deviceSnap.id] || new Set();
+    const identityIsAuthoritative = device.system_identity?.source === 'device_health' ||
+      device.system_identity?.source === 'verified_provenance';
     const customer = device.customer_id ? customersById.get(device.customer_id) : null;
     const course = device.customer_id && device.course_id
       ? coursesByPath.get(`${device.customer_id}/${device.course_id}`)
@@ -380,6 +381,10 @@ function createFairwayHandlers(db, {
       sim_iccid: device.sim_iccid ?? null,
       hardware_revision: device.hardware_revision ?? null,
       firmware_generation: device.firmware_generation ?? null,
+      system_identity: identityIsAuthoritative ? {
+        source: device.system_identity.source,
+        observed_at: device.system_identity.observed_at ?? null,
+      } : null,
       commissioning: device.commissioning ?? null,
       service: device.service ?? null,
       credential_status: device.credential ? {
@@ -392,7 +397,10 @@ function createFairwayHandlers(db, {
     };
     values.field_status = Object.fromEntries(Object.keys(values)
       .filter((field) => field !== 'device_id')
-      .map((field) => [field, availability(values[field], staleFields.has(field))]));
+      .map((field) => [field, availability(
+        values[field],
+        ['hardware_revision', 'firmware_generation'].includes(field) && !identityIsAuthoritative
+      )]));
     return values;
   }
 
@@ -506,7 +514,6 @@ function createFairwayHandlers(db, {
   async function provisionAdminDevice(req, res) {
     requireBodyFields(req.body, [
       'customer_id', 'course_id', 'location', 'comments', 'sim_iccid',
-      'hardware_revision', 'firmware_generation',
     ]);
     const result = await provisionNewDevice(db, {
       customerId: req.body.customer_id,
@@ -514,8 +521,6 @@ function createFairwayHandlers(db, {
       location: req.body.location,
       comments: req.body.comments,
       simIccid: req.body.sim_iccid,
-      hardwareRevision: req.body.hardware_revision,
-      firmwareGeneration: req.body.firmware_generation,
     });
     res.set('Cache-Control', 'no-store');
     return res.status(201).json({
@@ -910,7 +915,7 @@ function createFairwayHandlers(db, {
       const path = req.path || '/';
 
       if (path.startsWith('/api/v1/admin/')) {
-        return await handleAdminRequest(req, res, path);
+        return res.status(404).send('Not Found\n');
       }
 
       if (req.method !== 'POST') {

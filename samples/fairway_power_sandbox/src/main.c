@@ -71,6 +71,10 @@
 #include "health_schedule.h"
 #include <date_time.h>
 
+#if !defined(FAIRWAY_HARDWARE_REVISION) || !defined(FAIRWAY_FIRMWARE_GENERATION)
+#error "Fairway hardware and firmware identity must be defined by the build"
+#endif
+
 LOG_MODULE_REGISTER(main);
 struct health_cellular_snapshot;
 static int send_https_test(struct health_cellular_snapshot *snap, int64_t attempt_deadline_ms,
@@ -1924,7 +1928,8 @@ static const char *health_field_or_null_u32(char *buf, size_t buf_len, bool vali
 }
 
 /* Serializes health_cellular_snapshot into the deployed backend health_report
- * contract (docs/DEVICE_PROVISIONING_GUIDE.md / lib/fleet/health.js).
+ * contract (docs/DEVICE_PROVISIONING_GUIDE.md / lib/fleet/health.js),
+ * including the build-owned hardware revision and firmware generation.
  * conn_eval_error is firmware-local diagnostic only and is never
  * transmitted, matching the current backend contract exactly.
  */
@@ -1944,7 +1949,7 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 	char batt_soc_buf[16];
 	const char *https_succeeded_str;
 
-	static char health_body[512];
+	static char health_body[768];
 	int health_body_len;
 
 	if (snap->https_result_valid) {
@@ -1955,6 +1960,8 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 
 	health_body_len = snprintk(health_body, sizeof(health_body),
 		"{\"device_id\":\"%s\",\"event_type\":\"health_report\",\"health\":{"
+		"\"hardware_revision\":\"%s\","
+		"\"firmware_generation\":\"%s\","
 		"\"attempts\":%u,"
 		"\"registration_state\":%s,"
 		"\"http_status\":%s,"
@@ -1971,6 +1978,8 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 		"\"https_succeeded\":%s"
 		"}}",
 		FAIRWAY_DEVICE_ID,
+		FAIRWAY_HARDWARE_REVISION,
+		FAIRWAY_FIRMWARE_GENERATION,
 		(unsigned)snap->transaction_attempts,
 		health_field_or_null(registration_state_buf, sizeof(registration_state_buf),
 				      snap->registration_valid,
@@ -2011,7 +2020,7 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 		return -ENOMEM;
 	}
 
-	static char health_request[1024];
+	static char health_request[1280];
 	int health_request_len;
 
 	health_request_len = snprintk(health_request, sizeof(health_request),

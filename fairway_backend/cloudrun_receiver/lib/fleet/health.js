@@ -36,10 +36,16 @@ const NULLABLE_INTEGER_FIELDS = Object.freeze([
 
 const NULLABLE_BOOLEAN_FIELDS = Object.freeze(['https_succeeded']);
 
+const SYSTEM_IDENTITY_FIELDS = Object.freeze([
+  'hardware_revision',
+  'firmware_generation',
+]);
+
 const ALLOWED_HEALTH_OBSERVATION_KEYS = new Set([
   ...REQUIRED_INTEGER_FIELDS,
   ...NULLABLE_INTEGER_FIELDS,
   ...NULLABLE_BOOLEAN_FIELDS,
+  ...SYSTEM_IDENTITY_FIELDS,
 ]);
 
 function isNullableInteger(value) {
@@ -48,6 +54,10 @@ function isNullableInteger(value) {
 
 function isNullableBoolean(value) {
   return value === null || typeof value === 'boolean';
+}
+
+function isValidIdentityString(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 160;
 }
 
 /*
@@ -84,6 +94,17 @@ function isValidHealthObservation(observation) {
     }
   }
 
+
+  const identityFieldCount = SYSTEM_IDENTITY_FIELDS
+    .filter((field) => field in observation).length;
+  if (identityFieldCount !== 0 && identityFieldCount !== SYSTEM_IDENTITY_FIELDS.length) {
+    return false;
+  }
+  if (identityFieldCount > 0 &&
+      SYSTEM_IDENTITY_FIELDS.some((field) => !isValidIdentityString(observation[field]))) {
+    return false;
+  }
+
   if (observation.http_status !== null &&
       (observation.http_status < 100 || observation.http_status > 599)) {
     return false;
@@ -117,8 +138,11 @@ function isValidHealthObservation(observation) {
  * is used for both writes below so latest_health and the appended history
  * document always agree on receive time. Both writes happen in one Firestore
  * batch so they cannot diverge from a partial failure. Only `latest_health`
- * and `updated_at` are touched on the Device document; no other Device field
- * is written.
+ * and `updated_at` are always touched on the Device document. A new firmware
+ * may also report the complete hardware/firmware identity pair; when present,
+ * those authenticated values atomically become the registry's current
+ * system/device truth. Legacy observations without either identity field
+ * remain accepted during rollout and do not change existing identity truth.
  */
 async function recordHealthObservation(db, deviceId, observation, receivedAt) {
   if (!isValidHealthObservation(observation)) {
@@ -128,9 +152,21 @@ async function recordHealthObservation(db, deviceId, observation, receivedAt) {
   const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
   const historyRef = deviceRef.collection(HEALTH_HISTORY_SUBCOLLECTION).doc();
   const accepted = { ...observation, received_at: receivedAt };
+  const deviceUpdate = { latest_health: accepted, updated_at: receivedAt };
+
+  if (SYSTEM_IDENTITY_FIELDS.every((field) => field in observation)) {
+    deviceUpdate.hardware_revision = observation.hardware_revision;
+    deviceUpdate.firmware_generation = observation.firmware_generation;
+    deviceUpdate.system_identity = {
+      hardware_revision: observation.hardware_revision,
+      firmware_generation: observation.firmware_generation,
+      source: 'device_health',
+      observed_at: receivedAt,
+    };
+  }
 
   const batch = db.batch();
-  batch.set(deviceRef, { latest_health: accepted, updated_at: receivedAt }, { merge: true });
+  batch.set(deviceRef, deviceUpdate, { merge: true });
   batch.set(historyRef, accepted);
   await batch.commit();
 
