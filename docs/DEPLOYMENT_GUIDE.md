@@ -598,6 +598,23 @@ Hosting deployment command above was validated on 2026-10-01.
 
 Deployment Verification:
 
+- The full-surface logged-out entry cleanup deployed Hosting asset
+  `assets/index-DXzzUJ_N.js` (SHA-256
+  `e7b45ecd4b8b495a63951fafa5c86e4dbb21ee94f5c12d95e294c304d17e47ea`).
+  The custom-domain and Firebase Hosting copies were byte-identical to the
+  validated local production build. `/`, `/admin`, a request deep link, the
+  manifest, and the service worker returned `200`. Isolated logged-out
+  production inspection confirmed no simulated phone shell or horizontal
+  overflow at 1440x900, 1024x768, and 390x844; the primary email sign-in
+  reached Firebase Authentication, and Admin Login reached `/admin`.
+- The redundant operator queue-header cleanup deployed Hosting asset
+  `assets/index-ClNsEp5w.js` (SHA-256
+  `fb45582f004521105279141e5347b9c0671dc7d229fe9f4f1d8b61e3e8834e7f`).
+  The custom-domain and Firebase Hosting copies were byte-identical to the
+  validated local production build. `/`, `/admin`, and a request deep link
+  returned `200`, and authenticated production inspection confirmed that the
+  queue count remains while the duplicate `NEXT REQUEST` and top-level hole
+  fields are absent.
 - The CPO-accepted Option C rollout deployed Hosting asset
   `assets/index-B-HgnZrQ.js` (SHA-256
   `efcc091e392d4c27db704f17bdf61aae4049a70de70140b258456b4e9d2f7f37`).

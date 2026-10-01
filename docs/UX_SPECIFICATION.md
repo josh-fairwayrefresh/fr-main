@@ -97,9 +97,15 @@ Request A may still be active when Request B is created; that is valid. The oper
 
 ## Cart Operator Application (Implemented and Accepted in Production)
 
+- The logged-out Operator and Admin entries use the full responsive browser/PWA
+   surface without a simulated phone or device bezel. Cart Operator sign-in is
+   primary on `/`, with an unobtrusive Admin Login link to `/admin`; both entry
+   paths retain the same Firebase Authentication and route-preservation behavior.
 - The application is a full-surface, landscape-iPad-first responsive workspace.
 - The active queue is oldest first. The oldest request receives the strongest
    visual focus while all remaining active requests stay visible in order.
+- The queue summary shows the active-request count without repeating the oldest
+   request's hole above its card; the focused card is the single location display.
 - COMPLETE is the primary request action. It closes the request, preserves the
    existing request-correlated marker command behavior, and shows a brief,
    nonblocking confirmation before the next oldest request moves into focus.

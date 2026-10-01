@@ -83,7 +83,7 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
     if (focusedRequestId) document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
   }, [focusedRequestId, requests]);
   const next = requests[0];
-  return <div className="op-layout"><section className="op-focus"><div className="op-intro"><span>{next ? 'NEXT REQUEST' : 'ACTIVE REQUESTS'}</span><div><h1>{next ? `Hole ${next.hole ?? 'Unknown'}` : 'No active requests'}</h1><strong className="op-queue-total"><b>{requests.length}</b><small>{requests.length === 1 ? 'request' : 'requests'} in queue</small></strong></div></div>
+  return <div className="op-layout"><section className="op-focus"><div className="op-queue-summary"><strong className="op-queue-total"><b>{requests.length}</b><small>{requests.length === 1 ? 'request' : 'requests'} in queue</small></strong></div>
     {loadState === 'loading' && <div className="op-message">Loading requests...</div>}
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
     {loadState === 'ready' && !next && <EmptyQueue serviceActive={serviceActive} />}

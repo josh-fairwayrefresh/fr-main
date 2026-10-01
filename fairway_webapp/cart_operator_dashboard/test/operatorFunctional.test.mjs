@@ -10,5 +10,8 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.match(source, /Cancel request/);
   assert.match(source, /operator\/service\/\$\{action\}/);
   assert.match(source, /operator\/dashboard/);
+  assert.match(source, /op-queue-summary/);
+  assert.doesNotMatch(source, /NEXT REQUEST/);
+  assert.doesNotMatch(source, /op-intro/);
   assert.doesNotMatch(source, />CONFIRM</);
 });

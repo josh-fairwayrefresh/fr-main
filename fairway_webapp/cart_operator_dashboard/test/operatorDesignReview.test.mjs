@@ -13,5 +13,7 @@ test('static operator design review presents the approved Option C without revie
   assert.equal([...reviewSource.matchAll(/function Option[A-C]/g)].length, 3);
   assert.doesNotMatch(reviewSource, /phone-shell|firebase|operatorRequest|updateRequestStatus/);
   assert.match(reviewSource, /<OptionC empty=\{false\}/);
+  assert.match(reviewSource, /odc-queue-summary/);
+  assert.doesNotMatch(reviewSource, /NEXT REQUEST/);
   assert.doesNotMatch(reviewSource, /Design options|Show empty state|od-reviewbar/);
 });

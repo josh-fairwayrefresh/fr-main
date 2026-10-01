@@ -135,17 +135,25 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
   }
 
   return (
-    <main className="page">
-      <div className="phone-shell login-shell">
-        <section className="login-screen">
-          <div className="login-logo">
-            <Circle size={22} />
-          </div>
-
-          <h1>Fairway Refresh</h1>
-          <p className="login-subtitle">{isAdminEntry ? 'Administration' : 'Cart Operator Dashboard'}</p>
-
-          <div className="login-card">
+    <main className="auth-page">
+      <header className="auth-header">
+        <a href="/" aria-label="Fairway Refresh home">
+          <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
+        </a>
+        <span>{isAdminEntry ? 'Administration' : 'Cart operations'}</span>
+      </header>
+      <div className="auth-layout">
+        <section className="auth-intro" aria-labelledby="auth-title">
+          <p>COURSE SERVICE OPERATIONS</p>
+          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart Operator access'}</h1>
+          <span>{isAdminEntry ? 'Authorized fleet administration.' : 'Sign in to begin course service.'}</span>
+        </section>
+        <div className="auth-entry">
+          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}>
+            <div className="auth-panel-heading">
+              <span>AUTHORIZED ACCESS</span>
+              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}</h2>
+            </div>
             <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
                 Email
@@ -189,23 +197,27 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
                 Access denied. Use an approved Fairway Refresh account.
               </p>
             )}
-          </div>
-
+          </section>
           <a className="mode-entry-link" href={isAdminEntry ? '/' : '/admin'}>
             {isAdminEntry ? 'Cart Operator Login' : 'Admin Login'}
           </a>
-        </section>
+        </div>
       </div>
+      <footer className="auth-footer"><span>Fairway Refresh</span><span>Course service operations</span></footer>
     </main>
   );
 }
 
 function EntryStatus({ title, message, showAdminLink = false }) {
   return (
-    <main className="page">
-      <div className="phone-shell login-shell">
-        <section className="login-screen entry-status-screen">
-          <div className="login-logo"><ShieldCheck size={22} /></div>
+    <main className="auth-page">
+      <header className="auth-header">
+        <a href="/" aria-label="Fairway Refresh home"><img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" /></a>
+        <span>Account access</span>
+      </header>
+      <div className="auth-status-wrap">
+        <section className="auth-panel auth-status-panel">
+          <div className="auth-status-icon"><ShieldCheck size={22} /></div>
           <h1>{title}</h1>
           <p className="login-subtitle">{message}</p>
           <div className="entry-status-actions">
@@ -216,6 +228,7 @@ function EntryStatus({ title, message, showAdminLink = false }) {
           </div>
         </section>
       </div>
+      <footer className="auth-footer"><span>Fairway Refresh</span><span>Course service operations</span></footer>
     </main>
   );
 }
