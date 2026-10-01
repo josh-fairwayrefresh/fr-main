@@ -42,6 +42,7 @@ Context references:
 | Cloud Run Region | Current Operational Evidence | us-central1 |
 | Cloud Run Service | Current Operational Evidence | fairway-button-receiver |
 | Cloud Run URL | Repository + Current Operational Evidence | https://fairway-button-receiver-936892386735.us-central1.run.app |
+| Primary Production Application Origin | CPO Physical Acceptance | https://app.fairwayrefresh.com |
 | Firebase Hosting URL | Current Operational Evidence | https://savvy-kit-496703-r5.web.app |
 | Firestore Database | Current Operational Evidence | `(default)`, Native mode, `nam5` |
 
@@ -116,6 +117,7 @@ the browser.
 
 | Item | Production Value |
 |------|------------------|
+| Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
 | Validated Admin Revision | `fairway-admin-00007-znz` (100% traffic) |
@@ -553,9 +555,11 @@ Repository-Derived and Historical Web Deployment Facts:
 - Sandbox build command: npm run build:sandbox (package.json)
 - Sandbox local dev command: npm run dev:sandbox (package.json)
 - Firebase Hosting config present in firebase.json with SPA rewrite to /index.html
+- Primary production application origin: `https://app.fairwayrefresh.com`
+- Firebase Hosting origin: `https://savvy-kit-496703-r5.web.app`
 - First-class entry routes:
-  - `/admin` for claim-authorized production administration
-  - `/` and `/requests/{requestId}` for Course-assigned Cart Operators
+  - `https://app.fairwayrefresh.com/admin` for claim-authorized production administration
+  - `https://app.fairwayrefresh.com/` and `/requests/{requestId}` for Course-assigned Cart Operators
 - Firebase Authentication sessions are shared across routes, but each route
   invokes only its own authorization path; Admin entry never depends on
   operator bootstrap.
