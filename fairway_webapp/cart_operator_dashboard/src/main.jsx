@@ -14,6 +14,7 @@ import { auth, db, googleProvider } from './lib/firebase';
 import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
+import { APP_MODE, modeForPath, resolveEntry } from './lib/appEntry.mjs';
 import { operatorRequest } from './lib/operator';
 import './styles.css';
 
@@ -121,9 +122,10 @@ async function updateRequestStatus(requestId, action) {
   return response.text();
 }
 
-function LoginScreen({ authState, onGoogleSignIn, onEmailSignIn }) {
+function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const isAdminEntry = mode === APP_MODE.ADMIN;
 
   async function handleEmailSubmit(event) {
     event.preventDefault();
@@ -139,7 +141,7 @@ function LoginScreen({ authState, onGoogleSignIn, onEmailSignIn }) {
           </div>
 
           <h1>Fairway Refresh</h1>
-          <p className="login-subtitle">Cart Operator Dashboard</p>
+          <p className="login-subtitle">{isAdminEntry ? 'Administration' : 'Cart Operator Dashboard'}</p>
 
           <div className="login-card">
             <form className="login-form" onSubmit={handleEmailSubmit}>
@@ -185,6 +187,30 @@ function LoginScreen({ authState, onGoogleSignIn, onEmailSignIn }) {
                 Access denied. Use an approved Fairway Refresh account.
               </p>
             )}
+          </div>
+
+          <a className="mode-entry-link" href={isAdminEntry ? '/' : '/admin'}>
+            {isAdminEntry ? 'Cart Operator Login' : 'Admin Login'}
+          </a>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function EntryStatus({ title, message, showAdminLink = false }) {
+  return (
+    <main className="page">
+      <div className="phone-shell login-shell">
+        <section className="login-screen entry-status-screen">
+          <div className="login-logo"><ShieldCheck size={22} /></div>
+          <h1>{title}</h1>
+          <p className="login-subtitle">{message}</p>
+          <div className="entry-status-actions">
+            {showAdminLink && <a className="google-button" href="/admin">Open Admin</a>}
+            <button className="google-secondary-button" type="button" onClick={() => signOut(auth)}>
+              Sign out
+            </button>
           </div>
         </section>
       </div>
@@ -495,9 +521,10 @@ function PlaceholderScreen({ title }) {
 }
 
 function App() {
+  const [entryMode] = useState(() => modeForPath(window.location.pathname));
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [adminMode, setAdminMode] = useState(false);
+  const [claimsReady, setClaimsReady] = useState(false);
   const [authState, setAuthState] = useState('checking');
   const [requests, setRequests] = useState([]);
   const [loadState, setLoadState] = useState('loading');
@@ -506,6 +533,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [operatorConfig, setOperatorConfig] = useState(null);
   const [operatorError, setOperatorError] = useState('');
+  const [operatorState, setOperatorState] = useState('not_requested');
   const [focusedRequestId] = useState(() => {
     const match = window.location.pathname.match(/^\/requests\/([^/]+)$/);
     return match ? decodeURIComponent(match[1]) : null;
@@ -522,13 +550,15 @@ function App() {
       if (!nextUser) {
         setUser(null);
         setIsAdmin(false);
-        setAdminMode(false);
+        setClaimsReady(false);
         setAuthState('signed_out');
         setOperatorConfig(null);
+        setOperatorState('not_requested');
         return;
       }
 
       setUser(nextUser);
+      setClaimsReady(false);
       try {
         const tokenResult = await getIdTokenResult(nextUser);
         if (isMounted) {
@@ -538,6 +568,10 @@ function App() {
         console.error('Unable to inspect account permissions:', error);
         if (isMounted) {
           setIsAdmin(false);
+        }
+      } finally {
+        if (isMounted) {
+          setClaimsReady(true);
         }
       }
       setAuthState('signed_in');
@@ -549,7 +583,6 @@ function App() {
           return;
         }
 
-        setUser(result.user);
         setAuthState('signed_in');
       })
       .catch((error) => {
@@ -566,19 +599,31 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return undefined;
+    if (entryMode !== APP_MODE.OPERATOR || !user) {
+      setOperatorConfig(null);
+      setOperatorError('');
+      setOperatorState('not_requested');
+      return undefined;
+    }
     let active = true;
     setOperatorError('');
+    setOperatorState('checking');
     operatorRequest(user, API_BASE_URL, '/api/v1/operator/bootstrap')
-      .then((config) => { if (active) setOperatorConfig(config); })
+      .then((config) => {
+        if (active) {
+          setOperatorConfig(config);
+          setOperatorState('authorized');
+        }
+      })
       .catch((error) => {
         if (active) {
           setOperatorConfig(null);
           setOperatorError(error.message);
+          setOperatorState('denied');
         }
       });
     return () => { active = false; };
-  }, [user]);
+  }, [entryMode, user]);
 
   useEffect(() => {
     if (!user || !operatorConfig) {
@@ -655,18 +700,42 @@ function App() {
     return requests.filter((request) => request.status !== 'completed');
   }, [requests]);
 
+  const entry = resolveEntry({
+    mode: entryMode,
+    authenticated: Boolean(user),
+    claimsReady,
+    isAdmin,
+    operatorState,
+  });
+
   if (!user) {
     return (
       <LoginScreen
         authState={authState}
+        mode={entryMode}
         onGoogleSignIn={handleGoogleSignIn}
         onEmailSignIn={handleEmailSignIn}
       />
     );
   }
 
-  if (operatorError) {
-    return <main className="page"><div className="phone-shell"><section className="content"><p className="empty-state error-state">{operatorError}</p></section></div></main>;
+  if (entry === 'checking') {
+    return <EntryStatus title="Fairway Refresh" message="Checking account access..." />;
+  }
+
+  if (entry === 'denied') {
+    const adminEntry = entryMode === APP_MODE.ADMIN;
+    return (
+      <EntryStatus
+        title="Access denied"
+        message={adminEntry ? 'Administrator access is required.' : (operatorError || 'Operator course access is required.')}
+        showAdminLink={!adminEntry && claimsReady && isAdmin}
+      />
+    );
+  }
+
+  if (entry === 'admin') {
+    return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onSignOut={() => signOut(auth)} />;
   }
 
   if (completedRequest) {
@@ -677,10 +746,6 @@ function App() {
         onReturn={() => setCompletedRequest(null)}
       />
     );
-  }
-
-  if (adminMode && isAdmin) {
-    return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onExit={() => setAdminMode(false)} />;
   }
 
   let screen = null;
@@ -708,7 +773,7 @@ function App() {
       onTabChange={setActiveTab}
       user={user}
       isAdmin={isAdmin}
-      onOpenAdmin={() => setAdminMode(true)}
+      onOpenAdmin={() => window.location.assign('/admin')}
     >
       {screen}
     </AppFrame>

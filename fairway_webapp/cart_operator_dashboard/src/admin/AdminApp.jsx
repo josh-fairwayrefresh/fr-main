@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, ArrowLeft, BatteryMedium, Building2, Check, ChevronRight,
+  Activity, BatteryMedium, Building2, Check, ChevronRight,
   Clipboard, Download, FileDown, Gauge, HardDrive, LayoutDashboard, MapPin,
-  Plus, Radio, RefreshCw, Save, Search, ShieldCheck, Signal, Thermometer,
-  Wrench, X,
+  LogOut, Plus, Radio, RefreshCw, Save, Search, ShieldCheck, Signal, Thermometer,
+  Wrench,
 } from 'lucide-react';
 import { adminRequest, downloadBlob } from './adminApi';
 import './admin.css';
@@ -168,12 +168,12 @@ function ExportView({ user, apiBaseUrl }) {
   return <section className="a-view"><PageHeading eyebrow="FLEET DATA" title="Device-to-SIM Export" id="export-title" /><div className="a-export"><FileDown size={36} /><h3>Device and SIM registry</h3><p>Download the authorized fleet mapping as CSV. Credential material is not included.</p><Notice error={error}>{done ? 'Export downloaded.' : ''}</Notice><button className="a-primary" type="button" onClick={exportCsv} disabled={pending}><Download size={17} />{pending ? 'Preparing…' : 'Download CSV'}</button></div></section>;
 }
 
-export default function AdminApp({ user, apiBaseUrl, onExit }) {
+export default function AdminApp({ user, apiBaseUrl, onSignOut }) {
   const [section, setSection] = useState('overview'); const [fleet, setFleet] = useState({ customers: [], devices: [] }); const [status, setStatus] = useState('loading'); const [error, setError] = useState(''); const [deviceId, setDeviceId] = useState(null);
   async function refresh() { setStatus('loading'); setError(''); try { const result = await adminRequest(user, apiBaseUrl, '/api/v1/admin/fleet'); setFleet({ customers: result.customers || [], devices: result.devices || [] }); setStatus('ready'); } catch (err) { setError(err.message); setStatus('error'); } }
   useEffect(() => { refresh(); }, []);
   const selected = fleet.devices.find((device) => device.device_id === deviceId);
   const navigation = <>{NAVIGATION.map(([id, label, Icon]) => <button type="button" key={id} className={section === id ? 'active' : ''} onClick={() => setSection(id)} title={label}><Icon size={18} /><span>{label}</span></button>)}</>;
-  return <main className="admin-app"><aside className="a-sidebar"><Brand /> <nav aria-label="Admin sections">{navigation}</nav><footer><span>{user.email}</span><button type="button" onClick={onExit}><ArrowLeft size={16} />Operator dashboard</button></footer></aside><div className="a-main"><header className="a-mobile-head"><Brand /><button className="a-icon" type="button" onClick={onExit} aria-label="Return to operator dashboard"><X size={19} /></button></header><nav className="a-mobile-nav" aria-label="Admin sections">{navigation}</nav><div className="a-review-banner"><ShieldCheck size={16} /><strong>Live production fleet</strong><span>Authorized administration</span></div>{section === 'overview' && <FleetView fleet={fleet} loading={status === 'loading'} error={error} refresh={refresh} openDevice={setDeviceId} />}{section === 'customers' && <CustomersView user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} refresh={refresh} />}{section === 'provision' && <ProvisionView user={user} apiBaseUrl={apiBaseUrl} refresh={refresh} />}{section === 'export' && <ExportView user={user} apiBaseUrl={apiBaseUrl} />}</div>{selected && <DeviceDetail key={selected.device_id} user={user} apiBaseUrl={apiBaseUrl} device={selected} customers={fleet.customers} close={() => setDeviceId(null)} refresh={refresh} />}</main>;
+  return <main className="admin-app"><aside className="a-sidebar"><Brand /> <nav aria-label="Admin sections">{navigation}</nav><footer><span>{user.email}</span><button type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></footer></aside><div className="a-main"><header className="a-mobile-head"><Brand /><button className="a-icon" type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={19} /></button></header><nav className="a-mobile-nav" aria-label="Admin sections">{navigation}</nav><div className="a-review-banner"><ShieldCheck size={16} /><strong>Live production fleet</strong><span>Authorized administration</span></div>{section === 'overview' && <FleetView fleet={fleet} loading={status === 'loading'} error={error} refresh={refresh} openDevice={setDeviceId} />}{section === 'customers' && <CustomersView user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} refresh={refresh} />}{section === 'provision' && <ProvisionView user={user} apiBaseUrl={apiBaseUrl} refresh={refresh} />}{section === 'export' && <ExportView user={user} apiBaseUrl={apiBaseUrl} />}</div>{selected && <DeviceDetail key={selected.device_id} user={user} apiBaseUrl={apiBaseUrl} device={selected} customers={fleet.customers} close={() => setDeviceId(null)} refresh={refresh} />}</main>;
 }
 function Brand() { return <div className="a-brand"><i><ShieldCheck size={20} /></i><div><strong>Fairway Refresh</strong><small>Internal Admin</small></div></div>; }

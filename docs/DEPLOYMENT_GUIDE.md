@@ -136,6 +136,19 @@ server-verified `admin: true` claim. Production `admin@fairwayrefresh.com`
 retains its password provider and has that claim. Responses use `no-store`,
 exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
 
+Web application entry is role-specific while sharing the same persistent
+Firebase Authentication session. `/admin` is the first-class Admin entry: it
+checks the signed-in user's `admin: true` claim and renders the Admin UI without
+calling operator bootstrap. `/` and `/requests/{requestId}` are Cart Operator
+entries: they call `/api/v1/operator/bootstrap` and require an enabled
+`operator_course_assignments/{uid}` record. Entry path selects the initial mode;
+neither role requires the other role's authorization. An authenticated Admin
+without an operator assignment can therefore use `/admin`, while an operator
+without the Admin claim receives an access-denied response at `/admin`. Login
+and redirect flows retain the current path and query so Admin entry and operator
+notification deep links return to their original destinations. Backend claim,
+assignment, and Firestore Rules enforcement remain the security boundaries.
+
 The production UI supports Customer/Course create and edit, Course timezone and
 Health schedule, permanent Device provisioning and bounded one-time credential
 recovery, atomic Customer/Course/location deployment assignment, lifecycle
@@ -529,6 +542,12 @@ Repository-Derived and Historical Web Deployment Facts:
 - Sandbox build command: npm run build:sandbox (package.json)
 - Sandbox local dev command: npm run dev:sandbox (package.json)
 - Firebase Hosting config present in firebase.json with SPA rewrite to /index.html
+- First-class entry routes:
+  - `/admin` for claim-authorized production administration
+  - `/` and `/requests/{requestId}` for Course-assigned Cart Operators
+- Firebase Authentication sessions are shared across routes, but each route
+  invokes only its own authorization path; Admin entry never depends on
+  operator bootstrap.
 - Validated WP5-S1 sandbox deployment command:
   - npx firebase-tools deploy --only hosting --project fairway-refresh-sandbox-260930 --non-interactive
 - Validated production deployment command:
@@ -543,6 +562,24 @@ Deployment Verification:
 
 - Production Hosting, manifest, service worker, and 180/192/512 icons were verified
   byte-for-byte against the validated production build on 2026-10-01.
+- The independent Admin/Operator entry release deployed production asset
+  `assets/index-BGbFYyr2.js` (SHA-256
+  `b95334fc020b848ec389dcff4f337a8fb15fbdf1440063780dc3987f58257f87`).
+  The live index and JavaScript were byte-identical to the validated local
+  build. Direct `/admin` and `/requests/{requestId}?course=...` requests returned
+  the SPA, and browser inspection confirmed role-specific logged-out entry,
+  preserved operator deep-link URLs, and no horizontal overflow at a 390 by 844
+  viewport. The deterministic frontend entry-policy matrix passed 6/6 and the
+  unchanged backend authorization/receiver suite passed 101/101.
+- Real-account production acceptance confirmed the independent role paths.
+  `admin@fairwayrefresh.com` loaded the live fleet from `/admin` with Admin API
+  requests and zero operator-bootstrap requests; the same persistent session
+  received `Operator course access required` at `/` and returned to `/admin`
+  without reauthentication. `josh@fairwayrefresh.com` retained the complete
+  `/requests/{requestId}?course=...` URL through sign-in, completed operator
+  bootstrap, and rendered the Monarch Bay Cart Operator queue with zero Admin
+  API requests; `/admin` then returned `Administrator access is required` with
+  zero Admin API and zero operator-bootstrap requests.
 - The iPhone Home Screen application was physically validated for authenticated
   queue access, push subscription registration, notification display, and
   notification-click deep linking.

@@ -26,8 +26,7 @@ button {
 }
 
 .phone-shell {
-  width: 390px;
-  max-width: 100%;
+  width: min(390px, calc(100vw - 48px));
   min-height: 760px;
   background: #202020;
   border-radius: 34px;
@@ -395,6 +394,33 @@ button {
   background: #282828;
   border-radius: 16px;
   padding: 22px;
+}
+
+.mode-entry-link {
+  align-self: center;
+  margin-top: 24px;
+  color: #cfcfcf;
+  font-size: 13px;
+  text-underline-offset: 3px;
+}
+
+.entry-status-screen {
+  gap: 0;
+}
+
+.entry-status-screen .login-subtitle {
+  line-height: 1.5;
+}
+
+.entry-status-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.entry-status-actions a {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
 }
 
 .login-note {

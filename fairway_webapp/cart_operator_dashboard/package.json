@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "validate:sandbox": "node --env-file-if-exists=.env.sandbox scripts/validate_frontend_config.js",
     "validate:production": "node --env-file-if-exists=.env.production scripts/validate_frontend_config.js",
     "dev:sandbox": "npm run validate:sandbox && vite --mode sandbox --host 0.0.0.0",
