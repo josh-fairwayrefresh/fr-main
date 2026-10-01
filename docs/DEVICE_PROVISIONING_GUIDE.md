@@ -23,7 +23,7 @@ Fairway Refresh fleet data is organized as:
 Customer -> Course -> Device
 
 - **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style; the readable name is a separate `customer_name` field. Stored at `customers/{customerId}`; the Firestore document ID is the canonical identity and is not duplicated as a `customer_id` field inside the document.
-- **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone and a Device Health reporting schedule (default 09:00 and 17:00 course-local time); this timezone and schedule are stored/configured on the Course record and used by the implemented autonomous firmware Device Health scheduling described in `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Implemented)"). A Device's effective timezone and Device Health reporting schedule are inherited from its currently assigned Course, are not independently stored/authoritative on the Device, and follow automatically whenever the Device is reassigned to a different Course.
+- **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone, a Device Health reporting schedule (default 09:00 and 17:00 course-local time), and a recurring beverage-service schedule (`service_schedule.days`, `start`, and `end`, interpreted in the Course timezone). Temporary operator availability is stored as `service_suspension` on the Course, with immutable suspend/resume facts in its `service_events` subcollection. A Device inherits Course configuration through its assignment; none of these values are independently authoritative on the Device.
 - **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below), stored at the top level (`devices/{deviceId}`). Its active deployment assignment comprises `customer_id`/`customer_name`, `course_id`/`course_name`, and `location`. An `in_inventory` Device has all assignment fields null. The Device ID itself never changes. Deployment atomically assigns a valid Customer, a Course belonging to that Customer, and a marker location.
 
 This hierarchy, the canonical ID formats, and the backend allocation mechanism are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/` (`schema.js`, `ids.js`, `customers.js`, `courses.js`, `devices.js`). WP5 adds an internal Admin UI and dedicated production Admin API over these primitives. The CPO accepted the production-backed experience, and the deployed service's authorization, read, write-policy, redaction, CORS, route-isolation, and rejection paths are validated. Production acceptance does not require a synthetic or manufactured fleet mutation.
@@ -182,7 +182,7 @@ WP3 migration checkpoint (CPO-authorized bootstrap writes, before the subsequent
 
 `FRB-0002` is the first device allocated through the reusable provisioning utility above, rather than through FRB-0001's direct CPO-authorized manual bootstrap writes. Current live state:
 
-- `devices/FRB-0002` exists live with `state = "in_inventory"`, which is correct while the physical unit remains on the CPO's desk awaiting completion of the five-device pilot build. The corrected lifecycle workflow cleared `customer_id`, `customer_name`, `course_id`, `course_name`, and `location` to null. Its SIM, credential verifier, system identity, commissioning metadata, Health data, and other unrelated fields were preserved. Prior golfer-request records retain their event-time Monarch Bay GC / Tony Lema Course / Hole 2 facts.
+- `devices/FRB-0002` is currently deployed to Monarch Bay GC / Tony Lema Course / Hole 2. This accepted production assignment postdates its earlier inventory reconciliation; its permanent identity, SIM, credential verifier, system identity, commissioning metadata, and Health data remain preserved.
 - The self-reporting artifact recorded in `docs/FIRMWARE_SPECIFICATION.md` was flashed to FRB-0002 on 2026-10-01. Authenticated Device Health then atomically promoted `hardware_revision = "Monarch Bay Pilot v3.2"` and `firmware_generation = "Prototype 3.2 for Pilot — Working Button and Lights"` with `system_identity.source = "device_health"` and `observed_at = 2026-10-01T03:57:38.827Z`, superseding the temporary `verified_provenance` bridge without CPO-entered identity metadata. The production Admin read model marks both fields available, and the CPO confirmed those device-reported values and Device Health provenance in the production UI.
 - `commissioning = { commissioned_at, commissioned_by }` is recorded, using the CPO's existing authenticated identity as `commissioned_by`; no new identity/role schema was introduced.
 - Golfer commissioning passed: an authenticated button transaction reached the operator app correctly attributed to Tony Lema Course / Hole 2, and the CPO confirmed and completed that request.
@@ -293,7 +293,7 @@ Related planning owner:
 A deployment-ready device may be associated with:
 
 - a Customer (`customer_id`, authoritative) with a synchronized `customer_name` display copy
-- a Course (`course_id`, authoritative), which itself belongs to exactly one Customer (enforced by nested Firestore storage) and carries a timezone and Device Health reporting schedule (default 09:00 and 17:00 course-local time), with a synchronized `course_name` display copy
+- a Course (`course_id`, authoritative), which itself belongs to exactly one Customer (enforced by nested Firestore storage) and carries a timezone, Device Health reporting schedule (default 09:00 and 17:00 course-local time), and recurring beverage-service schedule, with a synchronized `course_name` display copy
 - a marker location: either a standard Hole 1 through Hole 18 selection, or a "Custom" free-text location name (for example "Driving Range", "Practice Green", "Clubhouse Patio"). Hole number and any display text (e.g. "Hole 7") are always derived from this single `location` field; no independent `hole`/`label` fields are stored on the Device document.
 - administrator comments
 
@@ -301,11 +301,24 @@ A deployment-ready device may be associated with:
 
 Customer, Course, and location fields represent only the active deployment. `in_inventory` Devices are completely unassigned. Admin collects a valid Customer, Course, and marker location before accepting a transition to `deployed`, then persists the lifecycle and complete assignment atomically. Returning a Device to `in_inventory` atomically clears all assignment fields.
 
+The Course record is authoritative for beverage-service availability. New
+`button_press` requests are accepted only during a scheduled service window and
+when no unexpired `service_suspension` exists. A suspension ends automatically
+at the next scheduled start unless an authorized operator resumes earlier.
+Suspension does not alter existing request status/actionability and does not
+block authenticated Device Health ingestion. Scheduled service minutes minus
+scheduled overlap with immutable suspension intervals are the denominator for
+Cart Operator cart-hour metrics. Existing production Courses require an Admin
+schedule. Tony Lema Course was migrated before production activation on
+2026-10-01 to Sunday–Saturday, 10:00–19:00 in `America/Los_Angeles`; Admin shows
+and permits editing that schedule. The migration changed only
+`service_schedule` and preserved the normalized non-schedule Course fingerprint.
+
 ## Device Health: Latest State, History, Thresholds, and Alerts
 
 This section is the canonical owner of backend Device Health state requirements, `latest_health` semantics, the health-history requirement, Device Health thresholds, and alert-state/lifecycle semantics. Firmware-side acquisition and the scheduled-transport requirement are owned by `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Implemented)") and are not duplicated here.
 
-Current implementation status: `latest_health` persistence, immutable health history, effective-configuration resolution, and authorized read-only WP5 Admin display of latest/history data are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/health.js`, `index.js`, and `fairway_webapp/cart_operator_dashboard/src/admin/`. The complete backend suite is test-verified (101/101 tests passing). Device Health threshold evaluation and the alert-record lifecycle described below remain approved target only; no threshold-evaluation or alert-record implementation exists in current tracked source, and the WP5 Admin alert surface is explicitly non-operational.
+Current implementation status: `latest_health` persistence, immutable health history, effective-configuration resolution, and authorized read-only WP5 Admin display of latest/history data are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/health.js`, `index.js`, and `fairway_webapp/cart_operator_dashboard/src/admin/`. The complete backend suite is test-verified (106/106 tests passing). Device Health threshold evaluation and the alert-record lifecycle described below remain approved target only; no threshold-evaluation or alert-record implementation exists in current tracked source, and the WP5 Admin alert surface is explicitly non-operational.
 
 ### Latest Health and History (Implemented)
 

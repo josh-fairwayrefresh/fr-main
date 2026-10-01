@@ -14,6 +14,8 @@ import { auth, db, googleProvider } from './lib/firebase';
 import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
+import OperatorApp from './OperatorApp';
+import OperatorDesignReview from './operator-design/OperatorDesignReview';
 import { APP_MODE, modeForPath, resolveEntry } from './lib/appEntry.mjs';
 import { operatorRequest } from './lib/operator';
 import './styles.css';
@@ -654,7 +656,9 @@ function App() {
             received_at: data.received_at,
             confirmed_at: data.confirmed_at,
             completed_at: data.completed_at,
+            cancelled_at: data.cancelled_at,
             device_id: data.device_id,
+            location_label: data.device_label,
             course_id: data.course_id,
             course_name: data.course_name,
             age: formatRequestAge(data.received_at),
@@ -697,7 +701,13 @@ function App() {
   }
 
   const activeRequests = useMemo(() => {
-    return requests.filter((request) => request.status !== 'completed');
+    return requests
+      .filter((request) => ['new', 'confirmed'].includes(request.status))
+      .sort((left, right) => {
+        const leftDate = timestampToDate(left.received_at);
+        const rightDate = timestampToDate(right.received_at);
+        return (leftDate?.getTime() || 0) - (rightDate?.getTime() || 0);
+      });
   }, [requests]);
 
   const entry = resolveEntry({
@@ -737,6 +747,22 @@ function App() {
   if (entry === 'admin') {
     return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onSignOut={() => signOut(auth)} />;
   }
+
+  return (
+    <OperatorApp
+      user={user}
+      apiBaseUrl={API_BASE_URL}
+      operatorConfig={operatorConfig}
+      requests={activeRequests}
+      loadState={loadState}
+      loadError={loadError}
+      focusedRequestId={focusedRequestId}
+      isAdmin={isAdmin}
+      onOpenAdmin={() => window.location.assign('/admin')}
+      onSignOut={() => signOut(auth)}
+      onRequestAction={(request, action) => updateRequestStatus(request.id, action)}
+    />
+  );
 
   if (completedRequest) {
     return (
@@ -780,4 +806,5 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const root = createRoot(document.getElementById('root'));
+root.render(window.location.pathname === '/operator-design' ? <OperatorDesignReview /> : <App />);

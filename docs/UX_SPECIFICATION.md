@@ -60,17 +60,16 @@ After the originating request has succeeded, any subsequent valid physical butto
 
 The firmware-local window and count are implemented. Transporting a repeat press and persisting it against the originating request are not yet implemented. The approved persisted factual metric remains `repeat_press_count`; "Frustration Presses" is a possible Admin-facing product interpretation/KPI label, not the canonical stored event meaning.
 
-Operator CONFIRM does not alter this five-minute marker behavior. Operator COMPLETE creates a best-effort command for the exact originating request. If the marker learns of and acknowledges that matching command while the window is active, it terminates the window early and returns to normal eligibility for a fresh golfer request. Until then, or if the command is missing, delayed, stale, expired, mismatched, or unreachable, the validated in-window behavior continues and the local five-minute expiry remains authoritative.
+Operator COMPLETE creates a best-effort command for the exact originating request. If the marker learns of and acknowledges that matching command while the window is active, it terminates the window early and returns to normal eligibility for a fresh golfer request. Until then, or if the command is missing, delayed, stale, expired, mismatched, or unreachable, the validated in-window behavior continues and the local five-minute expiry remains authoritative.
 
 ### Approved End-to-End Example
 
 - T=0:00 Group A initial press → orange → Request A accepted → green → five-minute window begins.
-- T=0:30 operator CONFIRMS Request A → no marker-behavior change.
 - If Request A is not completed, an in-window press at T=1:15 gives immediate green and remains associated with Request A; the local window expires at T=5:00, and a later press follows the normal orange transaction path.
 - Alternatively, if the operator COMPLETES Request A at T=0:45, the marker ends Request A's local window after learning of and acknowledging that exact matching command.
 - The next valid press after that acknowledgement follows the normal orange transaction path and may create a fresh Request B before T=5:00.
 
-Request A may still be CONFIRMED but not COMPLETE when Request B is created; that is valid. The operator may have multiple legitimate requests from successive golfer groups at the same marker/hole in the queue simultaneously.
+Request A may still be active when Request B is created; that is valid. The operator may have multiple legitimate requests from successive golfer groups at the same marker/hole in the queue simultaneously.
 
 ## Product / Data Semantics (Approved End-to-End Target)
 
@@ -95,6 +94,36 @@ Request A may still be CONFIRMED but not COMPLETE when Request B is created; tha
 - Physical production acceptance on 2026-10-01 used FRB-0002 at Hole 2. The CPO
    observed exactly one notification for one authoritative request, successful
    deep-link focus, and no notification for the in-window duplicate press.
+
+## Cart Operator Application (Implemented and Accepted in Production)
+
+- The application is a full-surface, landscape-iPad-first responsive workspace.
+- The active queue is oldest first. The oldest request receives the strongest
+   visual focus while all remaining active requests stay visible in order.
+- COMPLETE is the primary request action. It closes the request, preserves the
+   existing request-correlated marker command behavior, and shows a brief,
+   nonblocking confirmation before the next oldest request moves into focus.
+- Cancel Request is subordinate and requires operator confirmation. It closes
+   the request without creating a marker command.
+- There is no Cart Operator CONFIRM interaction.
+- Course service availability follows the Course-owned recurring local schedule.
+   An authorized operator may suspend new golfer requests until the next
+   scheduled service start and may resume earlier. Existing requests remain
+   actionable and Device Health reporting remains accepted while suspended. A
+   valid marker press rejected during suspension shows the normal red failure
+   response and creates no operator request.
+- History provides day, week, and month summaries plus completed/cancelled
+   outcomes. Cart-hour metrics use scheduled service time minus scheduled-time
+   overlap with operator suspensions; off-hours do not count as active cart time.
+   The operator-facing transaction-rate label is "Transactions per hour."
+- Existing Firebase Authentication, Course assignment authorization, Web Push,
+   installed-app behavior, and request deep links remain part of the workflow.
+
+This application behavior was CPO-accepted in the functional sandbox and
+promoted to production on 2026-10-01. Production acceptance established the
+full-surface Option C queue, completion feedback and transaction increment,
+guarded Cancel action, empty state, schedule visibility/editability, and
+independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
 ## Superseded Single-Indicator Behavior (Historical)
 

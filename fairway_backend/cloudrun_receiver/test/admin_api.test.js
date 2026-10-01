@@ -8,6 +8,11 @@ const { resolveRuntimeEnvironment, resolveSandboxEnvironment } = require('../lib
 let passed = 0;
 let failed = 0;
 const pending = [];
+const SERVICE_SCHEDULE = Object.freeze({
+  days: [0, 1, 2, 3, 4, 5, 6],
+  start: '00:00',
+  end: '23:59',
+});
 
 function test(name, fn) {
   pending.push({ name, fn });
@@ -97,6 +102,8 @@ async function seedHierarchy(db) {
     course_name: 'Old Course',
     timezone: 'America/Los_Angeles',
     health_report_schedule: { times: ['09:00', '17:00'] },
+    service_schedule: SERVICE_SCHEDULE,
+    service_suspension: null,
     comments: null,
   });
 }
@@ -237,6 +244,7 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
       course_name: 'Tony Lema Course',
       timezone: 'America/Los_Angeles',
       health_report_schedule: { times: ['09:00', '17:00'] },
+      service_schedule: SERVICE_SCHEDULE,
     },
   });
   assert.strictEqual(course.statusCode, 201);
@@ -263,6 +271,7 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
       course_name: 'Tony Lema',
       timezone: 'UTC',
       health_report_schedule: { times: ['08:30'] },
+      service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
       comments: 'winter schedule',
     },
   });
@@ -466,6 +475,8 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
     course_name: 'Second Course',
     timezone: 'UTC',
     health_report_schedule: { times: ['08:00'] },
+    service_schedule: SERVICE_SCHEDULE,
+    service_suspension: null,
   });
   await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Other Customer' });
   await db.collection('devices').doc('FRB-0001').set({

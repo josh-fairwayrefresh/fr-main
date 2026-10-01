@@ -3,6 +3,7 @@
 const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
 const { CUSTOMERS_COLLECTION } = require('./customers');
+const { isValidServiceSchedule } = require('../course_service');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
@@ -49,6 +50,9 @@ function isValidHealthReportSchedule(schedule) {
  *   health_report_schedule     { times: ["HH:MM", ...] } course-local times;
  *                              stored/configured only. Firmware scheduling is
  *                              out of scope for WP2.
+ *   service_schedule           { days: [0-6], start: "HH:MM", end: "HH:MM" }
+ *                              recurring Course-local beverage-service window
+ *   service_suspension         temporary operator suspension or null
  *   comments                   administrator free-text notes
  *   created_at / updated_at    standard metadata
  */
@@ -71,6 +75,7 @@ async function createCourse(db, {
   timezone,
   comments = null,
   healthReportSchedule,
+  serviceSchedule,
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
@@ -83,6 +88,9 @@ async function createCourse(db, {
   }
   if (healthReportSchedule !== undefined && !isValidHealthReportSchedule(healthReportSchedule)) {
     throw new Error('Health report schedule requires one or more HH:MM times');
+  }
+  if (!isValidServiceSchedule(serviceSchedule)) {
+    throw new Error('Service schedule requires selected days and a valid start/end window');
   }
   if (comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
@@ -100,6 +108,8 @@ async function createCourse(db, {
     course_name: courseName,
     timezone,
     health_report_schedule: healthReportSchedule || DEFAULT_HEALTH_REPORT_SCHEDULE,
+    service_schedule: serviceSchedule,
+    service_suspension: null,
     comments,
     created_at: now,
     updated_at: now,
@@ -130,6 +140,7 @@ async function updateCourse(db, customerId, courseId, {
   courseName,
   timezone,
   healthReportSchedule,
+  serviceSchedule,
   comments,
 } = {}) {
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
@@ -151,6 +162,9 @@ async function updateCourse(db, customerId, courseId, {
   if (healthReportSchedule !== undefined && !isValidHealthReportSchedule(healthReportSchedule)) {
     throw new Error('Health report schedule requires one or more HH:MM times');
   }
+  if (serviceSchedule !== undefined && !isValidServiceSchedule(serviceSchedule)) {
+    throw new Error('Service schedule requires selected days and a valid start/end window');
+  }
   if (comments !== undefined && comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
@@ -165,6 +179,9 @@ async function updateCourse(db, customerId, courseId, {
   }
   if (healthReportSchedule !== undefined) {
     update.health_report_schedule = healthReportSchedule;
+  }
+  if (serviceSchedule !== undefined) {
+    update.service_schedule = serviceSchedule;
   }
   if (comments !== undefined) {
     update.comments = comments;

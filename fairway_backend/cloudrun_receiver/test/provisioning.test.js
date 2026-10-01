@@ -45,6 +45,7 @@ async function seedCustomerAndCourse(db) {
     customerId: customer.customer_id,
     courseName: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
+    serviceSchedule: { days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:59' },
   });
   return { customerId: customer.customer_id, courseId: course.course_id };
 }

@@ -369,16 +369,16 @@ async function resolveEffectiveDeviceConfig(db, deviceId, now = new Date()) {
  */
 async function resolveDeviceHierarchyConfig(db, device, now = new Date()) {
   if (!device.customer_id && !device.course_id) {
-    return { valid: true, effectiveConfig: null };
+    return { valid: true, effectiveConfig: null, course: null };
   }
 
   if (!device.customer_id || !device.course_id) {
-    return { valid: false, effectiveConfig: null };
+    return { valid: false, effectiveConfig: null, course: null };
   }
 
   const course = await getCourseForCustomer(db, device.customer_id, device.course_id);
   if (!course) {
-    return { valid: false, effectiveConfig: null };
+    return { valid: false, effectiveConfig: null, course: null };
   }
 
   const schedule = course.health_report_schedule || DEFAULT_HEALTH_REPORT_SCHEDULE;
@@ -386,6 +386,7 @@ async function resolveDeviceHierarchyConfig(db, device, now = new Date()) {
 
   return {
     valid: true,
+    course,
     effectiveConfig: {
       timezone: course.timezone,
       health_report_schedule: schedule,

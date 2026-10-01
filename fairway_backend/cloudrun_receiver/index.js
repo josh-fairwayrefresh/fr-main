@@ -3,7 +3,12 @@ const { Firestore, FieldValue } = require('@google-cloud/firestore');
 require('./notifier');
 const { resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
-const { createCourse, updateCourse } = require('./lib/fleet/courses');
+const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
+const {
+  activeServiceMinutes,
+  nextScheduledStart,
+  resolveCourseServiceState,
+} = require('./lib/course_service');
 const {
   authenticateDeviceCredential,
   updateDeviceAssignment,
@@ -288,6 +293,18 @@ function createFairwayHandlers(db, {
       return persistHealthReport(res, deviceId, body.health, hierarchy.effectiveConfig);
     }
 
+    if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, requestTime).active) {
+      console.log('Rejected golfer request because Course service is unavailable:', {
+        device_id: deviceId,
+        course_id: device.course_id,
+      });
+      return res.status(503).json({
+        status: 'service_unavailable',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+        effective_config: hierarchy.effectiveConfig,
+      });
+    }
+
     return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig, requestTime);
   }
 
@@ -385,6 +402,124 @@ function createFairwayHandlers(db, {
       }
       throw error;
     }
+  }
+
+  async function authorizedCourse(operator, courseId) {
+    const assignment = operator.assignment.courses.find((course) => course.course_id === courseId);
+    if (!assignment) return null;
+    return getCourseForCustomer(db, assignment.customer_id, assignment.course_id);
+  }
+
+  async function courseServiceReadModel(course, requestTime) {
+    const eventsSnap = await coursesCollection(db, course.customer_id).doc(course.course_id)
+      .collection('service_events').orderBy('recorded_at', 'desc').limit(500).get();
+    const events = eventsSnap.docs.map((event) => event.data());
+    return {
+      course_id: course.course_id,
+      course_name: course.course_name,
+      timezone: course.timezone,
+      service_schedule: course.service_schedule,
+      service_state: resolveCourseServiceState(course, requestTime),
+      service_events: events,
+    };
+  }
+
+  function operatorCourseServiceModel(course) {
+    const { service_events: _serviceEvents, ...model } = course;
+    return model;
+  }
+
+  async function getOperatorDashboard(req, res) {
+    const operator = await authorizeOperator(req, res);
+    if (!operator) return res;
+    const requestTime = now();
+    const courses = (await Promise.all(operator.assignment.courses.map((assignment) =>
+      getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
+      .filter(Boolean);
+    const serviceCourses = await Promise.all(courses.map((course) =>
+      courseServiceReadModel(course, requestTime)));
+    const allowedCourseIds = new Set(courses.map((course) => course.course_id));
+    const requestSnap = await db.collection('requests')
+      .where('course_id', 'in', [...allowedCourseIds])
+      .limit(5000)
+      .get();
+    const requests = requestSnap.docs
+      .map((snapshot) => ({ request_id: snapshot.id, ...snapshot.data() }))
+      .filter((request) => allowedCourseIds.has(request.course_id));
+    const periods = [
+      ['daily', 24 * 60],
+      ['weekly', 7 * 24 * 60],
+      ['monthly', 30 * 24 * 60],
+    ];
+    const summaries = Object.fromEntries(periods.map(([period, durationMinutes]) => {
+      const start = new Date(requestTime.getTime() - durationMinutes * 60000);
+      const periodRequests = requests.filter((request) => {
+        const receivedAt = toDate(request.received_at);
+        return receivedAt && receivedAt >= start && receivedAt <= requestTime;
+      });
+      const completed = periodRequests.filter((request) => request.status === 'completed');
+      const cancelled = periodRequests.filter((request) => request.status === 'cancelled');
+      const activeMinutes = courses.reduce((total, course) => {
+        const service = serviceCourses.find((item) => item.course_id === course.course_id);
+        return total + activeServiceMinutes(course, service.service_events, start, requestTime);
+      }, 0);
+      const activeHours = activeMinutes / 60;
+      const completionMinutes = completed.map((request) => {
+        const receivedAt = toDate(request.received_at);
+        const completedAt = toDate(request.completed_at);
+        return receivedAt && completedAt ? (completedAt - receivedAt) / 60000 : null;
+      }).filter((value) => value !== null);
+      return [period, {
+        requests: periodRequests.length,
+        completed_transactions: completed.length,
+        cancelled_requests: cancelled.length,
+        active_cart_hours: Number(activeHours.toFixed(2)),
+        transactions_per_cart_hour: activeHours > 0 ? Number((completed.length / activeHours).toFixed(1)) : 0,
+        requests_per_hour: activeHours > 0 ? Number((periodRequests.length / activeHours).toFixed(1)) : 0,
+        average_completion_minutes: completionMinutes.length > 0
+          ? Number((completionMinutes.reduce((sum, value) => sum + value, 0) / completionMinutes.length).toFixed(1))
+          : null,
+      }];
+    }));
+    const history = requests
+      .filter((request) => ['completed', 'cancelled'].includes(request.status))
+      .sort((left, right) => toDate(right.received_at) - toDate(left.received_at))
+      .slice(0, 100);
+    return res.status(200).json({
+      courses: serviceCourses.map(operatorCourseServiceModel),
+      summaries,
+      history,
+    });
+  }
+
+  async function updateCourseService(req, res, action) {
+    const operator = await authorizeOperator(req, res);
+    if (!operator) return res;
+    const courseId = req.body?.course_id;
+    const course = await authorizedCourse(operator, courseId);
+    if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
+    const requestTime = now();
+    const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
+    if (action === 'suspend') {
+      const until = nextScheduledStart(course, requestTime);
+      if (!until) return res.status(409).send('Course service schedule is not configured\n');
+      await courseRef.update({
+        service_suspension: { suspended_at: requestTime, until, suspended_by: operator.identity.uid },
+        updated_at: requestTime,
+      });
+      await courseRef.collection('service_events').add({
+        type: 'suspended', recorded_at: requestTime, operator_id: operator.identity.uid, until,
+      });
+    } else {
+      await courseRef.update({ service_suspension: null, updated_at: requestTime });
+      await courseRef.collection('service_events').add({
+        type: 'resumed', recorded_at: requestTime, operator_id: operator.identity.uid,
+      });
+    }
+    const updated = await getCourseForCustomer(db, course.customer_id, course.course_id);
+    return res.status(200).json(operatorCourseServiceModel(
+      await courseServiceReadModel(updated, requestTime)
+    ));
   }
 
   function requireBodyFields(body, allowedFields) {
@@ -485,9 +620,11 @@ function createFairwayHandlers(db, {
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
           health_report_schedule: courseSource.health_report_schedule ?? null,
+          service_schedule: courseSource.service_schedule ?? null,
+          service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'health_report_schedule', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'health_report_schedule', 'service_schedule', 'service_suspension', 'comments']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -552,23 +689,25 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'service_schedule', 'comments']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
       healthReportSchedule: req.body.health_report_schedule,
+      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'service_schedule', 'comments']);
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
       healthReportSchedule: req.body.health_report_schedule,
+      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(200).json(course);
@@ -757,6 +896,10 @@ function createFairwayHandlers(db, {
       complete: {
         status: 'completed',
         timestampField: 'completed_at'
+      },
+      cancel: {
+        status: 'cancelled',
+        timestampField: 'cancelled_at'
       }
     };
 
@@ -995,8 +1138,17 @@ function createFairwayHandlers(db, {
       if (req.method === 'GET' && path === '/api/v1/operator/bootstrap') {
         return await getOperatorBootstrap(req, res);
       }
+      if (req.method === 'GET' && path === '/api/v1/operator/dashboard') {
+        return await getOperatorDashboard(req, res);
+      }
       if (req.method === 'POST' && path === '/api/v1/operator/push-subscriptions') {
         return await postOperatorPushSubscription(req, res);
+      }
+      if (req.method === 'POST' && path === '/api/v1/operator/service/suspend') {
+        return await updateCourseService(req, res, 'suspend');
+      }
+      if (req.method === 'POST' && path === '/api/v1/operator/service/resume') {
+        return await updateCourseService(req, res, 'resume');
       }
 
       if (req.method !== 'POST') {
@@ -1012,7 +1164,7 @@ function createFairwayHandlers(db, {
         return await acknowledgeDeviceCommand(req, res, commandAckMatch[1]);
       }
 
-      const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete)$/);
+      const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete|cancel)$/);
       if (statusMatch) {
         const requestId = statusMatch[1];
         const action = statusMatch[2];

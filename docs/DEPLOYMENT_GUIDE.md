@@ -471,8 +471,7 @@ Current Backend Deployment Facts:
 - Documented deployed service name: fairway-button-receiver
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
 - Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
-- The deployed backend requires a Firebase bearer ID token on CONFIRM and COMPLETE, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The deployed dashboard sends the current signed-in user's token. This path has automated backend test evidence and was operationally validated during Stage B2.
-- CONFIRM and COMPLETE continue to require authenticated operator identity without an admin claim. The WP5 admin API requires the out-of-band-assigned Firebase custom claim `admin: true` on every `/api/v1/admin/*` route and returns HTTP 403 before fleet reads or writes for authenticated non-admins. It is deployed to both the isolated WP5-S1 sandbox and the dedicated production Admin service described above.
+- The deployed backend requires a Firebase bearer ID token on operator mutations, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The active Cart Operator workflow has no CONFIRM interaction; COMPLETE, Cancel, Suspend/Resume, and dashboard-summary calls are restricted by enabled Course assignment. The WP5 admin API continues to require the out-of-band-assigned Firebase custom claim `admin: true` on every `/api/v1/admin/*` route and returns HTTP 403 before fleet reads or writes for authenticated non-admins.
 - Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
 - Supported request routes:
   - POST /
@@ -483,6 +482,30 @@ Current Backend Deployment Facts:
   - POST /api/v1/device-commands/{commandId}/ack
   - GET /api/v1/operator/bootstrap
   - POST /api/v1/operator/push-subscriptions
+  - POST /api/v1/requests/{requestId}/cancel
+  - GET /api/v1/operator/dashboard
+  - POST /api/v1/operator/service/suspend
+  - POST /api/v1/operator/service/resume
+
+The Option C production rollout on 2026-10-01 deployed receiver revision
+`fairway-button-receiver-00019-c8h` and Admin revision
+`fairway-admin-00008-sjt`, each ready with 100% traffic and its prior runtime
+identity preserved. Before activation, Tony Lema Course was migrated with an
+explicit Course-local `service_schedule` covering Sunday through Saturday,
+10:00–19:00 in `America/Los_Angeles`. The migration used a one-field update
+mask; the normalized non-schedule Course fingerprint remained
+`078fe6c87dc2e8532fd169d5edc184a20304d600130d57775a2c04647e6d7d19`.
+
+The validated backend production deployment commands are:
+
+```sh
+gcloud run deploy fairway-button-receiver --project=savvy-kit-496703-r5 \
+  --region=us-central1 --source=fairway_backend/cloudrun_receiver \
+  --function=fairwayButtonReceiver --quiet
+gcloud run deploy fairway-admin --project=savvy-kit-496703-r5 \
+  --region=us-central1 --source=fairway_backend/cloudrun_receiver \
+  --function=fairwayAdmin --quiet
+```
 
 ### Cart Operator Web Push
 
@@ -532,8 +555,8 @@ Operational lesson (established during WP3 per-device credential deployment): re
 
 Deployment process status:
 
-No repository-controlled backend deployment command or CI pipeline is currently documented.
-The canonical backend deployment process is not yet published in repository-controlled artifacts.
+The source-deployment commands above are production-validated. No automated
+repository CI deployment pipeline is currently established.
 
 ### Backend Deployment Validation
 
@@ -574,6 +597,21 @@ Repository-controlled artifacts define web build behavior and the production
 Hosting deployment command above was validated on 2026-10-01.
 
 Deployment Verification:
+
+- The CPO-accepted Option C rollout deployed Hosting asset
+  `assets/index-B-HgnZrQ.js` (SHA-256
+  `efcc091e392d4c27db704f17bdf61aae4049a70de70140b258456b4e9d2f7f37`).
+  The custom domain and Firebase Hosting copies were byte-identical to the
+  validated local production build. `/`, `/admin`, request deep links, the
+  manifest, and root service worker returned `200` through
+  `app.fairwayrefresh.com`. Authenticated production acceptance established the
+  Option C queue, Complete advancing transactions exactly once, guarded Cancel,
+  Course schedule display/edit controls, and independent Operator/Admin paths.
+  With Tony Lema Course authoritatively suspended, one FRB-0002 press produced
+  orange followed by red blink-blink-solid; receiver revision `00019-c8h`
+  returned two bounded `503` attempts with explicit service-unavailable logs,
+  and no request document was created. Resume then cleared the Course suspension
+  and restored Service Active.
 
 - Production Hosting, manifest, service worker, and 180/192/512 icons were verified
   byte-for-byte against the validated production build on 2026-10-01.

@@ -117,7 +117,11 @@ async function setUpDeployedDevice(db, deviceId, extra = {}) {
 
 async function seedCourse(db, customerId, courseId, courseFields) {
   await db.collection('customers').doc(customerId).set({ customer_name: customerId });
-  await db.collection('customers').doc(customerId).collection('courses').doc(courseId).set(courseFields);
+  await db.collection('customers').doc(customerId).collection('courses').doc(courseId).set({
+    service_schedule: { days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:59' },
+    service_suspension: null,
+    ...courseFields,
+  });
 }
 
 // --- WP3 auth/lifecycle regression (dynamic, against the real production handler) ---
@@ -655,6 +659,150 @@ test('authenticated COMPLETE atomically creates one deterministic correlated com
   assert.strictEqual(commands.docs[0].data().type, 'complete');
   assert.strictEqual(commands.docs[0].data().status, 'pending');
   assert.strictEqual(commands.docs[0].data().expires_at, expiresAt);
+});
+
+test('authenticated CANCEL closes an assigned request without creating a Device command', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
+  await db.collection('requests').doc('request-a').set({
+    course_id: 'COURSE-0001',
+    device_id: 'FRB-0001',
+    status: 'new',
+  });
+  const { updateRequestStatus } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const response = createResponse();
+  await updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer valid-token' },
+  }), response, 'request-a', 'cancel');
+
+  assert.strictEqual(response.statusCode, 200);
+  const request = await db.collection('requests').doc('request-a').get();
+  assert.strictEqual(request.data().status, 'cancelled');
+  assert.strictEqual(request.data().operator_id, 'operator-123');
+  const commands = await db.collection('devices').doc('FRB-0001').collection('commands').get();
+  assert.strictEqual(commands.empty, true);
+});
+
+test('Course suspension blocks new button requests but preserves Health and active-request actions', async () => {
+  const db = new FakeFirestore();
+  const requestTime = new Date('2026-10-01T19:00:00.000Z');
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    health_report_schedule: { times: ['09:00', '17:00'] },
+    service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
+    service_suspension: { until: new Date('2026-10-02T16:00:00.000Z') },
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Tony Lema Course',
+  });
+  await setUpOperatorAssignment(db);
+  await db.collection('requests').doc('request-existing').set({
+    course_id: 'COURSE-0001', device_id: 'FRB-0001', status: 'new',
+    demand_window_expires_at: new Date('2026-10-01T20:00:00.000Z'),
+  });
+  const handlers = createFairwayHandlers(db, {
+    now: () => requestTime,
+    verifyOperatorToken: operatorVerifier(),
+  });
+
+  const button = createResponse();
+  await handlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), button);
+  assert.strictEqual(button.statusCode, 503);
+  assert.strictEqual(button.body.status, 'service_unavailable');
+  const newRequests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  assert.strictEqual(newRequests.size, 1);
+
+  const health = createResponse();
+  await handlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
+    headers: { 'x-fairway-device-key': secret },
+  }), health);
+  assert.strictEqual(health.statusCode, 200);
+
+  const complete = createResponse();
+  await handlers.updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer valid-token' },
+  }), complete, 'request-existing', 'complete');
+  assert.strictEqual(complete.statusCode, 200);
+});
+
+test('assigned operators can suspend until the next scheduled start and resume service', async () => {
+  const db = new FakeFirestore();
+  const requestTime = new Date('2026-10-01T19:00:00.000Z');
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    health_report_schedule: { times: ['09:00', '17:00'] },
+    service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
+  });
+  await setUpOperatorAssignment(db);
+  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+    now: () => requestTime,
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const suspend = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'POST', path: '/api/v1/operator/service/suspend',
+    body: { course_id: 'COURSE-0001' },
+    headers: { authorization: 'Bearer valid-token' },
+  }), suspend);
+  assert.strictEqual(suspend.statusCode, 200);
+  assert.strictEqual(suspend.body.service_state.suspended, true);
+  assert.strictEqual(suspend.body.service_state.suspension_until.toISOString(), '2026-10-02T16:00:00.000Z');
+
+  const resume = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'POST', path: '/api/v1/operator/service/resume',
+    body: { course_id: 'COURSE-0001' },
+    headers: { authorization: 'Bearer valid-token' },
+  }), resume);
+  assert.strictEqual(resume.statusCode, 200);
+  assert.strictEqual(resume.body.service_state.active, true);
+  const events = await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .collection('service_events').get();
+  assert.deepStrictEqual(events.docs.map((event) => event.data().type), ['suspended', 'resumed']);
+});
+
+test('operator dashboard returns only assigned-Course service state, summaries, and outcomes', async () => {
+  const db = new FakeFirestore();
+  const requestTime = new Date('2026-10-01T19:00:00.000Z');
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles',
+    health_report_schedule: { times: ['09:00', '17:00'] },
+    service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
+  });
+  await setUpOperatorAssignment(db);
+  await db.collection('requests').doc('completed-assigned').set({
+    course_id: 'COURSE-0001', hole: 7, status: 'completed',
+    received_at: new Date('2026-10-01T18:00:00.000Z'),
+    completed_at: new Date('2026-10-01T18:10:00.000Z'),
+  });
+  await db.collection('requests').doc('completed-other').set({
+    course_id: 'COURSE-9999', hole: 18, status: 'completed',
+    received_at: new Date('2026-10-01T18:00:00.000Z'),
+    completed_at: new Date('2026-10-01T18:05:00.000Z'),
+  });
+  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+    now: () => requestTime,
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const response = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'GET', path: '/api/v1/operator/dashboard',
+    headers: { authorization: 'Bearer valid-token' },
+  }), response);
+
+  assert.strictEqual(response.statusCode, 200);
+  assert.deepStrictEqual(response.body.courses.map((course) => course.course_id), ['COURSE-0001']);
+  assert.strictEqual(response.body.summaries.daily.completed_transactions, 1);
+  assert.strictEqual(response.body.summaries.daily.average_completion_minutes, 10);
+  assert.deepStrictEqual(response.body.history.map((request) => request.request_id), ['completed-assigned']);
 });
 
 test('operator bootstrap and push subscription are restricted to assigned Courses', async () => {
