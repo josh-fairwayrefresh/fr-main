@@ -37,6 +37,46 @@ async function run() {
   }
 }
 
+const ACTIVE_COMMAND_TELEMETRY = Object.freeze({
+  command_scheduler_runs: 8,
+  command_timer_fires: 4,
+  command_poll_attempts: 4,
+  command_poll_transport_failures: 1,
+  command_poll_http_failures: 1,
+  command_poll_empty_responses: 1,
+  command_complete_received: 1,
+  command_ack_attempts: 2,
+  command_ack_failures: 1,
+  command_ack_successes: 1,
+  command_lte_not_registered: 1,
+  command_lte_recoveries: 1,
+  command_stale_results: 0,
+  command_last_result: 7,
+  command_stop_reason: 2,
+  command_state: 7,
+  command_registration_state: 1,
+});
+
+const EMPTY_COMMAND_TELEMETRY = Object.freeze({
+  command_scheduler_runs: 0,
+  command_timer_fires: 0,
+  command_poll_attempts: 0,
+  command_poll_transport_failures: 0,
+  command_poll_http_failures: 0,
+  command_poll_empty_responses: 0,
+  command_complete_received: 0,
+  command_ack_attempts: 0,
+  command_ack_failures: 0,
+  command_ack_successes: 0,
+  command_lte_not_registered: 0,
+  command_lte_recoveries: 0,
+  command_stale_results: 0,
+  command_last_result: 0,
+  command_stop_reason: 0,
+  command_state: 0,
+  command_registration_state: null,
+});
+
 const VALID_OBSERVATION = Object.freeze({
   hardware_revision: 'Monarch Bay Pilot v3.2',
   firmware_generation: 'Prototype 3.2 for Pilot — Working Button and Lights',
@@ -54,6 +94,7 @@ const VALID_OBSERVATION = Object.freeze({
   battery_voltage_u_v: 4000000,
   battery_soc_pct: 87,
   https_succeeded: true,
+  ...ACTIVE_COMMAND_TELEMETRY,
 });
 
 const MINIMAL_NULL_OBSERVATION = Object.freeze({
@@ -73,6 +114,7 @@ const MINIMAL_NULL_OBSERVATION = Object.freeze({
   battery_voltage_u_v: null,
   battery_soc_pct: null,
   https_succeeded: null,
+  ...EMPTY_COMMAND_TELEMETRY,
 });
 
 // --- A. Health observation validation ---
@@ -126,6 +168,7 @@ const FIRMWARE_FIRST_ATTEMPT_OBSERVATION = Object.freeze({
   battery_voltage_u_v: 4000000,
   battery_soc_pct: 87,
   https_succeeded: null,
+  ...EMPTY_COMMAND_TELEMETRY,
 });
 
 const FIRMWARE_RETRY_AFTER_TRANSPORT_FAILURE_OBSERVATION = Object.freeze({
@@ -166,6 +209,33 @@ test('missing required attempts field rejected', () => {
 
 test('negative attempts rejected', () => {
   assert.strictEqual(isValidHealthObservation({ ...VALID_OBSERVATION, attempts: -1 }), false);
+});
+
+test('legacy observation without command-poll telemetry remains accepted', () => {
+  const legacy = Object.fromEntries(Object.entries(VALID_OBSERVATION)
+    .filter(([key]) => !key.startsWith('command_')));
+  assert.strictEqual(isValidHealthObservation(legacy), true);
+});
+
+test('partial or out-of-range command-poll telemetry is rejected', () => {
+  const { command_stop_reason, ...partial } = VALID_OBSERVATION;
+  assert.strictEqual(isValidHealthObservation(partial), false);
+  assert.strictEqual(isValidHealthObservation({
+    ...VALID_OBSERVATION,
+    command_last_result: 10,
+  }), false);
+  assert.strictEqual(isValidHealthObservation({
+    ...VALID_OBSERVATION,
+    command_stop_reason: 5,
+  }), false);
+  assert.strictEqual(isValidHealthObservation({
+    ...VALID_OBSERVATION,
+    command_state: 10,
+  }), false);
+  assert.strictEqual(isValidHealthObservation({
+    ...VALID_OBSERVATION,
+    command_ack_successes: 3,
+  }), false);
 });
 
 test('non-integer numeric field rejected', () => {

@@ -41,11 +41,36 @@ const SYSTEM_IDENTITY_FIELDS = Object.freeze([
   'firmware_generation',
 ]);
 
+const COMMAND_POLL_INTEGER_FIELDS = Object.freeze([
+  'command_scheduler_runs',
+  'command_timer_fires',
+  'command_poll_attempts',
+  'command_poll_transport_failures',
+  'command_poll_http_failures',
+  'command_poll_empty_responses',
+  'command_complete_received',
+  'command_ack_attempts',
+  'command_ack_failures',
+  'command_ack_successes',
+  'command_lte_not_registered',
+  'command_lte_recoveries',
+  'command_stale_results',
+  'command_last_result',
+  'command_stop_reason',
+  'command_state',
+]);
+
+const COMMAND_POLL_FIELDS = Object.freeze([
+  ...COMMAND_POLL_INTEGER_FIELDS,
+  'command_registration_state',
+]);
+
 const ALLOWED_HEALTH_OBSERVATION_KEYS = new Set([
   ...REQUIRED_INTEGER_FIELDS,
   ...NULLABLE_INTEGER_FIELDS,
   ...NULLABLE_BOOLEAN_FIELDS,
   ...SYSTEM_IDENTITY_FIELDS,
+  ...COMMAND_POLL_FIELDS,
 ]);
 
 function isNullableInteger(value) {
@@ -103,6 +128,26 @@ function isValidHealthObservation(observation) {
   if (identityFieldCount > 0 &&
       SYSTEM_IDENTITY_FIELDS.some((field) => !isValidIdentityString(observation[field]))) {
     return false;
+  }
+
+  const commandPollFieldCount = COMMAND_POLL_FIELDS
+    .filter((field) => field in observation).length;
+  if (commandPollFieldCount !== 0 && commandPollFieldCount !== COMMAND_POLL_FIELDS.length) {
+    return false;
+  }
+  if (commandPollFieldCount > 0) {
+    if (COMMAND_POLL_INTEGER_FIELDS.some((field) =>
+      !Number.isInteger(observation[field]) || observation[field] < 0)) {
+      return false;
+    }
+    if (!isNullableInteger(observation.command_registration_state) ||
+        observation.command_last_result > 9 ||
+        observation.command_stop_reason > 4 ||
+        observation.command_state > 9 ||
+        observation.command_ack_successes > observation.command_ack_attempts ||
+        observation.command_ack_failures > observation.command_ack_attempts) {
+      return false;
+    }
   }
 
   if (observation.http_status !== null &&

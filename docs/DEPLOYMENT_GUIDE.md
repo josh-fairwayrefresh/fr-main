@@ -378,6 +378,8 @@ Before flashing, verify the selected artifact against that provenance record. Do
 
 The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tracked Fairway board root to the MCUboot child image. This is required for the custom `circuitdojo_feather_nrf9151` board to resolve consistently during the sysbuild build.
 
+Current unflashed FRB-0002 runtime-reliability candidate provenance (rebuilt `2026-10-02` after the complete lifecycle architecture review): base commit `0e7e4763ecec177bb4e69eb874a4ae61d2e6a5d7` plus the documented uncommitted correction; artifact `samples/fairway_power_sandbox/artifacts/frb0002-runtime-reliability/frb0002_runtime_reliability_candidate_merged.hex`; 564,898 bytes; SHA-256 `b0b13741fd0ac78678c6b58a91714e8db2ba56928b68385708eb16becc641a32`; NCS v3.1.1; Nordic toolchain bundle `561dce9adf`; West 1.4.0; board `circuitdojo_feather_nrf9151@1/nrf9151/ns`; `prj_a.conf`; explicit Fairway `BOARD_ROOT`; documented debug-thread-info settings; pristine sysbuild. Application usage was 124,688 B / 448 KB flash and 41,392 B / 211,608 B RAM; TF-M was 31,580 / 32,256 B flash and MCUboot was 47,784 / 48 KB flash. This provenance record does not authorize flashing.
+
 ### Flash Procedure
 
 The current Fairway programming path is probe-rs. In USB/debug/service mode, USB is connected and PPK2 is disconnected, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.

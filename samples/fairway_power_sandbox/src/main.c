@@ -69,6 +69,7 @@
 #include "command_protocol.h"
 #include "health_temperature.h"
 #include "health_schedule.h"
+#include "runtime_scheduler.h"
 #include <date_time.h>
 
 #if !defined(FAIRWAY_HARDWARE_REVISION) || !defined(FAIRWAY_FIRMWARE_GENERATION)
@@ -106,6 +107,7 @@ static const struct device *max17048_dev = DEVICE_DT_GET(DT_NODELABEL(max17048))
 #define GOLFER_MIN_RETRY_RESERVE_MS       3000
 #define GOLFER_DNS_READINESS_TIMEOUT_MS   3000
 #define BUTTON_REARM_SETTLE_MS            250
+#define BUTTON_DEBOUNCE_MS                 75
 
 #define STARTUP_FLASH_COUNT      3
 #define STARTUP_FLASH_ON_MS      150
@@ -353,124 +355,26 @@ static bool pending_deadline_take(int64_t *out_deadline_unix_ms)
 }
 
 static app_state_t state = STATE_IDLE;
-static volatile bool button_wake_pending;
 static volatile bool health_wake_pending;
 static volatile bool date_time_valid_pending;
 static volatile bool lte_registered_pending;
 static struct gpio_callback button_cb;
 static struct gpio_callback vbus_cb;
 
-struct active_request {
-	bool active;
-	int64_t expires_at_ms;
-	uint32_t repeat_press_count;
-	char request_id[FAIRWAY_REQUEST_ID_MAX];
-	bool command_check_due;
-};
-static struct active_request active_request;
-static struct k_spinlock active_request_lock;
+static struct fairway_runtime_scheduler command_scheduler;
+static struct fairway_button_latch button_latch;
+static struct k_spinlock button_latch_lock;
 
 static void active_request_start(const char *request_id, int64_t expires_at_ms)
 {
-	k_spinlock_key_t key = k_spin_lock(&active_request_lock);
-
-	strcpy(active_request.request_id, request_id);
-	active_request.expires_at_ms = expires_at_ms;
-	active_request.repeat_press_count = 0;
-	active_request.command_check_due = false;
-	active_request.active = true;
-	k_spin_unlock(&active_request_lock, key);
+	(void)fairway_runtime_scheduler_start(&command_scheduler, request_id,
+		k_uptime_get(), expires_at_ms);
 }
 
 static bool active_request_repeat_press(int64_t now_ms, uint32_t *repeat_count)
 {
-	k_spinlock_key_t key = k_spin_lock(&active_request_lock);
-	bool active = active_request.active && now_ms < active_request.expires_at_ms;
-
-	if (active) {
-		active_request.repeat_press_count++;
-		*repeat_count = active_request.repeat_press_count;
-	} else if (active_request.active) {
-		active_request.active = false;
-	}
-	k_spin_unlock(&active_request_lock, key);
-	return active;
-}
-
-static void complete_check_timer_expiry(struct k_timer *timer)
-{
-	k_spinlock_key_t key = k_spin_lock(&active_request_lock);
-	bool wake = active_request.active &&
-		    k_uptime_get() < active_request.expires_at_ms;
-
-	if (wake) {
-		active_request.command_check_due = true;
-	} else {
-		active_request.active = false;
-		active_request.command_check_due = false;
-	}
-	k_spin_unlock(&active_request_lock, key);
-
-	if (wake) {
-		k_sem_give(&txn_wake_sem);
-	} else {
-		k_timer_stop(timer);
-	}
-}
-
-K_TIMER_DEFINE(complete_check_timer, complete_check_timer_expiry, NULL);
-
-static bool active_request_take_command_check(char *request_id, size_t request_id_len)
-{
-	k_spinlock_key_t key = k_spin_lock(&active_request_lock);
-	int64_t now_ms = k_uptime_get();
-	bool due = active_request.active && active_request.command_check_due &&
-		   now_ms < active_request.expires_at_ms;
-
-	if (active_request.active && now_ms >= active_request.expires_at_ms) {
-		active_request.active = false;
-		active_request.command_check_due = false;
-	}
-	if (due) {
-		strncpy(request_id, active_request.request_id, request_id_len);
-		request_id[request_id_len - 1] = '\0';
-		active_request.command_check_due = false;
-	}
-	k_spin_unlock(&active_request_lock, key);
-	return due;
-}
-
-static void active_request_restore_command_check(void)
-{
-	k_spinlock_key_t key = k_spin_lock(&active_request_lock);
-
-	if (active_request.active) {
-		active_request.command_check_due = true;
-	}
-	k_spin_unlock(&active_request_lock, key);
-}
-
-static bool active_request_complete(const char *request_id)
-{
-	k_spinlock_key_t key = k_spin_lock(&active_request_lock);
-	int64_t now_ms = k_uptime_get();
-	bool matches = active_request.active &&
-		       now_ms < active_request.expires_at_ms &&
-		       strcmp(active_request.request_id, request_id) == 0;
-
-	if (matches) {
-		active_request.active = false;
-		active_request.command_check_due = false;
-	} else if (active_request.active && now_ms >= active_request.expires_at_ms) {
-		active_request.active = false;
-		active_request.command_check_due = false;
-	}
-	k_spin_unlock(&active_request_lock, key);
-
-	if (matches) {
-		k_timer_stop(&complete_check_timer);
-	}
-	return matches;
+	return fairway_runtime_scheduler_repeat_press(&command_scheduler, now_ms,
+							 repeat_count);
 }
 
 #define HEALTH_REPORT_MAX_ATTEMPTS             2
@@ -646,6 +550,7 @@ struct health_cellular_snapshot {
 	bool battery_valid;
 	int battery_voltage_uV;
 	uint8_t battery_soc_pct;
+	struct fairway_command_telemetry command_poll;
 };
 
 static struct health_cellular_snapshot button_health_snapshot;
@@ -959,12 +864,29 @@ static void button_pressed_cb(const struct device *dev, struct gpio_callback *cb
 	ARG_UNUSED(cb);
 	ARG_UNUSED(pins);
 
-	if (!button_is_pressed()) {
-		return;
-	}
+	k_spinlock_key_t key = k_spin_lock(&button_latch_lock);
+	bool accepted = fairway_button_latch_edge(&button_latch,
+		button_is_pressed(), k_uptime_get(), BUTTON_DEBOUNCE_MS);
+	k_spin_unlock(&button_latch_lock, key);
 
-	button_wake_pending = true;
-	k_sem_give(&button_wake_sem);
+	if (accepted) {
+		k_sem_give(&button_wake_sem);
+	}
+}
+
+static bool button_event_take(int64_t *press_time_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&button_latch_lock);
+	bool pending = fairway_button_latch_take(&button_latch, press_time_ms);
+	k_spin_unlock(&button_latch_lock, key);
+	return pending;
+}
+
+static void button_event_discard(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&button_latch_lock);
+	fairway_button_latch_discard(&button_latch);
+	k_spin_unlock(&button_latch_lock, key);
 }
 
 /* Single globally-registered LTE event handler (lte_lc_connect_async() and
@@ -982,6 +904,7 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 	switch (evt->type) {
 	case LTE_LC_EVT_NW_REG_STATUS:
 		radio_state_write_registration(evt->nw_reg_status);
+		fairway_runtime_scheduler_wake(&command_scheduler);
 
 		if (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
 		    evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
@@ -1046,9 +969,7 @@ static void configure_psm(void)
 
 static void low_power_idle(void)
 {
-	/* button_wake_pending is left set here; the button thread's own loop
-	 * in main() is the single point that clears it. Health/date_time/LTE/
-	 * effective_config causes are serviced entirely by
+	/* Health/date_time/LTE/effective_config causes are serviced entirely by
 	 * network_health_thread on its own network_wake_sem; the golfer
 	 * transaction scheduler is serviced entirely by transaction_thread on
 	 * its own txn_wake_sem. Neither is ever observed here.
@@ -1253,6 +1174,8 @@ static void health_snapshot_acquire(struct health_cellular_snapshot *snap)
 		.psm_active_time_s = radio.psm_active_time_s,
 	};
 
+	fairway_runtime_scheduler_telemetry(&command_scheduler, &snap->command_poll);
+
 	temperature_ret = health_temperature_read(&snap->temperature);
 	if (temperature_ret) {
 		LOG_WRN("Device temperature unavailable: %d", temperature_ret);
@@ -1352,24 +1275,50 @@ static int run_golfer_transaction(int64_t txn_deadline_ms,
 	return ret;
 }
 
-static int run_complete_check(const char *active_request_id)
+static enum fairway_command_result run_command_poll(
+	const struct fairway_command_action *action,
+	struct fairway_complete_command *command)
+{
+	button_health_snapshot.http_status_valid = false;
+	int ret = send_command_poll_request(action->request_id, command,
+					    &button_health_snapshot, action->deadline_ms);
+
+	if (ret == -ECANCELED) {
+		return FAIRWAY_COMMAND_RESULT_POLL_YIELDED;
+	}
+	if (ret != 0) {
+		return button_health_snapshot.http_status_valid ?
+			FAIRWAY_COMMAND_RESULT_POLL_HTTP_FAILURE :
+			FAIRWAY_COMMAND_RESULT_POLL_TRANSPORT_FAILURE;
+	}
+	if (command->command_id[0] == '\0') {
+		return FAIRWAY_COMMAND_RESULT_POLL_EMPTY;
+	}
+	return FAIRWAY_COMMAND_RESULT_COMPLETE_RECEIVED;
+}
+
+static enum fairway_command_result run_command_ack(
+	const struct fairway_command_action *action)
 {
 	struct fairway_complete_command command = {0};
-	int64_t deadline_ms = k_uptime_get() + COMMAND_HTTP_TIMEOUT_MS;
-	int ret = send_command_poll_request(active_request_id, &command,
-					    &button_health_snapshot, deadline_ms);
 
-	if (ret != 0 || command.command_id[0] == '\0') {
-		return ret;
+	strncpy(command.command_id, action->command_id, sizeof(command.command_id) - 1);
+	strncpy(command.request_id, action->request_id, sizeof(command.request_id) - 1);
+
+	button_health_snapshot.http_status_valid = false;
+	int ret = send_command_ack_request(&command, &button_health_snapshot,
+					   action->deadline_ms);
+	if (ret == -ECANCELED) {
+		return FAIRWAY_COMMAND_RESULT_ACK_YIELDED;
+	}
+	if (ret != 0) {
+		return button_health_snapshot.http_status_valid ?
+			FAIRWAY_COMMAND_RESULT_ACK_HTTP_FAILURE :
+			FAIRWAY_COMMAND_RESULT_ACK_TRANSPORT_FAILURE;
 	}
 
-	deadline_ms = k_uptime_get() + COMMAND_HTTP_TIMEOUT_MS;
-	ret = send_command_ack_request(&command, &button_health_snapshot, deadline_ms);
-	if (ret == 0 && active_request_complete(command.request_id)) {
-		LOG_INF("COMPLETE acknowledged for request %s", command.request_id);
-	}
-
-	return ret;
+	LOG_INF("COMPLETE acknowledged for request %s", command.request_id);
+	return FAIRWAY_COMMAND_RESULT_COMPLETE_ACKED;
 }
 
 /* Sends the scheduled health_report within its own two-attempt retry policy
@@ -1572,18 +1521,18 @@ enum http_response_kind {
  * socket_stage_deadline()/socket_connect_bounded(), so no single stage can
  * ever block longer than the remaining portion of attempt_deadline_ms.
  *
- * When yieldable is true (Health's own flow only), golfer_txn_is_pending()
- * is checked before/after every stage; a pending golfer press aborts this
- * call immediately with -ECANCELED so Health never holds the shared
- * transport once a golfer transaction has been accepted. The golfer's own
- * flow (yieldable=false) never checks this and is never itself aborted.
+ * When yieldable is true (Health and command poll/ack flows),
+ * golfer_txn_is_pending() is checked before/after every stage; a pending
+ * golfer press aborts this call immediately with -ECANCELED so subordinate
+ * work never holds the shared transport once a golfer transaction has been
+ * accepted. The golfer's own flow (yieldable=false) is never itself aborted.
  *
  * Return value convention (unchanged from the pre-WP4 button-only
  * behavior), plus one new outcome:
  *   0           HTTP 2xx.
  *   -EACCES     HTTP 400/401/403/404 (terminal; caller does not retry).
  *   -EPROTO     Any other received-but-unsuccessful HTTP response.
- *   -ECANCELED  Health yielded to an accepted golfer press (yieldable only).
+ *   -ECANCELED  Subordinate work yielded to a golfer press (yieldable only).
  *   -errno/-ETIMEDOUT  No response could be obtained at all.
  */
 static int send_http_request(const char *request, int request_len,
@@ -1947,9 +1896,10 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 	char psm_active_buf[16];
 	char batt_uv_buf[16];
 	char batt_soc_buf[16];
+	char command_registration_buf[16];
 	const char *https_succeeded_str;
 
-	static char health_body[768];
+	static char health_body[1280];
 	int health_body_len;
 
 	if (snap->https_result_valid) {
@@ -1975,7 +1925,24 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 		"\"psm_active_time_s\":%s,"
 		"\"battery_voltage_u_v\":%s,"
 		"\"battery_soc_pct\":%s,"
-		"\"https_succeeded\":%s"
+		"\"https_succeeded\":%s,"
+		"\"command_scheduler_runs\":%u,"
+		"\"command_timer_fires\":%u,"
+		"\"command_poll_attempts\":%u,"
+		"\"command_poll_transport_failures\":%u,"
+		"\"command_poll_http_failures\":%u,"
+		"\"command_poll_empty_responses\":%u,"
+		"\"command_complete_received\":%u,"
+		"\"command_ack_attempts\":%u,"
+		"\"command_ack_failures\":%u,"
+		"\"command_ack_successes\":%u,"
+		"\"command_lte_not_registered\":%u,"
+		"\"command_lte_recoveries\":%u,"
+		"\"command_stale_results\":%u,"
+		"\"command_last_result\":%d,"
+		"\"command_stop_reason\":%d,"
+		"\"command_state\":%d,"
+		"\"command_registration_state\":%s"
 		"}}",
 		FAIRWAY_DEVICE_ID,
 		FAIRWAY_HARDWARE_REVISION,
@@ -2013,14 +1980,34 @@ static int send_health_report_request(struct health_cellular_snapshot *snap, int
 		health_field_or_null(batt_soc_buf, sizeof(batt_soc_buf),
 				      snap->battery_valid,
 				      (int32_t)snap->battery_soc_pct),
-		https_succeeded_str);
+		https_succeeded_str,
+		(unsigned)snap->command_poll.scheduler_runs,
+		(unsigned)snap->command_poll.timer_fires,
+		(unsigned)snap->command_poll.poll_attempts,
+		(unsigned)snap->command_poll.poll_transport_failures,
+		(unsigned)snap->command_poll.poll_http_failures,
+		(unsigned)snap->command_poll.empty_responses,
+		(unsigned)snap->command_poll.complete_received,
+		(unsigned)snap->command_poll.ack_attempts,
+		(unsigned)snap->command_poll.ack_failures,
+		(unsigned)snap->command_poll.ack_successes,
+		(unsigned)snap->command_poll.lte_not_registered,
+		(unsigned)snap->command_poll.lte_recoveries,
+		(unsigned)snap->command_poll.stale_results,
+		(int)snap->command_poll.last_result,
+		(int)snap->command_poll.stop_reason,
+		(int)snap->command_poll.state,
+		health_field_or_null(command_registration_buf,
+				      sizeof(command_registration_buf),
+				      snap->command_poll.registration_valid,
+				      snap->command_poll.registration_state));
 
 	if (health_body_len < 0 || health_body_len >= sizeof(health_body)) {
 		LOG_ERR("health_report request body buffer too small");
 		return -ENOMEM;
 	}
 
-	static char health_request[1280];
+	static char health_request[1792];
 	int health_request_len;
 
 	health_request_len = snprintk(health_request, sizeof(health_request),
@@ -2163,11 +2150,16 @@ static void transaction_thread_entry(void *p1, void *p2, void *p3)
 	while (1) {
 		uint32_t gen;
 		int64_t deadline_ms;
-		char command_request_id[FAIRWAY_REQUEST_ID_MAX];
+		struct fairway_command_action command_action;
+		struct radio_state radio = radio_state_snapshot();
+		bool registered = radio.registration_valid &&
+			(radio.registration_state == LTE_LC_NW_REG_REGISTERED_HOME ||
+			 radio.registration_state == LTE_LC_NW_REG_REGISTERED_ROAMING);
 		bool have_golfer = golfer_txn_pickup(&gen, &deadline_ms);
 		bool have_command = !have_golfer &&
-			active_request_take_command_check(command_request_id,
-						  sizeof(command_request_id));
+			fairway_runtime_scheduler_next(&command_scheduler,
+				radio.registration_valid, registered,
+				(int)radio.registration_state, &command_action);
 		bool have_health = !have_golfer && !have_command && sched_ctl_take_health_due();
 
 		if (!have_golfer && !have_command && !have_health) {
@@ -2190,10 +2182,21 @@ static void transaction_thread_entry(void *p1, void *p2, void *p3)
 		}
 
 		if (have_command) {
-			int ret = run_complete_check(command_request_id);
+			if (command_action.type == FAIRWAY_COMMAND_ACTION_POLL) {
+				struct fairway_complete_command command = {0};
+				enum fairway_command_result result =
+					run_command_poll(&command_action, &command);
 
-			if (ret == -ECANCELED) {
-				active_request_restore_command_check();
+				fairway_runtime_scheduler_poll_finished(&command_scheduler,
+					command_action.generation, result,
+					result == FAIRWAY_COMMAND_RESULT_COMPLETE_RECEIVED ?
+						&command : NULL);
+			} else {
+				enum fairway_command_result result =
+					run_command_ack(&command_action);
+
+				fairway_runtime_scheduler_ack_finished(&command_scheduler,
+					command_action.generation, result);
 			}
 			continue;
 		}
@@ -2212,6 +2215,9 @@ K_THREAD_DEFINE(transaction_thread, TRANSACTION_THREAD_STACK_SIZE,
 int main(void)
 {
 	int ret;
+
+	fairway_runtime_scheduler_init(&command_scheduler, &txn_wake_sem,
+		COMPLETE_CHECK_INTERVAL_MS, COMMAND_HTTP_TIMEOUT_MS);
 
 	if (!device_is_ready(uart0_dev)) {
 		return 0;
@@ -2284,7 +2290,8 @@ int main(void)
 		return 0;
 	}
 
-	ret = gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
+	fairway_button_latch_init(&button_latch, k_uptime_get(), BUTTON_DEBOUNCE_MS);
+	ret = gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_BOTH);
 	if (ret < 0) {
 		LOG_ERR("Failed to configure button GPIO interrupt: %d", ret);
 		return 0;
@@ -2303,16 +2310,16 @@ int main(void)
 	LOG_INF("Ready. Waiting in low-power idle for button wake.");
 
 	while (1) {
-		low_power_idle();
+		int64_t press_time_ms;
 
-		if (!button_wake_pending) {
-			continue;
+		if (!button_event_take(&press_time_ms)) {
+			low_power_idle();
+			if (!button_event_take(&press_time_ms)) {
+				continue;
+			}
 		}
-		button_wake_pending = false;
 
 		LOG_INF("BUTTON_WAKE detected");
-
-		int64_t press_time_ms = k_uptime_get();
 
 		/* Active five-minute golfer demand window (docs/UX_SPECIFICATION.md,
 		 * "Five-Minute Golfer Demand Window"): a valid press before the
@@ -2328,22 +2335,13 @@ int main(void)
 			LOG_INF("REPEAT_PRESS within demand window: count=%u",
 				repeat_press_count);
 
-			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_DISABLE);
-
 			set_state(STATE_REPEAT_PRESS);
 			show_success_feedback();
 
 			k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
-			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
 			set_state(STATE_IDLE);
 			continue;
 		}
-
-		/* Keep switch bounce from queuing a second press during the
-		 * active transaction; re-armed only after terminal feedback
-		 * plus BUTTON_REARM_SETTLE_MS below.
-		 */
-		gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_DISABLE);
 
 		/* Architect Correction 1: the hard 15-second deadline begins
 		 * at acceptance, before the acknowledgement animation runs.
@@ -2413,12 +2411,14 @@ int main(void)
 		}
 
 		indicator_off(ORANGE_PIN);
+		/* Presses while the transaction was unresolved are not new demand.
+		 * Start retaining one intentional follow-up only from terminal
+		 * feedback onward, when it is an active-window repeat.
+		 */
+		button_event_discard();
 
 		if (got_result && success) {
 			active_request_start(request_id, accept_time_ms + DEMAND_WINDOW_MS);
-			k_timer_start(&complete_check_timer,
-				      K_MSEC(COMPLETE_CHECK_INTERVAL_MS),
-				      K_MSEC(COMPLETE_CHECK_INTERVAL_MS));
 			set_state(STATE_SUCCESS);
 			show_success_feedback();
 		} else {
@@ -2433,7 +2433,6 @@ int main(void)
 		}
 
 		k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
-		gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
 		set_state(STATE_IDLE);
 		all_indicators_off();
 	}

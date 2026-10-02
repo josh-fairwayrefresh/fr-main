@@ -37,11 +37,13 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - Green performs a blink-blink indication, followed by approximately 5 seconds of solid green.
 - Success means the accepted golfer service request is represented in the Fairway operator workflow/dashboard.
 - Successful acceptance starts a fixed five-minute demand window, measured from the initial accepted physical button press.
+- One valid press made while this green feedback is visible is retained and processed immediately after feedback as an in-window press; switch bounce and additional presses during the same feedback interval are not queued.
 
 ### 4. Failed request
 - If the transaction reaches terminal failure within the 15-second budget, orange ends.
 - Red performs a blink-blink indication, followed by approximately 5 seconds of solid red.
 - A failed transaction does not start a five-minute demand window.
+- One valid press made while red feedback is visible is retained and processed after feedback as the next fresh golfer demand; switch bounce and additional presses during the same feedback interval are not queued.
 - After the failure indication completes, the button is enabled again; the next valid press begins a completely new bounded golfer transaction.
 - There is no long retry lockout.
 
