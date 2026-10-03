@@ -1,0 +1,9 @@
+tests:
+  fairway.complete_poll:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
+    tags:
+      - fairway
+      - complete_poll

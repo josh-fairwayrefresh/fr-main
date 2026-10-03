@@ -24,7 +24,7 @@ endforeach()
 
 if(CONFIG_BOARD_CIRCUITDOJO_FEATHER_NRF9151)
     target_sources(app PRIVATE src/main.c src/health_temperature.c src/health_schedule.c
-        src/command_protocol.c)
+        src/command_protocol.c src/demand_window.c src/complete_poll.c)
     target_compile_definitions(app PRIVATE
         FAIRWAY_HARDWARE_REVISION="${FAIRWAY_HARDWARE_REVISION}"
         FAIRWAY_FIRMWARE_GENERATION="${FAIRWAY_FIRMWARE_GENERATION}"
