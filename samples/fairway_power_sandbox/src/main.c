@@ -1189,9 +1189,9 @@ static void health_snapshot_acquire(struct health_cellular_snapshot *snap)
  * main()). Every attempt and every stage inside send_https_test() computes
  * its own remaining time from this same deadline -- no attempt ever resets
  * or extends it. Never yields to Health (Health always yields to this).
- * Telemetry/connection-evaluation is intentionally never acquired here: it
- * has no established bound and no value in the button_press payload: only
- * best-effort temperature/battery logging happens, after disposition.
+ * Device Health acquisition is intentionally absent from this flow: Health
+ * is an independent scheduled subsystem, and the authoritative HTTP result
+ * must return to the golfer UX without post-response acquisition latency.
  */
 static int run_golfer_transaction(int64_t txn_deadline_ms,
 				  char *request_id, size_t request_id_len)
@@ -1220,23 +1220,6 @@ static int run_golfer_transaction(int64_t txn_deadline_ms,
 			break;
 		}
 	}
-
-	/* Best-effort, post-disposition-only local telemetry: never gates the
-	 * retry loop or terminal disposition above.
-	 */
-	(void)health_temperature_read(&button_health_snapshot.temperature);
-	health_battery_read(&button_health_snapshot);
-
-	LOG_INF("Golfer transaction telemetry: attempts=%u https=%d http=%d temp_valid=%d temp_mC=%d "
-		"batt_valid=%d batt_uV=%d batt_soc=%u",
-		button_health_snapshot.transaction_attempts,
-		button_health_snapshot.https_succeeded,
-		button_health_snapshot.http_status,
-		button_health_snapshot.temperature.valid,
-		button_health_snapshot.temperature.temp_mC,
-		button_health_snapshot.battery_valid,
-		button_health_snapshot.battery_valid ? button_health_snapshot.battery_voltage_uV : 0,
-		button_health_snapshot.battery_valid ? button_health_snapshot.battery_soc_pct : 0U);
 
 	return ret;
 }
