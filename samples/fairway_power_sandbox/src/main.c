@@ -468,12 +468,13 @@ static void wait_for_authoritative_time(void)
 static volatile bool vbus_hold_active;
 /* Guards PSM API calls from vbus_event_callback() until the modem is ready. */
 static volatile bool modem_ready;
+static volatile bool interaction_awake_active;
 
-/* Global service-awake keeper: the lowest-priority application thread,
- * strictly above K_IDLE_PRIO, that stays continuously runnable while VBUS
- * is present so Zephyr can never select the idle thread and execute WFI,
- * regardless of what any other thread (application or vendor LTE/modem
- * code) is doing. Any higher-priority thread still preempts it normally.
+/* Global awake keeper: the lowest-priority application thread, strictly above
+ * K_IDLE_PRIO, that stays continuously runnable while VBUS is present or a
+ * bounded golfer interaction owns the awake hold. Zephyr cannot select the
+ * idle thread and execute WFI during either hold; any higher-priority thread
+ * still preempts the keeper normally.
  */
 static K_SEM_DEFINE(keeper_sem, 0, 1);
 
@@ -486,7 +487,7 @@ static void service_awake_keeper_entry(void *p1, void *p2, void *p3)
 	while (1) {
 		k_sem_take(&keeper_sem, K_FOREVER);
 
-		while (vbus_hold_active) {
+		while (vbus_hold_active || interaction_awake_active) {
 			k_yield();
 		}
 	}
@@ -504,6 +505,15 @@ static void set_vbus_hold(bool active)
 		k_sem_give(&keeper_sem);
 	} else {
 		LOG_INF("SERVICE_AWAKE: keeper disabled");
+	}
+}
+
+static void set_interaction_awake(bool active)
+{
+	interaction_awake_active = active;
+
+	if (active) {
+		k_sem_give(&keeper_sem);
 	}
 }
 
@@ -2196,6 +2206,7 @@ int main(void)
 		button_wake_pending = false;
 
 		LOG_INF("BUTTON_WAKE detected");
+		set_interaction_awake(true);
 
 		int64_t press_time_ms = k_uptime_get();
 
@@ -2220,6 +2231,7 @@ int main(void)
 
 			k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
 			gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
+			set_interaction_awake(false);
 			set_state(STATE_IDLE);
 			continue;
 		}
@@ -2320,6 +2332,7 @@ int main(void)
 
 		k_sleep(K_MSEC(BUTTON_REARM_SETTLE_MS));
 		gpio_pin_interrupt_configure(gpio0_dev, BUTTON_PIN, GPIO_INT_EDGE_FALLING);
+		set_interaction_awake(false);
 		set_state(STATE_IDLE);
 		all_indicators_off();
 	}
