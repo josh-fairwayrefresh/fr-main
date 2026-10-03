@@ -469,6 +469,8 @@ static volatile bool vbus_hold_active;
 /* Guards PSM API calls from vbus_event_callback() until the modem is ready. */
 static volatile bool modem_ready;
 
+#define DIAGNOSTIC_FORCE_SERVICE_AWAKE true
+
 /* Global service-awake keeper: the lowest-priority application thread,
  * strictly above K_IDLE_PRIO, that stays continuously runnable while VBUS
  * is present so Zephyr can never select the idle thread and execute WFI,
@@ -486,7 +488,7 @@ static void service_awake_keeper_entry(void *p1, void *p2, void *p3)
 	while (1) {
 		k_sem_take(&keeper_sem, K_FOREVER);
 
-		while (vbus_hold_active) {
+		while (vbus_hold_active || DIAGNOSTIC_FORCE_SERVICE_AWAKE) {
 			k_yield();
 		}
 	}
@@ -499,7 +501,7 @@ static void set_vbus_hold(bool active)
 {
 	vbus_hold_active = active;
 
-	if (active) {
+	if (active || DIAGNOSTIC_FORCE_SERVICE_AWAKE) {
 		LOG_INF("SERVICE_AWAKE: keeper enabled");
 		k_sem_give(&keeper_sem);
 	} else {
