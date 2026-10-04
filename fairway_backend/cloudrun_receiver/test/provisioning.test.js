@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { createCustomer } = require('../lib/fleet/customers');
-const { createCourse } = require('../lib/fleet/courses');
+const { createCourse, DEFAULT_HEALTH_REPORT_SCHEDULE } = require('../lib/fleet/courses');
 const { DEVICE_STATES } = require('../lib/fleet/schema');
 const {
   provisionNewDevice,
@@ -49,6 +49,16 @@ async function seedCustomerAndCourse(db) {
   });
   return { customerId: customer.customer_id, courseId: course.course_id };
 }
+
+test('new Courses use the canonical 07:00 and 21:00 local Health schedule', async () => {
+  const db = new FakeFirestore();
+  const { customerId, courseId } = await seedCustomerAndCourse(db);
+  const course = await db.collection('customers').doc(customerId)
+    .collection('courses').doc(courseId).get();
+
+  assert.deepStrictEqual(DEFAULT_HEALTH_REPORT_SCHEDULE, { times: ['07:00', '21:00'] });
+  assert.deepStrictEqual(course.data().health_report_schedule, DEFAULT_HEALTH_REPORT_SCHEDULE);
+});
 
 test('provisionNewDevice creates an unassigned inventory device and issues a credential', async () => {
   const db = new FakeFirestore();

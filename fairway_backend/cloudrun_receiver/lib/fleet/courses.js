@@ -8,7 +8,7 @@ const { isValidServiceSchedule } = require('../course_service');
 const COURSES_SUBCOLLECTION = 'courses';
 
 const DEFAULT_HEALTH_REPORT_SCHEDULE = Object.freeze({
-  times: ['09:00', '17:00'],
+  times: ['07:00', '21:00'],
 });
 
 const HEALTH_REPORT_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -67,7 +67,7 @@ function coursesCollection(db, customerId) {
  * counters/COURSE document regardless of nested storage, so Course IDs
  * remain globally unique across all Customers and never restart per
  * Customer (see ids.js). Applies the CPO-approved default Device Health
- * reporting schedule (09:00 / 17:00 course-local time).
+ * reporting schedule (07:00 / 21:00 course-local time).
  */
 async function createCourse(db, {
   customerId,

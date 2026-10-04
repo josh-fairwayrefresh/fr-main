@@ -8,6 +8,7 @@ const {
   computeNextHealthReportAt,
   resolveEffectiveDeviceConfig,
 } = require('../lib/fleet/health');
+const { DEFAULT_HEALTH_REPORT_SCHEDULE } = require('../lib/fleet/courses');
 
 let passed = 0;
 let failed = 0;
@@ -290,48 +291,48 @@ test('malformed report is rejected before touching latest_health or history', as
 // --- Timezone / DST-aware scheduling ---
 
 const LA = 'America/Los_Angeles';
-const TIMES = ['09:00', '17:00'];
+const TIMES = DEFAULT_HEALTH_REPORT_SCHEDULE.times;
 
-test('before 09:00 local (standard time) -> next is today 09:00', () => {
-  const now = new Date('2026-01-15T16:00:00.000Z'); // 08:00 PST
+test('before 07:00 local (standard time) -> next is today 07:00', () => {
+  const now = new Date('2026-01-15T14:00:00.000Z'); // 06:00 PST
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-01-15T17:00:00.000Z'); // 09:00 PST = 17:00 UTC
+  assert.strictEqual(next.toISOString(), '2026-01-15T15:00:00.000Z'); // 07:00 PST = 15:00 UTC
 });
 
-test('between 09:00 and 17:00 local (standard time) -> next is today 17:00', () => {
+test('between 07:00 and 21:00 local (standard time) -> next is today 21:00', () => {
   const now = new Date('2026-01-15T18:00:00.000Z'); // 10:00 PST
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-01-16T01:00:00.000Z'); // 17:00 PST = 01:00 UTC next day
+  assert.strictEqual(next.toISOString(), '2026-01-16T05:00:00.000Z'); // 21:00 PST = 05:00 UTC next day
 });
 
-test('after 17:00 local (standard time) -> next is tomorrow 09:00 (next-day rollover)', () => {
-  const now = new Date('2026-01-16T03:00:00.000Z'); // 19:00 PST Jan 15
+test('after 21:00 local (standard time) -> next is tomorrow 07:00 (next-day rollover)', () => {
+  const now = new Date('2026-01-16T06:00:00.000Z'); // 22:00 PST Jan 15
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-01-16T17:00:00.000Z'); // Jan 16 09:00 PST = 17:00 UTC
+  assert.strictEqual(next.toISOString(), '2026-01-16T15:00:00.000Z'); // Jan 16 07:00 PST = 15:00 UTC
 });
 
 test('ordinary daylight-time date computes correct PDT (UTC-7) offset', () => {
   const now = new Date('2026-07-15T17:00:00.000Z'); // 10:00 PDT
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-07-16T00:00:00.000Z'); // 17:00 PDT = 00:00 UTC next day
+  assert.strictEqual(next.toISOString(), '2026-07-16T04:00:00.000Z'); // 21:00 PDT = 04:00 UTC next day
 });
 
 test('spring-forward transition (2026-03-08): correct post-transition PDT offset used', () => {
   const now = new Date('2026-03-09T12:00:00.000Z'); // 04:00 PDT Mar 9 (after the Mar 8 spring-forward)
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-03-09T16:00:00.000Z'); // 09:00 PDT = 16:00 UTC
+  assert.strictEqual(next.toISOString(), '2026-03-09T14:00:00.000Z'); // 07:00 PDT = 14:00 UTC
 });
 
 test('fall-back transition (2026-11-01): correct post-transition PST offset used', () => {
   const now = new Date('2026-11-02T12:00:00.000Z'); // 04:00 PST Nov 2 (after the Nov 1 fall-back)
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-11-02T17:00:00.000Z'); // 09:00 PST = 17:00 UTC
+  assert.strictEqual(next.toISOString(), '2026-11-02T15:00:00.000Z'); // 07:00 PST = 15:00 UTC
 });
 
 test('exact schedule boundary is treated as already reached, not returned as next', () => {
-  const now = new Date('2026-01-15T17:00:00.000Z'); // exactly 09:00 PST
+  const now = new Date('2026-01-15T15:00:00.000Z'); // exactly 07:00 PST
   const next = computeNextHealthReportAt(now, LA, TIMES);
-  assert.strictEqual(next.toISOString(), '2026-01-16T01:00:00.000Z'); // must be today's 17:00, not the instant equal to now
+  assert.strictEqual(next.toISOString(), '2026-01-16T05:00:00.000Z'); // must be today's 21:00, not the instant equal to now
 });
 
 // --- D. Effective configuration resolution ---
@@ -354,10 +355,10 @@ test('effective config resolves the assigned Course timezone/schedule and comput
   const db = new FakeFirestore();
   await seedAssignedDevice(db);
 
-  const config = await resolveEffectiveDeviceConfig(db, 'FRB-0001', new Date('2026-01-15T16:00:00.000Z'));
+  const config = await resolveEffectiveDeviceConfig(db, 'FRB-0001', new Date('2026-01-15T14:00:00.000Z'));
   assert.strictEqual(config.timezone, LA);
   assert.deepStrictEqual(config.health_report_schedule, { times: TIMES });
-  assert.strictEqual(config.next_health_report_at, '2026-01-15T17:00:00.000Z');
+  assert.strictEqual(config.next_health_report_at, '2026-01-15T15:00:00.000Z');
 });
 
 test('reassignment to a different Course changes subsequent config resolution', async () => {

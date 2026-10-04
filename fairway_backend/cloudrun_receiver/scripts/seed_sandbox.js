@@ -30,7 +30,6 @@ async function main() {
     customerId: customer.customer_id,
     courseName: 'Validation Course',
     timezone: 'America/Los_Angeles',
-    healthReportSchedule: { times: ['09:00', '17:00'] },
     comments: SYNTHETIC_MARKER,
   });
   const device = await createDevice(db, {

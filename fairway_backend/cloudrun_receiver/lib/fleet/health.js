@@ -282,7 +282,7 @@ const SCHEDULE_SEARCH_WINDOW_DAYS = 2;
 /*
  * Computes the next scheduled Course-local health-report instant, in UTC,
  * strictly after `now`. `times` is the Course's `health_report_schedule.times`
- * array of "HH:MM" Course-local strings (for example ["09:00", "17:00"]).
+ * array of "HH:MM" Course-local strings (for example ["07:00", "21:00"]).
  * Boundary semantics are deterministic: a candidate exactly equal to `now`
  * is treated as already reached and is not returned as "next"; the search
  * advances to the following scheduled time (or the following day) instead.
