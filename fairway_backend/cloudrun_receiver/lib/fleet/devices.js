@@ -57,7 +57,6 @@ const DEVICES_COLLECTION = 'devices';
  *                          issued/replaced (see replaceDeviceCredential());
  *                          only the non-reversible verifier is ever stored,
  *                          never the plaintext secret
- *   latest_health           placeholder for WP4; null until WP4 implements it
  *   gps                     placeholder for a future GPS extension; null
  *   created_at / updated_at  standard metadata
  */
@@ -135,7 +134,6 @@ async function createDevice(db, {
     commissioning: null,
     service: null,
     credential: null,
-    latest_health: null,
     gps: null,
     created_at: now,
     updated_at: now,

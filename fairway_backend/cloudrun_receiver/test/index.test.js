@@ -88,23 +88,6 @@ async function setUpOperatorAssignment(db, uid = 'operator-123', courseId = 'COU
   });
 }
 
-const VALID_OBSERVATION = Object.freeze({
-  attempts: 1,
-  registration_state: 1,
-  http_status: 200,
-  modem_temperature_m_c: 32000,
-  rsrp_dbm: -95,
-  rsrq_db: -10,
-  snr_db: 12,
-  serving_cell_id: 123456,
-  serving_band: 20,
-  psm_tau_s: 11160,
-  psm_active_time_s: 0,
-  battery_voltage_u_v: 4000000,
-  battery_soc_pct: 87,
-  https_succeeded: true,
-});
-
 async function setUpDeployedDevice(db, deviceId, extra = {}) {
   const { secret, verifier } = generateDeviceCredential();
   await db.collection('devices').doc(deviceId).set({
@@ -202,7 +185,7 @@ test('a valid allowed-lifecycle Device with correct credential proceeds (not rej
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-lifecycle' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
   assert.strictEqual(res.statusCode, 200);
@@ -210,12 +193,87 @@ test('a valid allowed-lifecycle Device with correct credential proceeds (not rej
 
 // --- button_press + duplicate suppression regression ---
 
-test('valid button_press creates a golfer request and returns effective_config JSON', async () => {
+test('authenticated button_press without transaction_id is rejected without persistence', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const res = createResponse();
+
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+
+  assert.strictEqual(res.statusCode, 400);
+  assert.strictEqual(res.body, 'Invalid transaction_id\n');
+  const requests = await db.collection('requests').get();
+  assert.strictEqual(requests.empty, true);
+});
+
+test('malformed transaction_id values fail without persistence', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  for (const transactionId of [null, '', 42, {}, [], 'contains space', 'contains/slash', 'a'.repeat(65)]) {
+    const res = createResponse();
+    await handleDeviceEvent(createRequest({
+      body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: transactionId },
+      headers: { 'x-fairway-device-key': secret },
+    }), res);
+    assert.strictEqual(res.statusCode, 400);
+    assert.strictEqual(res.body, 'Invalid transaction_id\n');
+  }
+  assert.strictEqual((await db.collection('requests').get()).empty, true);
+});
+
+test('concurrent retries atomically create one request and preserve the original document', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const req = createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-concurrent' },
+    headers: { 'x-fairway-device-key': secret },
+  });
+  const responses = Array.from({ length: 8 }, () => createResponse());
+  await Promise.all(responses.map((res) => handleDeviceEvent(req, res)));
+  assert.ok(responses.every((res) => res.statusCode === 200));
+  assert.strictEqual(new Set(responses.map((res) => res.body.request_id)).size, 1);
+  assert.strictEqual(responses.filter((res) => res.body.duplicate === true).length, 7);
+  assert.strictEqual((await db.collection('requests').get()).size, 1);
+
+  const requestRef = db.collection('requests').doc(responses[0].body.request_id);
+  await requestRef.update({ status: 'completed', operator_id: 'operator-123' });
+  const before = (await requestRef.get()).data();
+  const retry = createResponse();
+  await handleDeviceEvent(req, retry);
+  assert.strictEqual(retry.body.request_id, requestRef.id);
+  assert.strictEqual(retry.body.duplicate, true);
+  assert.deepStrictEqual((await requestRef.get()).data(), before);
+});
+
+test('the same transaction_id on different authenticated devices creates different requests', async () => {
+  const db = new FakeFirestore();
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const requestIds = [];
+  for (const deviceId of ['FRB-0001', 'FRB-0002']) {
+    const secret = await setUpDeployedDevice(db, deviceId);
+    const res = createResponse();
+    await handleDeviceEvent(createRequest({
+      body: { device_id: deviceId, event_type: 'button_press', transaction_id: 'txn-shared' },
+      headers: { 'x-fairway-device-key': secret },
+    }), res);
+    assert.strictEqual(res.statusCode, 200);
+    requestIds.push(res.body.request_id);
+  }
+  assert.notStrictEqual(requestIds[0], requestIds[1]);
+  assert.strictEqual((await db.collection('requests').get()).size, 2);
+});
+
+test('valid button_press creates a golfer request without effective_config', async () => {
   const db = new FakeFirestore();
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
   });
   const secret = await setUpDeployedDevice(db, 'FRB-0001', {
     customer_id: 'CUST-0001',
@@ -226,7 +284,7 @@ test('valid button_press creates a golfer request and returns effective_config J
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-valid' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
@@ -235,8 +293,7 @@ test('valid button_press creates a golfer request and returns effective_config J
   assert.strictEqual(res.body.event_type, 'button_press');
   assert.strictEqual(typeof res.body.request_id, 'string');
   assert.strictEqual(res.body.duplicate, undefined);
-  assert.strictEqual(res.body.effective_config.timezone, 'America/Los_Angeles');
-  assert.ok(res.body.effective_config.next_health_report_at);
+  assert.strictEqual('effective_config' in res.body, false);
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(requests.size, 1);
@@ -250,7 +307,6 @@ test('a new golfer request durably records Stage A event-time facts (customer, d
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
   });
   const secret = await setUpDeployedDevice(db, 'FRB-0001', {
     customer_id: 'CUST-0001',
@@ -263,7 +319,7 @@ test('a new golfer request durably records Stage A event-time facts (customer, d
 
   const before = Date.now();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-facts' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
   const after = Date.now();
@@ -292,11 +348,11 @@ test('an unassigned Device button_press records null customer/Course-local facts
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-unassigned' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
-  assert.strictEqual(res.body.effective_config, null);
+  assert.strictEqual('effective_config' in res.body, false);
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   const data = requests.docs[0].data();
@@ -315,7 +371,7 @@ test('an in_inventory (not yet deployed) Device button_press records device_stat
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-inventory' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
@@ -324,12 +380,11 @@ test('an in_inventory (not yet deployed) Device button_press records device_stat
   assert.strictEqual(requests.docs[0].data().device_state_at_request, 'in_inventory');
 });
 
-test('a second button_press while a request is open is suppressed as a duplicate and still returns effective_config', async () => {
+test('a retry with the same primary transaction_id returns the original request', async () => {
   const db = new FakeFirestore();
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
   });
   const secret = await setUpDeployedDevice(db, 'FRB-0001', {
     customer_id: 'CUST-0001',
@@ -339,13 +394,13 @@ test('a second button_press while a request is open is suppressed as a duplicate
 
   const first = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-0001' },
     headers: { 'x-fairway-device-key': secret },
   }), first);
 
   const second = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-0001' },
     headers: { 'x-fairway-device-key': secret },
   }), second);
 
@@ -354,10 +409,35 @@ test('a second button_press while a request is open is suppressed as a duplicate
   assert.strictEqual(second.body.event_type, 'button_press');
   assert.strictEqual(second.body.request_id, first.body.request_id);
   assert.strictEqual(second.body.duplicate, true);
-  assert.strictEqual(second.body.effective_config.timezone, 'America/Los_Angeles');
+  assert.strictEqual('effective_config' in second.body, false);
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
-  assert.strictEqual(requests.size, 1, 'duplicate press must not create a second request document');
+  assert.strictEqual(requests.size, 1, 'a transport retry must not create a second request document');
+  assert.strictEqual(requests.docs[0].data().transaction_id, 'txn-0001');
+});
+
+test('a different primary transaction_id creates fresh demand while an older request remains open', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+
+  const first = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-0001' },
+    headers: { 'x-fairway-device-key': secret },
+  }), first);
+
+  const second = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-0002' },
+    headers: { 'x-fairway-device-key': secret },
+  }), second);
+
+  assert.strictEqual(second.statusCode, 200);
+  assert.notStrictEqual(second.body.request_id, first.body.request_id);
+
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  assert.strictEqual(requests.size, 2);
 });
 
 test('an expired open request does not suppress a genuinely fresh golfer request', async () => {
@@ -374,7 +454,7 @@ test('an expired open request does not suppress a genuinely fresh golfer request
   const res = createResponse();
 
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-after-expiry' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
@@ -384,69 +464,28 @@ test('an expired open request does not suppress a genuinely fresh golfer request
   assert.strictEqual(requests.size, 2);
 });
 
-test('button_press creates no health_history entries', async () => {
+test('retired health_report event fails closed without changing historical data', async () => {
   const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  const historical = { attempts: 1, received_at: new Date('2026-09-01T00:00:00Z') };
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', { latest_health: historical });
+  const deviceRef = db.collection('devices').doc('FRB-0001');
+  await deviceRef.collection('health_history').doc('historical').set(historical);
+  const before = (await deviceRef.get()).data();
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
-    headers: { 'x-fairway-device-key': secret },
-  }), res);
-
-  const history = await db.collection('devices').doc('FRB-0001').collection('health_history').limit(1).get();
-  assert.strictEqual(history.empty, true);
-});
-
-// --- health_report regression ---
-
-test('valid health_report creates no golfer request', async () => {
-  const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001');
-  const { handleDeviceEvent } = createFairwayHandlers(db);
-  const res = createResponse();
-  await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
-    headers: { 'x-fairway-device-key': secret },
-  }), res);
-
-  assert.strictEqual(res.statusCode, 200);
-  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
-  assert.strictEqual(requests.empty, true);
-});
-
-test('valid health_report updates latest_health and appends exactly one history observation', async () => {
-  const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001');
-  const { handleDeviceEvent } = createFairwayHandlers(db);
-  const res = createResponse();
-  await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
-    headers: { 'x-fairway-device-key': secret },
-  }), res);
-
-  const deviceDoc = await db.collection('devices').doc('FRB-0001').get();
-  assert.strictEqual(deviceDoc.data().latest_health.attempts, 1);
-
-  const history = await db.collection('devices').doc('FRB-0001').collection('health_history').limit(10).get();
-  assert.strictEqual(history.size, 1);
-});
-
-test('malformed health_report does not persist anything and returns 400', async () => {
-  const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001');
-  const { handleDeviceEvent } = createFairwayHandlers(db);
-  const res = createResponse();
-  await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: { attempts: -1 } },
+    body: { device_id: 'FRB-0001', event_type: 'health_report', transaction_id: 'obsolete-event', health: historical },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
   assert.strictEqual(res.statusCode, 400);
-  const deviceDoc = await db.collection('devices').doc('FRB-0001').get();
-  assert.strictEqual(deviceDoc.data().latest_health, undefined);
-  const history = await db.collection('devices').doc('FRB-0001').collection('health_history').limit(1).get();
-  assert.strictEqual(history.empty, true);
+  assert.strictEqual(res.body, 'Unknown event\n');
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  assert.strictEqual(requests.empty, true);
+  assert.deepStrictEqual((await deviceRef.get()).data(), before);
+  const history = await deviceRef.collection('health_history').get();
+  assert.strictEqual(history.size, 1);
+  assert.deepStrictEqual(history.docs[0].data(), historical);
 });
 
 test('unknown event_type fails closed with 400', async () => {
@@ -464,41 +503,46 @@ test('unknown event_type fails closed with 400', async () => {
 
 // --- Hierarchy fail-closed regression ---
 
-test('unassigned allowed Device is accepted with effective_config: null', async () => {
+test('unassigned allowed Device accepts a golfer request without effective_config', async () => {
   const db = new FakeFirestore();
   const secret = await setUpDeployedDevice(db, 'FRB-0001'); // no customer_id/course_id at all
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-no-assignment' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
   assert.strictEqual(res.statusCode, 200);
-  assert.strictEqual(res.body.effective_config, null);
+  assert.strictEqual('effective_config' in res.body, false);
 });
 
-test('valid Customer/Course assignment is accepted with a resolved effective_config', async () => {
+test('obsolete malformed health_report_schedule does not affect a valid golfer request', async () => {
   const db = new FakeFirestore();
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
+    health_report_schedule: { times: 'not-an-array' },
   });
   const secret = await setUpDeployedDevice(db, 'FRB-0001', {
     customer_id: 'CUST-0001',
     course_id: 'COURSE-0001',
   });
-  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const requestTime = new Date('2026-10-01T19:00:00.000Z');
+  const { handleDeviceEvent } = createFairwayHandlers(db, { now: () => requestTime });
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-obsolete-schedule' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
   assert.strictEqual(res.statusCode, 200);
-  assert.strictEqual(res.body.effective_config.timezone, 'America/Los_Angeles');
-  assert.ok(res.body.effective_config.next_health_report_at);
+  assert.strictEqual('effective_config' in res.body, false);
+  const request = (await db.collection('requests').doc(res.body.request_id).get()).data();
+  assert.strictEqual(request.course_local_date, '2026-10-01');
+  assert.strictEqual(request.course_local_hour, 12);
+  const course = await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001').get();
+  assert.deepStrictEqual(course.data().health_report_schedule, { times: 'not-an-array' });
 });
 
 test('a Device claiming a nonexistent Course is rejected with 422 and zero persistence', async () => {
@@ -511,15 +555,12 @@ test('a Device claiming a nonexistent Course is rejected with 422 and zero persi
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-missing-course' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
   assert.strictEqual(res.statusCode, 422);
-  const deviceDoc = await db.collection('devices').doc('FRB-0001').get();
-  assert.strictEqual(deviceDoc.data().latest_health, undefined);
-  const history = await db.collection('devices').doc('FRB-0001').collection('health_history').limit(1).get();
-  assert.strictEqual(history.empty, true);
+  assert.strictEqual((await db.collection('requests').get()).empty, true);
 });
 
 test('a Device whose Course belongs to a different Customer is rejected with 422 and zero persistence', async () => {
@@ -527,7 +568,6 @@ test('a Device whose Course belongs to a different Customer is rejected with 422
   await seedCourse(db, 'CUST-0002', 'COURSE-0099', {
     course_name: 'Foreign Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
   });
   await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Monarch Bay GC' });
   const secret = await setUpDeployedDevice(db, 'FRB-0001', {
@@ -537,13 +577,12 @@ test('a Device whose Course belongs to a different Customer is rejected with 422
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-foreign-course' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
   assert.strictEqual(res.statusCode, 422);
-  const deviceDoc = await db.collection('devices').doc('FRB-0001').get();
-  assert.strictEqual(deviceDoc.data().latest_health, undefined);
+  assert.strictEqual((await db.collection('requests').get()).empty, true);
 });
 
 test('an invalid-hierarchy Device attempting button_press creates zero golfer requests', async () => {
@@ -556,7 +595,7 @@ test('an invalid-hierarchy Device attempting button_press creates zero golfer re
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-invalid-hierarchy' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
@@ -573,7 +612,7 @@ test('a partial assignment (course_id without customer_id) is rejected as an inv
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-partial-assignment' },
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
@@ -685,13 +724,12 @@ test('authenticated CANCEL closes an assigned request without creating a Device 
   assert.strictEqual(commands.empty, true);
 });
 
-test('Course suspension blocks new button requests but preserves Health and active-request actions', async () => {
+test('Course suspension blocks new button requests but preserves active-request actions', async () => {
   const db = new FakeFirestore();
   const requestTime = new Date('2026-10-01T19:00:00.000Z');
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
     service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
     service_suspension: { until: new Date('2026-10-02T16:00:00.000Z') },
   });
@@ -710,7 +748,7 @@ test('Course suspension blocks new button requests but preserves Health and acti
 
   const button = createResponse();
   await handlers.handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    body: { device_id: 'FRB-0001', event_type: 'button_press', transaction_id: 'txn-suspended' },
     headers: { 'x-fairway-device-key': secret },
   }), button);
   assert.strictEqual(button.statusCode, 503);
@@ -718,12 +756,7 @@ test('Course suspension blocks new button requests but preserves Health and acti
   const newRequests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(newRequests.size, 1);
 
-  const health = createResponse();
-  await handlers.handleDeviceEvent(createRequest({
-    body: { device_id: 'FRB-0001', event_type: 'health_report', health: VALID_OBSERVATION },
-    headers: { 'x-fairway-device-key': secret },
-  }), health);
-  assert.strictEqual(health.statusCode, 200);
+  assert.strictEqual('effective_config' in button.body, false);
 
   const complete = createResponse();
   await handlers.updateRequestStatus(createRequest({
@@ -738,7 +771,6 @@ test('assigned operators can suspend until the next scheduled start and resume s
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
     service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
   });
   await setUpOperatorAssignment(db);
@@ -774,7 +806,6 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
   const requestTime = new Date('2026-10-01T19:00:00.000Z');
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
     service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
   });
   await setUpOperatorAssignment(db);

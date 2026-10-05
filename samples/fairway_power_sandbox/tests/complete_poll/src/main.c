@@ -6,6 +6,7 @@
 
 #include "complete_poll.h"
 #include "demand_window.h"
+#include "http_response.h"
 
 #define T0 1000000
 #define DEADLINE (T0 + 300000)
@@ -256,6 +257,63 @@ ZTEST(complete_poll, test_16_poll_faults_do_not_affect_local_repeat_decision)
 	zassert_true(demand_window_repeat_press(T0 + 17000, &repeat_count));
 	zassert_equal(repeat_count, 1);
 	zassert_true(demand_window_get_snapshot(T0 + 17000).active);
+}
+
+ZTEST(complete_poll, test_17_fragmented_headers_and_body_complete_exactly)
+{
+	struct fairway_http_response response;
+	const char *part_1 = "HTTP/1.1 200 OK\r\nContent-Len";
+	const char *part_2 = "gth: 26\r\nContent-Type: application/json\r\n\r\n{\"request_";
+	const char *part_3 = "id\":\"request-a\"}";
+
+	fairway_http_response_init(&response);
+	zassert_equal(fairway_http_response_feed(&response, part_1, strlen(part_1)),
+		      FAIRWAY_HTTP_NEED_MORE);
+	zassert_equal(fairway_http_response_feed(&response, part_2, strlen(part_2)),
+		      FAIRWAY_HTTP_NEED_MORE);
+	zassert_equal(fairway_http_response_feed(&response, part_3, strlen(part_3)),
+		      FAIRWAY_HTTP_COMPLETE);
+	zassert_equal(response.status_code, 200);
+	zassert_equal(response.content_length, 26);
+	zassert_equal(strcmp(fairway_http_response_body(&response),
+			     "{\"request_id\":\"request-a\"}"), 0);
+}
+
+ZTEST(complete_poll, test_18_truncated_body_never_completes)
+{
+	struct fairway_http_response response;
+	const char *truncated = "HTTP/1.1 200 OK\r\nContent-Length: 26\r\n\r\n{\"request_id\":\"request";
+
+	fairway_http_response_init(&response);
+	zassert_equal(fairway_http_response_feed(&response, truncated, strlen(truncated)),
+		      FAIRWAY_HTTP_NEED_MORE);
+	zassert_is_null(fairway_http_response_body(&response));
+}
+
+ZTEST(complete_poll, test_19_bodyless_success_is_complete_but_has_no_identity_body)
+{
+	struct fairway_http_response response;
+	const char *bodyless = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+
+	fairway_http_response_init(&response);
+	zassert_equal(fairway_http_response_feed(&response, bodyless, strlen(bodyless)),
+		      FAIRWAY_HTTP_COMPLETE);
+	zassert_equal(response.content_length, 0);
+	zassert_not_null(fairway_http_response_body(&response));
+}
+
+ZTEST(complete_poll, test_20_missing_or_malformed_length_is_invalid)
+{
+	struct fairway_http_response response;
+	const char *missing = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{}";
+	const char *malformed = "HTTP/1.1 200 OK\r\nContent-Length: 1x\r\n\r\n{}";
+
+	fairway_http_response_init(&response);
+	zassert_equal(fairway_http_response_feed(&response, missing, strlen(missing)),
+		      FAIRWAY_HTTP_INVALID);
+	fairway_http_response_init(&response);
+	zassert_equal(fairway_http_response_feed(&response, malformed, strlen(malformed)),
+		      FAIRWAY_HTTP_INVALID);
 }
 
 ZTEST_SUITE(complete_poll, NULL, NULL, reset_modules, NULL, NULL);

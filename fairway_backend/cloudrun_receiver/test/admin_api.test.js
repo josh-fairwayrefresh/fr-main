@@ -101,7 +101,6 @@ async function seedHierarchy(db) {
   await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001').set({
     course_name: 'Old Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
     service_schedule: SERVICE_SCHEDULE,
     service_suspension: null,
     comments: null,
@@ -180,7 +179,6 @@ test('production Admin environment and dedicated handler fail closed', async () 
 
 const ADMIN_ROUTES = [
   { method: 'GET', path: '/api/v1/admin/fleet' },
-  { method: 'GET', path: '/api/v1/admin/devices/FRB-0001/health-history' },
   { method: 'POST', path: '/api/v1/admin/customers', body: { customer_name: 'Name' } },
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001', body: { customer_name: 'Name' } },
   { method: 'POST', path: '/api/v1/admin/customers/CUST-0001/courses', body: { course_name: 'Course', timezone: 'UTC' } },
@@ -233,7 +231,7 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
   const invalidCourse = await request({
     method: 'POST',
     path: `/api/v1/admin/customers/${customer.body.customer_id}/courses`,
-    body: { course_name: 'Bad', timezone: 'Not/A_Real_Zone', health_report_schedule: { times: [] } },
+    body: { course_name: 'Bad', timezone: 'Not/A_Real_Zone', service_schedule: SERVICE_SCHEDULE },
   });
   assert.strictEqual(invalidCourse.statusCode, 400);
 
@@ -243,7 +241,6 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema Course',
       timezone: 'America/Los_Angeles',
-      health_report_schedule: { times: ['09:00', '17:00'] },
       service_schedule: SERVICE_SCHEDULE,
     },
   });
@@ -270,7 +267,6 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema',
       timezone: 'UTC',
-      health_report_schedule: { times: ['08:30'] },
       service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
       comments: 'winter schedule',
     },
@@ -282,25 +278,72 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
   assert.strictEqual(device.data().course_name, 'Tony Lema');
 });
 
-test('health history returns at most 100 records sorted newest first', async () => {
+test('retired Health history route returns 404 and preserves historical records', async () => {
   const db = new FakeFirestore();
   await db.collection('devices').doc('FRB-0001').set({ state: 'deployed' });
-  for (let index = 0; index < 105; index += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    await db.collection('devices').doc('FRB-0001').collection('health_history').doc(`entry-${index}`).set({
-      received_at: new Date(Date.UTC(2026, 0, 1, 0, index)),
-      attempts: index,
-    });
-  }
+  const historyRef = db.collection('devices').doc('FRB-0001').collection('health_history');
+  const historical = { received_at: new Date('2026-09-01T00:00:00Z'), attempts: 1 };
+  await historyRef.doc('historical').set(historical);
 
   const res = await createAdminApi(db)({
     method: 'GET',
     path: '/api/v1/admin/devices/FRB-0001/health-history',
   });
-  assert.strictEqual(res.statusCode, 200);
-  assert.strictEqual(res.body.history.length, 100);
-  assert.strictEqual(res.body.history[0].attempts, 104);
-  assert.strictEqual(res.body.history[99].attempts, 5);
+  assert.strictEqual(res.statusCode, 404);
+  const history = await historyRef.get();
+  assert.strictEqual(history.size, 1);
+  assert.deepStrictEqual(history.docs[0].data(), historical);
+});
+
+test('Admin rejects Health Course writes and omits historical Health from retained responses', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  const courseRef = db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001');
+  const obsoleteSchedule = { times: 'malformed historical schedule' };
+  await courseRef.update({ health_report_schedule: obsoleteSchedule });
+  const deviceRef = db.collection('devices').doc('FRB-0001');
+  const historical = { attempts: 1, received_at: new Date('2026-09-01T00:00:00Z') };
+  await deviceRef.set({ state: 'maintenance', latest_health: historical });
+  const request = createAdminApi(db);
+  const before = JSON.stringify([...db._docs.entries()]);
+  for (const route of [
+    { method: 'POST', path: '/api/v1/admin/customers/CUST-0001/courses' },
+    { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001' },
+  ]) {
+    const res = await request({
+      ...route,
+      body: { course_name: 'Rejected', timezone: 'UTC', service_schedule: SERVICE_SCHEDULE,
+        health_report_schedule: { times: ['07:00'] } },
+    });
+    assert.strictEqual(res.statusCode, 400);
+    assert.strictEqual(JSON.stringify([...db._docs.entries()]), before);
+  }
+
+  const fleet = await request({ method: 'GET', path: '/api/v1/admin/fleet' });
+  assert.strictEqual(fleet.statusCode, 200);
+  assert.strictEqual('latest_health' in fleet.body.devices[0], false);
+  assert.strictEqual('latest_health' in fleet.body.devices[0].field_status, false);
+  assert.strictEqual('health_report_schedule' in fleet.body.customers[0].courses[0], false);
+  assert.strictEqual('health_report_schedule' in fleet.body.customers[0].courses[0].field_status, false);
+
+  const courseUpdate = await request({
+    method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001',
+    body: { course_name: 'Retained Course', service_schedule: SERVICE_SCHEDULE },
+  });
+  assert.strictEqual(courseUpdate.statusCode, 200);
+  assert.strictEqual('health_report_schedule' in courseUpdate.body, false);
+  assert.deepStrictEqual((await courseRef.get()).data().health_report_schedule, obsoleteSchedule);
+  for (const route of [
+    { method: 'PATCH', path: '/api/v1/admin/devices/FRB-0001/metadata', body: { comments: 'retained' } },
+    { method: 'PATCH', path: '/api/v1/admin/devices/FRB-0001/state', body: { state: 'in_inventory' } },
+    { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/service' },
+    { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/commission' },
+  ]) {
+    const res = await request(route);
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual('latest_health' in res.body, false);
+    assert.deepStrictEqual((await deviceRef.get()).data().latest_health, historical);
+  }
 });
 
 test('fleet identity availability requires explicit authoritative provenance', async () => {
@@ -317,6 +360,11 @@ test('fleet identity availability requires explicit authoritative provenance', a
     hardware_revision: 'stale hardware',
     firmware_generation: 'stale firmware',
   });
+  await db.collection('devices').doc('FRB-0003').set({
+    hardware_revision: 'Historical hardware',
+    firmware_generation: 'Historical firmware',
+    system_identity: { source: 'device_health', observed_at: new Date('2026-09-01T00:00:00Z') },
+  });
 
   const res = await createAdminApi(db)({ method: 'GET', path: '/api/v1/admin/fleet' });
   const verified = res.body.devices.find((device) => device.device_id === 'FRB-0001');
@@ -327,6 +375,9 @@ test('fleet identity availability requires explicit authoritative provenance', a
   assert.strictEqual(unverified.field_status.hardware_revision, 'known_stale');
   assert.strictEqual(unverified.field_status.firmware_generation, 'known_stale');
   assert.strictEqual(unverified.system_identity, null);
+  const historical = res.body.devices.find((device) => device.device_id === 'FRB-0003');
+  assert.strictEqual(historical.field_status.hardware_revision, 'available');
+  assert.strictEqual(historical.system_identity.source, 'device_health');
 });
 
 test('device provisioning returns plaintext once and never exposes or persists a digest', async () => {
@@ -474,7 +525,6 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
   await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0002').set({
     course_name: 'Second Course',
     timezone: 'UTC',
-    health_report_schedule: { times: ['08:00'] },
     service_schedule: SERVICE_SCHEDULE,
     service_suspension: null,
   });

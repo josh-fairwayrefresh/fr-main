@@ -11,7 +11,7 @@ Scope
 - This document defines only observable product behavior (what a golfer or Cart
    Operator sees and does).
 - It intentionally excludes implementation details such as GPIOs, timing constants, transistor driver circuits, interrupt names, PWM values, firmware function names, or backend transport/persistence mechanisms.
-- The behavior below is implemented and physically validated on FRB-0002, including Stage B2 early window termination after the marker learns of and acknowledges an exactly correlated operator COMPLETE. Repeat-press transport/persistence remains deferred; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md`.
+- The behavior below was physically validated on FRB-0002 in the recorded Prototype 3.2/Stage B2 lineage. The 2026-10-05 `pilot/minimal-runtime` repository candidate retains this golfer UX but has not been deployed or flashed to FRB-0002; prior physical acceptance does not establish candidate acceptance. Repeat-press transport/persistence remains deferred; see `docs/FIRMWARE_SPECIFICATION.md` and `docs/feature_backlog.md`.
 
 Purpose of the button marker UX
 -------------------------------
@@ -36,6 +36,7 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - When Fairway successfully accepts the service request, orange ends.
 - Green performs a blink-blink indication, followed by approximately 5 seconds of solid green.
 - Success means the accepted golfer service request is represented in the Fairway operator workflow/dashboard.
+- In the candidate, green success is not inferred from a partial acknowledgement: Fairway must return a complete valid acceptance identifying the originating request. Transport details are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 - Successful acceptance starts a fixed five-minute demand window, measured from the initial accepted physical button press.
 
 ### 4. Failed request
@@ -115,7 +116,8 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Course service availability follows the Course-owned recurring local schedule.
    An authorized operator may suspend new golfer requests until the next
    scheduled service start and may resume earlier. Existing requests remain
-   actionable and Device Health reporting remains accepted while suspended. A
+   actionable, including active COMPLETE actions. Device Health is retired and
+   no longer accepted, independently of suspension. A
    valid marker press rejected during suspension shows the normal red failure
    response and creates no operator request.
 - History provides day, week, and month summaries plus completed/cancelled
@@ -130,6 +132,10 @@ promoted to production on 2026-10-01. Production acceptance established the
 full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
+
+## Admin Health Retirement (Repository Candidate)
+
+The candidate removes Device Health columns, Device detail/history, Course Health scheduling, and the disabled on-demand Health placeholder. Historical system identity remains neutrally represented with its provenance; it is not a current Health observation or proof of candidate installation. Fleet administration and authorization remain. Production UI acceptance above predates this removal, which has not been deployed. A future independent Voltaic V25/V50/V75 Health experience is deferred and not specified here.
 
 ## Superseded Single-Indicator Behavior (Historical)
 

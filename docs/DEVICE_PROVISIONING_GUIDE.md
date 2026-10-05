@@ -4,7 +4,11 @@
 
 - Status: Draft
 - Version: 0.2
-- Last Updated: 2026-10-01
+- Last Updated: 2026-10-05
+
+## Current Candidate Boundary
+
+Current implementation means the uncommitted `pilot/minimal-runtime` repository candidate, not deployed production. No candidate backend deployment or FRB-0002 flash has occurred. Production provisioning and validation checkpoints below retain their original scope. Device Health is retired from candidate firmware, ingestion/configuration/persistence logic, routes, and Admin surfaces; existing historical data and identity provenance are preserved, not migrated or deleted by this documentation update.
 
 ## Purpose
 
@@ -23,7 +27,7 @@ Fairway Refresh fleet data is organized as:
 Customer -> Course -> Device
 
 - **Customer** — the Fairway Refresh contractual customer. One Customer may own one or many Courses. Canonical IDs use the `CUST-0001` style; the readable name is a separate `customer_name` field. Stored at `customers/{customerId}`; the Firestore document ID is the canonical identity and is not duplicated as a `customer_id` field inside the document.
-- **Course** — belongs to exactly one Customer and is stored as a Firestore subcollection of that Customer (`customers/{customerId}/courses/{courseId}`); the parent path itself establishes ownership, so no `customer_id` field is duplicated inside the Course document. Canonical IDs use the `COURSE-0001` style (globally unique across all Customers, centrally allocated, never restarted per Customer); the readable name is a separate `course_name` field. Each Course requires a timezone, a Device Health reporting schedule (default 07:00 and 21:00 course-local time), and a recurring beverage-service schedule (`service_schedule.days`, `start`, and `end`, interpreted in the Course timezone). Temporary operator availability is stored as `service_suspension` on the Course, with immutable suspend/resume facts in its `service_events` subcollection. A Device inherits Course configuration through its assignment; none of these values are independently authoritative on the Device.
+- **Course** — belongs to exactly one Customer and is stored at `customers/{customerId}/courses/{courseId}`; the parent path establishes ownership without a duplicated `customer_id`. Canonical IDs use the globally allocated `COURSE-0001` style; `course_name` is separate. Each Course requires a timezone and recurring beverage-service schedule (`service_schedule.days`, `start`, `end`) interpreted in that timezone. Temporary availability is `service_suspension`, with immutable suspend/resume facts in `service_events`. Assignment resolves the authoritative hierarchy; no Health schedule or effective Health configuration is part of the candidate contract.
 - **Device** — a permanent physical marker identified by its `FRB-0001`-style ID (see Device Identity below), stored at the top level (`devices/{deviceId}`). Its active deployment assignment comprises `customer_id`/`customer_name`, `course_id`/`course_name`, and `location`. An `in_inventory` Device has all assignment fields null. The Device ID itself never changes. Deployment atomically assigns a valid Customer, a Course belonging to that Customer, and a marker location.
 
 This hierarchy, the canonical ID formats, and the backend allocation mechanism are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/` (`schema.js`, `ids.js`, `customers.js`, `courses.js`, `devices.js`). WP5 adds an internal Admin UI and dedicated production Admin API over these primitives. The CPO accepted the production-backed experience, and the deployed service's authorization, read, write-policy, redaction, CORS, route-isolation, and rejection paths are validated. Production acceptance does not require a synthetic or manufactured fleet mutation.
@@ -52,9 +56,9 @@ Repository-verified:
 - Backend request ingestion verifies the presented `X-Fairway-Device-Key` credential against the exact claimed device's stored SHA-256 verifier; a single fleet-wide `FAIRWAY_DEVICE_KEY` is no longer the authentication mechanism.
 - Backend rejects unknown devices and Retired devices.
 - Backend stores request metadata using device course/hole data when present; hole number and display label are derived from the device's canonical `location` field.
-- A backend fleet data-foundation module now exists (`fairway_backend/cloudrun_receiver/lib/fleet/`) implementing the canonical Customer/Course/Device schema, centralized ID allocation, and per-device credential generation/verification (`credentials.js`). Courses are stored as a Firestore subcollection of their owning Customer (`customers/{customerId}/courses/{courseId}`); Course IDs remain globally allocated and unique. Device creation/reassignment always sources `customer_name`/`course_name` from the authoritative Customer/Course records and validates that an assigned Course belongs to the Device's Customer. The live request-ingestion path in `index.js` now looks up the claimed device first, then verifies its credential against that device's own stored verifier, before continuing to the same duplicate-suppression/request-creation logic as before.
+- The fleet module (`fairway_backend/cloudrun_receiver/lib/fleet/`) retains schema, centralized IDs, per-device credentials, and authoritative assignment. `hierarchy.js` resolves Customer/Course ownership generically; retained Course-local event facts are not Health configuration. Candidate `index.js` authenticates the exact Device and uses the transaction-idempotency contract below, not historical demand-window/open-request suppression.
 
-Current prototype behavior:
+Historical production validation (not current FRB-0001 physical service):
 
 - Per-device credential verification is implemented in the backend and is now live in production: the canonical reference device `devices/FRB-0001` has an issued credential verifier and has been physically validated end-to-end (button press through LTE/HTTPS to a persisted request) using it.
 - Provisioning workflow around the devices registry is not yet fully codified as a single operational procedure.
@@ -82,19 +86,18 @@ Each provisioned device requires a provisioning record with the fields below.
 | `state` | One exact canonical stored value: `in_inventory`, `deployed`, `maintenance`, or `retired` |
 | `hardware_revision` | Prototype or production hardware revision |
 | `firmware_generation` | Installed firmware generation |
-| `system_identity` | Authoritative identity provenance (`device_health` or `verified_provenance`) and observation time; null until established |
+| `system_identity` | Retained identity provenance (`device_health` historical observation or `verified_provenance`) and observation time; null until established |
 | `sim_iccid` | Installed SIM identity |
 | `credential` | Non-reversible SHA-256 verifier metadata only; never the plaintext secret |
 | `comments` | Administrator free-text notes |
 | `commissioning` | Commissioning metadata (`commissioned_at`, `commissioned_by`) or null |
 | `service` | Service metadata (`last_service_at`, `last_service_by`) or null |
-| `latest_health` | The freshest successfully received valid Device Health observation, including a backend/server-owned `received_at`; null until a Device has reported health successfully. |
 | `gps` | Reserved null placeholder for a future GPS extension |
 | `created_at` / `updated_at` | Standard record metadata |
 
 Do not store secret values in this record. Do not store device-specific records in canonical engineering documentation.
 
-Administrative fleet data and system/device truth have different ownership. Customer/Course naming, assignment and deployment location, lifecycle state, SIM association, comments, and commissioning/service actions remain editable through their approved Admin workflows. New provisioning initializes `hardware_revision`, `firmware_generation`, and `system_identity` to null; it never asks the CPO to type system metadata. An authenticated Device Health report may omit both identity fields for compatibility with installed legacy firmware, or must provide both valid fields. A complete pair atomically replaces `hardware_revision` and `firmware_generation` and records `system_identity.source = "device_health"`; a partial or malformed pair is rejected, and a legacy report preserves existing identity. Existing installed images whose current hardware/firmware values are already established by controlled build/flash/physical evidence use `system_identity.source = "verified_provenance"` until replaced by a self-reporting image. Both fields and their provenance remain read-only in Admin. Values without explicit authoritative provenance display as unavailable/known stale rather than being silently trusted.
+Administrative fleet data and system/device truth have different ownership. Naming, assignment, lifecycle, SIM, comments, commissioning, and service remain approved Admin workflows. New provisioning initializes `hardware_revision`, `firmware_generation`, and `system_identity` to null; it never asks the CPO to type system metadata. Candidate firmware no longer reports system identity via Health. Existing `device_health` and `verified_provenance` values remain neutrally represented, read-only evidence of their recorded observation/build/flash, not proof of the candidate's installation or a continuing Health service. Unproven values remain unavailable/known stale. Historical `latest_health` and `health_history` data may remain stored, but are not current provisioning fields, ingestion outputs, or Admin Health views.
 
 ## Device Identity
 
@@ -150,9 +153,13 @@ Per CPO direction, a physical marker's `FRB-XXXX` ID is allocated only once buil
 
 A reusable, production-validated provisioning utility exists at `fairway_backend/cloudrun_receiver/lib/fleet/provisioning.js` (`provisionNewDevice`, `issueCredentialForExistingDevice`) with a thin CLI invocation surface at `fairway_backend/cloudrun_receiver/scripts/provision_device.js` (`npm run provision-device`). The WP5 Admin API reuses `provisionNewDevice` rather than duplicating its logic. It allocates the Device ID through the existing allocator (never hardcoded), never persists or logs the plaintext credential, and preserves bounded partial-failure recovery when Device creation succeeds but credential issuance fails. This utility was used for FRB-0002's production provisioning (below).
 
-### Existing Reference Device: FRB-0001 (Live, Migrated, Physically Validated)
+### FRB-0001 Current Physical Status (CPO-Confirmed 2026-10-05)
 
-The existing physical reference device is canonically designated **FRB-0001** and this migration is now complete. To reserve that identity, the Device allocator (`RESERVED_FLOORS` in `ids.js`) starts a fresh/uninitialized `counters/FRB` document at sequence `2` rather than `1`, so the allocator can never issue `FRB-0001` to a new device. `FRB-0002` was subsequently allocated through the reusable provisioning utility described above. Customer and Course allocation are unaffected and continue to start at `CUST-0001` and `COURSE-0001` respectively.
+FRB-0001 is not in active service. It is physically disassembled on the workbench, pending reconstruction after the Prototype 3.2 (Adafruit 6106/5580) versus anticipated Prototype 3.3 Voltaic decision. No compatibility requirement applies. This physical fact does not claim a production registry mutation or rewrite the earlier successful migration. FRB-0002 is the current physical validation device. Prototype 3.3 hardware is not decided here.
+
+### Existing Reference Device: FRB-0001 (Historical Migration and Physical Validation)
+
+The historically migrated reference device is canonically designated **FRB-0001**. To reserve that identity, `RESERVED_FLOORS` in `ids.js` starts a fresh `counters/FRB` at sequence `2`, never issuing FRB-0001 to a new device. FRB-0002 was subsequently allocated through the reusable provisioning utility. Customer and Course allocation are unaffected. The following checkpoint describes what production and the physical device did then, not its current workbench condition.
 
 WP3 migration checkpoint (CPO-authorized bootstrap writes, before the subsequently completed WP5 Admin provisioning workflow):
 
@@ -178,9 +185,9 @@ WP3 migration checkpoint (CPO-authorized bootstrap writes, before the subsequent
 | `notes` | Canonical `comments` |
 | `model` (`"pv4"`) | Not migrated. CPO decision: `model = "pv4"` identifies the legacy E-Switch PV4 physical button model and is excluded from the canonical `FRB-0001` Device record; a future `button_type` field for multi-button-type support is deferred and not implemented. |
 
-### Second Device: FRB-0002 (Live, Independently Provisioned, Physically Commissioned)
+### Second Device: FRB-0002 (Historical Production Commissioning; Current Validation Device)
 
-`FRB-0002` is the first device allocated through the reusable provisioning utility above, rather than through FRB-0001's direct CPO-authorized manual bootstrap writes. Current live state:
+`FRB-0002` is the first device allocated through the reusable provisioning utility rather than direct bootstrap writes. The following records accepted production commissioning/assignment evidence; it does not claim a minimal-candidate flash or fresh live readback:
 
 - `devices/FRB-0002` is currently deployed to Monarch Bay GC / Tony Lema Course / Hole 2. This accepted production assignment postdates its earlier inventory reconciliation; its permanent identity, SIM, credential verifier, system identity, commissioning metadata, and Health data remain preserved.
 - The self-reporting artifact recorded in `docs/FIRMWARE_SPECIFICATION.md` was flashed to FRB-0002 on 2026-10-01. Authenticated Device Health then atomically promoted `hardware_revision = "Monarch Bay Pilot v3.2"` and `firmware_generation = "Prototype 3.2 for Pilot — Working Button and Lights"` with `system_identity.source = "device_health"` and `observed_at = 2026-10-01T03:57:38.827Z`, superseding the temporary `verified_provenance` bridge without CPO-entered identity metadata. The production Admin read model marks both fields available, and the CPO confirmed those device-reported values and Device Health provenance in the production UI.
@@ -293,7 +300,7 @@ Related planning owner:
 A deployment-ready device may be associated with:
 
 - a Customer (`customer_id`, authoritative) with a synchronized `customer_name` display copy
-- a Course (`course_id`, authoritative), which itself belongs to exactly one Customer (enforced by nested Firestore storage) and carries a timezone, Device Health reporting schedule (default 07:00 and 21:00 course-local time), and recurring beverage-service schedule, with a synchronized `course_name` display copy
+- a Course (`course_id`, authoritative), belonging to exactly one Customer through nested storage and carrying a timezone and recurring beverage-service schedule, with a synchronized `course_name` display copy
 - a marker location: either a standard Hole 1 through Hole 18 selection, or a "Custom" free-text location name (for example "Driving Range", "Practice Green", "Clubhouse Patio"). Hole number and any display text (e.g. "Hole 7") are always derived from this single `location` field; no independent `hole`/`label` fields are stored on the Device document.
 - administrator comments
 
@@ -305,8 +312,9 @@ The Course record is authoritative for beverage-service availability. New
 `button_press` requests are accepted only during a scheduled service window and
 when no unexpired `service_suspension` exists. A suspension ends automatically
 at the next scheduled start unless an authorized operator resumes earlier.
-Suspension does not alter existing request status/actionability and does not
-block authenticated Device Health ingestion. Scheduled service minutes minus
+Suspension does not alter existing request status/actionability; active COMPLETE
+actions and correlated poll/ACK remain available. Device Health is no longer
+accepted because its event is retired, not because of suspension. Scheduled service minutes minus
 scheduled overlap with immutable suspension intervals are the denominator for
 Cart Operator cart-hour metrics. Existing production Courses require an Admin
 schedule. Tony Lema Course was migrated before production activation on
@@ -314,13 +322,24 @@ schedule. Tony Lema Course was migrated before production activation on
 and permits editing that schedule. The migration changed only
 `service_schedule` and preserved the normalized non-schedule Course fingerprint.
 
-## Device Health: Latest State, History, Thresholds, and Alerts
+## Golfer Request Protocol and Retry Idempotency (Current Candidate)
 
-This section is the canonical owner of backend Device Health state requirements, `latest_health` semantics, the health-history requirement, Device Health thresholds, and alert-state/lifecycle semantics. Firmware-side acquisition and the scheduled-transport requirement are owned by `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Implemented)") and are not duplicated here.
+- The single canonical ingestion protocol requires `device_id`, `event_type = "button_press"`, and a valid `transaction_id`, authenticated by that exact Device's credential. Missing/malformed transaction IDs are rejected; `health_report` is not a supported event.
+- Source parsing still accepts the existing `device`/`event` aliases and defaults; this is retained parser behavior, not a second Health/legacy protocol or an exemption from required `transaction_id`. Firmware sends the canonical fields. No parser tightening is claimed by this docs-only reconciliation.
+- One accepted physical press generates one transaction ID, reused across its bounded retries. `index.js` atomically creates or returns the request for the same Device plus ID; concurrent/replayed attempts cannot create a second request. The same ID on a different authenticated Device is a different identity.
+- A different ID creates a fresh request regardless of older `new` or `confirmed` requests. Authentication, canonical state, hierarchy/assignment, and service-hours/suspension checks remain; there is no demand-window/open-request suppression query or old suppression-index dependency.
+- Successful JSON returns the originating `request_id`. Firmware requires the complete bounded 2xx JSON response with that valid ID before green success or local demand-window activation; HTTP status alone is insufficient. Firmware transport detail belongs to `docs/FIRMWARE_SPECIFICATION.md`.
+- In-window repeat presses remain local only. COMPLETE retains exact Device/request correlation, backend-owned expiry, and idempotent ACK; local expiry remains the fallback.
 
-Current implementation status: `latest_health` persistence, immutable health history, effective-configuration resolution, and authorized read-only WP5 Admin display of latest/history data are implemented in `fairway_backend/cloudrun_receiver/lib/fleet/health.js`, `index.js`, and `fairway_webapp/cart_operator_dashboard/src/admin/`. The complete backend suite is test-verified (106/106 tests passing). Device Health threshold evaluation and the alert-record lifecycle described below remain approved target only; no threshold-evaluation or alert-record implementation exists in current tracked source, and the WP5 Admin alert surface is explicitly non-operational.
+## Device Health: Retired Historical Requirements and Evidence
 
-### Latest Health and History (Implemented)
+Device Health is absent from the candidate: no ingestion, effective configuration, latest/history persistence logic, Health routes, Admin schedule/detail/history/columns, or on-demand placeholder. Historical Firestore observations and identity provenance are preserved. The following records the earlier implementation and approved-but-unimplemented targets only; none remains an active runtime requirement or a design for the future independent Voltaic V25/V50/V75 rebuild.
+
+This historical record owns the former backend Health semantics and targets. Former acquisition and scheduling evidence is preserved in `docs/FIRMWARE_SPECIFICATION.md` ("Device Health Transport and Scheduling (Historical; Retired)").
+
+Historical implementation status: latest/history persistence, effective configuration, and read-only WP5 Admin Health display were implemented and recorded with 106/106 backend tests. The candidate removes `lib/fleet/health.js` and these surfaces. That test count is historical, not candidate validation. Threshold/alert targets below were not implemented and are retired planning history, not carried-forward Voltaic requirements.
+
+### Latest Health and History (Historical; Retired)
 
 - `devices/{FRB-XXXX}.latest_health` represents the freshest successfully received valid Device Health observation for that Device, including a backend/server-owned `received_at` timestamp (`FieldValue.serverTimestamp()`, never client-supplied; a client-supplied `received_at` key is rejected as an unknown field).
 - The backend also retains immutable historical Device Health observations in the `health_history` subcollection of each Device document (`devices/{FRB-XXXX}/health_history/{historyId}`), written in the same Firestore batch as the `latest_health` update so both always agree on receive time and cannot diverge from a partial failure.
@@ -328,7 +347,7 @@ Current implementation status: `latest_health` persistence, immutable health his
 
 Production schedule validation on 2026-10-05 completed the operational rollout of source/default schedule commit `7038d56eebed38d0f9bdde38fb6b291761f7df6a`. FRB-0002 resolved through its authoritative `CUST-0001` / `COURSE-0001` assignment. COURSE-0001 previously persisted `health_report_schedule = { times: ["09:00", "17:00"] }`; a one-field production update changed only `health_report_schedule` to `{ times: ["07:00", "21:00"] }`, with every other Course field verified unchanged. Readback through the existing effective-configuration path returned the new schedule in the Course's unchanged `America/Los_Angeles` timezone and, at validation time, resolved the next report to 2026-10-05 21:00 local / `2026-10-06T04:00:00Z`. Moving scheduled Health outside play hours is an operational mitigation for the observed degraded golfer interaction around the former 17:00 execution; it does not establish or fix the underlying Health-interference mechanism.
 
-### Device Health Thresholds (Approved Initial Values)
+### Device Health Thresholds (Historical Approved Initial Values; Retired)
 
 | Metric | Yellow | Red | Status |
 |---|---|---|---|
@@ -340,7 +359,7 @@ Production schedule validation on 2026-10-05 completed the operational rollout o
 
 Battery and temperature thresholds are approved initial values. Cellular thresholds (RSRP, RSRQ, SNR) are explicitly provisional sprint thresholds and must not be silently converted into permanent validated thresholds. These are approved target values; no threshold-evaluation implementation exists yet.
 
-### Alert Lifecycle (Approved Target)
+### Alert Lifecycle (Historical Approved Target; Retired)
 
 Health alerts are persistent records, not transient UI coloring. Alerts shall:
 
@@ -355,13 +374,13 @@ Missed-scheduled-report detection and the alert engine described in this subsect
 
 No general stale-device threshold beyond the explicit 07:05/21:05 missed-scheduled-report rules has been approved; one is not implied or invented here. The exact alert collection/path/schema is unresolved WP6 implementation work, to be documented in `docs/DEPLOYMENT_GUIDE.md` once deployed.
 
-### Admin Notifications (Approved Target)
+### Admin Notifications (Historical Approved Target; Retired)
 
 A missed scheduled Device Health report shall generate an immediate notification to the admin once the backend establishes the miss at the applicable 07:05/21:05 Course-local deadline. Approved channels are email and SMS/text. For the present sprint/pilot, notification recipient scope is admin only; it must not be expanded to Course or Customer personnel without separate approval. The exact email/SMS provider is not yet selected and is not canonicalized here; notification implementation should remain sufficiently decoupled that the health architecture is not unnecessarily bound to a particular provider.
 
-### Admin Authorization (Implemented and Deployed)
+## Admin Authorization (Retained; Earlier Deployment Evidence)
 
-WP5 extends the existing Firebase-authenticated Fairway application with a distinct internal Admin area. Every `/api/v1/admin/*` backend route verifies the Firebase ID token and requires the out-of-band-assigned custom claim `admin: true`; authenticated users without that exact claim receive HTTP 403 before any read or write. The browser uses only these authorized backend routes for fleet administration, and Firestore rules remain closed to direct browser fleet access. The dedicated production Admin service and Hosting UI are deployed and CPO-accepted; live validation covers authorization, authoritative reads/history/export, redaction, CORS, route isolation, and write-policy rejection behavior. No fictitious production fleet mutation was required for acceptance.
+Every `/api/v1/admin/*` route verifies the Firebase ID token and exact custom claim `admin: true`; authenticated non-admins receive HTTP 403 before reads/writes. Browser fleet administration uses these routes, with Firestore rules closed to direct fleet access. The earlier dedicated production Admin/Hosting rollout was CPO-accepted for authorization, reads/history/export, redaction, CORS, route isolation, and write rejection without fictitious fleet mutation. Candidate Health removal is not yet deployed; historical Health-history validation does not imply a retained route.
 
 ## Functional Verification
 

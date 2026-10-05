@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 require('./notifier');
@@ -7,6 +8,7 @@ const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = 
 const {
   activeServiceMinutes,
   nextScheduledStart,
+  resolveCourseLocalDateHour,
   resolveCourseServiceState,
 } = require('./lib/course_service');
 const {
@@ -30,7 +32,7 @@ const {
   deriveDisplayLabelFromLocation,
   DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
-const { isValidHealthObservation, recordHealthObservation, resolveDeviceHierarchyConfig, resolveCourseLocalDateHour } = require('./lib/fleet/health');
+const { resolveDeviceHierarchy } = require('./lib/fleet/hierarchy');
 const {
   getOperatorAssignment,
   registerPushSubscription,
@@ -39,29 +41,13 @@ const {
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
 const COMPLETE_COMMAND_TYPE = 'complete';
-const DISPLAYED_HEALTH_FIELDS = Object.freeze([
-  'received_at', 'battery_soc_pct', 'battery_voltage_u_v', 'rsrp_dbm', 'rsrq_db',
-  'snr_db', 'modem_temperature_m_c', 'https_succeeded', 'attempts',
-]);
-const KNOWN_STALE_DEVICE_FIELDS = Object.freeze({
-  'FRB-0002': new Set(['hardware_revision', 'firmware_generation']),
-});
-
-function availability(value, stale = false, unavailableAtAcquisition = false) {
+const TRANSACTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+function availability(value, stale = false) {
   if (stale) return 'known_stale';
   if (value === null || value === undefined) {
-    return unavailableAtAcquisition ? 'unavailable_at_acquisition' : 'not_recorded';
+    return 'not_recorded';
   }
   return 'available';
-}
-
-function healthReadModel(health) {
-  if (!health) return null;
-  const values = Object.fromEntries(DISPLAYED_HEALTH_FIELDS.map((field) => [field, health[field] ?? null]));
-  values.field_status = Object.fromEntries(DISPLAYED_HEALTH_FIELDS.map((field) => [
-    field, availability(values[field], false, true),
-  ]));
-  return values;
 }
 
 async function verifyFirebaseIdToken(token) {
@@ -77,6 +63,14 @@ async function verifyFirebaseIdToken(token) {
 
 function completeCommandId(requestId) {
   return `${COMPLETE_COMMAND_TYPE}__${requestId}`;
+}
+
+function requestIdForTransaction(deviceId, transactionId) {
+  return crypto.createHash('sha256')
+    .update(deviceId)
+    .update('\0')
+    .update(transactionId)
+    .digest('hex');
 }
 
 function toDate(value) {
@@ -116,46 +110,16 @@ function createFairwayHandlers(db, {
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
 } = {}) {
-  /*
-   * Persists a golfer button_press request. Request persistence, duplicate
-   * suppression, and the `requests` document shape are byte-for-byte
-   * unchanged from the pre-WP4 implementation. The response body now
-   * returns JSON (status/event_type/request_id/effective_config) instead of
-   * plain text so a successful button_press communication can refresh the
-   * Device's cached scheduling config exactly like health_report already
-   * does, using the same effectiveConfig already resolved once by the
-   * caller (handleDeviceEvent) -- no duplicate configuration-calculation
-   * logic. HTTP 200 status and existing auth/state/hierarchy enforcement
-   * (all in handleDeviceEvent, before this function runs) are unchanged.
-   */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType, effectiveConfig, now) {
-    const existingOpenRequests = await db.collection('requests')
-      .where('device_id', '==', deviceId)
-      .where('status', 'in', ['new', 'confirmed'])
-      .where('demand_window_expires_at', '>', now)
-      .limit(1)
-      .get();
-
-    if (!existingOpenRequests.empty) {
-      const existingRequest = existingOpenRequests.docs[0];
-
-      console.log('Suppressed duplicate button request because its demand window remains active:', {
-        device_id: deviceId,
-        existing_request_id: existingRequest.id,
-      });
-
-      return res.status(200).json({
-        status: 'accepted',
-        event_type: EVENT_TYPES.BUTTON_PRESS,
-        request_id: existingRequest.id,
-        duplicate: true,
-        effective_config: effectiveConfig,
-      });
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
+    const transactionId = body.transaction_id;
+    if (typeof transactionId !== 'string' || !TRANSACTION_ID_PATTERN.test(transactionId)) {
+      return res.status(400).send('Invalid transaction_id\n');
     }
 
-    const courseLocalDateHour = effectiveConfig
-      ? resolveCourseLocalDateHour(now, effectiveConfig.timezone)
+    const courseLocalDateHour = course
+      ? resolveCourseLocalDateHour(now, course.timezone)
       : null;
+    const requestRef = db.collection('requests').doc(requestIdForTransaction(deviceId, transactionId));
 
     const requestDoc = {
       customer_id: device.customer_id || null,
@@ -177,13 +141,21 @@ function createFairwayHandlers(db, {
       device_state_at_request: device.state,
       course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
       course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
+      transaction_id: transactionId,
       raw_payload: body
     };
 
-    const docRef = await db.collection('requests').add(requestDoc);
+    const duplicate = await db.runTransaction(async (transaction) => {
+      const existingRequest = await transaction.get(requestRef);
+      if (existingRequest.exists) {
+        return true;
+      }
+      transaction.set(requestRef, requestDoc);
+      return false;
+    });
 
-    console.log('Fairway button request stored:', {
-      request_id: docRef.id,
+    console.log(duplicate ? 'Fairway button request retry accepted:' : 'Fairway button request stored:', {
+      request_id: requestRef.id,
       device_id: deviceId,
       event_type: eventType
     });
@@ -191,40 +163,13 @@ function createFairwayHandlers(db, {
     return res.status(200).json({
       status: 'accepted',
       event_type: EVENT_TYPES.BUTTON_PRESS,
-      request_id: docRef.id,
-      effective_config: effectiveConfig,
+      request_id: requestRef.id,
+      ...(duplicate ? { duplicate: true } : {}),
     });
   }
 
   /*
-   * Persists a validated health_report observation. Never creates a golfer
-   * `requests` document and never participates in button duplicate
-   * suppression; the two event types are handled by entirely separate
-   * persistence paths. `received_at` is always this server's own
-   * FieldValue.serverTimestamp(), never client-supplied. `effectiveConfig`
-   * is resolved by the caller (handleDeviceEvent) as part of its fail-closed
-   * hierarchy check, before any persistence occurs here.
-   */
-  async function persistHealthReport(res, deviceId, healthObservation, effectiveConfig) {
-    if (!isValidHealthObservation(healthObservation)) {
-      console.warn('Rejected malformed health report observation:', { device_id: deviceId });
-      return res.status(400).send('Invalid health observation\n');
-    }
-
-    await recordHealthObservation(db, deviceId, healthObservation, FieldValue.serverTimestamp());
-
-    console.log('Fairway health report accepted:', { device_id: deviceId });
-
-    return res.status(200).json({
-      status: 'accepted',
-      event_type: EVENT_TYPES.HEALTH_REPORT,
-      effective_config: effectiveConfig,
-    });
-  }
-
-  /*
-   * Single authenticated Device request entry point for both button_press and
-   * health_report events. Device lookup, lifecycle-state, credential, and
+   * Authenticated golfer request entry point. Device lookup, lifecycle-state, credential, and
    * Customer/Course-hierarchy checks happen exactly once here, before any
    * event-type-specific persistence. A Device with no Customer/Course
    * assignment at all is legitimately unassigned and proceeds normally; a
@@ -270,7 +215,7 @@ function createFairwayHandlers(db, {
       return res.status(401).send('Unauthorized\n');
     }
 
-    const hierarchy = await resolveDeviceHierarchyConfig(db, device, requestTime);
+    const hierarchy = await resolveDeviceHierarchy(db, device);
 
     if (!hierarchy.valid) {
       console.warn('Rejected device request with invalid Customer/Course hierarchy:', {
@@ -289,10 +234,6 @@ function createFairwayHandlers(db, {
       return res.status(400).send('Unknown event\n');
     }
 
-    if (eventType === EVENT_TYPES.HEALTH_REPORT) {
-      return persistHealthReport(res, deviceId, body.health, hierarchy.effectiveConfig);
-    }
-
     if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, requestTime).active) {
       console.log('Rejected golfer request because Course service is unavailable:', {
         device_id: deviceId,
@@ -301,11 +242,10 @@ function createFairwayHandlers(db, {
       return res.status(503).json({
         status: 'service_unavailable',
         event_type: EVENT_TYPES.BUTTON_PRESS,
-        effective_config: hierarchy.effectiveConfig,
       });
     }
 
-    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.effectiveConfig, requestTime);
+    return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.course, requestTime);
   }
 
   async function authenticateOperator(req, res) {
@@ -552,7 +492,7 @@ function createFairwayHandlers(db, {
     if (/cross-customer|does not belong to customer|cannot have an active assignment/.test(error.message)) {
       return res.status(409).json({ error: error.message });
     }
-    if (/Invalid|require(?:d|s)?|must be assigned|Valid Course|Health report schedule/.test(error.message)) {
+    if (/Invalid|require(?:d|s)?|must be assigned|Valid Course/.test(error.message)) {
       return res.status(400).json({ error: error.message });
     }
 
@@ -589,7 +529,6 @@ function createFairwayHandlers(db, {
         algorithm: device.credential.algorithm,
         updated_at: device.credential.updated_at,
       } : null,
-      latest_health: healthReadModel(device.latest_health),
       created_at: device.created_at ?? null,
       updated_at: device.updated_at ?? null,
     };
@@ -619,12 +558,11 @@ function createFairwayHandlers(db, {
           course_id: courseSnap.id,
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
-          health_report_schedule: courseSource.health_report_schedule ?? null,
           service_schedule: courseSource.service_schedule ?? null,
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'health_report_schedule', 'service_schedule', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'service_suspension', 'comments']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -648,26 +586,10 @@ function createFairwayHandlers(db, {
 
     return res.status(200).json({
       review_mode: 'production_admin',
-      field_status_values: ['available', 'not_recorded', 'unavailable_at_acquisition', 'known_stale'],
+      field_status_values: ['available', 'not_recorded', 'known_stale'],
       customers,
       devices,
     });
-  }
-
-  async function getAdminHealthHistory(res, deviceId) {
-    const deviceSnap = await db.collection('devices').doc(deviceId).get();
-    if (!deviceSnap.exists) {
-      return res.status(404).send('Unknown device\n');
-    }
-
-    const historySnap = await deviceSnap.ref.collection('health_history')
-      .orderBy('received_at', 'desc')
-      .limit(100)
-      .get();
-    const history = historySnap.docs
-      .map((historySnap) => ({ history_id: historySnap.id, ...healthReadModel(historySnap.data()) }));
-
-    return res.status(200).json({ device_id: deviceId, history });
   }
 
   async function createAdminCustomer(req, res) {
@@ -689,28 +611,33 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      healthReportSchedule: req.body.health_report_schedule,
       serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
-    return res.status(201).json(course);
+    return res.status(201).json(adminCourseResult(course));
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'health_report_schedule', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      healthReportSchedule: req.body.health_report_schedule,
       serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
-    return res.status(200).json(course);
+    return res.status(200).json(adminCourseResult(course));
+  }
+
+  function adminCourseResult(course) {
+    return Object.fromEntries([
+      'course_id', 'customer_id', 'course_name', 'timezone', 'service_schedule',
+      'service_suspension', 'comments', 'created_at', 'updated_at',
+    ].map((field) => [field, course[field] ?? null]));
   }
 
   async function provisionAdminDevice(req, res) {
@@ -764,7 +691,7 @@ function createFairwayHandlers(db, {
   }
 
   function redactDeviceResult(device) {
-    const { credential, ...redacted } = device;
+    const { credential, latest_health, ...redacted } = device;
     return redacted;
   }
 
@@ -811,10 +738,6 @@ function createFairwayHandlers(db, {
         return await exportDeviceSimCsv(res);
       }
 
-      const healthHistoryMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/health-history$/);
-      if (req.method === 'GET' && healthHistoryMatch) {
-        return await getAdminHealthHistory(res, healthHistoryMatch[1]);
-      }
       if (req.method === 'POST' && path === '/api/v1/admin/customers') {
         return await createAdminCustomer(req, res);
       }

@@ -36,15 +36,15 @@ test('denies retired, missing, malformed, unknown state values', () => {
   }
 });
 
-// --- WP4 event_type validation (new) ---
+// --- Golfer event_type validation ---
 
-test('accepts exactly button_press and health_report', () => {
+test('accepts exactly button_press', () => {
   assert.strictEqual(isValidEventType(EVENT_TYPES.BUTTON_PRESS), true);
-  assert.strictEqual(isValidEventType(EVENT_TYPES.HEALTH_REPORT), true);
+  assert.deepStrictEqual(Object.values(EVENT_TYPES), ['button_press']);
 });
 
 test('rejects unknown event_type values', () => {
-  for (const value of ['foo', '', undefined, null, 'BUTTON_PRESS', 'health-report', 42, {}]) {
+  for (const value of ['foo', '', undefined, null, 'BUTTON_PRESS', 'health_report', 'health-report', 42, {}]) {
     assert.strictEqual(isValidEventType(value), false, `expected invalid: ${String(value)}`);
   }
 });

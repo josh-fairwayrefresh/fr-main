@@ -3,12 +3,12 @@
 ## Document Status
 - Status: Draft
 - Version: 0.3
-- Last updated: 2026-09-30
+- Last updated: 2026-10-05
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
 - Unverified claims are marked `To Be Verified`.
-- This revision reconciles the current `nfed` repository state against the validated LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade) engineering baseline and separates current verified behavior from historical milestone claims.
+- This revision distinguishes the uncommitted minimal-runtime repository candidate from earlier validated LP 1.2/Prototype 3.2 milestones and deployed production evidence; no new physical acceptance is claimed.
 
 ## Fidelity Mandate
 
@@ -61,6 +61,16 @@ for CPO/Architect decision.
 
 This section is the canonical Fairway Refresh Fidelity Mandate. Its exact text is authoritative for Fairway engineering governance and must be preserved verbatim.
 
+## Current Repository Candidate and Physical State (2026-10-05)
+
+`pilot/minimal-runtime` at HEAD `6d90177c3f6e1e374c236d65fa773cc7c06af6c4` has uncommitted candidate source changes and no configured upstream. Current implementation is the minimal golfer lifecycle: field idle/WFI, primary press scoped-awake/orange, one bounded authenticated request with a transaction ID reused across retries, complete valid 2xx JSON/request-ID success, local five-minute demand/repeat behavior, and correlated COMPLETE poll/ACK with expiry fallback. Modem/PSM/TLS/on-demand DNS/VBUS/BUCK2 remain. No unrelated application networking runs outside the active golfer lifecycle.
+
+Device Health is retired across firmware, backend/configuration/persistence logic/routes, and Admin. Time/NTP, connection evaluation, telemetry helper, MAX17048 runtime, bootstrap, and prewarm are removed. Backend retry idempotency is atomic by Device plus transaction ID; different IDs create fresh requests regardless of older open requests. Historical Health data and neutral system-identity provenance remain. Detailed implementation belongs to `docs/FIRMWARE_SPECIFICATION.md`, protocol/registry to `docs/DEVICE_PROVISIONING_GUIDE.md`, deployment/validation limits to `docs/DEPLOYMENT_GUIDE.md`, and observable behavior to `docs/UX_SPECIFICATION.md`.
+
+No candidate backend deployment or FRB-0002 flash has occurred. Historical milestones below and their Git/artifact/production evidence remain valid for their recorded dates; they do not establish candidate physical acceptance or a current Health architecture.
+
+CPO-confirmed physical truth: FRB-0001 is not in active service and is disassembled on the workbench, pending reconstruction after the Prototype 3.2 (Adafruit 6106/5580) versus anticipated Prototype 3.3 Voltaic decision. There is no compatibility requirement. FRB-0002 is the current physical validation device. The 3.2 hardware record remains evidence, not a decision to build 3.3. Future Health will be independently rebuilt around Voltaic V25/V50/V75; no design is approved here. See the hardware owners and `docs/feature_backlog.md`.
+
 ## 1. Product System Overview
 
 The implemented end-to-end path is:
@@ -94,7 +104,7 @@ LP1.3 records that:
 - The resulting repository was verified clean (no staged, unstaged, or untracked changes) before this milestone was recorded.
 - LP1.3 establishes the clean starting point for the next Health Check engineering sprint.
 
-## Prototype 1.1 — Solar Power Integration (Hardware Milestone)
+## Prototype 1.1 — Solar Power Integration (Historical Hardware Milestone)
 
 Prototype 1.1 is a physical hardware milestone. It is not a firmware generation and did not change the then-current LP 1.2 Firmware Generation Registry entry in `docs/FIRMWARE_SPECIFICATION.md`.
 
@@ -111,14 +121,14 @@ Current vendor evidence closure for the onboard JST power feed:
 
 This evidence closes the previous direct vendor-evidence gate and authorizes the documented J4 VBAT/GND feed refinement to be described as a physical interconnect refinement to the same electrical domains, not as a separate VBUS-connected topology.
 
-The current approved pilot-build hardware architecture is distinct from the current reference device:
+At this historical checkpoint, the approved pilot-build architecture was distinct from the reference device:
 
 - Prototype 1.1 reference device: separate solar / LiPo / 6106 architecture with the historical AA power path removed and the physically validated field-power chain retained in the reference build.
 - Monarch Bay Pilot final architecture for new builds: LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT, with the Adafruit 6106 output establishing explicit Perma-Proto +5 V/GND distribution rails, an E-Switch PV8FWY0SS pushbutton, and a three-indicator (orange/green/red) driver circuit. This supersedes the prior direct `5580 GND → J2/4` wiring and the PV4 + 220 Ω LED-resistor circuit as the active new-build hardware. Full component selection is owned by `docs/HARDWARE_BOM.md` ("Monarch Bay Pilot --- Final Hardware Architecture"); full wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md` ("Monarch Bay Pilot --- Final Wiring Record"); neither is duplicated here.
 - The approved pilot-build power feed uses the existing regulated Fairway rail/common ground into the onboard JST J4 VBAT/GND domain using the Feather's official onboard connector path; J1/1 remains electrically VBAT and J2/4 remains electrically GND.
 - Exact component placement, Perma-Proto geometry, battery mounting, connector orientation, and harness routing remain TBD.
 
-Prototype 1.1 remains the current hardware milestone. The CPO-approved pilot-build architecture is a separate engineering-state record for new builds and must not be described as already installed on the reference unit.
+Prototype 1.1 remains the historical reference-device hardware milestone. Its physical evidence must not be rewritten as the later pilot-build configuration or as FRB-0001's current disassembled condition.
 
 The historical TMUX1101, MAX4544, switched-SAADC/divider, and legacy power-conditioning alternatives remain historical only and are not current alternatives.
 
@@ -147,7 +157,7 @@ The historical LP 1.2 approximately 23.25 uA dormant-current measurement remains
 
 Prototype 1.1 established the physical hardware baseline for the subsequent Device Health / Reliability engineering sprint, alongside the then-current LP 1.2 firmware generation and the LP1.3 repository/workspace cleanup milestone above.
 
-## Prototype 1.2 — Device Reliability Integration (Hardware/System Milestone)
+## Prototype 1.2 — Device Reliability Integration (Historical Hardware/System Milestone)
 
 Prototype 1.2 is a validated integrated product/system milestone. It was not a new firmware generation; its validation used the LP 1.2 lineage recorded in the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`.
 
@@ -160,13 +170,13 @@ Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 
 
 CPO-confirmed validation: the integrated candidate built cleanly under the canonical NCS 3.1.1 procedure, flashed successfully, and operated correctly from the current field-power architecture with one normal Fairway button interaction producing the expected behavior.
 
-Backend Device Health persistence and an admin-facing Device Health view were not part of Prototype 1.2. At that milestone, behavior remained acquisition/logging only. Later Device Health transport, scheduling, and backend persistence implementation is owned by `docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`; admin and alert work remains tracked in `docs/feature_backlog.md`.
+Backend Device Health persistence and Admin Health were not part of Prototype 1.2; behavior then remained acquisition/logging only. Later transport, scheduling, persistence, and Admin rollout evidence is preserved as retired history in the firmware/provisioning/deployment owners. The backlog distinguishes historical work packages from future independent Health work.
 
 Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing details (exact component placement, Perma-Proto geometry, and mechanical layout), which remain owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as previously recorded.
 
-## Prototype 3.2 for Pilot — Working Button and Lights
+## Prototype 3.2 for Pilot — Working Button and Lights (Historical Validation)
 
-Prototype 3.2 is the current validated Monarch Bay Pilot firmware generation. It preserves the golfer-first bounded transaction/Device Health architecture and implements the final local PV8/three-indicator golfer UX plus the firmware-local five-minute demand window. Exact implementation and artifact provenance are owned by `docs/FIRMWARE_SPECIFICATION.md`; externally observable behavior is owned by `docs/UX_SPECIFICATION.md`; hardware and validation detail are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+Prototype 3.2 is the recorded validated Monarch Bay Pilot generation, not the unflashed minimal candidate. At that checkpoint it retained the golfer-first bounded transaction/Device Health architecture and added the PV8/three-indicator UX and local five-minute window. Health is now retired in the candidate. Artifact provenance belongs to `docs/FIRMWARE_SPECIFICATION.md`; observable behavior to `docs/UX_SPECIFICATION.md`; physical evidence to the hardware owners.
 
 CPO-confirmed physical validation on FRB-0002 established orange startup and unresolved-transaction pulsing, green success and green-only in-window repeat behavior, red terminal-failure feedback, button re-arm, operator-dashboard request creation, and post-expiry return to the normal orange transaction path. Stage B2 adds a request-correlated, device-initiated HTTPS COMPLETE mailbox and status-independent post-window backend request creation. Its backend and dashboard were deployed and validated, and corrected firmware with a dedicated 3,072-byte transaction-thread stack was built, flashed, and physically validated on FRB-0002: COMPLETE terminated the active demand window early and the next press created a fresh request before the five-minute fallback. Repeat-press transport/persistence remains deferred in `docs/feature_backlog.md`.
 
@@ -226,7 +236,7 @@ Prototype 1.0 hardware definition is split between two owner documents.
 `docs/HARDWARE_BOM.md` owns the installed hardware components and part numbers.
 `docs/HARDWARE_ASSEMBLY_GUIDE.md` owns Prototype 1.0 physical assembly, wiring, and maintenance power-handling guidance.
 
-The current approved pilot-build hardware architecture is owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as the active design state for new builds, while the current reference-device evidence remains distinct and separate.
+The recorded Prototype 3.2 pilot-build hardware and historical reference-device evidence are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`. FRB-0001 reconstruction and any Prototype 3.3 selection remain pending; historical records do not establish a current assembled reference unit.
 
 ## Circuit Dojo nRF9151 Feather Reference
 
@@ -247,7 +257,7 @@ Firmware generation identity and accepted checkpoint provenance are owned exclus
 
 ### Fleet data foundation
 
-The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The backend verifies per-device credentials for event ingestion and Device command poll/ack routes. Stage B2 source changes make duplicate suppression demand-window-aware and add exact request-correlated COMPLETE commands; repeat-press transport/persistence remains deferred. See `docs/feature_backlog.md`.
+The fleet hierarchy, IDs, states, per-device credentials, and backend fleet primitives are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. Candidate ingestion and command poll/ACK retain those controls. Required transaction IDs and atomic Device-plus-ID idempotency replace historical demand-window suppression; exact request-correlated COMPLETE remains. Repeat-press transport/persistence is deferred in `docs/feature_backlog.md`.
 
 ### Cart operator webapp
 
@@ -295,7 +305,7 @@ interpretation are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### Current Observed or Repository-Verified Risks
 
-- Blocking network operations in the golfer button request path were resolved by the golfer-first transaction architecture in `fde1aade63ac62650709e7ea6aead6f817b71b58`; see `docs/FIRMWARE_SPECIFICATION.md` ("Golfer Transaction Architecture"). Prototype 3.2 physically validated terminal FAILURE feedback; Health-vs-golfer concurrency and repeated-boot determinism remain source/desk-verified follow-up scenarios.
+- Historical golfer-first commit `fde1aade63ac62650709e7ea6aead6f817b71b58` resolved blocking request-path behavior; Prototype 3.2 validated terminal FAILURE feedback. The minimal candidate has not been physically accepted. Health concurrency is no longer a candidate scenario because Health is retired; repeated-boot, golfer/COMPLETE reliability, and power acceptance remain bounded by available evidence in the firmware/deployment owners.
 - Battery behavior under LTE load remains uncharacterized.
 - CPO-observed whole-device idle-power regression (approximately an order of magnitude versus the LP 1.2 ~23.25 uA baseline) coincident with the 5580/6106 power-architecture integration; deferred and unresolved, see `docs/feature_backlog.md`.
 

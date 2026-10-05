@@ -8,6 +8,14 @@ It owns deployment configuration, environment configuration, hosting configurati
 
 It does not own hardware implementation, firmware implementation details, UX behavior definitions, or feature planning.
 
+## Repository Candidate Versus Production (2026-10-05)
+
+The uncommitted `pilot/minimal-runtime` candidate is based on HEAD `6d90177c3f6e1e374c236d65fa773cc7c06af6c4` (no upstream configured). It has not been deployed to Cloud Run/Hosting or flashed to FRB-0002. Production revision, asset, Health, and physical-acceptance facts below record earlier validated checkpoints, not the candidate's deployed state.
+
+Candidate firmware runs only the bounded golfer lifecycle and its active-window correlated COMPLETE poll/ACK, with no unrelated application networking. Health scheduling/acquisition, time/NTP, prewarm, bootstrap, and telemetry helper are retired; modem/PSM/TLS/on-demand DNS/VBUS/BUCK2 remain. The backend requires `transaction_id` and atomically reuses the request for the same Device plus ID; different IDs create fresh demand regardless of older open requests. Firmware success requires a complete bounded 2xx JSON response containing valid `request_id`. Detailed contracts belong to `docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+Candidate Admin removes Health columns/detail/history/schedule/on-demand placeholder and backend Health ingestion/configuration/persistence logic/routes. Historical stored observations and neutral identity provenance remain. Active COMPLETE actions and device poll/ACK remain available during service suspension; Health is no longer accepted because its event is retired.
+
 ---
 
 ## Deployment Architecture
@@ -52,7 +60,7 @@ traffic. The revision identifies that validation event only; deployment and
 operational procedures target the durable service name, not a permanent
 revision ID.
 
-### WP5-S1 Isolated Sandbox Environment
+### WP5-S1 Isolated Sandbox Environment (Historical Rollout Evidence)
 
 WP5-S1 established a dedicated non-production environment on 2026-09-30. It
 does not reuse production Auth users, Firestore data, counters, credentials,
@@ -107,7 +115,9 @@ overlap has no relationship to a physical or production Device.
 The sandbox remains available for synthetic workflow testing. Its Hosting build
 now calls only the isolated sandbox backend; it no longer reads production data.
 
-### WP5 Production Fleet Administration
+### WP5 Production Fleet Administration (Historical Rollout Evidence)
+
+This section preserves the deployed WP5 record, including now-retired Health surfaces and system-identity promotion. Those facts are not candidate route/UI requirements or evidence that FRB-0001 is currently physically operating.
 
 The CPO accepted the live production-data information architecture and
 presentation during the WP5 read-only review. On 2026-09-30, that accepted UI
@@ -278,7 +288,7 @@ Current deployment depends on:
 | Item | Source | Status | Notes |
 |------|--------|--------|-------|
 | Per-device ID and credential | Local provisioning material | Required | `FAIRWAY_DEVICE_ID` and the per-device `FAIRWAY_DEVICE_KEY` macro are supplied by the local gitignored provisioning header; values are intentionally omitted. |
-| Hardware/firmware system identity | Approved firmware build | Required | `FAIRWAY_HARDWARE_REVISION` and `FAIRWAY_FIRMWARE_GENERATION` are build-owned compile definitions transmitted together in authenticated Device Health; they are not CPO-entered provisioning fields. |
+| Hardware/firmware system identity | Historical build/flash or device observation | Retained provenance only | The former build-owned Health reporting path is retired in the candidate. Existing identity/provenance remains read-only; it does not establish installation of this candidate. |
 | Firebase web configuration | Repository | Repository-managed | Web app configuration is maintained in source; this guide does not duplicate values. |
 | TLS CA chain certificates | Repository | Repository-managed | Firmware trust material is maintained in the firmware certificate directory. |
 | Cloud Run service account IAM | Historical Working State | Pending Live Verification | Historical source reports Firestore write role assignment; exact service account identity is not recorded in current repository-controlled artifacts. |
@@ -378,6 +388,14 @@ Before flashing, verify the selected artifact against that provenance record. Do
 
 The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tracked Fairway board root to the MCUboot child image. This is required for the custom `circuitdojo_feather_nrf9151` board to resolve consistently during the sysbuild build.
 
+### Candidate Validation Evidence and Limits
+
+Working-state inspection on 2026-10-05 found `build-minimal-runtime/merged.hex` and sysbuild metadata specifying NCS v3.1.1, toolchain bundle `561dce9adf`, West 1.4.0, `circuitdojo_feather_nrf9151@1/nrf9151/ns`, explicit `BOARD_ROOT`, and `prj_a.conf`. Generated artifact presence/metadata is not source-to-artifact equivalence or physical acceptance; no candidate artifact is promoted to the validated firmware registry here.
+
+Current backend tests include required/malformed transaction ID rejection, concurrent retry idempotency, cross-device ID isolation, fresh different-ID requests, and retired Health rejection. `samples/fairway_power_sandbox/tests/complete_poll` includes COMPLETE/demand-window lifecycle and fragmented, truncated, bodyless, and malformed-length HTTP cases. Inspection establishes that these cases exist, not a new passing count. Prior test/build counts in milestone records retain their historical scope.
+
+The Zephyr `native_sim` target requires Linux; its executable validation is not a native macOS procedure. Use an authorized Linux environment for that target, or the existing host-compatible checks for their narrower scope. This limitation does not prevent the canonical nRF9151 cross-build on macOS and does not imply native_sim tests passed here.
+
 ### Flash Procedure
 
 The current Fairway programming path is probe-rs. In USB/debug/service mode, USB is connected and PPK2 is disconnected, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
@@ -465,14 +483,14 @@ UART/serial logs are useful diagnostic evidence but are NOT automatically a requ
 
 ## Backend Deployment
 
-Current Backend Deployment Facts:
+Retained backend architecture and earlier deployment evidence:
 
 - Runtime libraries indicate Node.js function-style service using @google-cloud/functions-framework.
 - Documented deployed service name: fairway-button-receiver
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
 - Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
 - The deployed backend requires a Firebase bearer ID token on operator mutations, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The active Cart Operator workflow has no CONFIRM interaction; COMPLETE, Cancel, Suspend/Resume, and dashboard-summary calls are restricted by enabled Course assignment. The WP5 admin API continues to require the out-of-band-assigned Firebase custom claim `admin: true` on every `/api/v1/admin/*` route and returns HTTP 403 before fleet reads or writes for authenticated non-admins.
-- Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
+- Candidate golfer ingestion requires a valid `transaction_id` in addition to device identity/event and per-device authentication. There is no supported Health event or effective Health configuration response. See the canonical protocol and idempotency contract in `docs/DEVICE_PROVISIONING_GUIDE.md`.
 - Supported request routes:
   - POST /
   - POST /api/v1/button-events
@@ -536,10 +554,9 @@ destination.
 - Firestore document events are delivered as `application/protobuf`; the sender
   obtains the request document path from the CloudEvent `subject` envelope.
 
-WP5 admin routes (implemented, test-verified, and deployed to the isolated sandbox and dedicated production Admin service):
+Retained candidate Admin routes (earlier WP5 deployment evidence does not establish deployment of the Health-removal candidate):
 
 - `GET /api/v1/admin/fleet`
-- `GET /api/v1/admin/devices/{deviceId}/health-history`
 - `GET /api/v1/admin/export/device-sim`
 - `POST|PATCH /api/v1/admin/customers...` for Customer/Course creation and configuration
 - `POST /api/v1/admin/devices` for permanent-ID allocation and one-time credential issuance
@@ -549,7 +566,7 @@ WP5 admin routes (implemented, test-verified, and deployed to the isolated sandb
 
 The Admin UI calls these backend routes with the current Firebase ID token. It does not read or write fleet collections directly, and the repository Firestore rules continue to deny browser access to those collections. Admin responses redact credential verifier digests; new-device provisioning returns the plaintext credential only in the one successful creation response.
 
-The command routes use the existing per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact active, pending, unexpired command, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay of an already-acknowledged command. The demand-window query requires the repository-controlled composite index in `fairway_webapp/cart_operator_dashboard/firestore.indexes.json`. The backend, dashboard, and index were deployed and validated during Stage B2; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local demand window early.
+The command routes retain per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact pending, unexpired command, and ACK rechecks backend-owned expiry with idempotent replay. The candidate no longer uses the old demand-window suppression query/index. Historically, Stage B2 deployed and validated the backend, dashboard, and then-required index; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local window early. That evidence is not candidate deployment acceptance.
 
 Operational lesson (established during WP3 per-device credential deployment): read-only Cloud Run inspection commands (for example `gcloud run services describe`) return full container environment variable values, including secrets, unless the output is field-restricted. Always use a field-restricted `--format=value(...)` (or equivalent) query that excludes environment variable values when inspecting a service that may hold secret-bearing configuration; only request variable names, never values, unless a value is explicitly required and authorized.
 
@@ -688,7 +705,7 @@ Collection schema is owned by the backend implementation.
 
 Indexes:
 
-- `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` defines the deployed `requests` composite index required by demand-window-aware duplicate suppression (`device_id`, `status`, and `demand_window_expires_at`).
+- Candidate `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` retains the `requests` Course query (`course_id`, `received_at` descending). The old suppression index (`device_id`, `status`, `demand_window_expires_at`) is removed from the repository candidate; no production index deployment/deletion is claimed. Atomic device-plus-transaction-ID idempotency does not require it.
 
 ---
 
@@ -711,12 +728,12 @@ Related planning reference:
 Full-system or pilot operational validation is broader than backend deployment
 validation. When that scope is authorized, the sequence is:
 
-1. Firmware boots and reaches network-ready state.
-2. Device sends request to Cloud Run endpoint.
-3. Backend stores request document in Firestore.
+1. Firmware boots with local button readiness and the expected idle policy; network startup does not gate local readiness.
+2. Device sends an authenticated golfer request with one transaction ID across retries.
+3. Backend stores exactly one request for that Device/ID and firmware receives the complete valid 2xx JSON `request_id` before success.
 4. Operator dashboard receives live request update.
-5. Confirm action succeeds and updates status.
-6. Complete action succeeds and updates status/removes active item.
+5. Complete updates status/removes the active item; correlated marker poll/ACK clears its matching window, with local expiry fallback when unavailable.
+6. In-window repeats stay local; a fresh transaction ID can create another request even while an earlier request remains open. Validate service rejection and continued actionability of existing COMPLETE during suspension.
 
 A full-system or pilot operational validation is complete only after all six
 steps succeed. A bounded backend deployment can be validated against its own

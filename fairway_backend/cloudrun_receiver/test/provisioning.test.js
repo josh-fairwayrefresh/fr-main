@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { createCustomer } = require('../lib/fleet/customers');
-const { createCourse, DEFAULT_HEALTH_REPORT_SCHEDULE } = require('../lib/fleet/courses');
+const { createCourse } = require('../lib/fleet/courses');
 const { DEVICE_STATES } = require('../lib/fleet/schema');
 const {
   provisionNewDevice,
@@ -50,14 +50,16 @@ async function seedCustomerAndCourse(db) {
   return { customerId: customer.customer_id, courseId: course.course_id };
 }
 
-test('new Courses use the canonical 07:00 and 21:00 local Health schedule', async () => {
+test('new Courses store service hours without a Health schedule', async () => {
   const db = new FakeFirestore();
   const { customerId, courseId } = await seedCustomerAndCourse(db);
   const course = await db.collection('customers').doc(customerId)
     .collection('courses').doc(courseId).get();
 
-  assert.deepStrictEqual(DEFAULT_HEALTH_REPORT_SCHEDULE, { times: ['07:00', '21:00'] });
-  assert.deepStrictEqual(course.data().health_report_schedule, DEFAULT_HEALTH_REPORT_SCHEDULE);
+  assert.strictEqual('health_report_schedule' in course.data(), false);
+  assert.deepStrictEqual(course.data().service_schedule, {
+    days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:59',
+  });
 });
 
 test('provisionNewDevice creates an unassigned inventory device and issues a credential', async () => {
@@ -86,6 +88,7 @@ test('provisionNewDevice creates an unassigned inventory device and issues a cre
   assert.strictEqual(device.state, DEVICE_STATES.IN_INVENTORY, 'must not transition state; deployment is a later step');
   assert.strictEqual(device.firmware_generation, null);
   assert.strictEqual(device.system_identity, null);
+  assert.strictEqual('latest_health' in device, false);
 
   // The stored credential must be a non-reversible verifier only.
   assert.strictEqual(device.credential.algorithm, 'sha256');

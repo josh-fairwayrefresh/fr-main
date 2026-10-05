@@ -5,6 +5,7 @@ const {
   activeServiceMinutes,
   isValidServiceSchedule,
   nextScheduledStart,
+  resolveCourseLocalDateHour,
   resolveCourseServiceState,
 } = require('../lib/course_service');
 
@@ -17,6 +18,17 @@ assert.strictEqual(isValidServiceSchedule(course.service_schedule), true);
 assert.strictEqual(isValidServiceSchedule({ days: [1], start: '17:00', end: '09:00' }), false);
 
 const active = new Date('2026-10-01T19:00:00.000Z'); // Thursday 12:00 PDT
+for (const [instant, expected] of [
+  ['2026-01-16T07:30:00Z', { date: '2026-01-15', hour: 23 }],
+  ['2026-07-16T07:30:00Z', { date: '2026-07-16', hour: 0 }],
+  ['2026-03-08T09:30:00Z', { date: '2026-03-08', hour: 1 }],
+  ['2026-03-08T10:30:00Z', { date: '2026-03-08', hour: 3 }],
+  ['2026-11-01T08:30:00Z', { date: '2026-11-01', hour: 1 }],
+  ['2026-11-01T09:30:00Z', { date: '2026-11-01', hour: 1 }],
+]) {
+  assert.deepStrictEqual(resolveCourseLocalDateHour(new Date(instant), course.timezone), expected);
+}
+assert.deepStrictEqual(resolveCourseLocalDateHour(active, 'UTC'), { date: '2026-10-01', hour: 19 });
 assert.deepStrictEqual(resolveCourseServiceState(course, active), {
   active: true,
   scheduled: true,

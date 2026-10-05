@@ -2,6 +2,10 @@
 
 This document records the hardware installed in the Fairway Refresh prototype across physical hardware generations.
 
+## Current Physical Status (CPO-Confirmed 2026-10-05)
+
+FRB-0001 is not in active service and is physically disassembled on the workbench, pending reconstruction after the Prototype 3.2 (Adafruit 6106/5580) versus anticipated Prototype 3.3 Voltaic decision. No compatibility requirement applies. FRB-0002 is the current physical validation device. This document retains the accepted 3.2 BOM and earlier MAX17048 installation/validation evidence; it does not select 3.3 hardware. Candidate firmware has retired MAX17048/Device Health runtime, which does not erase installed-hardware history. Firmware truth belongs to `docs/FIRMWARE_SPECIFICATION.md`.
+
 ## Prototype 1.1 — Solar Power Integration (Reference-Device Generation)
 
 Prototype 1.1 replaced the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture on the reference device. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
@@ -39,7 +43,7 @@ or establish batch-wide manufacturing validation.
 - external polyfuse omitted
 - 1000 uF capacitor omitted
 - PV4 220 Ω LED resistor circuit retired from this build; see Pushbutton/Indicators below
-- actual LiPo voltage/trend remains the primary energy-health evidence; SOC is supplementary
+- in the historical Prototype 3.2 Health interpretation, actual LiPo voltage/trend was primary and SOC supplementary; this is not an active candidate telemetry claim
 
 The Adafruit 6106 regulated output and GND now explicitly establish the
 Perma-Proto +5 V and GND rails as the system power-distribution buses, which
@@ -70,7 +74,7 @@ The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to
 | Solar/USB/DC charger with 5 V boost | Adafruit | 6106 | Adafruit | BQ25185 charger/power-path with TPS61023 5 V boost output; establishes the Perma-Proto +5 V/GND distribution rails. |
 | Antenna | Circuit Dojo | FLEX-LTE-GPS-UFL | Circuit Dojo | Must be LTE+GPS combo for 9151. |
 | Hologram SIM | Hologram | Hologram SIM Card | Hologram | Installed for LTE service. |
-| LiPo fuel gauge | Adafruit | 5580 / MAX17048 | Adafruit | Direct LiPo voltage and fuel-gauge sensing for Device Health; electrically between the protected LiPo and the Adafruit 6106 battery input through the approved JST path. Actual LiPo voltage/trend is the primary operational metric; SOC is supplementary. |
+| LiPo fuel gauge | Adafruit | 5580 / MAX17048 | Adafruit | Recorded Prototype 3.2 inline sensing hardware, electrically between the protected LiPo and Adafruit 6106 battery input through the approved JST path. Former Device Health voltage/SOC acquisition is retired in candidate firmware; the installed physical record is retained. |
 | Barrel-to-screw-terminal adapter | Adafruit | 368 | Adafruit | 5.5 x 2.1 mm female barrel to screw-terminal adapter; solar input path. |
 | Panel connector adapter | Adafruit | 4287 | Adafruit | 3.5 x 1.1 mm to 5.5 x 2.1 mm adapter; solar input path. |
 | Cable gland | Voltaic | Appropriate IP67/68 gland | Voltaic | Enclosure cable penetration. |
@@ -96,11 +100,11 @@ The canonical engineering BOM basis is the approved pilot-build configuration ab
 
 ### Retained historical field-power evidence
 
-The current reference device remains a separate physical evidence record and is not redefined as the new-build architecture. The current reference device was functionally validated with solar / LiPo / Adafruit 6106 field power, and the physical placement and mounting details remain TBD.
+The historical reference-device evidence is separate from the later pilot-build architecture and FRB-0001's current disassembled condition. The reference device was functionally validated with solar / LiPo / Adafruit 6106 field power; that event remains valid history.
 
 ### Reference-Device Battery-Health Update
 
-The Adafruit 5580 / MAX17048 fuel gauge is now physically installed and wired on the current reference device, using the approved wiring: VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11, SDA → J1/12. I2C communication and battery-voltage acquisition were validated live on this reference device; see `docs/FIRMWARE_SPECIFICATION.md` for the validated Device Health result and `docs/HARDWARE_ASSEMBLY_GUIDE.md` for the wiring/validation record. Component placement, Perma-Proto geometry, and final mechanical layout remain TBD, as previously recorded.
+Historically, the Adafruit 5580 / MAX17048 was installed on the reference device with VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11, SDA → J1/12. I2C communication and battery-voltage acquisition were validated live; see the firmware and assembly owners for that historical evidence. This is not a claim that disassembled FRB-0001 remains wired or that candidate firmware acquires Health. Placement, geometry, and final mechanical layout remain TBD.
 
 ### Retained from Prototype 1.0 (CPO-confirmed installed and functioning)
 

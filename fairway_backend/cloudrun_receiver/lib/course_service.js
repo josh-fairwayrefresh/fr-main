@@ -44,6 +44,11 @@ function toDate(value) {
   return null;
 }
 
+function resolveCourseLocalDateHour(instant, timeZone) {
+  const local = localParts(instant, timeZone);
+  return { date: local.date, hour: Number(local.time.slice(0, 2)) };
+}
+
 function scheduledAt(course, instant) {
   if (!isValidServiceSchedule(course?.service_schedule) || typeof course.timezone !== 'string') {
     return false;
@@ -138,6 +143,7 @@ module.exports = {
   activeServiceMinutes,
   isValidServiceSchedule,
   nextScheduledStart,
+  resolveCourseLocalDateHour,
   resolveCourseServiceState,
   scheduledMinutesBetween,
 };

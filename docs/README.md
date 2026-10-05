@@ -61,9 +61,9 @@ Current:
 - `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
 
 Current-state notes:
-- Prototype 3.2 for Pilot is the current validated pilot firmware generation; exact source/artifact provenance and validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`.
+- The 2026-10-05 `pilot/minimal-runtime` working-tree candidate is current repository implementation, not a deployed or flashed release. Device Health is retired; the independent future Voltaic V25/V50/V75 rebuild is undesigned. Current implementation and historical Prototype 3.2 source/artifact/validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`; operational boundaries by `docs/DEPLOYMENT_GUIDE.md`.
 - Prototype 1.2 remains the earlier validated Device Reliability Integration milestone and LP 1.2 remains the accepted dormant-power/NCS baseline; neither is the latest golfer-facing firmware generation.
-- One Monarch Bay Pilot instance (FRB-0002) has now been assembled and functionally validated with the 5580 battery-health path, onboard J4 VBAT/GND feed, PV8 button, and three-indicator system. Batch-wide physical placement and manufacturing validation remain TBD.
+- FRB-0002 is the current physical validation device; its recorded Prototype 3.2 assembly/validation includes the 5580, J4 VBAT/GND feed, PV8, and three indicators. FRB-0001 is CPO-confirmed disassembled and out of active service, awaiting reconstruction after the 3.2 versus anticipated 3.3 Voltaic decision, with no compatibility requirement. Historical physical evidence remains in the hardware owners; batch-wide placement/manufacturing validation and Prototype 3.3 selection remain unresolved.
 
 Planned during documentation migration:
 

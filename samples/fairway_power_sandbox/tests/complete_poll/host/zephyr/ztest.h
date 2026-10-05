@@ -7,6 +7,8 @@
 #define zassert_true(condition) assert(condition)
 #define zassert_false(condition) assert(!(condition))
 #define zassert_equal(actual, expected) assert((actual) == (expected))
+#define zassert_is_null(value) assert((value) == NULL)
+#define zassert_not_null(value) assert((value) != NULL)
 
 #define ZTEST(suite, name) static void name(void)
 
@@ -35,7 +37,11 @@
 		RUN_TEST(test_14_stale_generation_result_is_rejected); \
 		RUN_TEST(test_15_successive_request_lifecycles); \
 		RUN_TEST(test_16_poll_faults_do_not_affect_local_repeat_decision); \
-		puts("16/16 tests passed"); \
+		RUN_TEST(test_17_fragmented_headers_and_body_complete_exactly); \
+		RUN_TEST(test_18_truncated_body_never_completes); \
+		RUN_TEST(test_19_bodyless_success_is_complete_but_has_no_identity_body); \
+		RUN_TEST(test_20_missing_or_malformed_length_is_invalid); \
+		puts("20/20 tests passed"); \
 		return 0; \
 	}
 

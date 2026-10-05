@@ -8,7 +8,7 @@ Its purpose is to preserve exactly how the first working prototype was physicall
 
 This is not a manufacturing work instruction.
 
-The current physical hardware generation is Prototype 1.1, documented in a dedicated section near the end of this document. The Prototype 1.0 wiring record below remains a historical reference for the original AA-powered build and is not the current field-power architecture.
+Prototype 1.1 reference-device wiring and Prototype 1.0 AA wiring are retained as historical records; the accepted Prototype 3.2 pilot wiring is recorded separately below. CPO-confirmed on 2026-10-05: FRB-0001 is disassembled on the workbench, not in active service, and awaits reconstruction after the Prototype 3.2 (Adafruit 6106/5580) versus anticipated Prototype 3.3 Voltaic decision, with no compatibility requirement. FRB-0002 is the current physical validation device. No 3.3 hardware decision or candidate flash is established here; historical MAX17048 physical evidence remains valid even though candidate firmware Health runtime is retired.
 
 ---
 
@@ -249,7 +249,7 @@ layout remain TBD.
 
 Validated:
 
-- I2C electrical behavior and MAX17048 response at address 0x36: confirmed live through the existing Device Health snapshot, with the 5580 wired as VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11 / P0.01, SDA → J1/12 / P0.02. This validation event predates the Monarch Bay Pilot GND-rail supersession above and is retained as historical evidence of the I2C signal path and address, not as current ground-wiring truth.
+- I2C electrical behavior and MAX17048 response at address 0x36: confirmed live through the then-existing Device Health snapshot, with the 5580 wired as VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11 / P0.01, SDA → J1/12 / P0.02. This validation event predates the Monarch Bay Pilot GND-rail supersession above and is retained as historical evidence of the I2C signal path and address, not as current ground-wiring truth or current Health runtime.
 - MAX17048 cell voltage compared with a DMM measurement at the actual LiPo node: MAX17048 reported 4.0125 V; CPO DMM measurement at the LiPo node was approximately 4.0 V; difference approximately 12.5 mV (approximately 0.31%). The CPO accepted this as adequate out-of-box battery-voltage calibration for the prototype. This validates voltage acquisition only; it does not establish long-term SOC model accuracy.
 - FRB-0002 Monarch Bay Pilot assembly: regulated rail measured approximately 5.2 V at Feather J1/1 (VBAT) relative to J2/4 (GND), and J2/2 measured 3.3 V after correcting 5580 VIN to J2/2. PV8 input and each indicator channel were then physically validated through normal firmware behavior: orange startup/transmitting, green success/repeat, and red failure.
 - FRB-0002 completed an authenticated LTE/HTTPS button transaction from field power and produced the expected operator-dashboard request. This is representative functional validation of the assembled pilot path; it is not simultaneous-three-indicator load characterization or a dormant-current measurement.
@@ -512,13 +512,13 @@ Observed battery behavior and engineering risks are maintained in:
 
 ---
 
-# Prototype 1.1 — Solar Power Integration (Current Field-Power Architecture)
+# Prototype 1.1 — Solar Power Integration (Historical Reference-Device Architecture)
 
 Prototype 1.1 is the reference-device solar-power generation. It replaced the historical Prototype 1.0 AA/VBAT field-power architecture recorded above with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
-This section documents the current reference-device hardware evidence. The CPO-approved pilot-build architecture above remains a separate design-state record for new builds and must not be described as already installed in the current reference unit.
+This section preserves historical reference-device hardware evidence, not FRB-0001's present disassembled state. The accepted Prototype 3.2 pilot wiring above is separate; reconstruction and any 3.3 selection remain pending.
 
-## Current Field-Power Chain (CPO-Installed and Functionally Validated)
+## Historical Field-Power Chain (CPO-Installed and Functionally Validated)
 
 ```
 Adafruit 5366 solar panel
@@ -566,4 +566,4 @@ Detailed validation evidence and remaining characterization scope are recorded i
 
 # Notes
 
-This document is the canonical physical assembly record for Prototype 1.0. The current Prototype 1.1 field-power architecture is recorded in the section above.
+This document preserves the Prototype 1.0 and Prototype 1.1 physical records and owns the accepted Prototype 3.2 pilot wiring. Current device status is stated at the top; Prototype 3.3 is not decided here.

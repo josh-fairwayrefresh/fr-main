@@ -13,24 +13,6 @@
           "order": "DESCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "requests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "device_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "demand_window_expires_at",
-          "order": "ASCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": []
