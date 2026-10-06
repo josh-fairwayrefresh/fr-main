@@ -6,7 +6,6 @@ const { resolveSandboxEnvironment } = require('../lib/environment');
 const { createCustomer } = require('../lib/fleet/customers');
 const { createCourse } = require('../lib/fleet/courses');
 const { createDevice, replaceDeviceCredential, updateDeviceState } = require('../lib/fleet/devices');
-const { recordHealthObservation } = require('../lib/fleet/health');
 
 const SYNTHETIC_MARKER = 'WP5-S1 SYNTHETIC SANDBOX DATA - NOT A PHYSICAL DEVICE';
 
@@ -30,7 +29,6 @@ async function main() {
     customerId: customer.customer_id,
     courseName: 'Validation Course',
     timezone: 'America/Los_Angeles',
-    healthReportSchedule: { times: ['09:00', '17:00'] },
     comments: SYNTHETIC_MARKER,
   });
   const device = await createDevice(db, {
@@ -47,29 +45,6 @@ async function main() {
 
   const credential = await replaceDeviceCredential(db, device.device_id);
   credential.secret = null;
-
-  const health = {
-    attempts: 1,
-    registration_state: 1,
-    http_status: 200,
-    modem_temperature_m_c: 28000,
-    rsrp_dbm: -92,
-    rsrq_db: -9,
-    snr_db: 14,
-    serving_cell_id: 123456,
-    serving_band: 12,
-    psm_tau_s: 11160,
-    psm_active_time_s: 0,
-    battery_voltage_u_v: 4020000,
-    battery_soc_pct: 84,
-    https_succeeded: true,
-  };
-  await recordHealthObservation(
-    db,
-    device.device_id,
-    health,
-    FieldValue.serverTimestamp()
-  );
 
   await db.collection('requests').add({
     customer_id: customer.customer_id,

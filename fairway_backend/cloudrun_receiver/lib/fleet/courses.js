@@ -7,12 +7,6 @@ const { isValidServiceSchedule } = require('../course_service');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
-const DEFAULT_HEALTH_REPORT_SCHEDULE = Object.freeze({
-  times: ['09:00', '17:00'],
-});
-
-const HEALTH_REPORT_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-
 function isValidIanaTimezone(timezone) {
   if (typeof timezone !== 'string' || timezone.length === 0) {
     return false;
@@ -26,18 +20,6 @@ function isValidIanaTimezone(timezone) {
   }
 }
 
-function isValidHealthReportSchedule(schedule) {
-  return Boolean(
-    schedule &&
-    typeof schedule === 'object' &&
-    !Array.isArray(schedule) &&
-    Object.keys(schedule).length === 1 &&
-    Array.isArray(schedule.times) &&
-    schedule.times.length > 0 &&
-    schedule.times.every((time) => typeof time === 'string' && HEALTH_REPORT_TIME_PATTERN.test(time))
-  );
-}
-
 /*
  * Course schema. Courses are stored as a subcollection of their owning
  * Customer (customers/{customerId}/courses/{courseId}); the parent path
@@ -47,9 +29,6 @@ function isValidHealthReportSchedule(schedule) {
  *
  *   course_name                course name
  *   timezone                   IANA timezone name (e.g. "America/Los_Angeles")
- *   health_report_schedule     { times: ["HH:MM", ...] } course-local times;
- *                              stored/configured only. Firmware scheduling is
- *                              out of scope for WP2.
  *   service_schedule           { days: [0-6], start: "HH:MM", end: "HH:MM" }
  *                              recurring Course-local beverage-service window
  *   service_suspension         temporary operator suspension or null
@@ -66,15 +45,13 @@ function coursesCollection(db, customerId) {
  * centrally allocated COURSE-XXXX id. Allocation uses the same global
  * counters/COURSE document regardless of nested storage, so Course IDs
  * remain globally unique across all Customers and never restart per
- * Customer (see ids.js). Applies the CPO-approved default Device Health
- * reporting schedule (09:00 / 17:00 course-local time).
+ * Customer (see ids.js).
  */
 async function createCourse(db, {
   customerId,
   courseName,
   timezone,
   comments = null,
-  healthReportSchedule,
   serviceSchedule,
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
@@ -85,9 +62,6 @@ async function createCourse(db, {
   }
   if (!isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
-  }
-  if (healthReportSchedule !== undefined && !isValidHealthReportSchedule(healthReportSchedule)) {
-    throw new Error('Health report schedule requires one or more HH:MM times');
   }
   if (!isValidServiceSchedule(serviceSchedule)) {
     throw new Error('Service schedule requires selected days and a valid start/end window');
@@ -107,7 +81,6 @@ async function createCourse(db, {
   const courseDoc = {
     course_name: courseName,
     timezone,
-    health_report_schedule: healthReportSchedule || DEFAULT_HEALTH_REPORT_SCHEDULE,
     service_schedule: serviceSchedule,
     service_suspension: null,
     comments,
@@ -139,7 +112,6 @@ async function getCourseForCustomer(db, customerId, courseId) {
 async function updateCourse(db, customerId, courseId, {
   courseName,
   timezone,
-  healthReportSchedule,
   serviceSchedule,
   comments,
 } = {}) {
@@ -159,9 +131,6 @@ async function updateCourse(db, customerId, courseId, {
   if (timezone !== undefined && !isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
   }
-  if (healthReportSchedule !== undefined && !isValidHealthReportSchedule(healthReportSchedule)) {
-    throw new Error('Health report schedule requires one or more HH:MM times');
-  }
   if (serviceSchedule !== undefined && !isValidServiceSchedule(serviceSchedule)) {
     throw new Error('Service schedule requires selected days and a valid start/end window');
   }
@@ -176,9 +145,6 @@ async function updateCourse(db, customerId, courseId, {
   }
   if (timezone !== undefined) {
     update.timezone = timezone;
-  }
-  if (healthReportSchedule !== undefined) {
-    update.health_report_schedule = healthReportSchedule;
   }
   if (serviceSchedule !== undefined) {
     update.service_schedule = serviceSchedule;
@@ -206,9 +172,7 @@ async function updateCourse(db, customerId, courseId, {
 
 module.exports = {
   COURSES_SUBCOLLECTION,
-  DEFAULT_HEALTH_REPORT_SCHEDULE,
   isValidIanaTimezone,
-  isValidHealthReportSchedule,
   coursesCollection,
   createCourse,
   getCourseForCustomer,

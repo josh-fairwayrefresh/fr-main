@@ -36,15 +36,12 @@ test('denies retired, missing, malformed, unknown state values', () => {
   }
 });
 
-// --- WP4 event_type validation (new) ---
-
-test('accepts exactly button_press and health_report', () => {
+test('accepts exactly button_press', () => {
   assert.strictEqual(isValidEventType(EVENT_TYPES.BUTTON_PRESS), true);
-  assert.strictEqual(isValidEventType(EVENT_TYPES.HEALTH_REPORT), true);
 });
 
 test('rejects unknown event_type values', () => {
-  for (const value of ['foo', '', undefined, null, 'BUTTON_PRESS', 'health-report', 42, {}]) {
+  for (const value of ['foo', '', undefined, null, 'BUTTON_PRESS', 'health_report', 42, {}]) {
     assert.strictEqual(isValidEventType(value), false, `expected invalid: ${String(value)}`);
   }
 });

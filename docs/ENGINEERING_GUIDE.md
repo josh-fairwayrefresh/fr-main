@@ -160,13 +160,13 @@ Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 
 
 CPO-confirmed validation: the integrated candidate built cleanly under the canonical NCS 3.1.1 procedure, flashed successfully, and operated correctly from the current field-power architecture with one normal Fairway button interaction producing the expected behavior.
 
-Backend Device Health persistence and an admin-facing Device Health view were not part of Prototype 1.2. At that milestone, behavior remained acquisition/logging only. Later Device Health transport, scheduling, and backend persistence implementation is owned by `docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`; admin and alert work remains tracked in `docs/feature_backlog.md`.
+Prototype 1.2 Device Health acquisition is retained as historical validation evidence. Device Health runtime, transport, persistence, scheduling, and Admin surfaces are retired from the current product; current ownership is recorded in `docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`.
 
 Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing details (exact component placement, Perma-Proto geometry, and mechanical layout), which remain owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as previously recorded.
 
 ## Prototype 3.2 for Pilot — Working Button and Lights
 
-Prototype 3.2 is the current validated Monarch Bay Pilot firmware generation. It preserves the golfer-first bounded transaction/Device Health architecture and implements the final local PV8/three-indicator golfer UX plus the firmware-local five-minute demand window. Exact implementation and artifact provenance are owned by `docs/FIRMWARE_SPECIFICATION.md`; externally observable behavior is owned by `docs/UX_SPECIFICATION.md`; hardware and validation detail are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+Prototype 3.2 is the current validated Monarch Bay Pilot hardware/UX baseline. The current runtime preserves its golfer-first bounded transaction, scoped-awake behavior, PV8/three-indicator UX, local five-minute demand window, exact COMPLETE lifecycle, PSM/WFI, and VBUS/BUCK2 policy while retiring Device Health and unrelated background networking. Exact implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 CPO-confirmed physical validation on FRB-0002 established orange startup and unresolved-transaction pulsing, green success and green-only in-window repeat behavior, red terminal-failure feedback, button re-arm, operator-dashboard request creation, and post-expiry return to the normal orange transaction path. Stage B2 adds a request-correlated, device-initiated HTTPS COMPLETE mailbox and status-independent post-window backend request creation. Its backend and dashboard were deployed and validated, and corrected firmware with a dedicated 3,072-byte transaction-thread stack was built, flashed, and physically validated on FRB-0002: COMPLETE terminated the active demand window early and the next press created a fresh request before the five-minute fallback. Repeat-press transport/persistence remains deferred in `docs/feature_backlog.md`.
 
@@ -247,7 +247,7 @@ Firmware generation identity and accepted checkpoint provenance are owned exclus
 
 ### Fleet data foundation
 
-The Customer -> Course -> Device fleet hierarchy, canonical ID formats (`CUST-XXXX`, `COURSE-XXXX`, `FRB-XXXX`), canonical device states, per-device credential architecture, and the backend ID-allocation/schema primitives (`fairway_backend/cloudrun_receiver/lib/fleet/`) are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The backend verifies per-device credentials for event ingestion and Device command poll/ack routes. Stage B2 source changes make duplicate suppression demand-window-aware and add exact request-correlated COMPLETE commands; repeat-press transport/persistence remains deferred. See `docs/feature_backlog.md`.
+The Customer -> Course -> Device fleet hierarchy, canonical IDs/states, per-device credentials, and allocation/schema primitives are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The backend verifies credentials for button ingestion and command poll/ack. Active demand-window duplicate suppression and exact request-correlated COMPLETE behavior remain as physically validated in Prototype 3.2. Repeat-press transport/persistence remains deferred.
 
 ### Cart operator webapp
 

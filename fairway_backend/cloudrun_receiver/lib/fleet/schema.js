@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Canonical Fleet Administration + Device Health (WP2) schema constants and
+ * Canonical Fleet Administration schema constants and
  * validators. Pure functions only; no Firestore dependency in this file.
  */
 
@@ -33,15 +33,10 @@ function isDeviceCommunicationAllowed(state) {
 }
 
 /*
- * Canonical authenticated Device request event types. `button_press` is the
- * existing golfer-request event; `health_report` is the WP4 Device Health
- * transport event. Both share the same request endpoint and authentication
- * path; an event_type outside this set is rejected rather than silently
- * treated as `button_press`.
+ * Canonical authenticated Device request event type.
  */
 const EVENT_TYPES = Object.freeze({
   BUTTON_PRESS: 'button_press',
-  HEALTH_REPORT: 'health_report',
 });
 
 const EVENT_TYPE_VALUES = Object.freeze(Object.values(EVENT_TYPES));

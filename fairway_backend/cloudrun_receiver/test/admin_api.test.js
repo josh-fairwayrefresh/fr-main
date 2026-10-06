@@ -101,7 +101,6 @@ async function seedHierarchy(db) {
   await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001').set({
     course_name: 'Old Course',
     timezone: 'America/Los_Angeles',
-    health_report_schedule: { times: ['09:00', '17:00'] },
     service_schedule: SERVICE_SCHEDULE,
     service_suspension: null,
     comments: null,
@@ -233,7 +232,7 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
   const invalidCourse = await request({
     method: 'POST',
     path: `/api/v1/admin/customers/${customer.body.customer_id}/courses`,
-    body: { course_name: 'Bad', timezone: 'Not/A_Real_Zone', health_report_schedule: { times: [] } },
+    body: { course_name: 'Bad', timezone: 'Not/A_Real_Zone' },
   });
   assert.strictEqual(invalidCourse.statusCode, 400);
 
@@ -243,7 +242,6 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema Course',
       timezone: 'America/Los_Angeles',
-      health_report_schedule: { times: ['09:00', '17:00'] },
       service_schedule: SERVICE_SCHEDULE,
     },
   });
@@ -270,7 +268,6 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema',
       timezone: 'UTC',
-      health_report_schedule: { times: ['08:30'] },
       service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
       comments: 'winter schedule',
     },
@@ -282,25 +279,15 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
   assert.strictEqual(device.data().course_name, 'Tony Lema');
 });
 
-test('health history returns at most 100 records sorted newest first', async () => {
+test('retired health history route is unavailable', async () => {
   const db = new FakeFirestore();
   await db.collection('devices').doc('FRB-0001').set({ state: 'deployed' });
-  for (let index = 0; index < 105; index += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    await db.collection('devices').doc('FRB-0001').collection('health_history').doc(`entry-${index}`).set({
-      received_at: new Date(Date.UTC(2026, 0, 1, 0, index)),
-      attempts: index,
-    });
-  }
 
   const res = await createAdminApi(db)({
     method: 'GET',
     path: '/api/v1/admin/devices/FRB-0001/health-history',
   });
-  assert.strictEqual(res.statusCode, 200);
-  assert.strictEqual(res.body.history.length, 100);
-  assert.strictEqual(res.body.history[0].attempts, 104);
-  assert.strictEqual(res.body.history[99].attempts, 5);
+  assert.strictEqual(res.statusCode, 404);
 });
 
 test('fleet identity availability requires explicit authoritative provenance', async () => {
@@ -474,7 +461,6 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
   await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0002').set({
     course_name: 'Second Course',
     timezone: 'UTC',
-    health_report_schedule: { times: ['08:00'] },
     service_schedule: SERVICE_SCHEDULE,
     service_suspension: null,
   });

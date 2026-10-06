@@ -15,12 +15,14 @@ It does not own hardware implementation, firmware implementation details, UX beh
 The documented deployment architecture consists of:
 
 - Firmware running on nRF9151 hardware that sends HTTPS button events to a Cloud Run endpoint.
-- A Cloud Run backend service that validates requests and writes request records to Firestore.
+- A Cloud Run backend service that validates lifecycle, per-device credentials, hierarchy, and service availability, then writes request records to Firestore.
 - A Firebase-hosted operator web application.
 - Firestore for request state and operator workflow state transitions.
 - Operator actions in the web application that call Cloud Run status endpoints.
 - A Firestore document-created Eventarc trigger that invokes a dedicated Web
   Push sender for authorized course subscriptions.
+
+Current Device API scope is `button_press` plus correlated COMPLETE poll/ack. Device Health ingestion, schedules, history, Admin display, and background firmware reporting are retired. Historical deployment records later in this guide document earlier validated revisions and must not be interpreted as current API/configuration requirements. Voltaic/Prototype 3.3 is outside the current sprint.
 
 Context references:
 
@@ -163,16 +165,16 @@ authenticated mobile Admin session on `app.fairwayrefresh.com` and confirmed
 that the production fleet loaded without the prior `Load failed` state.
 
 The production UI supports Customer/Course create and edit, Course timezone and
-Health schedule, permanent Device provisioning and bounded one-time credential
+service schedule, permanent Device provisioning and bounded one-time credential
 recovery, atomic Customer/Course/location deployment assignment, lifecycle
 state, SIM/comments, service and commissioning records,
-read-only hardware/firmware identity, read-only current Device Health/history,
-and Device-to-SIM export. Hardware revision and firmware generation start unknown
-at provisioning; authenticated Device Health populates both atomically
-from build-owned firmware values. Installed legacy images use controlled verified
-provenance until a self-reporting artifact is flashed. Neither field can be
-changed through an administrative metadata route.
-Request Health Check and WP6 Alerts remain visible and non-operational.
+read-only verified hardware/firmware identity, and Device-to-SIM export.
+Hardware revision and firmware generation start unknown at provisioning and may
+be established only by controlled verified provenance. Neither field can be
+changed through an administrative metadata route. No Health placeholder or
+history/schedule control is current UI.
+
+### Historical WP5 System-Metadata Deployment Record
 
 The WP5 system-metadata closeout deployed Admin revision
 `fairway-admin-00004-mz5`, receiver revision

@@ -111,7 +111,7 @@ async function main() {
   }
 
   console.log('Provisioning succeeded.');
-  console.log('Hardware and firmware identity will populate from authenticated Device Health.');
+  console.log('Hardware and firmware identity require verified provisioning records.');
   printCredentialForPaste(result);
   console.log('Device state is "in_inventory" and completely unassigned; deploy separately after commissioning.');
 }

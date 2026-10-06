@@ -115,7 +115,7 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Course service availability follows the Course-owned recurring local schedule.
    An authorized operator may suspend new golfer requests until the next
    scheduled service start and may resume earlier. Existing requests remain
-   actionable and Device Health reporting remains accepted while suspended. A
+   actionable while suspended. A
    valid marker press rejected during suspension shows the normal red failure
    response and creates no operator request.
 - History provides day, week, and month summaries plus completed/cancelled
