@@ -1,763 +1,387 @@
-# FAIRWAY REFRESH --- CONTINUOUS IMPROVEMENT / KAIZEN
+FAIRWAY REFRESH — CONTINUOUS IMPROVEMENT / KAIZEN
 
-**Canonical path:** `docs/Continuous_improvement_Kaizen_1.0.md`
+Canonical path: docs/Continuous_improvement_Kaizen_1.0.md
 
-## 1. Purpose and Authority
+1. Purpose and Authority
 
-This document is the Fairway Refresh Major Engineering Document and
-canonical System of Truth for continuous improvement of the Fairway
-Refresh development process.
+This document is the Fairway Refresh canonical System of Truth for continuous improvement and development-decision practice.
 
-It owns:
+Its purpose is to help the Development Team deliver a robust, modular, scalable Fairway Refresh system with less wasted work, fewer unnecessary handoffs, and better engineering decisions.
 
--   development-team learning and continuous improvement;
--   product-first engineering decision discipline;
--   prioritization and value-of-work principles;
--   evidence and diagnostic-value discipline;
--   diagnostic roadmaps, opt-out points, and failure-class correction;
--   reconsideration of existing engineering decisions;
--   efficient use of CPO and Development Team time;
--   retrospective practice; and
--   adoption and maintenance of durable development best practices.
+It does not own product behavior, subsystem architecture, implementation, deployment, provisioning, UX, or engineering truth assigned to another owner document.
 
-It does not own product behavior, firmware architecture, hardware
-implementation, deployment procedure, provisioning architecture, UX
-behavior, or engineering truth assigned to another owner document.
+The Fidelity Mandate in docs/ENGINEERING_GUIDE.md governs protection of current truth and authorization. This document governs how engineering decisions are made within those controls.
 
-The purpose of Kaizen is **not to add process**. Its purpose is to
-continuously remove wasted work, improve decision quality, accelerate
-learning, protect product fidelity, and increase the Development Team's
-ability to deliver a robust and scalable Fairway Refresh system.
+Only the CPO may approve durable Kaizen rules.
 
-Any member of the Development Team, including the Lead Architect or VSC
-engineering agent, may propose a Kaizen rule at any time.
+⸻
 
-**Only the CPO may approve a proposed rule for adoption into this
-canonical SoT.**
+2. Development Objective
 
-A lesson learned, retrospective finding, recommendation, or agent
-preference is not a canonical development rule until approved by the CPO
-and incorporated here.
+Develop Fairway Refresh’s full stack and hardware as a modular productized system that can scale from pilot deployment to many hundreds of courses.
 
-This SoT was established following the WP4 Device Health / golfer-first
-retrospective.
+The product Definition of Done remains:
 
-## 2. Tier 1 Product Goal
+Fairway Refresh devices can be robustly deployed indefinitely on the course.
 
-> **Develop Fairway Refresh's codebase (full stack + hardware) as a
-> modular productized system that allows for the business to scale from
-> pilot to many hundreds of courses.**
+Development decisions shall optimize for the simplest durable system that satisfies the product requirement, not the smallest individual change.
 
-Continuous improvement exists to make the Development Team increasingly
-effective at achieving this goal.
+A smaller change is not better when it creates temporary architecture, duplicate responsibility, workaround logic, hidden coupling, competing sources of truth, or foreseeable rework.
 
-Process, architecture, implementation, testing, documentation, tooling,
-and development practices shall be evaluated according to whether they
-advance this goal rather than whether they preserve an existing practice
-for its own sake.
+The objective is to build architecture worth keeping.
 
-## 3. Definition of Done
+⸻
 
-> **The Fairway Refresh devices can be robustly deployed indefinitely on
-> the course.**
+3. Product-First Engineering
 
-Development decisions shall therefore optimize for a productized system
-that is robust, maintainable, understandable, scalable, and
-operationally deployable, not merely for successful completion of the
-immediate development task.
+Engineering reasoning proceeds:
 
-A local fix that satisfies an immediate symptom but preserves a
-recurring class of failure may therefore be inferior to a broader
-correction that better satisfies the Definition of Done.
+Product Requirement → Architecture → Engineering Decision → Implementation
 
-## 4. Tier 1 Product Goal --- Development Acceptance Criteria
+Current implementation establishes what the system does. It does not automatically establish what the architecture should continue to be.
 
-### 4.1 CPO Time and Development Priority
+Before committing to architecture, resolve the product requirements, constraints, priorities, and existing decisions that could materially change it.
 
-> **The CPO's time is a valuable resource to be used to full potential,
-> but not wasted. The Development Team must always understand
-> objectives, priorities and the value of the tasks they propose. Always
-> prioritize what is most uncertain, impactful and required to be done
-> now before other items. If that prioritization is not clear, ask the
-> CPO.**
+Do not require certainty about implementation details that can responsibly be resolved during engineering without changing the architectural direction.
 
-This criterion applies to planning, research, diagnostics, architecture,
-implementation, physical testing, validation, documentation, and
-deployment.
+Architecture should establish enough structure to make the system coherent:
 
-Before proposing material work, the Development Team shall understand,
-proportionate to the task:
+* responsibility and state ownership;
+* important boundaries and interfaces;
+* reusable capabilities;
+* material failure behavior; and
+* end-to-end product behavior.
 
-1.  **Objective** --- What product or engineering objective does this
-    work advance?
-2.  **Uncertainty** --- What important uncertainty does it resolve?
-3.  **Decision value** --- What decision could the result change?
-4.  **Impact** --- Why does that decision matter?
-5.  **Priority** --- Why is this required now?
-6.  **Cost** --- What engineering, elapsed, CPO-attention, or
-    physical-interaction cost does it impose?
-7.  **Sufficiency** --- Is there a less expensive way to obtain
-    sufficient evidence for the decision?
+The objective is neither speculative abstraction nor minimum-change implementation.
 
-Not every small action requires a formal written response to these
-questions. They are a decision discipline, not a paperwork requirement.
+Build the smallest complete architecture worth keeping.
 
-If the priority or value of material proposed work is unclear, ask the
-CPO before proceeding.
+⸻
 
-## 5. Product-First Engineering Hierarchy
+4. Clean Architecture Invariant
 
-Fairway Refresh engineering shall reason in this direction:
+Fairway Refresh shall be built as clean, modular architecture.
 
-> **Product Requirement → Architecture → Engineering Decision →
-> Implementation**
+Each behavior, state, interface, and source of engineering truth shall have one authoritative owner.
 
-### 5.1 Product Requirement
+Features should compose bounded capabilities through explicit interfaces rather than recreate shared behavior inside feature-specific paths.
 
-First establish what the product must accomplish and why.
+The Development Team shall actively avoid:
 
-Product requirements and priorities are owned by the CPO and the
-appropriate canonical product and engineering SoTs.
+* competing sources of truth;
+* duplicated state or behavior;
+* unclear responsibility ownership;
+* intertwined feature and infrastructure logic;
+* parallel workflows performing the same responsibility;
+* hidden coupling;
+* feature-specific copies of shared capabilities; and
+* temporary harness, glue, or compatibility logic becoming permanent product architecture.
 
-### 5.2 Architecture
+Do not build additional product behavior on top of a known architectural defect merely because doing so is locally expedient.
 
-Determine the architecture that best satisfies the product requirement
-as a coherent, modular, robust, and scalable system.
+When such a condition is encountered:
 
-Architecture exists to serve product requirements. It shall not be
-dictated merely by the current implementation.
+* correct it and continue when the correction fits the established architecture and authorized objective;
+* escalate when correcting it would materially change architecture, a canonical decision, scope, risk, or authorization; and
+* do not silently work around it.
 
-### 5.3 Engineering Decision
+This does not require abstraction for hypothetical future reuse. Create common capabilities when the current product requires common ownership or behavior.
 
-Within the approved architecture, make the engineering decisions
-necessary to implement it correctly and efficiently.
+The standard is:
 
-These decisions may include timing, retry behavior, interfaces,
-scheduling, state ownership, concurrency, libraries, protocols, hardware
-choices, and similar design choices.
+One responsibility → one owner → one source of truth → explicit interfaces → composition.
 
-### 5.4 Implementation
+⸻
 
-Implement the approved engineering decisions faithfully in tracked
-source and configuration.
+5. Architect Definition of Done / VSC Definition of Ready
 
-Current tracked implementation remains authoritative for what the system
-actually does.
+The Architect’s Definition of Done is VSC’s Definition of Ready.
 
-### 5.5 Evidence Can Require Reconsideration
+Architecture and planning are complete when VSC can engineer the authorized objective coherently without:
 
-Although engineering reasoning begins with product requirements and
-proceeds downward, implementation and physical evidence may reveal that
-an assumption, engineering decision, architecture, or requirement
-interpretation needs reconsideration.
+* inventing product intent;
+* resolving an unmade material product tradeoff;
+* inventing or materially redefining architecture;
+* choosing between materially competing sources of truth;
+* silently overriding a canonical engineering decision; or
+* returning for an avoidable decision that should already have been resolved.
 
-When that happens, do not merely patch upward from the implementation.
-Return to the appropriate higher level of the hierarchy and determine
-the correct product-first response.
+A VSC-ready objective therefore has, proportionate to the work:
 
-### 5.6 Fidelity Is Not Preservation of the Current Solution
+* a clear product or engineering outcome;
+* sufficient architecture and responsibility ownership;
+* relevant material constraints and accepted decisions;
+* a clear authorization boundary;
+* an end-to-end success condition; and
+* genuine stop or escalation conditions where a material unresolved decision may be encountered.
 
-Do not confuse fidelity to the current system with preservation of the
-current solution.
+VSC is not ready to implement a feature when its required behavior has materially ambiguous ownership or competing sources of truth.
 
-Fidelity requires accurately establishing current truth, respecting
-current approved decisions until changed, preserving evidence and
-provenance, and observing authorization boundaries.
+Do not require additional investigation, documentation, decomposition, or certainty merely because it is possible.
 
-Fidelity does **not** create a presumption that the existing
-architecture, engineering decision, or implementation is the best
-solution to preserve.
+If VSC can responsibly resolve an implementation question without changing product intent, architecture, canonical decisions, material risk, or authorization, that question belongs to engineering execution.
 
-## 6. Architecture Inputs Must Be Established Before Architecture Is Drafted
+The Architect should hand VSC the largest coherent engineering objective that is ready and authorized, not the smallest safe technical step.
 
-Before drafting an architecture proposal, identify the product-level
-inputs that could materially determine the architecture.
+⸻
 
-These may include:
+6. Engineering Judgment at Every Scale
 
--   priority ordering between competing product or execution flows;
--   hard timing or performance budgets;
--   power, cost, memory, compute, bandwidth, or other resource
-    constraints;
--   safety, installation, serviceability, or operational constraints;
--   scalability requirements;
--   external dependencies; and
--   existing engineering decisions or constants that may need
-    reconsideration.
+Kaizen applies to engineering decisions at every scale.
 
-Do not draft a full architecture around self-inferred assumptions when
-an unresolved product-level input could materially change the design.
+Its application should be continuous but proportional.
 
-If such an input is unclear, ask the CPO before designing around it.
+Major product and architectural decisions require deliberate reasoning against these principles.
 
-This requirement is especially important where multiple flows compete
-for execution, resources, timing, or user priority.
+Ordinary engineering decisions should follow established architecture, clear ownership, reusable capabilities, and known engineering best practices without requiring additional process.
 
-## 7. Canonical Does Not Mean Immutable
+Small implementation decisions should simply make the clean, conventional, durable choice and keep moving.
 
-Canonical engineering decisions are authoritative **until changed**.
+Do not create a meeting, artifact, Architect interaction, diagnostic cycle, or authorization gate merely because a decision exists.
 
-They are not automatically permanent.
+Good engineering judgment at small scale should reinforce the architecture rather than gradually undermine it.
 
-The existence of a decision in an SoT means:
+⸻
 
-> **This is the currently approved decision. Do not silently deviate
-> from it.**
+7. Evidence and Escalation
 
-It does not mean:
+Evidence exists to support decisions.
 
-> **Preserve this decision regardless of cost, complexity, or new
-> evidence.**
+Before creating a separate investigation or diagnostic cycle, ask:
 
-An existing engineering decision shall be surfaced for CPO/Architect
-reconsideration when preserving it materially:
+What uncertainty does this resolve, and what decision can the result change?
 
--   conflicts with a higher-order product requirement;
--   obstructs the approved architecture;
--   creates disproportionate implementation complexity;
--   requires repeated workarounds;
--   causes repeated diagnostic or validation cycles;
--   consumes significant CPO or Development Team time;
--   creates a recurring failure class; or
--   is contradicted by material new source, physical, operational, or
-    validation evidence.
+If plausible results would not materially change the product requirement, architecture, engineering direction, validation conclusion, risk acceptance, or authorization decision, do not create the additional gate.
 
-VSC shall not silently override the canonical decision.
+Use sufficient evidence for the decision being made. Do not seek exhaustive certainty.
 
-The Architect shall not silently override it.
+Normal implementation problem-solving belongs inside engineering execution.
 
-Instead, identify the constraining decision clearly, together with the
-consequence of retaining it and the potential value of changing it.
+Escalation is warranted when evidence can materially change:
 
-The CPO decides whether the decision changes.
+* product intent or priority;
+* architecture;
+* a canonical engineering decision;
+* a material product or operational tradeoff;
+* accepted risk; or
+* authorization reserved to the CPO.
 
-## 8. Evidence and Diagnostic Value
+When a defect is discovered, distinguish evidence that the defect exists from evidence that it explains the observed behavior. Do not overstate causality, but do not continue investigating after sufficient evidence exists to make the engineering decision.
 
-Diagnostics and evidence gathering exist to support decisions, not to
-eliminate every theoretical uncertainty.
+For genuine diagnostic campaigns involving repeated investigation or physical interaction, establish the question, information value, and a stop or pivot condition before allowing diagnostic momentum to accumulate.
 
-Before proposing material evidence-gathering work, determine:
+⸻
 
-> **What uncertainty does this address, what result could it produce,
-> and how could that result change what we do next?**
+8. Authorization and Coherent Execution
 
-If plausible results would not materially change the implementation,
-engineering, or architectural decision, further diagnosis is normally
-not warranted.
+Authorization boundaries established by the Fairway Refresh engineering system remain in force.
 
-The fact that something remains unknown is not by itself sufficient
-reason to investigate it.
+Approval of one separately controlled action does not silently authorize another.
 
-**Sufficient evidence for the next decision is the objective.**
+In particular, implementation does not itself authorize deployment, flash, physical validation, destructive operations, commit, push, or another separately controlled action.
 
-This principle does not permit unsupported assumptions where unresolved
-evidence could materially change the decision.
+Within the authorization actually granted:
 
-### 8.1 Choose Evidence by Value
+Technical decomposition is not an authorization boundary.
 
-Source inspection, static analysis, build evidence, logs,
-instrumentation, physical measurements, controlled experiments, and CPO
-observations are tools for resolving uncertainty.
+VSC should engineer through ordinary implementation steps, builds, automated verification, refactoring necessary to preserve the approved architecture, and implementation-level problems that are within scope.
 
-No diagnostic method is automatically first merely because it was
-effective previously.
+Do not create another Architect/VSC cycle merely because another technical step has begun.
 
-Choose the method that most efficiently attacks the:
+Create another decision or authorization boundary only when the work reaches a genuine unresolved product, architecture, canonical-decision, material-risk, or authorization boundary.
 
-> **most uncertain, impactful, and currently necessary question.**
+⸻
 
-Physical testing shall not be requested when existing source or other
-evidence can establish the decision sufficiently.
+9. Roles
 
-Likewise, source analysis shall not substitute for physical evidence
-when the unresolved question is inherently physical or operational.
-
-The evidence hierarchy defined by the Fairway engineering system remains
-controlling.
-
-## 9. Diagnostic Roadmaps, Opt-Out Points, and Failure Classes
-
-A diagnostic effort becomes a campaign when it is expected to require
-repeated investigation, instrumentation, builds, flashes, physical CPO
-interaction, or multiple decision cycles.
-
-Before entering such a campaign, establish a bounded diagnostic roadmap
-proportionate to the problem.
-
-The roadmap should identify:
-
--   the uncertainty being investigated;
--   why resolving it matters;
--   the highest-value first investigation;
--   what useful evidence the proposed diagnostics can provide;
--   the decision that evidence affects;
--   expected physical/CPO interaction; and
--   known stop, pivot, or opt-out points.
-
-The Development Team shall deliberately reassess the roadmap when an
-opt-out point is reached.
-
-Do not continue a diagnostic sequence merely because another diagnostic
-can be constructed.
-
-Do not allow sunk effort in a diagnostic channel to justify continued
-effort if the channel is not producing decision-relevant information.
-
-There is no automatic entitlement to a fixed number of diagnostic
-iterations. The relevant test is **information value**, not iteration
-count.
-
-### 9.1 Prefer Failure-Class Elimination
-
-When evidence reveals that a product requirement can be violated by a
-broader architectural dependency, evaluate whether the dependency itself
-should be removed or redesigned before continuing to localize one
-occurrence.
-
-Ask:
-
-> **Are we fixing this instance, or preventing this class of failure?**
-
-Localized fixes are appropriate when the architecture is sound and the
-defect is genuinely local.
-
-When multiple symptoms arise from the same architectural dependency, or
-a local correction merely exposes the next blocker in the same
-dependency chain, reconsider the architecture before accumulating
-additional fixes.
-
-The goal is not automatically to make the largest change.
-
-The goal is the **smallest coherent correction that prevents recurrence
-while satisfying the product requirement and architecture.**
-
-## 10. CPO Interaction and Physical Validation
-
-CPO attention, decision time, and physical interaction with prototypes
-are engineering resources.
-
-They shall be used where they provide meaningful value.
-
-Repeated requests for the CPO to flash devices, reset or power-cycle
-hardware, observe indicators, manipulate wiring, perform measurements,
-compare ambiguous physical behaviors, or wait through diagnostic cycles
-shall be evaluated against their expected information and decision
-value.
-
-When VSC believes the evidence justifies physical flashing, its
-responsibility is to state clearly:
-
-> **I think we can flash now.**
-
-It shall explain concisely what is ready, what the flash is expected to
-establish, and any relevant risk.
-
-**The CPO decides whether flashing is appropriate and authorizes it.**
-
-There is no standing or implied flash authorization.
-
-Existing authorization boundaries for planning, editing, building,
-flashing, physical validation, cleanup, commit, and push remain in force
-unless explicitly authorized otherwise.
-
-## 11. Roles and Responsibilities
-
-### 11.1 CPO
+CPO
 
 The CPO owns:
 
--   product intent;
--   product priorities;
--   acceptance of material product tradeoffs;
--   reconsideration of canonical decisions when surfaced;
--   authorization decisions assigned to the CPO; and
--   approval of durable Kaizen rules.
-
-The Development Team should bring the CPO **decisions worth making**,
-not unresolved technical detail that can be answered without CPO
-involvement.
-
-### 11.2 Lead Architect
-
-The Lead Architect owns:
-
--   maintaining coherence from Product Requirement through Architecture,
-    Engineering Decision, and Implementation;
--   determining whether engineering work remains aligned with the
-    product objective;
--   identifying product-level inputs that must be resolved before
-    architecture is drafted;
--   evaluating evidence sufficiency for architectural and engineering
-    decisions;
--   recognizing when the engineering question has changed;
--   preventing diagnostic momentum from replacing decision-making;
--   identifying when a canonical decision should be reconsidered;
--   framing material CPO decisions concisely;
--   protecting coherence across owner SoTs;
--   protecting CPO time from avoidable engineering churn; and
--   independently assessing VSC results before recommending the next
-    safe action.
-
-The Architect should not become merely the director of increasingly
-narrow debugging.
-
-### 11.3 VSC Engineering Agent
-
-VSC owns:
-
--   establishing current implementation truth from the canonical
-    repository;
--   implementing approved engineering decisions faithfully;
--   performing authorized investigation and engineering work;
--   identifying implementation constraints and relevant evidence;
--   identifying unresolved product-level inputs before drafting
-    architecture;
--   identifying when a canonical decision is causing disproportionate
-    complexity or repeated workaround logic;
--   surfacing such decisions rather than silently engineering around
-    them;
--   proposing Kaizen improvements when useful;
--   maintaining Git, build, and evidence discipline; and
--   reporting what was actually established rather than overstating
-    validation.
-
-VSC does not independently redefine product requirements, architecture,
-or canonical engineering decisions.
-
-When such a change appears warranted, VSC escalates it.
+* product intent and priorities;
+* material product tradeoffs;
+* reconsideration of canonical decisions;
+* CPO-reserved authorizations; and
+* approval of durable Kaizen rules.
 
-## 12. Authorization Discipline
+The Development Team should bring the CPO decisions worth making, not implementation questions that can be responsibly resolved within established architecture.
 
-Continuous improvement shall not be used as justification for weakening
-controls that protect the integrity of the engineering system.
+Lead Architect
 
-Explicit separation of planning, implementation, build, flash,
-validation, cleanup, commit, and push remains valuable engineering
-governance.
+The Lead Architect owns coherence from product requirement through architecture and engineering direction.
 
-Kaizen should reduce **unnecessary work**, not remove valuable controls.
+The Architect shall:
 
-Where repeated authorization interactions appear wasteful, improve the
-scope, sequencing, and clarity of the proposed work rather than assuming
-broader authority.
-
-## 13. Retrospective / Kaizen Cycle
+* establish enough architecture to make the objective VSC-ready;
+* establish clear responsibility and state ownership;
+* resolve or surface material product and architectural decisions;
+* prefer durable system corrections over accumulated local fixes;
+* protect modularity and single sources of truth;
+* avoid unnecessary investigation and engineering handoffs; and
+* independently assess VSC evidence before recommending the next stage.
 
-A formal Development Team retrospective shall occur:
-
--   after every major development sprint; and
--   whenever the CPO calls for one.
-
-The retrospective includes the CPO, Lead Architect, and VSC engineering
-agent.
+The Architect should not become the director of increasingly narrow debugging or the dispatcher of micro-tasks.
 
-Its purpose is not to create a historical record for its own sake.
+VSC Engineering Agent
 
-Its purpose is to determine:
+VSC owns engineering execution within the approved objective, architecture, canonical truth, and authorization boundary.
 
--   what worked;
--   what did not;
--   what consumed disproportionate time;
--   where assumptions were wrong;
--   where decisions were made too early or too late;
--   whether the correct product-first hierarchy was followed;
--   whether architecture inputs were established before design;
--   whether evidence was sufficient or excessive;
--   whether CPO time was used effectively;
--   whether architecture eliminated or preserved failure classes;
--   whether existing SoT decisions should have been reconsidered;
--   what practices should be retained; and
--   what practices should change.
+VSC shall:
 
-Any participant may propose a Kaizen rule during or outside a
-retrospective.
+* exercise engineering judgment over implementation details;
+* follow known engineering best practices;
+* preserve clear ownership and modular boundaries;
+* compose existing capabilities rather than duplicate them;
+* engineer through ordinary technical obstacles;
+* correct local architectural defects when doing so remains within the established architecture and authorized objective; and
+* report what the work actually established.
 
-Only CPO-approved lessons become canonical rules.
+VSC shall not knowingly extend competing sources of truth, duplicated responsibilities, intertwined workflows, or workaround architecture merely to complete the immediate task.
 
-## 14. Kaizen Must Reduce Process Burden
+When correcting such a condition would materially change architecture, a canonical decision, scope, risk, or authorization, VSC shall stop and surface it rather than work around it.
 
-Continuous improvement can itself become waste.
+⸻
 
-Therefore:
+10. Kaizen Discipline
 
--   prefer a small number of durable principles over large checklists;
--   do not create mandatory artifacts without demonstrated value;
--   do not create a process merely because a failure happened once;
--   consolidate overlapping rules;
--   remove obsolete rules;
--   avoid rules that prescribe a particular diagnostic technique where a
-    broader decision principle is sufficient; and
--   periodically challenge whether existing Kaizen rules still create
-    value.
+Kaizen must reduce total development burden while improving the product and architecture.
 
-A Kaizen rule that creates more burden than the failure it prevents
-should be reconsidered.
+Prefer durable principles over checklists, additional artifacts, mandatory stages, or technique-specific rules.
 
-Preserve the durable lesson, not unnecessary historical narrative.
+Do not create process merely because a failure occurred once.
 
-## 15. Relationship to Other Systems of Truth
+Consolidate overlapping rules and remove obsolete ones.
 
-This document owns continuous-improvement and development-decision
-practice.
+Do not confuse smaller work units with lower engineering risk.
 
-Other Major Engineering Documents shall reference this SoT where needed
-rather than duplicate its detailed rules.
+Do not preserve a process whose burden exceeds the failure it prevents.
 
-When a clause currently owned by another SoT is determined to belong
-here:
+Do not preserve poor architecture merely because changing it requires more work than adding another local fix.
 
-1.  identify the ownership change;
-2.  migrate the detailed truth here;
-3.  remove the competing detailed statement from the prior owner;
-4.  leave only the minimum cross-reference necessary for navigation or
-    context; and
-5.  ensure no gap or contradictory authority is created.
+Retrospectives should identify lessons that materially improve future development. Only lessons worth applying repeatedly should become canonical Kaizen rules.
 
-The Fidelity Mandate remains owned by `docs/ENGINEERING_GUIDE.md`.
+Minimum sufficient direction means eliminating waste, not minimizing architectural completeness or engineering scope.
 
-The Fidelity Mandate establishes how current engineering truth and
-authorization are protected.
+⸻
 
-This Kaizen SoT establishes how the Development Team continuously
-improves **the quality, value, and efficiency of the decisions made
-within those controls.**
+11. Approved Kaizen Rule Register
 
-The two are complementary.
+K-001 — Product First
 
-### 15.1 Required Canonical Registration
+Rule
 
-When this document is adopted, the engineering document hierarchy shall
-be reconciled so that this SoT is discoverable through the canonical
-read path.
+Engineering reasoning proceeds:
 
-At minimum:
+Product Requirement → Architecture → Engineering Decision → Implementation
 
--   `docs/README.md` shall identify
-    `docs/Continuous_improvement_Kaizen_1.0.md` as the owner of
-    continuous-improvement and development-decision practice and include
-    it in the Major Engineering Documents;
--   `docs/ENGINEERING_GUIDE.md` shall include it in the Documentation
-    Map;
--   the canonical Fidelity Mandate's Major Engineering Document read
-    list shall include it.
+Implementation constraints shall not silently redefine product requirements or architecture.
 
-The CPO-maintained Durable Lead Architect Handoff and Durable VSC Engineering
-Handoff should direct their respective agents to the canonical repository entry
-point and this SoT. The handoffs remain external bootstrap/role instructions
-and are not themselves canonical engineering SoTs.
+Failure prevented
 
-Detailed continuous-improvement clauses that are migrated here shall be
-removed from competing owner documents and replaced only with the
-minimum necessary cross-reference.
+Local implementation concerns driving product behavior or architecture without an explicit decision.
 
-# 16. Approved Kaizen Rule Register
+⸻
 
-This section contains durable rules approved by the CPO.
+K-002 — Architect Done Means VSC Ready
 
-Retrospective observations do not belong here unless promoted by the
-CPO.
+Rule
 
-## K-001 --- Product First
+The Architect’s Definition of Done is VSC’s Definition of Ready.
 
-**Rule**
+Resolve the product, ownership, and architectural questions that could materially change the engineering objective before execution.
 
-Engineering reasoning shall proceed:
+Do not require resolution of implementation questions VSC can responsibly answer while engineering within the established architecture.
 
-> **Product Requirement → Architecture → Engineering Decision →
-> Implementation**
+Hand VSC the largest coherent objective that is ready and authorized.
 
-Do not allow inherited implementation or engineering decisions to
-silently redefine the product requirement.
+Failure prevented
 
-**Origin**
+Premature implementation, repeated Architect/VSC handoffs, micro-stage engineering, ambiguous ownership, and VSC being forced either to invent architecture or repeatedly request decisions.
 
-WP4 Device Health / golfer-first architecture retrospective.
+⸻
 
-**Failure prevented**
+K-003 — Build Clean, Modular, Single-Owner Architecture
 
-Local implementation constraints driving product behavior or
-architecture without explicit decision.
+Rule
 
-## K-002 --- Establish Architecture Inputs Before Designing
+Build the simplest durable architecture that satisfies the product requirement.
 
-**Rule**
+Each behavior and state shall have one authoritative owner and one source of truth.
 
-Before drafting architecture, identify product-level priorities, hard
-timing/performance/resource constraints, operational requirements, and
-existing engineering decisions that could materially determine the
-architecture.
+Compose features from bounded capabilities through explicit interfaces. Do not duplicate shared behavior or extend intertwined workflows, competing state, hidden coupling, or workaround architecture.
 
-If a material input is unknown, ask the CPO rather than drafting around
-a self-inferred assumption.
+When an architectural defect is locally correctable within the established architecture and authorized objective, correct it and continue.
 
-**Origin**
+When correction requires a material architectural, canonical, scope, risk, or authorization decision, surface it rather than building around it.
 
-WP4 Device Health / golfer-first architecture retrospective.
+Do not generalize for speculative future needs.
 
-**Failure prevented**
+Failure prevented
 
-Architecture planning rounds built around unconfirmed product
-priorities, timing budgets, or inherited engineering assumptions.
+Competing sources of truth, duplicated behavior, unclear ownership, hidden coupling, feature-specific infrastructure, temporary harnesses becoming permanent, recurring failure classes, and locally successful changes that progressively degrade the system.
 
-## K-003 --- Know the Value Before Doing the Work
+⸻
 
-**Rule**
+K-004 — Evidence Must Change a Decision
 
-Before material work, understand the objective, uncertainty being
-resolved, decision it can change, impact, priority, and why the work is
-required now.
+Rule
 
-If that prioritization is unclear, ask the CPO.
+Before creating a separate investigation or diagnostic cycle, identify the uncertainty being resolved and the decision its result can change.
 
-**Origin**
+If plausible results would not materially change what the Development Team does, do not create the additional gate.
 
-WP4 retrospective and Tier 1 Product Goal Development Acceptance
-Criteria.
+Use sufficient evidence, not exhaustive certainty.
 
-**Failure prevented**
+Failure prevented
 
-Low-value engineering activity, premature work, and unnecessary
-CPO/Development Team effort.
+Diagnostic momentum, low-value investigation, unnecessary physical interaction, repeated validation, and delayed engineering decisions.
 
-## K-004 --- Diagnose With a Roadmap and Opt-Out Points
+⸻
 
-**Rule**
+K-005 — Canonical Decisions Are Reconsiderable
 
-Nontrivial diagnostic campaigns shall identify their intended
-information gain, the decisions affected, and the conditions under which
-the team will stop, pivot, or escalate.
+Rule
 
-Do not continue diagnostics that cannot materially change the
-engineering decision.
-
-**Origin**
-
-WP4 Device Health / golfer-first architecture retrospective.
-
-**Failure prevented**
-
-Diagnostic momentum, sunk-cost continuation, and excessive localization.
-
-## K-005 --- Canonical Decisions Are Reconsiderable
-
-**Rule**
-
-Canonical engineering decisions remain binding until changed, but shall
-be surfaced for reconsideration when preserving them causes material
-complexity, repeated workarounds, significant delay, substantial CPO
-effort, or conflict with higher-order product requirements or
-architecture.
+Canonical engineering decisions remain authoritative until changed, but shall be surfaced for reconsideration when preserving them causes material complexity, repeated workarounds, recurring failure classes, poor ownership, competing sources of truth, significant delay, or conflict with higher-order product requirements or architecture.
 
 VSC and the Architect may propose reconsideration.
 
 The CPO decides.
 
-**Origin**
+Failure prevented
 
-WP4 Device Health / golfer-first architecture retrospective.
+Treating prior engineering decisions as permanent constraints and engineering unnecessary complexity around them.
 
-**Failure prevented**
+⸻
 
-Treating earlier engineering decisions as immutable constraints and
-engineering unnecessary complexity around them.
+K-006 — Execute Coherent Authorized Work
 
-## K-006 --- Eliminate Failure Classes
+Rule
 
-**Rule**
+Once an objective is VSC-ready, execute it in the largest coherent unit permitted by the current authorization.
 
-When evidence exposes an architectural failure mode, evaluate
-eliminating the failure class before continuing to localize or patch
-individual occurrences.
+Technical decomposition does not itself create a new decision or authorization boundary.
 
-Prefer the smallest coherent correction that prevents recurrence and
-satisfies the product requirement.
+VSC should engineer through ordinary implementation problems and make proportionate best-practice decisions within scope.
 
-**Origin**
+Return to the Architect or CPO when evidence reaches a genuine product, architecture, canonical-decision, material-risk, or authorization boundary.
 
-WP4 golfer-first correction.
+Capture and reuse verified procedures when repeated work would otherwise require rediscovering the same tool, environment, or operational knowledge.
 
-**Failure prevented**
+Failure prevented
 
-Repeated symptom fixes that preserve the underlying architectural
-dependency.
+Micro-stage engineering, unnecessary handoffs, repeated rediscovery, loss of implementation context, avoidable CPO involvement, and slow feature completion without corresponding improvement in product fidelity or engineering safety.
 
-## K-007 --- Capture and Reuse Verified Procedures for Repeated External Requests
+⸻
 
-**Rule**
+K-007 — Instrument Ambiguous Correlation Boundaries Before Investigating Further
 
-When the Development Team is asked to repeat a request that depends on a
-tool, procedure, or environment fact previously discovered through search
-or trial and error (for example: locating an out-of-repository artifact,
-or finding a working document-conversion tool on this machine), the
-verified procedure shall be captured the first time it is confirmed
-working, rather than rediscovered from first principles on each
-subsequent request.
+Rule
 
-Capture, at minimum: the identity/location of the artifact or tool, the
-verified working command(s), and any known-broken alternatives so they
-are not retried.
+When a system boundary collapses multiple distinct outcomes into one identical response or signal (for example, a poll endpoint returning the same null result for "not yet created," "already acknowledged," and "expired"), add structured logging identifying the specific reason at the point of decision before continuing speculative investigation.
 
-**Verified Procedure --- Fairway Refresh SoT Summary PDF (External, CPO Command)**
+Prefer direct, low-risk, additive instrumentation over inferring root cause from indirect evidence (timing patterns, physical observation, correlated-but-unproven external factors) when the ambiguity can be resolved directly at the source.
 
-The CPO-facing "current canonical SoTs" PDF is a convenience export of
-the current tracked owner documents in `nfed/docs/`, kept outside the
-repository. It is not a repo file, is never committed, and is not part
-of the Fidelity Mandate's Major Engineering Document read path.
+Failure prevented
 
-There shall always be exactly one such export, and it always reflects the
-live current SoTs at the time the CPO requests an update.
-
-Canonical location: `~/Documents/feather_code/` (the parent workspace
-folder, outside the `nfed` repository). Do not create or leave the
-export in any other location (e.g. Desktop, Downloads), even if an older
-artifact is found there.
-
-Verified working procedure:
-
-1.  Confirm current git truth first (branch/HEAD) so the new export's
-    provenance header is accurate, explicitly noting when HEAD is on a
-    feature branch not yet merged to `main`.
-2.  Freshly read the current Major Engineering Documents in Fidelity
-    Mandate read order (README first, then the mandate's list, with any
-    newly-registered SoT such as Kaizen inserted at its Documentation Map
-    position) and concatenate them with a plain-text provenance header
-    (source commit, branch, milestone state, and an explicit "reference
-    export only, tracked Markdown remains canonical" disclaimer).
-3.  Convert the assembled text to PDF with `cupsfilter <file>.txt >
-    <file>.pdf` (verified working on this machine). `textutil -convert
-    pdf` does **not** support PDF output on this machine and should not
-    be retried; `pandoc`, `wkhtmltopdf`, and `weasyprint` are not
-    installed.
-4.  Verify fidelity with `pdftotext -layout` against the source text
-    (line-wrap differences are cosmetic and expected; content must
-    match).
-5.  Before writing the new file, delete every existing file in the
-    canonical location matching `Fairway_Refresh_Current_Canonical_SoTs_*.pdf`,
-    then write the new export named with the new source commit short SHA,
-    so exactly one export exists at any time.
-
-**Origin**
-
-Repeated CPO requests to regenerate the external SoT summary PDF, each of
-which required rediscovering the file's location and a working
-text-to-PDF conversion path from scratch.
-
-**Failure prevented**
-
-Repeated, avoidable rediscovery/troubleshooting time (file location,
-non-working tools such as `textutil -convert pdf`) spent re-solving an
-already-solved problem each time this recurring CPO request is made.
-
-## K-008 --- Keep Bounded Local Control on Monotonic Time
-
-**Rule**
-
-Bounded local control behavior shall use relative monotonic time and the native width of the platform timing API. Do not introduce wall-clock or externally supplied absolute timestamps into local control decisions unless a product requirement or authoritative external interface requires the device to interpret that instant. Use narrower duration or state representations only when they preserve indefinite-runtime rollover safety and do not add conversion, synchronization, or maintenance complexity. Absolute external time remains owned and validated at its authoritative boundary; convert it to local monotonic timing only where device behavior genuinely requires it.
-
-**Origin**
-
-Stage B2 COMPLETE timing-ownership correction.
-
-**Failure prevented**
-
-Unnecessary wall-clock dependencies, duplicate timing authority, rollover hazards, and cross-module coupling in bounded local control paths.
+Repeated speculative diagnosis of a distributed/async failure (for example, competing reboot or connectivity-drop theories) that direct instrumentation could resolve in one occurrence, and wasted investigation cycles re-deriving the same ambiguity each time the symptom recurs.

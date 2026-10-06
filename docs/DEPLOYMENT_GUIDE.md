@@ -553,6 +553,14 @@ The Admin UI calls these backend routes with the current Firebase ID token. It d
 
 The command routes use the existing per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact active, pending, unexpired command, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay of an already-acknowledged command. The demand-window query requires the repository-controlled composite index in `fairway_webapp/cart_operator_dashboard/firestore.indexes.json`. The backend, dashboard, and index were deployed and validated during Stage B2; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local demand window early.
 
+On 2026-10-06, receiver revision `fairway-button-receiver-00022-wxk` was deployed (100% traffic, logging-only, no behavior or response-shape change) adding structured correlation logging to the COMPLETE command routes. Prior to this, `pollDeviceCommand` and `acknowledgeDeviceCommand` returned an identical response for every non-match reason with zero logging, making it impossible to tell from Cloud Run logs alone why a demand window expired without an acknowledgement. The deployed logging emits:
+
+- `COMPLETE command correlation` — on every Complete-click command-creation attempt (`request_id`, `command_id`, `device_id`, `created` true/false for the idempotent-skip case).
+- `COMPLETE poll correlation` — on every device poll, with `reason` one of `request_not_found`, `request_device_mismatch`, `no_command_doc`, `status_<status>`, `expired`, `field_mismatch`, or `matched`.
+- `COMPLETE ack correlation` — on every device acknowledgement, with `reason` one of `not_found`, `mismatch`, `expired`, or `acknowledged`.
+
+This closed a diagnostic gap found while investigating FRB-0002 demand windows that polled reliably (internal gaps never exceeding ~53 seconds across dozens of polls) for up to the full window but expired with no acknowledgement ever recorded; root cause is not yet established, see `docs/feature_backlog.md`.
+
 Operational lesson (established during WP3 per-device credential deployment): read-only Cloud Run inspection commands (for example `gcloud run services describe`) return full container environment variable values, including secrets, unless the output is field-restricted. Always use a field-restricted `--format=value(...)` (or equivalent) query that excludes environment variable values when inspecting a service that may hold secret-bearing configuration; only request variable names, never values, unless a value is explicitly required and authorized.
 
 Deployment process status:
