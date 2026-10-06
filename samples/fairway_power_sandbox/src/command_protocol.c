@@ -1,17 +1,15 @@
 #include "command_protocol.h"
 
+#include <errno.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <zephyr/data/json.h>
+#include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
-struct button_response_json {
-	const char *request_id;
-};
-
-static const struct json_obj_descr button_response_descr[] = {
-	JSON_OBJ_DESCR_PRIM(struct button_response_json, request_id, JSON_TOK_STRING),
-};
+#include "http_transport.h"
+#include "secrets/fairway_device_key.h"
 
 struct complete_command_json {
 	const char *command_id;
@@ -46,20 +44,6 @@ static bool copy_id(char *destination, size_t destination_len, const char *sourc
 	return true;
 }
 
-bool fairway_parse_button_response(char *body, size_t body_len,
-				   char *request_id, size_t request_id_len)
-{
-	struct button_response_json response = {0};
-
-	if (body == NULL || body_len == 0 || request_id == NULL || request_id_len == 0 ||
-	    json_obj_parse(body, body_len, button_response_descr,
-			   ARRAY_SIZE(button_response_descr), &response) < 0) {
-		return false;
-	}
-
-	return copy_id(request_id, request_id_len, response.request_id);
-}
-
 bool fairway_parse_complete_command(char *body, size_t body_len,
 				    const char *active_device_id,
 				    const char *active_request_id,
@@ -83,4 +67,75 @@ bool fairway_parse_complete_command(char *body, size_t body_len,
 		       response.command.command_id) &&
 	       copy_id(command->request_id, sizeof(command->request_id),
 		       response.command.request_id);
+}
+
+int command_protocol_send_poll(const char *active_request_id,
+			       struct fairway_complete_command *command,
+			       int64_t attempt_deadline_ms)
+{
+	char body[256];
+	char request[768];
+	int body_len = snprintk(body, sizeof(body),
+		"{\"device_id\":\"%s\",\"active_request_id\":\"%s\"}",
+		FAIRWAY_DEVICE_ID, active_request_id);
+
+	if (body_len < 0 || body_len >= sizeof(body)) {
+		return -ENOMEM;
+	}
+
+	int request_len = snprintk(request, sizeof(request),
+		"POST /api/v1/device-commands/poll HTTP/1.1\r\n"
+		"Host: " FAIRWAY_HOST "\r\n"
+		"Content-Type: application/json\r\n"
+		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"Content-Length: %d\r\nConnection: close\r\n\r\n%s",
+		body_len, body);
+
+	if (request_len < 0 || request_len >= sizeof(request)) {
+		return -ENOMEM;
+	}
+
+	command->command_id[0] = '\0';
+
+	struct http_transport_response response;
+	int ret = http_transport_send(request, request_len, attempt_deadline_ms, true,
+				      &response);
+
+	if (ret != 0) {
+		return ret;
+	}
+
+	(void)fairway_parse_complete_command(response.body, response.body_len,
+					     FAIRWAY_DEVICE_ID, active_request_id, command);
+	return 0;
+}
+
+int command_protocol_send_ack(const struct fairway_complete_command *command,
+			      int64_t attempt_deadline_ms)
+{
+	char body[256];
+	char request[768];
+	int body_len = snprintk(body, sizeof(body),
+		"{\"device_id\":\"%s\",\"request_id\":\"%s\"}",
+		FAIRWAY_DEVICE_ID, command->request_id);
+
+	if (body_len < 0 || body_len >= sizeof(body)) {
+		return -ENOMEM;
+	}
+
+	int request_len = snprintk(request, sizeof(request),
+		"POST /api/v1/device-commands/%s/ack HTTP/1.1\r\n"
+		"Host: " FAIRWAY_HOST "\r\n"
+		"Content-Type: application/json\r\n"
+		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"Content-Length: %d\r\nConnection: close\r\n\r\n%s",
+		command->command_id, body_len, body);
+
+	if (request_len < 0 || request_len >= sizeof(request)) {
+		return -ENOMEM;
+	}
+
+	struct http_transport_response response;
+
+	return http_transport_send(request, request_len, attempt_deadline_ms, true, &response);
 }
