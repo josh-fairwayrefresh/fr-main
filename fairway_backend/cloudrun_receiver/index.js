@@ -880,7 +880,7 @@ function createFairwayHandlers(db, {
           });
         }
 
-        return { commandId };
+        return { commandId, created: !commandSnap.exists, deviceId: requestData.device_id };
       });
 
       if (result.notFound) {
@@ -892,6 +892,13 @@ function createFairwayHandlers(db, {
       if (result.invalid) {
         return res.status(422).send('Request is missing command correlation data\n');
       }
+
+      console.log('COMPLETE command correlation:', {
+        request_id: requestId,
+        command_id: result.commandId,
+        device_id: result.deviceId,
+        created: result.created,
+      });
     } else {
       const requestSnap = await requestRef.get();
 
@@ -931,17 +938,28 @@ function createFairwayHandlers(db, {
       return res;
     }
 
+    const commandId = completeCommandId(activeRequestId);
+    const logPollOutcome = (reason) => {
+      console.log('COMPLETE poll correlation:', {
+        device_id: deviceId,
+        active_request_id: activeRequestId,
+        command_id: commandId,
+        reason,
+      });
+    };
+
     const requestSnap = await db.collection('requests').doc(activeRequestId).get();
 
     if (!requestSnap.exists || requestSnap.data().device_id !== deviceId) {
+      logPollOutcome(!requestSnap.exists ? 'request_not_found' : 'request_device_mismatch');
       return res.status(200).json({ status: 'accepted', command: null });
     }
 
-    const commandId = completeCommandId(activeRequestId);
     const commandSnap = await db.collection('devices').doc(deviceId)
       .collection('commands').doc(commandId).get();
 
     if (!commandSnap.exists) {
+      logPollOutcome('no_command_doc');
       return res.status(200).json({ status: 'accepted', command: null });
     }
 
@@ -955,8 +973,12 @@ function createFairwayHandlers(db, {
       expiresAt && expiresAt.getTime() > now().getTime();
 
     if (!matches) {
+      logPollOutcome(command.status !== 'pending' ? `status_${command.status}` :
+        (expiresAt && expiresAt.getTime() <= now().getTime() ? 'expired' : 'field_mismatch'));
       return res.status(200).json({ status: 'accepted', command: null });
     }
+
+    logPollOutcome('matched');
 
     return res.status(200).json({
       status: 'accepted',
@@ -1024,6 +1046,17 @@ function createFairwayHandlers(db, {
       });
 
       return {};
+    });
+
+    const ackReason = result.notFound ? 'not_found' :
+      result.mismatch ? 'mismatch' :
+      result.expired ? 'expired' : 'acknowledged';
+
+    console.log('COMPLETE ack correlation:', {
+      device_id: deviceId,
+      request_id: requestId,
+      command_id: commandId,
+      reason: ackReason,
     });
 
     if (result.notFound) {
