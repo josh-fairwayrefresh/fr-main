@@ -22,22 +22,40 @@ void demand_window_init(void)
 	k_spin_unlock(&window_lock, key);
 }
 
-bool demand_window_start(uint32_t generation, const char *request_id,
-			 int64_t deadline_ms)
+bool demand_window_start(uint32_t generation,
+			 const struct golfer_acceptance *acceptance,
+			 int64_t now_ms)
 {
-	if (request_id == NULL || request_id[0] == '\0' ||
-	    strlen(request_id) >= sizeof(window.request_id)) {
+	if (acceptance == NULL || acceptance->request_id[0] == '\0' ||
+	    strlen(acceptance->request_id) >= sizeof(window.request_id) ||
+	    acceptance->golfer_demand_window_ms == 0 ||
+	    acceptance->press_time_ms < 0 || acceptance->response_received_ms < 0 ||
+	    (acceptance->duplicate && acceptance->demand_window_remaining_ms >
+	     acceptance->golfer_demand_window_ms) ||
+	    (!acceptance->duplicate && acceptance->demand_window_remaining_ms != 0)) {
 		return false;
 	}
 
+	int64_t timeline_start_ms = acceptance->duplicate
+		? acceptance->response_received_ms : acceptance->press_time_ms;
+	uint32_t duration_ms = acceptance->duplicate
+		? acceptance->demand_window_remaining_ms
+		: acceptance->golfer_demand_window_ms;
+	if (timeline_start_ms > INT64_MAX - duration_ms) {
+		return false;
+	}
+	int64_t deadline_ms = timeline_start_ms + duration_ms;
 	k_spinlock_key_t key = k_spin_lock(&window_lock);
 
 	window = (struct demand_window_snapshot){
-		.active = true,
+		.active = duration_ms > 0 && now_ms < deadline_ms,
 		.generation = generation,
+		.timeline_start_ms = timeline_start_ms,
 		.deadline_ms = deadline_ms,
+		.golfer_demand_window_ms = acceptance->golfer_demand_window_ms,
+		.duplicate = acceptance->duplicate,
 	};
-	strcpy(window.request_id, request_id);
+	strcpy(window.request_id, acceptance->request_id);
 	k_spin_unlock(&window_lock, key);
 	return true;
 }

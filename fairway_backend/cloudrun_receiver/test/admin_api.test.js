@@ -4,6 +4,10 @@ const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { createFairwayHandlers } = require('../index');
 const { resolveRuntimeEnvironment, resolveSandboxEnvironment } = require('../lib/environment');
+const {
+  LEGACY_GOLFER_DEMAND_WINDOW_MS,
+  UINT32_MAX,
+} = require('../lib/golfer_demand_window_policy');
 
 let passed = 0;
 let failed = 0;
@@ -247,6 +251,21 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
   });
   assert.strictEqual(course.statusCode, 201);
   assert.match(course.body.course_id, /^COURSE-\d{4}$/);
+  assert.strictEqual(course.body.golfer_demand_window_ms, LEGACY_GOLFER_DEMAND_WINDOW_MS);
+
+  await db.collection('customers').doc(customer.body.customer_id)
+    .collection('courses').doc('COURSE-LEGACY').set({
+      course_name: 'Legacy Course',
+      timezone: 'UTC',
+      service_schedule: SERVICE_SCHEDULE,
+      comments: null,
+    });
+  const legacyFleet = await request({ method: 'GET', path: '/api/v1/admin/fleet' });
+  assert.strictEqual(
+    legacyFleet.body.customers[0].courses.find((item) => item.course_id === 'COURSE-LEGACY')
+      .golfer_demand_window_ms,
+    LEGACY_GOLFER_DEMAND_WINDOW_MS
+  );
 
   await db.collection('devices').doc('FRB-0099').set({
     customer_id: customer.body.customer_id,
@@ -269,14 +288,35 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
       course_name: 'Tony Lema',
       timezone: 'UTC',
       service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
+      golfer_demand_window_ms: 9173,
       comments: 'winter schedule',
     },
   });
   assert.strictEqual(courseUpdate.statusCode, 200);
+  assert.strictEqual(courseUpdate.body.golfer_demand_window_ms, 9173);
+
+  const fleet = await request({ method: 'GET', path: '/api/v1/admin/fleet' });
+  assert.strictEqual(fleet.body.customers[0].courses[0].golfer_demand_window_ms, 9173);
+
+  const invalidPolicy = await request({
+    method: 'PATCH',
+    path: `/api/v1/admin/customers/${customer.body.customer_id}/courses/${course.body.course_id}`,
+    body: {
+      course_name: 'Tony Lema',
+      timezone: 'UTC',
+      service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
+      golfer_demand_window_ms: UINT32_MAX + 1,
+      comments: 'invalid policy should not persist',
+    },
+  });
+  assert.strictEqual(invalidPolicy.statusCode, 400);
 
   const device = await db.collection('devices').doc('FRB-0099').get();
   assert.strictEqual(device.data().customer_name, 'Monarch Bay Golf Club');
   assert.strictEqual(device.data().course_name, 'Tony Lema');
+  const storedCourse = await db.collection('customers').doc(customer.body.customer_id)
+    .collection('courses').doc(course.body.course_id).get();
+  assert.strictEqual(storedCourse.data().golfer_demand_window_ms, 9173);
 });
 
 test('retired health history route is unavailable', async () => {

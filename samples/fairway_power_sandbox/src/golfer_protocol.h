@@ -2,9 +2,14 @@
 #define GOLFER_PROTOCOL_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "command_protocol.h"
+#include "golfer_acceptance.h"
+
+bool golfer_protocol_parse_acceptance(char *body, size_t body_len,
+				      struct golfer_acceptance *acceptance);
 
 /*
  * Runs the golfer's accepted transaction to terminal disposition within
@@ -18,6 +23,7 @@
  * attempt budget.
  */
 int golfer_protocol_run_transaction(int64_t txn_deadline_ms,
-				    char *request_id, size_t request_id_len);
+				    int64_t press_time_ms,
+				    struct golfer_acceptance *acceptance);
 
 #endif /* GOLFER_PROTOCOL_H */

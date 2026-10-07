@@ -4,6 +4,9 @@ const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { createFairwayHandlers } = require('../index');
 const { generateDeviceCredential } = require('../lib/fleet/credentials');
+const {
+  LEGACY_GOLFER_DEMAND_WINDOW_MS,
+} = require('../lib/golfer_demand_window_policy');
 
 let passed = 0;
 let failed = 0;
@@ -181,7 +184,11 @@ test('missing/malformed state is rejected with 403 (fail closed)', async () => {
 
 test('a valid allowed-lifecycle Device with correct credential proceeds (not rejected)', async () => {
   const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', { timezone: 'UTC' });
   const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  await db.collection('devices').doc('FRB-0001').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  }, { merge: true });
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
@@ -216,6 +223,9 @@ test('valid button_press creates a golfer request and returns its authoritative 
   assert.strictEqual(res.body.status, 'accepted');
   assert.strictEqual(res.body.event_type, 'button_press');
   assert.strictEqual(typeof res.body.request_id, 'string');
+  assert.strictEqual(res.body.duplicate, false);
+  assert.strictEqual(res.body.golfer_demand_window_ms, LEGACY_GOLFER_DEMAND_WINDOW_MS);
+  assert.strictEqual(Object.hasOwn(res.body, 'demand_window_remaining_ms'), false);
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(requests.size, 1);
@@ -253,20 +263,51 @@ test('a new golfer request durably records Stage A event-time facts (customer, d
   assert.strictEqual(data.repeat_press_count, 0);
   assert.strictEqual(data.last_repeat_press_at, null);
   assert.strictEqual(data.device_state_at_request, 'deployed');
+  assert.strictEqual(data.golfer_demand_window_ms, LEGACY_GOLFER_DEMAND_WINDOW_MS);
 
   assert.ok(data.demand_window_expires_at instanceof Date, 'demand_window_expires_at must be a concrete Date, not a FieldValue sentinel');
   const expiresMs = data.demand_window_expires_at.getTime();
-  assert.ok(expiresMs >= before + 5 * 60 * 1000, 'demand window must be at least 5 minutes from request time');
-  assert.ok(expiresMs <= after + 5 * 60 * 1000, 'demand window must not exceed 5 minutes from request time');
+  assert.ok(expiresMs >= before + data.golfer_demand_window_ms, 'expiry must match the accepted policy');
+  assert.ok(expiresMs <= after + data.golfer_demand_window_ms, 'expiry must match the accepted policy');
 
   // 2026-09-29 is outside US DST-transition edge cases for America/Los_Angeles (PDT, UTC-7).
   assert.match(data.course_local_date, /^\d{4}-\d{2}-\d{2}$/);
   assert.ok(Number.isInteger(data.course_local_hour) && data.course_local_hour >= 0 && data.course_local_hour <= 23);
 });
 
-test('an unassigned Device button_press records null customer/Course-local facts but still records deployed state and demand window', async () => {
+test('new request expiry is derived from receipt time and the Course policy snapshot', async () => {
   const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001'); // no customer_id/course_id at all
+  const requestTime = new Date('2026-10-06T12:00:00.000Z');
+  const policyMs = 9173;
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    timezone: 'UTC', golfer_demand_window_ms: policyMs,
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  });
+  const { handleDeviceEvent } = createFairwayHandlers(db, {
+    now: () => requestTime,
+  });
+  const response = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: {
+      device_id: 'FRB-0001',
+      event_type: 'button_press',
+    },
+    headers: { 'x-fairway-device-key': secret },
+  }), response);
+
+  const request = await db.collection('requests').doc(response.body.request_id).get();
+  assert.strictEqual(request.data().golfer_demand_window_ms, policyMs);
+  assert.strictEqual(
+    request.data().demand_window_expires_at.getTime(),
+    requestTime.getTime() + policyMs
+  );
+});
+
+test('a Course-less Device uses the temporary legacy demand-window policy', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpDeployedDevice(db, 'FRB-0001');
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
   await handleDeviceEvent(createRequest({
@@ -274,19 +315,21 @@ test('an unassigned Device button_press records null customer/Course-local facts
     headers: { 'x-fairway-device-key': secret },
   }), res);
 
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.body.golfer_demand_window_ms, LEGACY_GOLFER_DEMAND_WINDOW_MS);
+  assert.strictEqual(res.body.duplicate, false);
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
-  const data = requests.docs[0].data();
-
-  assert.strictEqual(data.customer_id, null);
-  assert.strictEqual(data.course_local_date, null);
-  assert.strictEqual(data.course_local_hour, null);
-  assert.strictEqual(data.device_state_at_request, 'deployed');
-  assert.ok(data.demand_window_expires_at instanceof Date);
+  assert.strictEqual(requests.size, 1);
+  assert.strictEqual(requests.docs[0].data().customer_id, null);
+  assert.strictEqual(requests.docs[0].data().course_local_date, null);
 });
 
 test('an in_inventory (not yet deployed) Device button_press records device_state_at_request accordingly', async () => {
   const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001', {});
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', { timezone: 'UTC' });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  });
   await db.collection('devices').doc('FRB-0001').set({ state: 'in_inventory' }, { merge: true });
   const { handleDeviceEvent } = createFairwayHandlers(db);
   const res = createResponse();
@@ -329,14 +372,135 @@ test('a second button_press while a request is open is suppressed as a duplicate
   assert.strictEqual(second.body.event_type, 'button_press');
   assert.strictEqual(second.body.request_id, first.body.request_id);
   assert.strictEqual(second.body.duplicate, true);
+  assert.strictEqual(second.body.golfer_demand_window_ms, LEGACY_GOLFER_DEMAND_WINDOW_MS);
+  assert.ok(second.body.demand_window_remaining_ms > 0);
 
   const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(requests.size, 1, 'duplicate press must not create a second request document');
 });
 
+test('duplicate query match returns accepted zero remaining if expiry passes before response', async () => {
+  const db = new FakeFirestore();
+  const requestTime = new Date('2026-10-06T12:00:00.000Z');
+  const responseTime = new Date(requestTime.getTime() + 1000);
+  let clockCalls = 0;
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    timezone: 'UTC', golfer_demand_window_ms: 9173,
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  });
+  await db.collection('requests').doc('racing-request').set({
+    device_id: 'FRB-0001',
+    status: 'new',
+    golfer_demand_window_ms: 9173,
+    demand_window_expires_at: responseTime,
+  });
+
+  const { handleDeviceEvent } = createFairwayHandlers(db, {
+    now: () => (++clockCalls === 1 ? requestTime : responseTime),
+  });
+  const response = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: {
+      device_id: 'FRB-0001',
+      event_type: 'button_press',
+    },
+    headers: { 'x-fairway-device-key': secret },
+  }), response);
+
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.status, 'accepted');
+  assert.strictEqual(response.body.duplicate, true);
+  assert.strictEqual(response.body.request_id, 'racing-request');
+  assert.strictEqual(response.body.golfer_demand_window_ms, 9173);
+  assert.strictEqual(response.body.demand_window_remaining_ms, 0);
+  assert.strictEqual(
+    (await db.collection('requests').where('device_id', '==', 'FRB-0001').get()).size,
+    1
+  );
+});
+
+test('Course policy is snapshotted per request and duplicate acceptance cannot restart an older window', async () => {
+
+  const db = new FakeFirestore();
+  let requestTime = new Date('2026-10-06T12:00:00.000Z');
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    golfer_demand_window_ms: 9173,
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  });
+  const handlers = createFairwayHandlers(db, { now: () => requestTime });
+  const press = () => {
+    const response = createResponse();
+    return handlers.handleDeviceEvent(createRequest({
+      body: { device_id: 'FRB-0001', event_type: 'button_press' },
+      headers: { 'x-fairway-device-key': secret },
+    }), response).then(() => response);
+  };
+
+  const initial = await press();
+  assert.strictEqual(initial.body.golfer_demand_window_ms, 9173);
+  assert.strictEqual(initial.body.demand_window_remaining_ms, undefined);
+  const firstId = initial.body.request_id;
+  const firstRequest = await db.collection('requests').doc(firstId).get();
+  const originalExpiry = firstRequest.data().demand_window_expires_at;
+  assert.strictEqual(firstRequest.data().golfer_demand_window_ms, 9173);
+
+  const longerPolicy = 18001;
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .update({ golfer_demand_window_ms: longerPolicy });
+  requestTime = new Date(requestTime.getTime() + 1000);
+  const duplicate = await press();
+
+  assert.strictEqual(duplicate.body.duplicate, true);
+  assert.strictEqual(duplicate.body.request_id, firstId);
+  assert.strictEqual(duplicate.body.golfer_demand_window_ms, 9173);
+  assert.strictEqual(duplicate.body.demand_window_remaining_ms, 8173);
+  const unchangedRequest = await db.collection('requests').doc(firstId).get();
+  assert.strictEqual(unchangedRequest.data().demand_window_expires_at.getTime(), originalExpiry.getTime());
+
+  requestTime = new Date(originalExpiry.getTime() + 1);
+  const nextRequest = await press();
+  assert.strictEqual(nextRequest.body.duplicate, false);
+  assert.notStrictEqual(nextRequest.body.request_id, firstId);
+  assert.strictEqual(nextRequest.body.golfer_demand_window_ms, longerPolicy);
+  const nextDocument = await db.collection('requests').doc(nextRequest.body.request_id).get();
+  assert.strictEqual(nextDocument.data().golfer_demand_window_ms, longerPolicy);
+  assert.strictEqual(nextDocument.data().demand_window_expires_at.getTime(), requestTime.getTime() + longerPolicy);
+});
+
+test('invalid Course policy rejects before request persistence', async () => {
+  for (const invalidPolicy of [0, 1.5, '9173', 0x100000000]) {
+    const db = new FakeFirestore();
+    await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+      timezone: 'UTC', golfer_demand_window_ms: invalidPolicy,
+    });
+    const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+      customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+    });
+    const { handleDeviceEvent } = createFairwayHandlers(db);
+    const response = createResponse();
+    await handleDeviceEvent(createRequest({
+      body: { device_id: 'FRB-0001', event_type: 'button_press' },
+      headers: { 'x-fairway-device-key': secret },
+    }), response);
+    assert.strictEqual(response.statusCode, 422);
+    assert.strictEqual(response.body.status, 'course_configuration_invalid');
+    assert.strictEqual((await db.collection('requests')
+      .where('device_id', '==', 'FRB-0001').get()).size, 0);
+  }
+});
+
 test('an expired open request does not suppress a genuinely fresh golfer request', async () => {
   const db = new FakeFirestore();
-  const secret = await setUpDeployedDevice(db, 'FRB-0001');
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', { timezone: 'UTC' });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  });
   await db.collection('requests').doc('old-request').set({
     device_id: 'FRB-0001',
     status: 'confirmed',
@@ -373,7 +537,7 @@ test('unknown event_type fails closed with 400', async () => {
 
 // --- Hierarchy fail-closed regression ---
 
-test('unassigned allowed Device button request is accepted', async () => {
+test('unassigned allowed Device button request retains Course-less migration behavior', async () => {
   const db = new FakeFirestore();
   const secret = await setUpDeployedDevice(db, 'FRB-0001'); // no customer_id/course_id at all
   const { handleDeviceEvent } = createFairwayHandlers(db);
@@ -384,6 +548,7 @@ test('unassigned allowed Device button request is accepted', async () => {
   }), res);
 
   assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.body.golfer_demand_window_ms, LEGACY_GOLFER_DEMAND_WINDOW_MS);
 });
 
 test('valid Customer/Course assignment is accepted', async () => {

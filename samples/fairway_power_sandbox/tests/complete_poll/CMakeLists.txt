@@ -7,4 +7,6 @@ target_sources(app PRIVATE
     src/main.c
     ../../src/complete_poll.c
     ../../src/demand_window.c
+    ../../src/golfer_txn.c
+    ../../src/golfer_protocol.c
 )

@@ -30,12 +30,25 @@
 		RUN_TEST(test_09_uncertain_ack_retries_same_identity); \
 		RUN_TEST(test_10_confirmed_ack_emits_once); \
 		RUN_TEST(test_11_local_clear_requires_generation_and_request); \
-		RUN_TEST(test_12_immutable_five_minute_expiry); \
+		RUN_TEST(test_12_immutable_window_expiry); \
 		RUN_TEST(test_13_exact_deadline_expiry_wins); \
 		RUN_TEST(test_14_stale_generation_result_is_rejected); \
 		RUN_TEST(test_15_successive_request_lifecycles); \
 		RUN_TEST(test_16_poll_faults_do_not_affect_local_repeat_decision); \
-		puts("16/16 tests passed"); \
+		RUN_TEST(test_17_duplicate_uses_remaining_window_not_full_policy); \
+		RUN_TEST(test_18_local_deadline_expires_without_complete_or_button_poll); \
+		RUN_TEST(test_19_window_rejects_invalid_acceptance_contract); \
+		RUN_TEST(test_20_transaction_handoff_preserves_acceptance_contract); \
+		RUN_TEST(test_21_new_protocol_response_parses); \
+		RUN_TEST(test_22_duplicate_zero_remaining_parses); \
+		RUN_TEST(test_23_invalid_protocol_responses_fail); \
+		RUN_TEST(test_24_legacy_parser_ignores_additive_fields); \
+		RUN_TEST(test_25_request_omits_physical_press_age); \
+		RUN_TEST(test_26_new_window_uses_original_press_and_poll_phase); \
+		RUN_TEST(test_27_late_new_acceptance_is_success_without_window); \
+		RUN_TEST(test_28_duplicate_deadline_uses_response_plus_remaining); \
+		RUN_TEST(test_29_expired_duplicate_is_success_without_window); \
+		puts("29/29 tests passed"); \
 		return 0; \
 	}
 

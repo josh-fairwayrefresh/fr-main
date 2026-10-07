@@ -26,8 +26,10 @@ static void transaction_thread_entry(void *p1, void *p2, void *p3)
 	while (1) {
 		uint32_t gen;
 		int64_t deadline_ms;
+		int64_t press_time_ms;
 		struct complete_poll_action command_action;
-		bool have_golfer = golfer_txn_pickup(&gen, &deadline_ms);
+		bool have_golfer = golfer_txn_pickup(&gen, &deadline_ms,
+						     &press_time_ms);
 		bool have_command = !have_golfer &&
 			complete_poll_next_action(k_uptime_get(), modem_service_lte_is_registered(),
 						  &command_action);
@@ -38,12 +40,12 @@ static void transaction_thread_entry(void *p1, void *p2, void *p3)
 		}
 
 		if (have_golfer) {
-			char request_id[FAIRWAY_REQUEST_ID_MAX];
+			struct golfer_acceptance acceptance = {0};
 
-			int ret = golfer_protocol_run_transaction(deadline_ms, request_id,
-							  sizeof(request_id));
+			int ret = golfer_protocol_run_transaction(deadline_ms, press_time_ms,
+							  &acceptance);
 
-			golfer_txn_complete(gen, ret == 0, request_id);
+			golfer_txn_complete(gen, ret == 0, &acceptance);
 			k_sem_give(&button_wake_sem);
 
 			continue;

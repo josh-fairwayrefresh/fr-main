@@ -27,8 +27,8 @@ Current Implementation
 - Request retry and validation: within the 15-second budget the firmware performs up to `GOLFER_MAX_ATTEMPTS` sequential attempts without overlap. Each attempt retains the physically validated Prototype 3.2 bounded nonblocking send/receive and HTTP status/body parsing behavior.
 - State machine: the device implements IDLE, TRANSMITTING, SUCCESS, FAILURE, and REPEAT_PRESS states in one state machine. REPEAT_PRESS is the local in-window feedback path; it does not create a second transaction scheduler or network flow.
 - Golfer-facing indication (currently implemented): orange flashes three times at startup, remains off in IDLE, and pulses throughout an unresolved golfer transaction. SUCCESS stops orange and gives green blink-blink followed by approximately five seconds solid; FAILURE stops orange and gives the same pattern in red. Exact externally observable behavior is owned by `docs/UX_SPECIFICATION.md`.
-- Five-minute correlated demand window (Stage B2 implemented and physically validated): SUCCESS requires a parseable originating `request_id`, carried through the existing generation-tagged result handoff before establishing the RAM-only window. A valid in-window press retains the previously validated local green-only behavior. Every 15 seconds while the window remains active, a timer marks a COMPLETE check due; `transaction_thread` performs the authenticated HTTPS poll. The backend owns absolute command expiry and checks it at both poll and acknowledgement; firmware retains no command wall-clock expiry and clears the window only after successful exact command/request correlation and a synchronized check that its local monotonic five-minute deadline remains active. Missing, unreachable, stale, expired, or mismatched commands leave the local five-minute expiry authoritative. CPO-confirmed validation on FRB-0002 established corrected cold boot and normal golfer requests, then exact COMPLETE acknowledgement ending the window early so the next press created a fresh request before the five-minute fallback. The 15-second check period remains a pilot field-validation hypothesis, not a permanently optimized production constant.
-- Request identity: the backend suppresses a duplicate while the Device has an unexpired open demand window and returns that request's ID. After expiry, a fresh press creates a fresh request even if the earlier request remains open. The local five-minute window prevents ordinary in-window presses from creating transactions. Repeat-press transport/persistence remains deferred.
+- Course-configured Golfer Demand Window (implementation candidate, not deployed or physically validated): `Course.golfer_demand_window_ms` is the sole policy value. The backend snapshots policy and receiver-receipt-time expiry for NEW requests, returns an explicit NEW/DUPLICATE acceptance, and preserves the originating stored expiry for duplicate suppression and COMPLETE. Firmware protocol parses the contract; `golfer_txn` transports it with the original physical-press time; `demand_window.c` alone establishes NEW (press time + policy) or DUPLICATE (response time + remaining) local deadlines and repeat eligibility. A zero-remaining or already-expired valid acceptance is SUCCESS with no active window. Local expiry is monotonic and needs neither COMPLETE nor an asynchronous demand-window timer. NEW COMPLETE cadence remains anchored to the original press. Backend duplicate suppression can outlast the local physical-press deadline by initial request transit time. COMPLETE remains the existing 15-second early-completion path.
+- Request identity: the backend suppresses a duplicate while the Device has an unexpired open demand window and returns that request's ID. After expiry, a fresh press creates a fresh request even if the earlier request remains open. The Course-configured local window prevents ordinary in-window presses from creating transactions. Repeat-press transport/persistence remains deferred.
 
 Golfer Transaction Architecture
 --------------------------------
@@ -39,9 +39,177 @@ Golfer Transaction Architecture
 - COMPLETE correlation protection: the successful response's `request_id` is part of that same generation-tagged handoff. Active-window state is spinlock-guarded, and a command can clear it only after exact request correlation and successful idempotent acknowledgement.
 - DNS isolation: `zsock_getaddrinfo()` has no established NCS 3.1.1 application-level timeout and executes only in `dns_resolver_thread`; golfer/COMPLETE transport uses the bounded, age-limited cache accessor.
 - Transport deadline enforcement: golfer connect/send/receive stages use a nonblocking socket plus `zsock_poll()` with an explicit remaining-time timeout, since NCS 3.1.1 does not document `SO_SNDTIMEO`/`SO_RCVTIMEO` as bounding `zsock_connect()`.
+Transport deadline enforcement: connect/send/receive use a nonblocking socket plus `zsock_poll()` with an explicit remaining-time timeout, since NCS 3.1.1 does not document `SO_SNDTIMEO`/`SO_RCVTIMEO` as bounding `zsock_connect()`. Application waits can be bounded, but individual vendor calls and socket close cannot be preempted by an application deadline; this is not a verified hard wall-clock bound on the shared transport thread.
+
+Accepted Restored Baseline — 2026-10-06
+---------------------------------------
+The accepted device state was restored from source commit `9775842aebfc5c5ec1cb15ede7329aa58f1709fe` on 2026-10-06 after the separately archived and rejected `sprint/complete-transport-foundation` candidate caused a physical regression. The rejected candidate is preserved locally, not merged or pushed, at archive commit `e19394faa0935cb73e4eec0b217e1ca33ec84367` on `archive/firmware/complete-transport-foundation`. The restored artifact was `/tmp/fairway-rollback-build/merged.hex`, SHA-256 `4c31d29437bc0f4d5937a19a0a395470629c7587671177d5ed16fefab710cc09`, 529,206 bytes; it was programmed with read-back verification and one normal reset. The CPO subsequently reported basic golfer behavior working again after a hard power cycle. This is a restoration of the accepted Embarrassingly Small Runtime source line, not a new firmware generation or a claim that the unresolved COMPLETE polling irregularity is fixed.
+
+The deployed and physically validated `9775842` product state retains the five-minute behavior. The implementation candidate on `sprint/modular-golfer-demand-window` now makes the window Course-configurable while preserving 300,000 ms through one temporary backend fallback. The candidate has passed backend, Admin, macOS firmware-host tests, and a pristine NCS 3.1.1 application build. It has not been deployed or flashed and has not received physical validation. No Course value has been changed to 60 seconds. Deployment order and rollback compatibility are owned by `docs/DEPLOYMENT_GUIDE.md`.
+
+Temporary FRB-0002 Connection Diagnostic — 2026-10-06
+----------------------------------------------------
+This is diagnostic evidence, not an accepted firmware generation or production fix.
+The isolated `/tmp/fairway-golfer-demand-window-minimal` worktree is based on
+`9775842aebfc5c5ec1cb15ede7329aa58f1709fe`, with the six-file minimal
+Course-duration response patch plus an uncommitted `http_transport.c` diagnostic.
+The normal image timed out during TLS-socket connect before sending HTTP.
+The first diagnostic resolved `34.143.74.2` with an 80,986 ms cache age and
+timed out on a three-second raw-TCP probe; TLS was not tested. The exact IPv4
+subsequently accepted TCP and verified TLS from the Mac; this does not prove
+device-side reachability. Additional physical presses are not assumed from
+console wake events alone.
+
+The enhanced one-shot diagnostic separately logs socket creation, TLS options,
+nonblocking configuration, connect, poll events, SO_ERROR, and close. Raw TCP
+has a 15-second budget; only a successful TCP probe proceeds to a separately
+budgeted 15-second verified TLS probe. No HTTP request is sent. These temporary
+diagnostic budgets do not change the product's 15-second golfer budget; the
+diagnostic thread may continue after terminal LED feedback. Later probes are
+suppressed until reboot. FRB-0002 is not operational for golfer requests while
+this diagnostic is installed.
+
+Enhanced build provenance: `/tmp/fairway-connect-diag-build/merged.hex`,
+531,360 bytes, SHA-256
+`06b7603fd3a9e9f62af41da2e333cc38c7f37319bd4a6a2fcada25ecc61694f6`;
+NCS v3.1.1, Nordic toolchain `561dce9adf`, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, explicit isolated-worktree
+`BOARD_ROOT`, and `EXTRA_CONF_FILE=prj_a.conf`. Build/link and UART configuration
+checks passed. On FRB-0002, the enhanced test used `34.143.77.2` with a
+36,299 ms DNS cache age. Socket creation and nonblocking configuration
+succeeded; connect reported in progress. Poll returned zero events after
+15,000 ms; SO_ERROR retrieval succeeded with zero while the connection remained
+pending. TCP timed out, TLS was not tested, and no HTTP was sent. This exact
+IPv4 also accepted TCP and verified TLS from the Mac. No production fix is
+established.
+
+The follow-up diagnostic adds the destination port, read-only `AT+CGACT?`
+and `AT+CGPADDR=0` observations, modem data-enabled state, and a native Nordic
+socket/poll comparison against the same endpoint. It does not configure APNs
+or SIM state. Each TCP path receives 15 seconds, so this diagnostic may run
+beyond the normal LED failure indication. Follow-up artifact uses the same
+source lineage, board and build configuration: 535,248 bytes, SHA-256
+`3b6583158fcb4f300a9a147e346cb5720218b4efc1f040fd068e9e04eec4f483`
+at `/tmp/fairway-connect-diag-build/merged.hex`. Build/link checks passed.
+The physical comparison used `34.143.73.2:443` with a 30,517 ms cache age.
+Modem data was enabled, the default context was active, and an IPv4 address
+was assigned. Zephyr TCP completed successfully in 12,199 ms; native modem TCP
+completed in 6,760 ms; verified TLS completed in 13,040 ms. Poll indicated
+write readiness and SO_ERROR was zero for all successful connections. No HTTP
+request was sent. Connectivity and verified TLS are demonstrably possible;
+earlier 15-second TCP timeouts remain observed, so success is not a reliability
+claim. Setup latency is material against the unchanged 15-second product
+budget. A matched real-POST acceptance test and any product timing decision
+remain pending at that diagnostic checkpoint.
+
+After explicit restore/test authorization, FRB-0002 was restored to the exact
+matched minimal artifact `/tmp/fairway-golfer-demand-window-minimal-build/merged.hex`,
+SHA-256 `1dfbd5cbf981418c7ca1e3028ff3da023be7259447a871fa60b3c496c4078946`,
+with normal programming and reset. It is no longer on the no-POST diagnostic.
+The real request started at device uptime 59.005 s. The first DNS readiness
+wait timed out after three seconds; the retry obtained an address and began
+TLS connect at 64.597 s. The original 15-second deadline expired at 74.005 s
+before connection or any HTTP send. DNS/retry therefore consumed approximately
+5.6 seconds, leaving approximately 9.4 seconds for TLS and the HTTP exchange.
+Separate diagnostics established possible TLS completion in 13.0 seconds,
+not guaranteed completion within the original transaction deadline. No
+backend rejection or successful real request was observed. Receiver log
+verification was blocked by expired CLI authentication requiring interactive
+reauthentication. A longer diagnostic transaction budget requires explicit
+CPO approval; the product budget remains unchanged and no production fix is
+claimed.
+
+The CPO subsequently authorized a temporary 60-second real-POST diagnostic
+build, flash, and one physical test. This is not acceptance of a changed
+shipping deadline. The test disables preliminary TCP/native probes and uses
+the matched minimal authenticated request/response path, with timing markers.
+Artifact `/tmp/fairway-connect-diag-build/merged.hex`, 531,196 bytes, SHA-256
+`8f4ff13000f78dc2abddf75f7f6ca59f1eb0b44b9d4d29e288d09dc9f446ec42`,
+uses the same NCS/toolchain/board configuration. Build/link and source checks
+passed. After CPO-completed CLI reauthentication, the authorized physical test
+succeeded. A prior attach was rejected with EMM cause 11, then roaming
+registration succeeded. This observation is not a diagnosed cause of the
+earlier TCP timeouts.
+
+The real request began at uptime 230.649 s, verified TLS connected in 2,547 ms,
+273 request bytes were sent, HTTP 200 was received, and firmware entered
+STATE_SUCCESS at 235.871 s (approximately 5.22 seconds after the press), then
+STATE_IDLE. Receiver revision `fairway-button-receiver-00023-dff` recorded the
+POST at `2026-10-07T00:54:01.927494Z` and persisted request
+`t0SxgELtdn4DuM3AUOFz` for FRB-0002, CUST-0001, COURSE-0001. A read-only
+Firestore check confirmed status `new`, event `button_press`, and a 90,000 ms
+policy snapshot; the live nested Tony Lema Course likewise read 90,000 ms.
+The diagnostic did not change Course configuration. Subsequent active-window
+COMPLETE polls also returned HTTP 200.
+
+This establishes authenticated device-to-backend acceptance and compatible
+response parsing for one real request. It does not establish that the
+temporary 60-second budget caused success: this transaction completed within
+the original 15 seconds, while earlier transactions exhausted that deadline.
+Variable DNS/connection latency and the extra post-rearm button event remain
+unresolved. FRB-0002 remains on the explicitly authorized 60-second test image;
+shipping-deadline acceptance and a production reliability fix are not claimed.
+
+Follow-up green-output diagnostic image: `/tmp/fairway-connect-diag-build/merged.hex`,
+531,686 bytes, SHA-256
+`72f1db69af5b7cb425807a29b223ad3a6f1249b89e8ed075a7f8f2c6a3396480`.
+Built from the same isolated source/configuration, with only diagnostic logging
+added around green `gpio_pin_set()` calls and immediate `gpio_pin_get()` levels;
+feedback timing, request budget, and HTTP behavior are unchanged. Build/link,
+embedded marker, and source checks passed. One physical request succeeded;
+`STATE_SUCCESS` followed by green set/off calls whose `gpio_pin_set()` results
+were all zero. All `gpio_pin_get()` results were zero. Nordic's nrfx driver
+confirms this API reads the GPIO input register, not its output latch; that
+observation alone does not prove whether P0.29's output latch was set. The
+device was observed by the CPO to show no green indication.
+
+The next diagnostic build adds `nrf_gpio_pin_out_read()` alongside the input
+read and connects P0.29's input buffer while retaining output mode. This lets
+`gpio_pin_get()` sample the pad during the same unchanged green feedback
+sequence. Artifact `/tmp/fairway-connect-diag-build/merged.hex`, 531,936 bytes,
+SHA-256
+`81596831e0427cf50ccb1c2c89f12194c74fe907dafc561dcc2dcdcf2223fa7b`.
+Build/link and source checks passed. On the physical test at device uptime
+24.194 s, HTTP 200 led to STATE_SUCCESS and the green feedback routine. For
+each green pulse and the five-second hold, `gpio_pin_set()` returned 0, the
+output latch read 1, and the input-connected pad read 1; after each clear,
+both read 0. The CPO observed no visible green. Receiver revision
+`fairway-button-receiver-00023-dff` accepted the corresponding POST at
+`2026-10-07T01:30:36.737364Z`, persisting request `N0hPQcNGIYxNTwpxPLnY` for
+FRB-0002; subsequent COMPLETE polling returned 200. This proves the firmware
+commanded and electrically read a high P0.29 pad during the expected green
+interval. The remaining discrepancy is downstream of the MCU pad or in the
+visual observation; this evidence does not identify the specific transistor,
+indicator, rail, or interconnect. The image remains temporary and is not a
+production firmware generation.
 
 Firmware Generation Registry
 ----------------------------
+
+FRB-0001 firmware rebuild — 2026-10-06: device-specific build of the exact
+currently working FRB-0002 isolated source/configuration. Source base commit
+`9775842aebfc5c5ec1cb15ede7329aa58f1709fe`; source tree copied from
+`/tmp/fairway-golfer-demand-window-minimal` and verified byte-identical to that
+FRB-0002 source tree except `src/secrets/fairway_device_key.h`. NCS v3.1.1,
+Nordic toolchain bundle `561dce9adf`, West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, `prj_a.conf`, and the same
+`DEBUG_THREAD_INFO` CMake settings. The unchanged 60,000 ms transaction budget
+and current UART/GPIO diagnostics are inherited exactly. The authorized
+`replaceDeviceCredential` primitive replaced only FRB-0001's credential
+verifier and `updated_at`; the one-time credential was captured only in the
+ignored isolated header, and local verification matched the new Firestore
+verifier without exposing the plaintext. Artifact
+`/tmp/fairway-frb1-build/merged.hex`, 531,934 bytes, SHA-256
+`a25b7936b128eff366fc57b16944cbea4654c9cf7e17504d58d7bba6baeba519`.
+Build and identity/configuration checks passed. Before flash, probe-rs confirmed
+the Memory AP inaccessible; the authorized `recovery --unlock-only` succeeded
+on attempt 2/3. The artifact flashed with inline readback verification and one
+normal reset. UART confirms the image reached idle-ready, the stored modem CA
+was present and matched, and the unchanged 60-second budget was compiled in.
+LTE registration currently reports status 4 (unknown), not registered; no
+post-flash button press was made. FRB-0001 is ready for physical/LED checks,
+but backend acceptance testing should wait until LTE registers.
+
 The current pilot firmware lineage is recorded against exact Git provenance and validated artifact records.
 
 | Firmware generation | Source commit | Checkpoint / artifact | Validation date | Status | Baseline |
@@ -124,7 +292,7 @@ Device Health Diagnostics (Historical Validation, Runtime Retired)
 Device Health Runtime (Retired)
 --------------------------------
 - Device Health acquisition, scheduled wake/reporting, authoritative-time scheduling, effective-config parsing, telemetry helper work, and background Health HTTP are retired.
-- Current application networking occurs only for an accepted golfer transaction and its correlated five-minute COMPLETE poll/ack lifecycle.
+- Current application networking occurs only for an accepted golfer transaction and its correlated COMPLETE poll/ack lifecycle while the Course-configured demand window is active.
 
 FUTURE ARCHITECTURAL OPTION
 - A substantially deeper application-core power architecture could be investigated using nRF9151 System OFF / power-off behavior. Conceptually, the possible future path is `running -> System OFF -> wake event -> reset/reboot -> initialize -> resume Fairway service`.

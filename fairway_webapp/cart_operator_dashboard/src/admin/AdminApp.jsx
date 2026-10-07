@@ -6,6 +6,10 @@ import {
   Wrench, X,
 } from 'lucide-react';
 import { adminRequest, downloadBlob } from './adminApi';
+import {
+  courseDemandWindowMilliseconds,
+  courseDemandWindowSeconds,
+} from './courseDemandWindow.mjs';
 import './admin.css';
 
 const NAVIGATION = [
@@ -116,6 +120,7 @@ function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
   const [form, setForm] = useState(isCourse ? {
     course_name: course?.course_name || '',
     timezone: course?.timezone || '',
+    golfer_demand_window_seconds: courseDemandWindowSeconds(course?.golfer_demand_window_ms),
     service_days: course?.service_schedule?.days || [0, 1, 2, 3, 4, 5, 6],
     service_start: course?.service_schedule?.start || '08:00',
     service_end: course?.service_schedule?.end || '18:00',
@@ -123,8 +128,31 @@ function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
   } : { customer_name: customer?.customer_name || '', comments: customer?.comments || '' });
   const [pending, setPending] = useState(false); const [error, setError] = useState('');
   function toggleServiceDay(day) { setForm({ ...form, service_days: form.service_days.includes(day) ? form.service_days.filter((value) => value !== day) : [...form.service_days, day].sort() }); }
-  async function submit(event) { event.preventDefault(); setPending(true); setError(''); let path = '/api/v1/admin/customers'; if (isCourse) path = `${path}/${customer.customer_id}/courses${editing ? `/${course.course_id}` : ''}`; else if (editing) path += `/${customer.customer_id}`; const body = isCourse ? { course_name: form.course_name, timezone: form.timezone, service_schedule: { days: form.service_days, start: form.service_start, end: form.service_end }, comments: form.comments } : form; try { await adminRequest(user, apiBaseUrl, path, { method: editing ? 'PATCH' : 'POST', body }); await refresh(); close(); } catch (err) { setError(err.message); } finally { setPending(false); } }
-  return <div className="a-overlay"><div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><header><h2 id="customer-modal-title">{editing ? 'Edit' : 'Add'} {isCourse ? 'course' : 'customer'}</h2><button className="a-icon" type="button" onClick={close} aria-label="Close"><X size={20} /></button></header><form className="a-form" onSubmit={submit}><Notice error={error} />{isCourse ? <><label>Course name<input value={form.course_name} onChange={(event) => setForm({ ...form, course_name: event.target.value })} required /></label><label>Timezone<input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="America/Los_Angeles" required /></label><fieldset className="a-service-schedule"><legend>Beverage service schedule</legend><div className="a-weekdays">{WEEKDAYS.map((label, day) => <label key={label}><input type="checkbox" checked={form.service_days.includes(day)} onChange={() => toggleServiceDay(day)} />{label}</label>)}</div><div className="a-form-grid"><label>Starts<input type="time" value={form.service_start} onChange={(event) => setForm({ ...form, service_start: event.target.value })} required /></label><label>Ends<input type="time" value={form.service_end} onChange={(event) => setForm({ ...form, service_end: event.target.value })} required /></label></div></fieldset></> : <label>Customer name<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} required /></label>}<label>Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label><div className="a-modal-actions"><button type="button" onClick={close}>Cancel</button><PrimaryButton pending={pending} text="Save" /></div></form></div></div>;
+  async function submit(event) {
+    event.preventDefault(); setPending(true); setError('');
+    const milliseconds = courseDemandWindowMilliseconds(form.golfer_demand_window_seconds);
+    if (milliseconds === null) {
+      setError('Enter a positive duration with millisecond precision.');
+      setPending(false);
+      return;
+    }
+    let path = '/api/v1/admin/customers';
+    if (isCourse) path = `${path}/${customer.customer_id}/courses${editing ? `/${course.course_id}` : ''}`;
+    else if (editing) path += `/${customer.customer_id}`;
+    const body = isCourse ? {
+      course_name: form.course_name,
+      timezone: form.timezone,
+      golfer_demand_window_ms: milliseconds,
+      service_schedule: { days: form.service_days, start: form.service_start, end: form.service_end },
+      comments: form.comments,
+    } : form;
+    try {
+      await adminRequest(user, apiBaseUrl, path, { method: editing ? 'PATCH' : 'POST', body });
+      await refresh(); close();
+    } catch (err) { setError(err.message); }
+    finally { setPending(false); }
+  }
+  return <div className="a-overlay"><div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><header><h2 id="customer-modal-title">{editing ? 'Edit' : 'Add'} {isCourse ? 'course' : 'customer'}</h2><button className="a-icon" type="button" onClick={close} aria-label="Close"><X size={20} /></button></header><form className="a-form" onSubmit={submit}><Notice error={error} />{isCourse ? <><label>Course name<input value={form.course_name} onChange={(event) => setForm({ ...form, course_name: event.target.value })} required /></label><label>Timezone<input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="America/Los_Angeles" required /></label><label>Golfer Demand Window (seconds)<input type="number" step="0.001" value={form.golfer_demand_window_seconds} onChange={(event) => setForm({ ...form, golfer_demand_window_seconds: event.target.value })} required /></label><fieldset className="a-service-schedule"><legend>Beverage service schedule</legend><div className="a-weekdays">{WEEKDAYS.map((label, day) => <label key={label}><input type="checkbox" checked={form.service_days.includes(day)} onChange={() => toggleServiceDay(day)} />{label}</label>)}</div><div className="a-form-grid"><label>Starts<input type="time" value={form.service_start} onChange={(event) => setForm({ ...form, service_start: event.target.value })} required /></label><label>Ends<input type="time" value={form.service_end} onChange={(event) => setForm({ ...form, service_end: event.target.value })} required /></label></div></fieldset></> : <label>Customer name<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} required /></label>}<label>Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label><div className="a-modal-actions"><button type="button" onClick={close}>Cancel</button><PrimaryButton pending={pending} text="Save" /></div></form></div></div>;
 }
 function CustomersView({ user, apiBaseUrl, customers, refresh }) {
   const [editor, setEditor] = useState(null);

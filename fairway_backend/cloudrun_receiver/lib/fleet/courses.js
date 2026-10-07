@@ -4,6 +4,10 @@ const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
 const { CUSTOMERS_COLLECTION } = require('./customers');
 const { isValidServiceSchedule } = require('../course_service');
+const {
+  resolveGolferDemandWindowMs,
+  validateGolferDemandWindowMs,
+} = require('../golfer_demand_window_policy');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
@@ -31,6 +35,7 @@ function isValidIanaTimezone(timezone) {
  *   timezone                   IANA timezone name (e.g. "America/Los_Angeles")
  *   service_schedule           { days: [0-6], start: "HH:MM", end: "HH:MM" }
  *                              recurring Course-local beverage-service window
+ *   golfer_demand_window_ms    local demand-window policy for newly accepted requests
  *   service_suspension         temporary operator suspension or null
  *   comments                   administrator free-text notes
  *   created_at / updated_at    standard metadata
@@ -53,6 +58,7 @@ async function createCourse(db, {
   timezone,
   comments = null,
   serviceSchedule,
+  golferDemandWindowMs,
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
@@ -66,6 +72,9 @@ async function createCourse(db, {
   if (!isValidServiceSchedule(serviceSchedule)) {
     throw new Error('Service schedule requires selected days and a valid start/end window');
   }
+  const acceptedDemandWindowMs = golferDemandWindowMs === undefined
+    ? resolveGolferDemandWindowMs(null)
+    : validateGolferDemandWindowMs(golferDemandWindowMs);
   if (comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
@@ -82,6 +91,7 @@ async function createCourse(db, {
     course_name: courseName,
     timezone,
     service_schedule: serviceSchedule,
+    golfer_demand_window_ms: acceptedDemandWindowMs,
     service_suspension: null,
     comments,
     created_at: now,
@@ -114,6 +124,7 @@ async function updateCourse(db, customerId, courseId, {
   timezone,
   serviceSchedule,
   comments,
+  golferDemandWindowMs,
 } = {}) {
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
   if (!customerSnap.exists) {
@@ -134,6 +145,9 @@ async function updateCourse(db, customerId, courseId, {
   if (serviceSchedule !== undefined && !isValidServiceSchedule(serviceSchedule)) {
     throw new Error('Service schedule requires selected days and a valid start/end window');
   }
+  if (golferDemandWindowMs !== undefined) {
+    validateGolferDemandWindowMs(golferDemandWindowMs);
+  }
   if (comments !== undefined && comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
@@ -148,6 +162,9 @@ async function updateCourse(db, customerId, courseId, {
   }
   if (serviceSchedule !== undefined) {
     update.service_schedule = serviceSchedule;
+  }
+  if (golferDemandWindowMs !== undefined) {
+    update.golfer_demand_window_ms = golferDemandWindowMs;
   }
   if (comments !== undefined) {
     update.comments = comments;

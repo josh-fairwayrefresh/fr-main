@@ -5,7 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define FAIRWAY_REQUEST_ID_MAX 96
+#include "golfer_acceptance.h"
+
 #define FAIRWAY_COMMAND_ID_MAX 128
 
 struct fairway_complete_command {

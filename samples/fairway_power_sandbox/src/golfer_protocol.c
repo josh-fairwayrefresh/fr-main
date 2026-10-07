@@ -19,11 +19,21 @@ LOG_MODULE_REGISTER(golfer_protocol);
 #define GOLFER_MIN_RETRY_RESERVE_MS       3000
 
 struct button_response_json {
+	const char *status;
+	const char *event_type;
 	const char *request_id;
+	uint64_t golfer_demand_window_ms;
+	uint64_t demand_window_remaining_ms;
+	bool duplicate;
 };
 
 static const struct json_obj_descr button_response_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct button_response_json, status, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct button_response_json, event_type, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct button_response_json, request_id, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct button_response_json, golfer_demand_window_ms, JSON_TOK_UINT64),
+	JSON_OBJ_DESCR_PRIM(struct button_response_json, demand_window_remaining_ms, JSON_TOK_UINT64),
+	JSON_OBJ_DESCR_PRIM(struct button_response_json, duplicate, JSON_TOK_TRUE),
 };
 
 static bool copy_id(char *destination, size_t destination_len, const char *source)
@@ -36,31 +46,58 @@ static bool copy_id(char *destination, size_t destination_len, const char *sourc
 	return true;
 }
 
-static bool fairway_parse_button_response(char *body, size_t body_len,
-					  char *request_id, size_t request_id_len)
+bool golfer_protocol_parse_acceptance(char *body, size_t body_len,
+				      struct golfer_acceptance *acceptance)
 {
 	struct button_response_json response = {0};
+	const int64_t required_fields = (INT64_C(1) << 0) | (INT64_C(1) << 1) |
+		(INT64_C(1) << 2) | (INT64_C(1) << 3) | (INT64_C(1) << 5);
+	const int64_t remaining_field = INT64_C(1) << 4;
+	int64_t parsed_fields;
 
-	if (body == NULL || body_len == 0 || request_id == NULL || request_id_len == 0 ||
-	    json_obj_parse(body, body_len, button_response_descr,
-			   ARRAY_SIZE(button_response_descr), &response) < 0) {
+	if (body == NULL || body_len == 0 || acceptance == NULL ||
+	    (parsed_fields = json_obj_parse(body, body_len, button_response_descr,
+					    ARRAY_SIZE(button_response_descr), &response)) < 0 ||
+	    (parsed_fields & required_fields) != required_fields ||
+	    strcmp(response.status, "accepted") != 0 ||
+	    strcmp(response.event_type, "button_press") != 0 ||
+	    response.golfer_demand_window_ms == 0 ||
+	    response.golfer_demand_window_ms > UINT32_MAX ||
+	    (response.duplicate && !(parsed_fields & remaining_field)) ||
+	    (!response.duplicate && (parsed_fields & remaining_field)) ||
+	    (response.duplicate &&
+	     (response.demand_window_remaining_ms > UINT32_MAX ||
+	      response.demand_window_remaining_ms > response.golfer_demand_window_ms))) {
 		return false;
 	}
 
-	return copy_id(request_id, request_id_len, response.request_id);
+	if (!copy_id(acceptance->request_id, sizeof(acceptance->request_id), response.request_id)) {
+		return false;
+	}
+	acceptance->golfer_demand_window_ms =
+		(uint32_t)response.golfer_demand_window_ms;
+	acceptance->demand_window_remaining_ms = response.duplicate
+		? (uint32_t)response.demand_window_remaining_ms : 0;
+	acceptance->duplicate = response.duplicate;
+	return true;
 }
 
 static int send_button_press(int64_t attempt_deadline_ms,
-			     char *request_id, size_t request_id_len)
+			     struct golfer_acceptance *acceptance)
 {
-	static char request_body[128];
+	static char request_body[192];
 	int request_body_len;
+	int64_t send_time_ms = k_uptime_get();
+
+	if (send_time_ms >= attempt_deadline_ms) {
+		return -ETIMEDOUT;
+	}
 
 	request_body_len = snprintk(request_body, sizeof(request_body),
 		"{\"device_id\":\"%s\",\"event_type\":\"button_press\"}",
 		FAIRWAY_DEVICE_ID);
 
-	if (request_body_len < 0 || request_body_len >= sizeof(request_body)) {
+	if (request_body_len < 0 || (size_t)request_body_len >= sizeof(request_body)) {
 		LOG_ERR("HTTPS request body buffer too small");
 		return -ENOMEM;
 	}
@@ -80,7 +117,7 @@ static int send_button_press(int64_t attempt_deadline_ms,
 		request_body_len,
 		request_body);
 
-	if (request_len < 0 || request_len >= sizeof(request)) {
+	if (request_len < 0 || (size_t)request_len >= sizeof(request)) {
 		LOG_ERR("HTTPS request buffer too small");
 		return -ENOMEM;
 	}
@@ -93,8 +130,8 @@ static int send_button_press(int64_t attempt_deadline_ms,
 		return ret;
 	}
 
-	if (!fairway_parse_button_response(response.body, response.body_len,
-					   request_id, request_id_len)) {
+	acceptance->response_received_ms = k_uptime_get();
+	if (!golfer_protocol_parse_acceptance(response.body, response.body_len, acceptance)) {
 		return -EPROTO;
 	}
 
@@ -102,11 +139,16 @@ static int send_button_press(int64_t attempt_deadline_ms,
 }
 
 int golfer_protocol_run_transaction(int64_t txn_deadline_ms,
-				    char *request_id, size_t request_id_len)
+				    int64_t press_time_ms,
+				    struct golfer_acceptance *acceptance)
 {
 	int ret = -ETIMEDOUT;
 
-	request_id[0] = '\0';
+	if (acceptance == NULL || press_time_ms < 0 || txn_deadline_ms <= press_time_ms) {
+		return -EINVAL;
+	}
+	memset(acceptance, 0, sizeof(*acceptance));
+	acceptance->press_time_ms = press_time_ms;
 
 	for (int attempt = 0; attempt < GOLFER_MAX_ATTEMPTS; attempt++) {
 		int64_t now_ms = k_uptime_get();
@@ -119,7 +161,7 @@ int golfer_protocol_run_transaction(int64_t txn_deadline_ms,
 			break;
 		}
 
-		ret = send_button_press(txn_deadline_ms, request_id, request_id_len);
+		ret = send_button_press(txn_deadline_ms, acceptance);
 		if (ret == 0 || ret == -EACCES) {
 			break;
 		}

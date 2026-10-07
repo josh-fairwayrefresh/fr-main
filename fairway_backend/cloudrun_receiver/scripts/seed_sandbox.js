@@ -29,6 +29,7 @@ async function main() {
     customerId: customer.customer_id,
     courseName: 'Validation Course',
     timezone: 'America/Los_Angeles',
+    serviceSchedule: { days: [0, 1, 2, 3, 4, 5, 6], start: '08:00', end: '18:00' },
     comments: SYNTHETIC_MARKER,
   });
   const device = await createDevice(db, {
@@ -62,7 +63,8 @@ async function main() {
     operator_id: null,
     repeat_press_count: 0,
     last_repeat_press_at: null,
-    demand_window_expires_at: new Date(Date.now() + 5 * 60 * 1000),
+    golfer_demand_window_ms: course.golfer_demand_window_ms,
+    demand_window_expires_at: new Date(Date.now() + course.golfer_demand_window_ms),
     device_state_at_request: 'deployed',
     course_local_date: null,
     course_local_hour: null,

@@ -25,12 +25,12 @@
  *
  *   Valid press, no active demand window:
  *     Orange begins immediately and pulses for the unresolved transaction
- *     SUCCESS: orange off; green blink-blink then ~5 s solid; starts a local
- *       5-minute demand window from the original accepted press time
+ *     SUCCESS: orange off; green blink-blink then ~5 s solid; starts the
+ *       Course-configured local demand window from the original physical press
  *     FAILURE: orange off; red blink-blink then ~5 s solid; no demand window
  *     Return to IDLE
  *
- *   Valid press during an active 5-minute demand window:
+ *   Valid press during an active Course-configured demand window:
  *     No orange, no new transaction, no new request; immediate green
  *     blink-blink then ~5 s solid; increments a local repeat-press counter
  *     on the originating transaction (preparatory state only; backend
@@ -65,13 +65,6 @@ static const struct device *uart0_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console))
  */
 #define ORANGE_PULSE_ON_MS       80
 #define ORANGE_PULSE_OFF_MS      85
-
-/* Canonical Monarch Bay Pilot golfer demand window (docs/UX_SPECIFICATION.md,
- * "Five-Minute Golfer Demand Window"), mirroring the backend's DEMAND_WINDOW_MS
- * (fairway_backend/cloudrun_receiver/lib/fleet/schema.js). Firmware-local
- * only; no shared code with the backend.
- */
-#define DEMAND_WINDOW_MS         (5 * 60 * 1000)
 
 /* Non-static: shared via sync_primitives.h with button_ux's ISR and the
  * transaction scheduler. See that header for why these two (and only
@@ -187,8 +180,8 @@ int main(void)
 
 		int64_t press_time_ms = k_uptime_get();
 
-		/* Active five-minute golfer demand window (docs/UX_SPECIFICATION.md,
-		 * "Five-Minute Golfer Demand Window"): a valid press before the
+		/* Active Course-configured golfer demand window (docs/UX_SPECIFICATION.md):
+		 * a valid press before the
 		 * window's expiry is a same-group repeat, not a new golfer demand
 		 * event. It never touches golfer_txn/txn_wake_sem -- no new
 		 * transaction, no new request -- and is purely a local indicator
@@ -224,7 +217,7 @@ int main(void)
 		 */
 		int64_t accept_time_ms = press_time_ms;
 		int64_t deadline_ms = accept_time_ms + GOLFER_TRANSACTION_BUDGET_MS;
-		uint32_t my_gen = golfer_txn_accept(deadline_ms);
+		uint32_t my_gen = golfer_txn_accept(deadline_ms, press_time_ms);
 
 		set_state(STATE_TRANSMITTING);
 
@@ -240,7 +233,7 @@ int main(void)
 		bool got_result = false;
 		bool success = false;
 		bool orange_lit = true;
-		char request_id[FAIRWAY_REQUEST_ID_MAX];
+		struct golfer_acceptance acceptance = {0};
 
 		/* Orange pulses continuously for the whole unresolved transaction
 		 * (docs/UX_SPECIFICATION.md: "pulses while the transaction is
@@ -265,8 +258,7 @@ int main(void)
 			int64_t wait_ms = (remaining_ms < phase_ms) ? remaining_ms : phase_ms;
 
 			if (k_sem_take(&button_wake_sem, K_MSEC(wait_ms)) == 0) {
-				if (golfer_txn_check_done(my_gen, &success, request_id,
-							 sizeof(request_id))) {
+				if (golfer_txn_check_done(my_gen, &success, &acceptance)) {
 					got_result = true;
 					break;
 				}
@@ -289,13 +281,21 @@ int main(void)
 		button_ux_orange_off();
 
 		if (got_result && success) {
-			int64_t demand_deadline_ms = accept_time_ms + DEMAND_WINDOW_MS;
+			if (!demand_window_start(my_gen, &acceptance, k_uptime_get())) {
+				set_state(STATE_FAILURE);
+				button_ux_show_failure_feedback();
+			} else {
+				struct demand_window_snapshot window =
+					demand_window_get_snapshot(k_uptime_get());
 
-			demand_window_start(my_gen, request_id, demand_deadline_ms);
-			complete_poll_start(my_gen, request_id, accept_time_ms,
-					    demand_deadline_ms);
-			set_state(STATE_SUCCESS);
-			button_ux_show_success_feedback();
+				if (window.active) {
+					complete_poll_start(my_gen, acceptance.request_id,
+							    window.timeline_start_ms,
+							    window.deadline_ms);
+				}
+				set_state(STATE_SUCCESS);
+				button_ux_show_success_feedback();
+			}
 		} else {
 			/* Local defensive deadline: guarantees a terminal
 			 * disposition even in the unforeseen case that the

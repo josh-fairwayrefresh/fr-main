@@ -24,7 +24,7 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 
 ### 1. Idle
 - All three indicators are off.
-- The button is enabled for a new golfer demand event unless the marker is inside its five-minute demand window (below).
+- The button is enabled for a new golfer demand event unless the marker is inside its Course-configured demand window (below).
 
 ### 2. Initial valid press / transaction underway
 - A valid press begins the bounded golfer transaction (existing hard 15-second budget, unchanged).
@@ -36,20 +36,21 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - When Fairway successfully accepts the service request, orange ends.
 - Green performs a blink-blink indication, followed by approximately 5 seconds of solid green.
 - Success means the accepted golfer service request is represented in the Fairway operator workflow/dashboard.
-- Successful acceptance starts a fixed five-minute demand window, measured from the initial accepted physical button press.
+- Successful acceptance starts a demand window using the Course value in seconds, measured from the initial physical button press. The deployed, physically validated system remains at five minutes until the matched candidate is deployed and validated; no Course value has yet been changed to 60 seconds.
 
 ### 4. Failed request
 - If the transaction reaches terminal failure within the 15-second budget, orange ends.
 - Red performs a blink-blink indication, followed by approximately 5 seconds of solid red.
-- A failed transaction does not start a five-minute demand window.
+- A failed transaction does not start a demand window.
 - After the failure indication completes, the button is enabled again; the next valid press begins a completely new bounded golfer transaction.
 - There is no long retry lockout.
 
-## Five-Minute Golfer Demand Window (Implemented and Validated Locally)
+## Course-Configured Golfer Demand Window
+The implementation candidate makes duration a Course-owned setting editable in Admin in seconds. Its backend compatibility fallback remains 300 seconds for legacy Course documents and Course-less devices. The candidate is built and automated-test validated but has not been deployed or physically validated. The deployed system therefore remains at five minutes; the CPO's planned 60-second setting change is a later Admin operation, not a source-code value.
 
-For the Monarch Bay Pilot, a fixed five-minute window from the initial accepted press is the canonical operational proxy for presses attributable to the same golfer group at that marker. This is a pilot product assumption, not a claim that every group occupies every tee box for exactly five minutes; per-hole, par-specific, or administrator-configurable windows are not introduced at this stage.
+For the Monarch Bay Pilot, the configured duration from the initial physical press is the operational proxy for presses attributable to the same golfer group at that marker. This is a pilot product assumption, not a claim that every group occupies every tee box for exactly the configured duration; per-hole and par-specific windows are not introduced.
 
-After the originating request has succeeded, any subsequent valid physical button press during that five-minute window:
+After the originating request has succeeded, any subsequent valid physical button press during that Course-configured window:
 
 - immediately gives the golfer green feedback;
 - does not show orange;
@@ -60,21 +61,21 @@ After the originating request has succeeded, any subsequent valid physical butto
 
 The firmware-local window and count are implemented. Transporting a repeat press and persisting it against the originating request are not yet implemented. The approved persisted factual metric remains `repeat_press_count`; "Frustration Presses" is a possible Admin-facing product interpretation/KPI label, not the canonical stored event meaning.
 
-Operator COMPLETE creates a best-effort command for the exact originating request. If the marker learns of and acknowledges that matching command while the window is active, it terminates the window early and returns to normal eligibility for a fresh golfer request. Until then, or if the command is missing, delayed, stale, expired, mismatched, or unreachable, the validated in-window behavior continues and the local five-minute expiry remains authoritative.
+Operator COMPLETE creates a best-effort command for the exact originating request. If the marker learns of and acknowledges that matching command while the window is active, it terminates the window early and returns to normal eligibility for a fresh golfer request. Until then, or if the command is missing, delayed, stale, expired, mismatched, or unreachable, the in-window behavior continues and local expiry remains authoritative. The device expires locally without relying on further backend communication; backend request expiry starts at receiver receipt and can outlast the local physical-press deadline by initial request transit time.
 
 ### Approved End-to-End Example
 
-- T=0:00 Group A initial press → orange → Request A accepted → green → five-minute window begins.
-- If Request A is not completed, an in-window press at T=1:15 gives immediate green and remains associated with Request A; the local window expires at T=5:00, and a later press follows the normal orange transaction path.
-- Alternatively, if the operator COMPLETES Request A at T=0:45, the marker ends Request A's local window after learning of and acknowledging that exact matching command.
-- The next valid press after that acknowledgement follows the normal orange transaction path and may create a fresh Request B before T=5:00.
+- T=0:00 Group A initial press → orange → Request A accepted → green → the Course-configured window begins.
+- If Request A is not completed, an in-window press gives immediate green and remains associated with Request A; after the local configured deadline, a later press follows the normal orange transaction path.
+- Alternatively, if the operator COMPLETES Request A before expiry, the marker ends Request A's local window after learning of and acknowledging that exact matching command.
+- The next valid press after that acknowledgement follows the normal orange transaction path and may create a fresh Request B before the configured deadline.
 
 Request A may still be active when Request B is created; that is valid. The operator may have multiple legitimate requests from successive golfer groups at the same marker/hole in the queue simultaneously.
 
 ## Product / Data Semantics (Approved End-to-End Target)
 
 - The canonical analytical demand unit remains one successfully accepted golfer service request.
-- Internal transport retries and repeat presses within the originating five-minute demand window must not inflate service-request volume.
+- Internal transport retries and repeat presses within the originating Course-configured demand window must not inflate service-request volume.
 - `repeat_press_count` belongs to the originating accepted request. The cart operator does not need to see each repeat press as a new request or notification.
 - How repeat presses are communicated from the marker and persisted against the originating request is an engineering/implementation decision, not specified by this document; see `docs/feature_backlog.md`.
 
@@ -89,7 +90,7 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Tapping the notification opens or focuses the authenticated Fairway
    application at the originating request and course. The request remains
    actionable through the normal operator workflow.
-- A press suppressed by the marker's active five-minute demand window does not
+- A press suppressed by the marker's active Course-configured demand window does not
    produce another request or notification.
 - Physical production acceptance on 2026-10-01 used FRB-0002 at Hole 2. The CPO
    observed exactly one notification for one authoritative request, successful

@@ -122,7 +122,7 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Validated Admin Revision | `fairway-admin-00007-znz` (100% traffic) |
+| Current Restored Admin Revision | `fairway-admin-00008-sjt` (100% traffic as of 2026-10-06) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user` only |
@@ -172,7 +172,44 @@ read-only verified hardware/firmware identity, and Device-to-SIM export.
 Hardware revision and firmware generation start unknown at provisioning and may
 be established only by controlled verified provenance. Neither field can be
 changed through an administrative metadata route. No Health placeholder or
-history/schedule control is current UI.
+history/schedule control is part of the current product/source scope. The
+restored production artifact described below is an older retained UI build and
+its inclusion of Health history is a deployment/source divergence, not a change
+to that product decision.
+
+### Restored Matched Stable Deployment — 2026-10-06
+
+Following rejection of the unvalidated firmware transport candidate, production
+Admin and Hosting were restored to the retained 2026-10-01 stable revisions that
+were current before the 2026-10-06 Admin/Hosting redeployments. Firestore was not
+modified. The restored UI again reads the persisted FRB-0002
+`device_health`-provenance identity, commissioning metadata, and the existing
+Device health-history endpoint. The receiver was not rolled back; it remains on
+the accepted `9775842`-matched backend revision with additive COMPLETE
+correlation logging.
+
+Deployment/source divergence requiring Architect review: the restored Oct 1
+Admin API and Hosting artifacts predate the `0daf02d` Health-retirement source
+checkpoint and include the legacy Health-history read surface. The
+firmware/backlog source-of-truth describes Health Admin surfaces as retired.
+This exact retained deployment was restored under the CPO's rollback direction
+to recover FRB-0002 identity and operational metadata reads; that restoration is
+not, by itself, a product decision to re-adopt the broader Health Admin scope.
+Do not redeploy a different Admin/Hosting source or revise the Health product
+scope silently to resolve this divergence.
+
+| Surface | Restored/current production identity | Provenance |
+|---------|---------------------------------------|------------|
+| Receiver | `fairway-button-receiver-00022-wxk`, 100% traffic | Image SHA-256 `535fe5e874dbc0a4aefc95981b35073b49a68fd4b21069e6fa7dc3fbb77dd8cf`; Cloud Build `6a448151-0523-4009-a1a1-f6ebe33967fe`; logging-only COMPLETE correlation deployment described below. Source change is committed as `8686eeb`; the 2026-10-06 deployment immediately preceded that commit. |
+| Admin API | `fairway-admin-00008-sjt`, 100% traffic | Retained Oct 1 image SHA-256 `d1341c1dc6ccd9b9542f90df4ecbfb57524310bad42b6c014d3cb1606ed199f2`; Cloud Build `b9620a32-2c87-4791-b9a2-d89957fef0d0`. No source commit is asserted because the retained revision provenance records its Cloud Build source archive, not a verified Git SHA. |
+| Firebase Hosting live | Version `23488f2b47f307e0` | Exact retained immutable Oct 1 version, restored by a Firebase Hosting rollback release on 2026-10-06. It serves `assets/index-DXzzUJ_N.js`, SHA-256 `e7b45ecd4b8b495a63951fafa5c86e4dbb21ee94f5c12d95e294c304d17e47ea`. |
+
+The 2026-10-06 current pre-rollback identities and source archive/image
+references were saved locally, redacted of environment values, at
+`/tmp/fairway-rollback-deployment-provenance.json` to preserve undo context.
+FRB-0002 identity fields (`hardware_revision`, `firmware_generation`,
+`system_identity`), commissioning metadata, device `health_history`, and Course
+`service_events` were verified present before restoration; none were changed.
 
 ### Historical WP5 System-Metadata Deployment Record
 
@@ -297,6 +334,38 @@ the obsolete Cloud Run environment variable has been removed.
 Firmware deployment procedures are owned by this document.
 
 Firmware implementation is owned by docs/FIRMWARE_SPECIFICATION.md.
+
+### Course-Configured Golfer Demand Window Rollout
+
+The `sprint/modular-golfer-demand-window` candidate is implemented and passed
+automated validation at the legacy 300,000 ms behavior. It has not been
+deployed, flashed, or physically validated. Production Course configuration,
+Firestore documents, and services remain unchanged. Do not treat the candidate
+as the deployed product until the Architect/CPO separately authorizes rollout.
+
+Roll out a matched candidate backend and firmware in this order:
+
+1. Deploy the backend first. It accepts the legacy firmware's additive-response
+  contract because the accepted `9775842` parser requires `request_id` and
+  ignores unknown response fields. Course-less request acceptance likewise
+  uses the one backend-owned 300,000 ms fallback.
+2. After backend health and compatibility validation, flash the matching new
+  firmware. New firmware requires the new acceptance contract and is not
+  compatible with the old backend response.
+3. Validate matched backend/firmware behavior with Courses effectively at
+  300,000 ms before changing any Course configuration.
+4. Only after physical validation, the CPO may set the Course value to 60
+  seconds in Admin. That value is not encoded in runtime source.
+
+Rollback is reverse dependency order: restore old firmware first, then restore
+the old backend. Do not roll back the backend while new firmware remains in the
+field because its acceptance response lacks the required policy contract.
+Existing request documents retain their snapshotted policy and absolute expiry.
+The temporary legacy fallback may be removed only after active Courses have
+explicit values, active request-producing devices are assigned, and legacy
+open requests without policy snapshots have expired. Removal must not silently
+change the accepted Course-less behavior; that later product transition needs
+separate authorization.
 
 ### Authorization Control
 

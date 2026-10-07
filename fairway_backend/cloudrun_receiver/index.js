@@ -28,8 +28,11 @@ const {
   EVENT_TYPES,
   deriveHoleFromLocation,
   deriveDisplayLabelFromLocation,
-  DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
+const {
+  resolveGolferDemandWindowMs,
+  resolveExistingRequestGolferDemandWindowMs,
+} = require('./lib/golfer_demand_window_policy');
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
 const {
   getOperatorAssignment,
@@ -104,16 +107,20 @@ function createFairwayHandlers(db, {
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
 } = {}) {
   /* Persists a golfer request using the validated demand-window suppression. */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, requestTime) {
     const existingOpenRequests = await db.collection('requests')
       .where('device_id', '==', deviceId)
       .where('status', 'in', ['new', 'confirmed'])
-      .where('demand_window_expires_at', '>', now)
+      .where('demand_window_expires_at', '>', requestTime)
       .limit(1)
       .get();
 
     if (!existingOpenRequests.empty) {
       const existingRequest = existingOpenRequests.docs[0];
+      const existingData = existingRequest.data();
+      const expiresAt = toDate(existingData.demand_window_expires_at);
+      const acceptedWindowMs = resolveExistingRequestGolferDemandWindowMs(existingData);
+      const remainingMs = Math.max(0, expiresAt.getTime() - now().getTime());
 
       console.log('Suppressed duplicate button request because its demand window remains active:', {
         device_id: deviceId,
@@ -124,13 +131,30 @@ function createFairwayHandlers(db, {
         status: 'accepted',
         event_type: EVENT_TYPES.BUTTON_PRESS,
         request_id: existingRequest.id,
+        golfer_demand_window_ms: acceptedWindowMs,
+        demand_window_remaining_ms: remainingMs,
         duplicate: true,
       });
     }
 
     const courseLocalDateHour = course
-      ? resolveCourseLocalDateHour(now, course.timezone)
+      ? resolveCourseLocalDateHour(requestTime, course.timezone)
       : null;
+    let acceptedWindowMs;
+
+    try {
+      acceptedWindowMs = resolveGolferDemandWindowMs(course);
+    } catch (error) {
+      console.warn('Rejected golfer request because Course demand-window policy is invalid:', {
+        device_id: deviceId,
+        course_id: device.course_id,
+      });
+      return res.status(422).json({
+        status: 'course_configuration_invalid',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+      });
+    }
+    const expiresAt = new Date(requestTime.getTime() + acceptedWindowMs);
 
     const requestDoc = {
       customer_id: device.customer_id || null,
@@ -148,7 +172,8 @@ function createFairwayHandlers(db, {
       operator_id: null,
       repeat_press_count: 0,
       last_repeat_press_at: null,
-      demand_window_expires_at: new Date(now.getTime() + DEMAND_WINDOW_MS),
+      golfer_demand_window_ms: acceptedWindowMs,
+      demand_window_expires_at: expiresAt,
       device_state_at_request: device.state,
       course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
       course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
@@ -167,19 +192,17 @@ function createFairwayHandlers(db, {
       status: 'accepted',
       event_type: EVENT_TYPES.BUTTON_PRESS,
       request_id: docRef.id,
+      golfer_demand_window_ms: acceptedWindowMs,
+      duplicate: false,
     });
   }
 
   /*
   * Authenticated Device button request entry point. Device lookup,
-  * lifecycle-state, credential, and
-   * Customer/Course-hierarchy checks happen exactly once here, before any
-   * event-type-specific persistence. A Device with no Customer/Course
-   * assignment at all is legitimately unassigned and proceeds normally; a
-   * Device that claims an assignment which cannot resolve through the
-   * authoritative hierarchy is rejected outright, with zero persistence,
-   * rather than silently accepted. An event_type outside the known set
-   * fails closed rather than being silently treated as button_press.
+  * lifecycle-state, credential, and Customer/Course-hierarchy checks happen
+  * exactly once here, before event-specific persistence. Course-less devices
+  * use the single temporary legacy policy fallback during migration; invalid
+  * claimed hierarchy remains rejected. Unknown event types fail closed.
    */
   async function handleDeviceEvent(req, res) {
     const requestTime = now();
@@ -561,10 +584,11 @@ function createFairwayHandlers(db, {
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
           service_schedule: courseSource.service_schedule ?? null,
+          golfer_demand_window_ms: resolveGolferDemandWindowMs(courseSource),
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'golfer_demand_window_ms', 'service_suspension', 'comments']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -613,23 +637,25 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments', 'golfer_demand_window_ms']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
       serviceSchedule: req.body.service_schedule,
+      golferDemandWindowMs: req.body.golfer_demand_window_ms,
       comments: req.body.comments,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments', 'golfer_demand_window_ms']);
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
       serviceSchedule: req.body.service_schedule,
+      golferDemandWindowMs: req.body.golfer_demand_window_ms,
       comments: req.body.comments,
     });
     return res.status(200).json(course);

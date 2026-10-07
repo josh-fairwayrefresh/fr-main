@@ -6,8 +6,16 @@
 
 #define ARG_UNUSED(value) ((void)(value))
 #define K_NO_WAIT 0
+#define K_FOREVER (-1)
 #define K_MSEC(ms) (ms)
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+extern int64_t fairway_host_uptime_ms;
+static inline int64_t k_uptime_get(void)
+{
+	return fairway_host_uptime_ms;
+}
 
 struct k_sem {
 	unsigned int count;
