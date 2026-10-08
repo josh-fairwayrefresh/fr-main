@@ -211,6 +211,35 @@ FRB-0002 identity fields (`hardware_revision`, `firmware_generation`,
 `system_identity`), commissioning metadata, device `health_history`, and Course
 `service_events` were verified present before restoration; none were changed.
 
+### Backend Release Register — Device Firmware Compatibility
+
+This register maps production `fairway-button-receiver` revisions to firmware
+compatibility evidence. It does not register Admin or Hosting releases, which do
+not define the Device wire protocol. Firmware source, build configuration, and
+artifact provenance remain owned by the Firmware Generation Registry in
+`docs/FIRMWARE_SPECIFICATION.md`.
+
+Compatibility status is evidence-based: **Proven operational** requires a
+matched firmware generation and successful end-to-end Device request evidence;
+**Partial / historical** applies only to the specifically verified API path;
+**Observed diagnostic only** is not product acceptance; **Unverified** means
+the existing release record does not identify a matched firmware artifact or
+end-to-end outcome. Revision traffic/readiness alone is not compatibility proof.
+
+| Receiver revision | Release record | Firmware pairing evidence | Compatibility status |
+|---|---|---|---|
+| `fairway-button-receiver-00009-c5j` | WP3 production validation; healthy at 100% traffic. Exact image/build provenance is not in the current record. | FRB-0001 per-device-authenticated request acceptance is recorded in `docs/DEVICE_PROVISIONING_GUIDE.md`, but the exact firmware artifact is not linked to this revision. | **Unverified exact pairing**; functional request evidence exists, but the firmware/revision mapping is not traceable. |
+| `fairway-button-receiver-00013-zhj` | Original WP5 rollout-validation checkpoint; exact image digest/source is not recorded here. | The WP5 checklist records backend/admin route and authorization tests, not a specific physical firmware artifact paired with this revision. | **Unverified**. |
+| `fairway-button-receiver-00016-djx` | WP5 system-metadata deployment record; full image/source provenance is not recorded here. | The same closeout records FRB-0002 system-identity firmware and an authenticated Device Health update. | **Partial / historical**: Device Health compatibility was observed for that exchange; Device Health is retired and this does not prove the current button/COMPLETE contract. |
+| `fairway-button-receiver-00019-c8h` | Option C service-schedule production rollout; exact image/source provenance is not recorded here. | No exact physical firmware artifact or end-to-end Device result is paired with this revision in the deployment record. | **Unverified**. |
+| `fairway-button-receiver-00022-wxk` | Retained stable receiver, 100% traffic; image digest and Cloud Build are recorded in the Restored Matched Stable Deployment table above. The change from its predecessor is logging-only with no response-shape change. | Accepted source `9775842aebfc5c5ec1cb15ede7329aa58f1709fe`; restored artifact and CPO-reported basic operation are recorded in the Firmware Generation Registry above. | **Proven operational** as the accepted matched stable button/COMPLETE pairing. |
+| `fairway-button-receiver-00023-dff` | Later diagnostic revision; image/source provenance is not recorded in this deployment guide. | One authenticated FRB-0002 request and subsequent COMPLETE polls succeeded with a temporary diagnostic firmware image; the event is recorded in `docs/FIRMWARE_SPECIFICATION.md`. | **Observed diagnostic only**; not an accepted operational firmware pairing and superseded by the rollback to `00022-wxk`. |
+
+For each new receiver release evaluated for operational compatibility, record
+its immutable revision, firmware generation under test, validation scope,
+evidence reference, and compatibility determination. Reference existing
+release and firmware provenance rather than duplicating it.
+
 ### Historical WP5 System-Metadata Deployment Record
 
 The WP5 system-metadata closeout deployed Admin revision
