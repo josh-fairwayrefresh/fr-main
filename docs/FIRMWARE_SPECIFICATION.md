@@ -27,8 +27,8 @@ Current Implementation
 - Request retry and validation: within the 15-second budget the firmware performs up to `GOLFER_MAX_ATTEMPTS` sequential attempts without overlap. Each attempt retains the physically validated Prototype 3.2 bounded nonblocking send/receive and HTTP status/body parsing behavior.
 - State machine: the device implements IDLE, TRANSMITTING, SUCCESS, FAILURE, and REPEAT_PRESS states in one state machine. REPEAT_PRESS is the local in-window feedback path; it does not create a second transaction scheduler or network flow.
 - Golfer-facing indication (currently implemented): orange flashes three times at startup, remains off in IDLE, and pulses throughout an unresolved golfer transaction. SUCCESS stops orange and gives green blink-blink followed by approximately five seconds solid; FAILURE stops orange and gives the same pattern in red. Exact externally observable behavior is owned by `docs/UX_SPECIFICATION.md`.
-- Five-minute correlated demand window (Stage B2 implemented and physically validated): SUCCESS requires a parseable originating `request_id`, carried through the existing generation-tagged result handoff before establishing the RAM-only window. A valid in-window press retains the previously validated local green-only behavior. Every 15 seconds while the window remains active, a timer marks a COMPLETE check due; `transaction_thread` performs the authenticated HTTPS poll. The backend owns absolute command expiry and checks it at both poll and acknowledgement; firmware retains no command wall-clock expiry and clears the window only after successful exact command/request correlation and a synchronized check that its local monotonic five-minute deadline remains active. Missing, unreachable, stale, expired, or mismatched commands leave the local five-minute expiry authoritative. CPO-confirmed validation on FRB-0002 established corrected cold boot and normal golfer requests, then exact COMPLETE acknowledgement ending the window early so the next press created a fresh request before the five-minute fallback. The 15-second check period remains a pilot field-validation hypothesis, not a permanently optimized production constant.
-- Request identity: the backend suppresses a duplicate while the Device has an unexpired open demand window and returns that request's ID. After expiry, a fresh press creates a fresh request even if the earlier request remains open. The local five-minute window prevents ordinary in-window presses from creating transactions. Repeat-press transport/persistence remains deferred.
+- Course-configured Golfer Demand Window (implementation candidate, not deployed or physically validated): `Course.golfer_demand_window_ms` is the sole policy value. The backend snapshots policy and receiver-receipt-time expiry for NEW requests, returns an explicit NEW/DUPLICATE acceptance, and preserves the originating stored expiry for duplicate suppression and COMPLETE. Firmware protocol parses the contract; `golfer_txn` transports it with the original physical-press time; `demand_window.c` alone establishes NEW (press time + policy) or DUPLICATE (response time + remaining) local deadlines and repeat eligibility. A zero-remaining or already-expired valid acceptance is SUCCESS with no active window. Local expiry is monotonic and needs neither COMPLETE nor an asynchronous demand-window timer. NEW COMPLETE cadence remains anchored to the original press. Backend duplicate suppression can outlast the local physical-press deadline by initial request transit time. COMPLETE remains the existing 15-second early-completion path.
+- Request identity: the stable backend suppresses a duplicate while the Device has an unexpired five-minute demand window and returns that request's ID. After expiry, a fresh press creates a fresh request even if the earlier request remains open. The fixed five-minute local window prevents ordinary in-window presses from creating transactions. Course-configurable policy remains an excluded candidate; repeat-press transport/persistence remains deferred.
 
 Golfer Transaction Architecture
 --------------------------------
@@ -39,9 +39,208 @@ Golfer Transaction Architecture
 - COMPLETE correlation protection: the successful response's `request_id` is part of that same generation-tagged handoff. Active-window state is spinlock-guarded, and a command can clear it only after exact request correlation and successful idempotent acknowledgement.
 - DNS isolation: `zsock_getaddrinfo()` has no established NCS 3.1.1 application-level timeout and executes only in `dns_resolver_thread`; golfer/COMPLETE transport uses the bounded, age-limited cache accessor.
 - Transport deadline enforcement: golfer connect/send/receive stages use a nonblocking socket plus `zsock_poll()` with an explicit remaining-time timeout, since NCS 3.1.1 does not document `SO_SNDTIMEO`/`SO_RCVTIMEO` as bounding `zsock_connect()`.
+Transport deadline enforcement: connect/send/receive use a nonblocking socket plus `zsock_poll()` with an explicit remaining-time timeout, since NCS 3.1.1 does not document `SO_SNDTIMEO`/`SO_RCVTIMEO` as bounding `zsock_connect()`. Application waits can be bounded, but individual vendor calls and socket close cannot be preempted by an application deadline; this is not a verified hard wall-clock bound on the shared transport thread.
+
+Accepted Restored Baseline — 2026-10-06
+---------------------------------------
+The accepted device state was restored from source commit `9775842aebfc5c5ec1cb15ede7329aa58f1709fe` on 2026-10-06 after the separately archived and rejected `sprint/complete-transport-foundation` candidate caused a physical regression. The rejected candidate is preserved locally, not merged or pushed, at archive commit `e19394faa0935cb73e4eec0b217e1ca33ec84367` on `archive/firmware/complete-transport-foundation`. The restored artifact was `/tmp/fairway-rollback-build/merged.hex`, SHA-256 `4c31d29437bc0f4d5937a19a0a395470629c7587671177d5ed16fefab710cc09`, 529,206 bytes; it was programmed with read-back verification and one normal reset. The CPO subsequently reported basic golfer behavior working again after a hard power cycle. This is a restoration of the accepted Embarrassingly Small Runtime source line, not a new firmware generation or a claim that the unresolved COMPLETE polling irregularity is fixed.
+
+The deployed and physically validated `9775842` product state retains the five-minute behavior. The implementation candidate on `sprint/modular-golfer-demand-window` now makes the window Course-configurable while preserving 300,000 ms through one temporary backend fallback. The candidate has passed backend, Admin, macOS firmware-host tests, and a pristine NCS 3.1.1 application build. It has not been deployed or flashed and has not received physical validation. No Course value has been changed to 60 seconds. Deployment order and rollback compatibility are owned by `docs/DEPLOYMENT_GUIDE.md`.
+
+Temporary FRB-0002 Connection Diagnostic — 2026-10-06
+----------------------------------------------------
+This is diagnostic evidence, not an accepted firmware generation or production fix.
+The isolated `/tmp/fairway-golfer-demand-window-minimal` worktree is based on
+`9775842aebfc5c5ec1cb15ede7329aa58f1709fe`, with the six-file minimal
+Course-duration response patch plus an uncommitted `http_transport.c` diagnostic.
+The normal image timed out during TLS-socket connect before sending HTTP.
+The first diagnostic resolved `34.143.74.2` with an 80,986 ms cache age and
+timed out on a three-second raw-TCP probe; TLS was not tested. The exact IPv4
+subsequently accepted TCP and verified TLS from the Mac; this does not prove
+device-side reachability. Additional physical presses are not assumed from
+console wake events alone.
+
+The enhanced one-shot diagnostic separately logs socket creation, TLS options,
+nonblocking configuration, connect, poll events, SO_ERROR, and close. Raw TCP
+has a 15-second budget; only a successful TCP probe proceeds to a separately
+budgeted 15-second verified TLS probe. No HTTP request is sent. These temporary
+diagnostic budgets do not change the product's 15-second golfer budget; the
+diagnostic thread may continue after terminal LED feedback. Later probes are
+suppressed until reboot. FRB-0002 is not operational for golfer requests while
+this diagnostic is installed.
+
+Enhanced build provenance: `/tmp/fairway-connect-diag-build/merged.hex`,
+531,360 bytes, SHA-256
+`06b7603fd3a9e9f62af41da2e333cc38c7f37319bd4a6a2fcada25ecc61694f6`;
+NCS v3.1.1, Nordic toolchain `561dce9adf`, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, explicit isolated-worktree
+`BOARD_ROOT`, and `EXTRA_CONF_FILE=prj_a.conf`. Build/link and UART configuration
+checks passed. On FRB-0002, the enhanced test used `34.143.77.2` with a
+36,299 ms DNS cache age. Socket creation and nonblocking configuration
+succeeded; connect reported in progress. Poll returned zero events after
+15,000 ms; SO_ERROR retrieval succeeded with zero while the connection remained
+pending. TCP timed out, TLS was not tested, and no HTTP was sent. This exact
+IPv4 also accepted TCP and verified TLS from the Mac. No production fix is
+established.
+
+The follow-up diagnostic adds the destination port, read-only `AT+CGACT?`
+and `AT+CGPADDR=0` observations, modem data-enabled state, and a native Nordic
+socket/poll comparison against the same endpoint. It does not configure APNs
+or SIM state. Each TCP path receives 15 seconds, so this diagnostic may run
+beyond the normal LED failure indication. Follow-up artifact uses the same
+source lineage, board and build configuration: 535,248 bytes, SHA-256
+`3b6583158fcb4f300a9a147e346cb5720218b4efc1f040fd068e9e04eec4f483`
+at `/tmp/fairway-connect-diag-build/merged.hex`. Build/link checks passed.
+The physical comparison used `34.143.73.2:443` with a 30,517 ms cache age.
+Modem data was enabled, the default context was active, and an IPv4 address
+was assigned. Zephyr TCP completed successfully in 12,199 ms; native modem TCP
+completed in 6,760 ms; verified TLS completed in 13,040 ms. Poll indicated
+write readiness and SO_ERROR was zero for all successful connections. No HTTP
+request was sent. Connectivity and verified TLS are demonstrably possible;
+earlier 15-second TCP timeouts remain observed, so success is not a reliability
+claim. Setup latency is material against the unchanged 15-second product
+budget. A matched real-POST acceptance test and any product timing decision
+remain pending at that diagnostic checkpoint.
+
+After explicit restore/test authorization, FRB-0002 was restored to the exact
+matched minimal artifact `/tmp/fairway-golfer-demand-window-minimal-build/merged.hex`,
+SHA-256 `1dfbd5cbf981418c7ca1e3028ff3da023be7259447a871fa60b3c496c4078946`,
+with normal programming and reset. It is no longer on the no-POST diagnostic.
+The real request started at device uptime 59.005 s. The first DNS readiness
+wait timed out after three seconds; the retry obtained an address and began
+TLS connect at 64.597 s. The original 15-second deadline expired at 74.005 s
+before connection or any HTTP send. DNS/retry therefore consumed approximately
+5.6 seconds, leaving approximately 9.4 seconds for TLS and the HTTP exchange.
+Separate diagnostics established possible TLS completion in 13.0 seconds,
+not guaranteed completion within the original transaction deadline. No
+backend rejection or successful real request was observed. Receiver log
+verification was blocked by expired CLI authentication requiring interactive
+reauthentication. A longer diagnostic transaction budget requires explicit
+CPO approval; the product budget remains unchanged and no production fix is
+claimed.
+
+The CPO subsequently authorized a temporary 60-second real-POST diagnostic
+build, flash, and one physical test. This is not acceptance of a changed
+shipping deadline. The test disables preliminary TCP/native probes and uses
+the matched minimal authenticated request/response path, with timing markers.
+Artifact `/tmp/fairway-connect-diag-build/merged.hex`, 531,196 bytes, SHA-256
+`8f4ff13000f78dc2abddf75f7f6ca59f1eb0b44b9d4d29e288d09dc9f446ec42`,
+uses the same NCS/toolchain/board configuration. Build/link and source checks
+passed. After CPO-completed CLI reauthentication, the authorized physical test
+succeeded. A prior attach was rejected with EMM cause 11, then roaming
+registration succeeded. This observation is not a diagnosed cause of the
+earlier TCP timeouts.
+
+The real request began at uptime 230.649 s, verified TLS connected in 2,547 ms,
+273 request bytes were sent, HTTP 200 was received, and firmware entered
+STATE_SUCCESS at 235.871 s (approximately 5.22 seconds after the press), then
+STATE_IDLE. Receiver revision `fairway-button-receiver-00023-dff` recorded the
+POST at `2026-10-07T00:54:01.927494Z` and persisted request
+`t0SxgELtdn4DuM3AUOFz` for FRB-0002, CUST-0001, COURSE-0001. A read-only
+Firestore check confirmed status `new`, event `button_press`, and a 90,000 ms
+policy snapshot; the live nested Tony Lema Course likewise read 90,000 ms.
+The diagnostic did not change Course configuration. Subsequent active-window
+COMPLETE polls also returned HTTP 200.
+
+This establishes authenticated device-to-backend acceptance and compatible
+response parsing for one real request. It does not establish that the
+temporary 60-second budget caused success: this transaction completed within
+the original 15 seconds, while earlier transactions exhausted that deadline.
+Variable DNS/connection latency and the extra post-rearm button event remain
+unresolved. FRB-0002 remains on the explicitly authorized 60-second test image;
+shipping-deadline acceptance and a production reliability fix are not claimed.
+
+Follow-up green-output diagnostic image: `/tmp/fairway-connect-diag-build/merged.hex`,
+531,686 bytes, SHA-256
+`72f1db69af5b7cb425807a29b223ad3a6f1249b89e8ed075a7f8f2c6a3396480`.
+Built from the same isolated source/configuration, with only diagnostic logging
+added around green `gpio_pin_set()` calls and immediate `gpio_pin_get()` levels;
+feedback timing, request budget, and HTTP behavior are unchanged. Build/link,
+embedded marker, and source checks passed. One physical request succeeded;
+`STATE_SUCCESS` followed by green set/off calls whose `gpio_pin_set()` results
+were all zero. All `gpio_pin_get()` results were zero. Nordic's nrfx driver
+confirms this API reads the GPIO input register, not its output latch; that
+observation alone does not prove whether P0.29's output latch was set. The
+device was observed by the CPO to show no green indication.
+
+The next diagnostic build adds `nrf_gpio_pin_out_read()` alongside the input
+read and connects P0.29's input buffer while retaining output mode. This lets
+`gpio_pin_get()` sample the pad during the same unchanged green feedback
+sequence. Artifact `/tmp/fairway-connect-diag-build/merged.hex`, 531,936 bytes,
+SHA-256
+`81596831e0427cf50ccb1c2c89f12194c74fe907dafc561dcc2dcdcf2223fa7b`.
+Build/link and source checks passed. On the physical test at device uptime
+24.194 s, HTTP 200 led to STATE_SUCCESS and the green feedback routine. For
+each green pulse and the five-second hold, `gpio_pin_set()` returned 0, the
+output latch read 1, and the input-connected pad read 1; after each clear,
+both read 0. The CPO observed no visible green. Receiver revision
+`fairway-button-receiver-00023-dff` accepted the corresponding POST at
+`2026-10-07T01:30:36.737364Z`, persisting request `N0hPQcNGIYxNTwpxPLnY` for
+FRB-0002; subsequent COMPLETE polling returned 200. This proves the firmware
+commanded and electrically read a high P0.29 pad during the expected green
+interval. The remaining discrepancy is downstream of the MCU pad or in the
+visual observation; this evidence does not identify the specific transistor,
+indicator, rail, or interconnect. The image remains temporary and is not a
+production firmware generation.
 
 Firmware Generation Registry
 ----------------------------
+
+**Fairway Refresh Stable Pilot Baseline 1.0** (CPO designation, 2026-10-10)
+selects the existing Embarrassingly Small Runtime firmware at `6a19f83`, not
+the later undeployed Course-configurable demand-window candidate or temporary
+diagnostic images. Firmware/application and board trees at `8686eeb` and
+`9775842` are identical to `6a19f83`; the receiver tree at `8686eeb` is the
+verified production pairing, as recorded in `docs/DEPLOYMENT_GUIDE.md`.
+The FRB-0003 record below supplies its device-specific artifact and operational
+validation scope. The product-baseline name does not create a firmware generation
+or extend that scope to endurance, power/autonomy, COMPLETE/repeat-window, or
+five-device fleet validation.
+
+FRB-0003 / Prototype 3.3 operational validation — 2026-10-09:
+device-specific build of the accepted Embarrassingly Small Runtime source
+`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`, using NCS 3.1.1, Nordic toolchain
+`561dce9adf`, board `circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`.
+The unique FRB-0003 credential was supplied only through its ignored isolated
+header; provisioning/SIM and deployment evidence is owned by
+`docs/DEVICE_PROVISIONING_GUIDE.md`. Artifact
+`/tmp/fairway-frb3-embarrassingly-small-build/merged.hex`, 530,008 bytes,
+SHA-256 `acf4d33ab36a59543f7ac2b2c9626d21ca9fb4a13c45da8b6ecc8e2ba53a2b56`,
+was programmed normally with probe-rs, inline readback verification, and one
+normal reset, without erase-all. UART established boot/idle-ready and modem
+initialization; cellular connectivity and normal button/LED operation were
+subsequently confirmed by the CPO. Physical LED wiring/polarity corrections
+required no firmware changes. After deployment/assignment through the web app,
+the CPO confirmed successful end-to-end requests appearing in the cart operator
+UI. Prototype 3.3 is a hardware/operational milestone using this existing
+firmware generation, not a new firmware generation. This does not establish
+endurance, PPK2 consumption, battery/solar autonomy, five-device fleet validation,
+or new FRB-0003 COMPLETE/repeat-window validation.
+
+FRB-0001 firmware rebuild — 2026-10-06: device-specific build of the exact
+currently working FRB-0002 isolated source/configuration. Source base commit
+`9775842aebfc5c5ec1cb15ede7329aa58f1709fe`; source tree copied from
+`/tmp/fairway-golfer-demand-window-minimal` and verified byte-identical to that
+FRB-0002 source tree except `src/secrets/fairway_device_key.h`. NCS v3.1.1,
+Nordic toolchain bundle `561dce9adf`, West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, `prj_a.conf`, and the same
+`DEBUG_THREAD_INFO` CMake settings. The unchanged 60,000 ms transaction budget
+and current UART/GPIO diagnostics are inherited exactly. The authorized
+`replaceDeviceCredential` primitive replaced only FRB-0001's credential
+verifier and `updated_at`; the one-time credential was captured only in the
+ignored isolated header, and local verification matched the new Firestore
+verifier without exposing the plaintext. Artifact
+`/tmp/fairway-frb1-build/merged.hex`, 531,934 bytes, SHA-256
+`a25b7936b128eff366fc57b16944cbea4654c9cf7e17504d58d7bba6baeba519`.
+Build and identity/configuration checks passed. Before flash, probe-rs confirmed
+the Memory AP inaccessible; the authorized `recovery --unlock-only` succeeded
+on attempt 2/3. The artifact flashed with inline readback verification and one
+normal reset. UART confirms the image reached idle-ready, the stored modem CA
+was present and matched, and the unchanged 60-second budget was compiled in.
+LTE registration currently reports status 4 (unknown), not registered; no
+post-flash button press was made. FRB-0001 is ready for physical/LED checks,
+but backend acceptance testing should wait until LTE registers.
+
 The current pilot firmware lineage is recorded against exact Git provenance and validated artifact records.
 
 | Firmware generation | Source commit | Checkpoint / artifact | Validation date | Status | Baseline |
@@ -84,24 +283,24 @@ Debounce and duplicate behavior
 
 Power and sleep strategy
 ------------------------
-- CURRENT VALIDATED STATE
-- Application CPU: while IDLE, the application blocks indefinitely waiting for a button event. The nRF9151 application Cortex-M33 reaches the Zephyr idle path and uses WFI (Wait For Interrupt). Conceptually, the current path is `running -> WFI -> interrupt -> resume execution`. WFI preserves the application execution context and supports the current Fairway button-wake architecture. This is not a separate deep Zephyr system-power state: generic Zephyr system PM / `CONFIG_PM` is not enabled as a deeper resume-in-place CPU state, and prior target-specific investigation did not establish another deeper resume-in-place CPU/system state for this nRF9151 target beyond WFI.
-- Cellular modem: the application requests LTE PSM after modem initialization and before LTE connection, using modem/network-default RPTAU (`-1`) and zero-second RAT (`0`). Automatic Kconfig PSM requesting is disabled so the runtime request is the single application authority. PSM is validated current behavior on Prototype 1.0: the network granted a validated TAU of `11,160 s` with active time `0 s`; the modem entered sleep after registration, button/request activity caused modem sleep exit, the HTTPS request completed successfully, and the modem subsequently re-entered sleep. An earlier `13,800 s` grant is historical and is not the latest validated observation.
+- Current Prototype 3.3 field power continuously asserts nPM1300 VBUS. Tracked `samples/fairway_power_sandbox/src/power_policy.c` reads PMIC VBUS presence at boot and on events; it does not independently detect a USB host. Consequently V75 field operation uses the existing service-awake policy: BUCK2 enabled, Errata-36 awake keeper active, and modem PSM requested off. `modem_service.c` applies `lte_lc_psm_req(false)` after initialization when that VBUS hold is active. The CPO accepts this unchanged behavior for the initial pilot because FRB-0003 operates successfully; it is not a policy optimized for Prototype 3.3. Consumption and autonomy remain unmeasured; deferred work is owned by `docs/feature_backlog.md`.
+- Application CPU: while IDLE, the main thread blocks indefinitely waiting for a button event. When VBUS and interaction awake holds are absent, the nRF9151 application Cortex-M33 can reach Zephyr idle/WFI (Wait For Interrupt). With continuous 3.3 VBUS, the keeper prevents that idle path. WFI preserves the application execution context and supports the existing button-wake architecture. Generic Zephyr system PM / `CONFIG_PM` is not enabled as a deeper resume-in-place CPU state; prior target-specific investigation did not establish a deeper resume-in-place state for this target beyond WFI.
+- Cellular modem: with VBUS absent, the application requests LTE PSM after modem initialization and before LTE connection, using modem/network-default RPTAU (`-1`) and zero-second RAT (`0`); with VBUS present it requests PSM off. Automatic Kconfig PSM requesting is disabled so runtime is the single authority. Historical Prototype 1.0 PSM validation granted TAU `11,160 s` with active time `0 s`: registration, button/HTTPS activity, and modem sleep exit/re-entry succeeded. The earlier `13,800 s` grant remains historical; neither observation is a Prototype 3.3 power measurement.
 - Wake-for-button events triggers the transmit sequence; firmware aims to minimize modem-on time.
 - HTTPS handling retains the physically validated Prototype 3.2 single-send/single-receive behavior. HTTP 400, 401, 403, and 404 terminate retries; transport, TLS, timeout, malformed-response, and HTTP 5xx failures remain retryable within the attempt limit. DNS resolution runs only in `dns_resolver_thread`.
 - eDRX is intentionally disabled in the current low-power design. Build A explicitly sets `CONFIG_LTE_EDRX_REQ=n`; the generated image leaves `CONFIG_LTE_LC_EDRX_MODULE` unset, and the application calls no eDRX API. PSM remains the intended modem idle mechanism because the current product does not require network-initiated reachability while sleeping. eDRX is not unsupported generally; it is simply not used by the current Fairway Refresh implementation.
 - Profile A deferred logging remains event-triggered through the existing logger thread rather than an application polling loop; UART logging remains enabled for startup, request, and troubleshooting events.
-- LTE modem PSM remains the modem low-power architecture and has already been runtime-validated. `CONFIG_LTE_LC_MODEM_SLEEP_MODULE` provides diagnostic modem-sleep notification visibility in temporary diagnostic builds; it is not the authority that enables PSM. The application PSM request remains `lte_lc_psm_param_set_seconds(-1, 0)` followed by `lte_lc_psm_req(true)`.
+- LTE modem PSM remains the VBUS-absent low-power architecture with historical runtime validation. `CONFIG_LTE_LC_MODEM_SLEEP_MODULE` supplies diagnostic visibility, not PSM authority. The application sets `lte_lc_psm_param_set_seconds(-1, 0)` and requests PSM according to VBUS presence; Prototype 3.3 holds the request off.
 - Device runtime PM: Phase 1 enables `CONFIG_PM_DEVICE` and `CONFIG_PM_DEVICE_RUNTIME` for UART0/UARTE0 runtime ownership. The existing UART console and log backend acquire UART0 for legitimate output and release it afterward; the installed UART driver suspends the UARTE and applies its sleep pinctrl state, then restores default pinctrl on resume. The Phase 1 whole-device idle result was `917.75 uA` over a representative stable window versus an approximately `1.40 mA` pre-change baseline, a material reduction of approximately `34.4%`. This whole-device A/B measurement does not attribute the entire reduction specifically to UART0.
 - Phase 2 adds explicit I2C2/TWIM2 runtime ownership. The Build A overlay suppresses `zephyr,pm-device-runtime-auto` for I2C2, and the installed TWIM transaction path acquires runtime PM before each I2C transfer and releases it afterward. The Phase 2 whole-device idle result was `901.12 uA`, only `16.63 uA` or approximately `1.8%` below Phase 1. This is classified as no material additional idle reduction; the small difference is not attributed necessarily to I2C2 rather than measurement variation.
 - GPIO/GPIOTE remains active as the required physical button wake resource. The button ISR contains no UART or PM work, and the wake diagnostic log is emitted from the awakened main-thread path. Kernel timing/clocks and GPIO/GPIOTE are required infrastructure rather than ordinary peripherals to suspend.
-- Current idle power model: `CPU -> WFI`; `modem -> LTE PSM`; `UART0 -> runtime PM`; `I2C2 -> runtime PM`; `GPIO/GPIOTE -> retained button wake resource`.
+- VBUS-absent idle model: `CPU -> WFI`; `modem -> LTE PSM`; `UART0 -> runtime PM`; `I2C2 -> runtime PM`; `GPIO/GPIOTE -> retained button wake resource`. Prototype 3.3 VBUS-present field operation instead keeps the CPU awake and PSM requested off; peripheral runtime-PM ownership is unchanged.
 - The Phase 2 generated-build inventory found zero additional genuine application-side runtime-PM peripheral candidates. UART1-3, I2C0/1/3, the ADC/SAADC driver path, the SPI/external-flash application path, PWM, watchdog, USB application stack, and the LIS2DH sensor driver path are inactive or disabled in Build A. The nPM1300 PMIC remains part of the board power tree, and the modem/application interface remains required for LTE/PSM operation; neither is treated as an ordinary suspendable application peripheral.
-- The current production whole-device dormant state disables nPM1300 BUCK2 when VBUS is absent. BUCK2 powers the RP2040 USB/debug service domain; BUCK1 remains the always-on application +3V3 rail and is not changed by the policy. At boot, firmware reads the nPM1300 charger VBUS-present state and retains BUCK2 for USB/VBUS service mode or disables it for field mode. The nPM1300 VBUS event path keeps that policy synchronized with later VBUS state changes.
-- The accepted Fairway operating and measurement boundary is PPK2 Source Measure mode at 5.0 V, 1 A range, 100 ksps, with primary AA batteries disconnected and Feather USB disconnected. This is a whole-device measurement boundary, not a direct measurement of an individual peripheral.
+- The existing policy disables nPM1300 BUCK2 when VBUS is absent and retains it when VBUS is present, including Prototype 3.3 field operation. BUCK2 powers the RP2040 USB/debug service domain; BUCK1 remains the always-on application +3V3 rail and is unchanged. Boot reads and subsequent PMIC VBUS events govern the policy, not field/service intent or independent USB-host detection.
+- The historical LP 1.2 measurement boundary was PPK2 Source Measure at 5.0 V, 1 A range, 100 ksps, with AA batteries and Feather USB disconnected. This whole-device result does not characterize Prototype 3.3; its actual idle/transaction consumption requires new PPK2 evidence.
 - In validated field mode at the accepted 5.0 V boundary, LP 1.2 production dormant current settled at approximately 23.25 uA, versus the approximately 23.5 uA LP 1.0 baseline; no field-power regression was demonstrated. Button wake, the normal LTE/HTTPS request sequence, LED feedback, and return to dormant current after the transaction were validated with BUCK2 disabled.
 - CPO-confirmed physical observation following the approved pilot-build 5580/MAX17048 + Adafruit 6106 power-architecture integration (see `docs/HARDWARE_BOM.md`): whole-device idle/dormant current increased by approximately an order of magnitude relative to the LP 1.2 ~23.25 uA baseline above. This is reported as current physical evidence only; the cause has not been investigated, no replacement dormant-current target is adopted here, and this is deferred, unresolved power-optimization work (see `docs/feature_backlog.md`), not corrected or diagnosed by the golfer-first firmware architecture in this document.
-- USB/VBUS-present service mode retains BUCK2 so the onboard USB/debug service domain remains powered. USB service mode and field-power mode are separate operating configurations.
+- VBUS presence retains BUCK2 so the onboard USB/debug service domain remains powered, including V75 field operation. USB development/service and V75 field supplies are physically mutually exclusive; the firmware's VBUS policy does not distinguish them.
 - I2C2 remains enabled because the board DTS instantiates the nPM1300 PMIC and LIS2DH on that bus. Fairway main.c performs no I2C2 transaction while waiting in STATE_IDLE. The nPM1300 MFD driver can submit work in response to its host-interrupt GPIO, and that work uses the normal I2C APIs. LIS2DH is present in devicetree but its sensor subsystem is not enabled in Build A, so it has no active trigger, polling, timer, or work path.
 
 USB/VBUS Service-Awake Behavior (Validated)
@@ -110,7 +309,7 @@ USB/VBUS Service-Awake Behavior (Validated)
 - Fairway firmware implements a dedicated service-awake keeper thread running at `K_LOWEST_APPLICATION_THREAD_PRIO`, the lowest application priority, strictly above the Zephyr idle thread. While USB/VBUS is present, this thread remains continuously runnable, which prevents Zephyr from selecting its idle thread and therefore prevents the application CPU from entering WFI/System-On-idle for as long as VBUS remains present. Every normal higher-priority Fairway, system-workqueue, and LTE/modem thread continues to preempt the keeper normally.
 - While USB/VBUS is present, modem PSM is withdrawn (`lte_lc_psm_req(false)`); while USB/VBUS is absent, PSM remains requested exactly as in the existing field policy described above.
 - BUCK2 continues to follow its existing VBUS-present-ON / VBUS-absent-OFF policy, unchanged by this behavior.
-- This is a service/development-mode behavior only. Field/dormant behavior when USB/VBUS is absent is unchanged: the CPU may enter WFI, the modem may use PSM, and BUCK2 follows the existing field policy described above.
+- This is a VBUS-dependent behavior, not independent USB-host detection. It also applies continuously to Prototype 3.3 V75 field power. When VBUS and interaction holds are absent, the CPU may enter WFI, the modem may use PSM, and BUCK2 is disabled. The Errata-36 rationale and earlier validation remain applicable evidence for the keeper; successful FRB-0003 operation does not establish optimized field consumption or universal debug-lock prevention.
 - Direct hardware validation (commit `c720f8069b514d28c97bf80c47b9e4b39399a0eb` on sprint branch `sprint/device-reliability`) confirmed: VBUS detected at boot, the keeper enabled, PSM withdrawn, normal STATE_IDLE reached with no false button/request event, and ordinary probe-rs access remained available after two separate approximately 5-minute USB-connected intervals with no recovery workaround required. This validates the prevention behavior across the tested interval; it does not establish multi-hour/day debug-session reliability, and it does not establish that every historical AP-access loss was caused by Errata 36.
 
 Device Health Diagnostics (Historical Validation, Runtime Retired)
@@ -124,11 +323,11 @@ Device Health Diagnostics (Historical Validation, Runtime Retired)
 Device Health Runtime (Retired)
 --------------------------------
 - Device Health acquisition, scheduled wake/reporting, authoritative-time scheduling, effective-config parsing, telemetry helper work, and background Health HTTP are retired.
-- Current application networking occurs only for an accepted golfer transaction and its correlated five-minute COMPLETE poll/ack lifecycle.
+- Stable-baseline application networking occurs only for an accepted golfer transaction and its correlated COMPLETE poll/ack lifecycle while the fixed five-minute demand window is active.
 
 FUTURE ARCHITECTURAL OPTION
 - A substantially deeper application-core power architecture could be investigated using nRF9151 System OFF / power-off behavior. Conceptually, the possible future path is `running -> System OFF -> wake event -> reset/reboot -> initialize -> resume Fairway service`.
-- System OFF is not approved for implementation. The current product architecture intentionally retains WFI/resume-in-place behavior: `running -> WFI -> button interrupt -> resume execution`.
+- System OFF is not approved for implementation. The architecture retains WFI/resume-in-place capability when awake holds are absent: `running -> WFI -> button interrupt -> resume execution`. Continuous Prototype 3.3 VBUS currently prevents WFI through the existing keeper.
 - System OFF must be evaluated experimentally before any design decision. Evaluation must include achievable current reduction, button wake capability, boot/wake latency, modem initialization and network-registration consequences, preservation or reconstruction of application state, request responsiveness, reliability, recovery behavior, and the energy cost of reboot/reinitialization versus idle savings. System OFF must not be assumed to improve overall battery life before measurement.
 
 Planned Enhancements / Feature Backlog
@@ -138,10 +337,10 @@ This section owns firmware implementation backlog only. Product-level planning i
 - Watchdog timer and reset-reason logging.
 - Battery-under-load characterization and safe-transmit thresholds.
 - Explicit LTE reconnect strategy with bounded retry/backoff behavior.
-- Explicit power-optimization audit, including investigation of the CPO-observed
-  whole-device idle-power regression reported after 5580/6106 power-architecture
-  integration (approximately an order of magnitude versus the LP 1.2 ~23.25 uA
-  baseline); cause not yet diagnosed, no replacement target adopted.
+- Measure Prototype 3.3 idle/transaction consumption and battery/solar autonomy
+  before deciding whether optimization is necessary. Future policy/SDK work and
+  the unresolved historical 5580/6106 idle regression retain their scope and
+  priority in `docs/feature_backlog.md`; no replacement current target is adopted.
 
 Engineering rationale
 --------------------

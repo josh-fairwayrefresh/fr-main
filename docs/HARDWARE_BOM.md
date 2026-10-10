@@ -2,19 +2,36 @@
 
 This document records the hardware installed in the Fairway Refresh prototype across physical hardware generations.
 
+## Prototype 3.3 — Current Pilot Hardware (FRB-0003)
+
+The CPO confirmed successful operation of FRB-0003 on Prototype 3.3 on
+2026-10-09. The field-power component is a **Voltaic V75**, using its USB-A
+output instead of the earlier LiPo/5580/6106 field-power chain. The Feather
+JST battery connector and J1/1 VBAT are unused in this configuration.
+Wiring, mutually exclusive field/service configurations, and the voltage
+qualification are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+The Feather, cellular antenna/SIM, Perma-Proto, PV8 button, and three-indicator
+component identities remain as recorded in the 3.2 BOM below; its legacy
+power/battery-health components are not the current 3.3 field-power BOM.
+Exact V75 variant/capacity specifications, solar charging hardware/interconnect details, and batch-wide
+physical layout are not established by this validation record. Functional
+success does not establish endurance, power consumption, solar autonomy, or
+five-device fleet validation.
+
 ## Prototype 1.1 — Solar Power Integration (Reference-Device Generation)
 
 Prototype 1.1 replaced the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture on the reference device. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
-## Monarch Bay Pilot --- Final Hardware Architecture (Approved, v3.2 Pilot Ready)
+## Monarch Bay Pilot --- Historical Approved v3.2 Hardware Architecture
 
-This is the CPO-approved final hardware architecture and Bill of Materials for
+This records the CPO-approved hardware architecture and Bill of Materials for
 the Monarch Bay Pilot build ("Prototype Bill of Materials (v3.2 Pilot Ready)",
 approved 2026-09-29). "Final" applies to the Monarch Bay Pilot configuration
 specifically; it does not freeze Fairway Refresh hardware for all future
 builds. This supersedes the prior direct `5580 GND → J2/4` wiring and the
-PV4 + 220 Ω LED-resistor circuit as the active new-build hardware for this
-pilot. It is the engineering basis for the Monarch Bay Pilot build batch and
+PV4 + 220 Ω LED-resistor circuit as the new-build hardware at that milestone.
+Its power path is superseded by Prototype 3.3; shared button/indicator parts remain applicable. It was the engineering basis for the Monarch Bay Pilot build batch and
 is not a statement that the current reference device is already wired in
 this exact arrangement; that device's own history remains recorded
 separately below.
@@ -90,7 +107,7 @@ The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to
 | Base pull-down resistor | Not specified | 100 kΩ, 1/4 W, ±1% | Not specified | Qty 3. Each transistor base to common GND. |
 | Indicator terminal block | DIANN | 12-position, 2.54 mm / 0.1 in pitch, 26-18 AWG | Not specified | Six of twelve positions used for the three indicators; see `docs/HARDWARE_ASSEMBLY_GUIDE.md`. |
 
-The canonical engineering BOM basis is the approved pilot-build configuration above. Inventory quantities, procurement status, and cost are intentionally not duplicated in canonical engineering truth unless a BOM owner requires those fields.
+The table preserves the approved 3.2 BOM basis; the current 3.3 field-power component is specified above. Inventory quantities, procurement status, and cost are intentionally not duplicated in canonical engineering truth unless a BOM owner requires those fields.
 
 **Removed from the final architecture:** the Adafruit 1131 battery/board disconnect (present historically on the reference device, see below) is not part of the Monarch Bay Pilot final BOM and must not be treated as an active pilot component.
 

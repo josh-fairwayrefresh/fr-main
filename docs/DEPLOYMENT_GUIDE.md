@@ -22,7 +22,7 @@ The documented deployment architecture consists of:
 - A Firestore document-created Eventarc trigger that invokes a dedicated Web
   Push sender for authorized course subscriptions.
 
-Current Device API scope is `button_press` plus correlated COMPLETE poll/ack. Device Health ingestion, schedules, history, Admin display, and background firmware reporting are retired. Historical deployment records later in this guide document earlier validated revisions and must not be interpreted as current API/configuration requirements. Voltaic/Prototype 3.3 is outside the current sprint.
+Current Device API scope is `button_press` plus correlated COMPLETE poll/ack. Device Health ingestion, schedules, history, Admin display, and background firmware reporting are retired. Historical deployment records later in this guide document earlier validated revisions and must not be interpreted as current API/configuration requirements. FRB-0003 Prototype 3.3 operational validation is recorded in `docs/DEVICE_PROVISIONING_GUIDE.md`; it introduces no backend deployment or API change.
 
 Context references:
 
@@ -122,7 +122,7 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Validated Admin Revision | `fairway-admin-00007-znz` (100% traffic) |
+| Current Restored Admin Revision | `fairway-admin-00008-sjt` (100% traffic as of 2026-10-06) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user` only |
@@ -172,7 +172,89 @@ read-only verified hardware/firmware identity, and Device-to-SIM export.
 Hardware revision and firmware generation start unknown at provisioning and may
 be established only by controlled verified provenance. Neither field can be
 changed through an administrative metadata route. No Health placeholder or
-history/schedule control is current UI.
+history/schedule control is part of the current product/source scope. The
+restored production artifact described below is an older retained UI build and
+its inclusion of Health history is a deployment/source divergence, not a change
+to that product decision.
+
+### Restored Matched Stable Deployment — 2026-10-06
+
+Following rejection of the unvalidated firmware transport candidate, production
+Admin and Hosting were restored to the retained 2026-10-01 stable revisions that
+were current before the 2026-10-06 Admin/Hosting redeployments. Firestore was not
+modified. The restored UI again reads the persisted FRB-0002
+`device_health`-provenance identity, commissioning metadata, and the existing
+Device health-history endpoint. The receiver was not rolled back; it remains on
+the accepted `9775842`-matched backend revision with additive COMPLETE
+correlation logging.
+
+Deployment/source divergence requiring Architect review: the restored Oct 1
+Admin API and Hosting artifacts predate the `0daf02d` Health-retirement source
+checkpoint and include the legacy Health-history read surface. The
+firmware/backlog source-of-truth describes Health Admin surfaces as retired.
+This exact retained deployment was restored under the CPO's rollback direction
+to recover FRB-0002 identity and operational metadata reads; that restoration is
+not, by itself, a product decision to re-adopt the broader Health Admin scope.
+Do not redeploy a different Admin/Hosting source or revise the Health product
+scope silently to resolve this divergence.
+
+| Surface | Restored/current production identity | Provenance |
+|---------|---------------------------------------|------------|
+| Receiver | `fairway-button-receiver-00022-wxk`, 100% traffic | Image SHA-256 `535fe5e874dbc0a4aefc95981b35073b49a68fd4b21069e6fa7dc3fbb77dd8cf`; Cloud Build `6a448151-0523-4009-a1a1-f6ebe33967fe`; logging-only COMPLETE correlation deployment described below. Source change is committed as `8686eeb`; the 2026-10-06 deployment immediately preceded that commit. |
+| Admin API | `fairway-admin-00008-sjt`, 100% traffic | Retained Oct 1 image SHA-256 `d1341c1dc6ccd9b9542f90df4ecbfb57524310bad42b6c014d3cb1606ed199f2`; Cloud Build `b9620a32-2c87-4791-b9a2-d89957fef0d0`. No source commit is asserted because the retained revision provenance records its Cloud Build source archive, not a verified Git SHA. |
+| Firebase Hosting live | Version `23488f2b47f307e0` | Exact retained immutable Oct 1 version, restored by a Firebase Hosting rollback release on 2026-10-06. It serves `assets/index-DXzzUJ_N.js`, SHA-256 `e7b45ecd4b8b495a63951fafa5c86e4dbb21ee94f5c12d95e294c304d17e47ea`. |
+
+The 2026-10-06 current pre-rollback identities and source archive/image
+references were saved locally, redacted of environment values, at
+`/tmp/fairway-rollback-deployment-provenance.json` to preserve undo context.
+FRB-0002 identity fields (`hardware_revision`, `firmware_generation`,
+`system_identity`), commissioning metadata, device `health_history`, and Course
+`service_events` were verified present before restoration; none were changed.
+
+### Stable Pilot Baseline 1.0 — Verified Receiver Correspondence
+
+Read-only production/Git verification on 2026-10-10 established the receiver
+component of **Fairway Refresh Stable Pilot Baseline 1.0**:
+
+- Production traffic is 100% on `fairway-button-receiver-00022-wxk`; latest-ready `00023-dff` receives no traffic. Existing FRB-0003 activity is recorded on `00022-wxk`.
+- Revision annotations identify Cloud Build `6a448151-0523-4009-a1a1-f6ebe33967fe`; its successful output matches the serving image digest `535fe5e874dbc0a4aefc95981b35073b49a68fd4b21069e6fa7dc3fbb77dd8cf` recorded above.
+- The revision pins source archive `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-button-receiver/1791276191.783936-5af0e81b6f4f4957867829a308b0db45.zip#1791276191998024`, SHA-256 `63adb75dbf293772cfc211a1e06345276aeb2a1314f55c7a37d0373e06a51f40`. All 29 packaged files match `8686eeb:fairway_backend/cloudrun_receiver` byte-for-byte, with no extras; only tracked `.gcloudignore` is omitted from the archive. `9775842` has the same backend tree.
+- The baseline pairs that receiver with accepted `6a19f83` firmware and CPO-confirmed Prototype 3.3 / FRB-0003 operation. Naming it is not a new deployment. Receiver correlation logging is retained; later undeployed demand-window source introduced in `62a2122` is excluded from the baseline.
+
+This verifies receiver source correspondence only. The restored Admin/Hosting
+source-equivalence and Health-surface divergence described above remain
+unresolved; neither receiver verification nor successful cart UI receipt proves
+their source trees equal the baseline repository. Do not silently substitute
+Admin/Hosting versions or change production to reconcile that distinction.
+
+### Backend Release Register — Device Firmware Compatibility
+
+This register maps production `fairway-button-receiver` revisions to firmware
+compatibility evidence. It does not register Admin or Hosting releases, which do
+not define the Device wire protocol. Firmware source, build configuration, and
+artifact provenance remain owned by the Firmware Generation Registry in
+`docs/FIRMWARE_SPECIFICATION.md`.
+
+Compatibility status is evidence-based: **Proven operational** requires a
+matched firmware generation and successful end-to-end Device request evidence;
+**Partial / historical** applies only to the specifically verified API path;
+**Observed diagnostic only** is not product acceptance; **Unverified** means
+the existing release record does not identify a matched firmware artifact or
+end-to-end outcome. Revision traffic/readiness alone is not compatibility proof.
+
+| Receiver revision | Release record | Firmware pairing evidence | Compatibility status |
+|---|---|---|---|
+| `fairway-button-receiver-00009-c5j` | WP3 production validation; healthy at 100% traffic. Exact image/build provenance is not in the current record. | FRB-0001 per-device-authenticated request acceptance is recorded in `docs/DEVICE_PROVISIONING_GUIDE.md`, but the exact firmware artifact is not linked to this revision. | **Unverified exact pairing**; functional request evidence exists, but the firmware/revision mapping is not traceable. |
+| `fairway-button-receiver-00013-zhj` | Original WP5 rollout-validation checkpoint; exact image digest/source is not recorded here. | The WP5 checklist records backend/admin route and authorization tests, not a specific physical firmware artifact paired with this revision. | **Unverified**. |
+| `fairway-button-receiver-00016-djx` | WP5 system-metadata deployment record; full image/source provenance is not recorded here. | The same closeout records FRB-0002 system-identity firmware and an authenticated Device Health update. | **Partial / historical**: Device Health compatibility was observed for that exchange; Device Health is retired and this does not prove the current button/COMPLETE contract. |
+| `fairway-button-receiver-00019-c8h` | Option C service-schedule production rollout; exact image/source provenance is not recorded here. | No exact physical firmware artifact or end-to-end Device result is paired with this revision in the deployment record. | **Unverified**. |
+| `fairway-button-receiver-00022-wxk` | Stable Pilot Baseline 1.0 receiver, 100% traffic; byte-for-byte archive/Git, image, and build verification is recorded above. The change from its predecessor is logging-only with no response-shape change. | Receiver tree `8686eeb` (also identical at `9775842`) paired with accepted `6a19f83` firmware. FRB-0003 button/LED and cart UI receipt are CPO-confirmed; earlier COMPLETE evidence retains its original device/context in `docs/FIRMWARE_SPECIFICATION.md`. | **Proven operational** for the designated baseline; not new FRB-0003 COMPLETE or endurance/power/fleet validation. |
+| `fairway-button-receiver-00023-dff` | Later diagnostic revision; image/source provenance is not recorded in this deployment guide. | One authenticated FRB-0002 request and subsequent COMPLETE polls succeeded with a temporary diagnostic firmware image; the event is recorded in `docs/FIRMWARE_SPECIFICATION.md`. | **Observed diagnostic only**; not an accepted operational firmware pairing and superseded by the rollback to `00022-wxk`. |
+
+For each new receiver release evaluated for operational compatibility, record
+its immutable revision, firmware generation under test, validation scope,
+evidence reference, and compatibility determination. Reference existing
+release and firmware provenance rather than duplicating it.
 
 ### Historical WP5 System-Metadata Deployment Record
 
@@ -298,6 +380,38 @@ Firmware deployment procedures are owned by this document.
 
 Firmware implementation is owned by docs/FIRMWARE_SPECIFICATION.md.
 
+### Course-Configured Golfer Demand Window Rollout
+
+The `sprint/modular-golfer-demand-window` candidate is implemented and passed
+automated validation at the legacy 300,000 ms behavior. It has not been
+deployed, flashed, or physically validated. Production Course configuration,
+Firestore documents, and services remain unchanged. Do not treat the candidate
+as the deployed product until the Architect/CPO separately authorizes rollout.
+
+Roll out a matched candidate backend and firmware in this order:
+
+1. Deploy the backend first. It accepts the legacy firmware's additive-response
+  contract because the accepted `9775842` parser requires `request_id` and
+  ignores unknown response fields. Course-less request acceptance likewise
+  uses the one backend-owned 300,000 ms fallback.
+2. After backend health and compatibility validation, flash the matching new
+  firmware. New firmware requires the new acceptance contract and is not
+  compatible with the old backend response.
+3. Validate matched backend/firmware behavior with Courses effectively at
+  300,000 ms before changing any Course configuration.
+4. Only after physical validation, the CPO may set the Course value to 60
+  seconds in Admin. That value is not encoded in runtime source.
+
+Rollback is reverse dependency order: restore old firmware first, then restore
+the old backend. Do not roll back the backend while new firmware remains in the
+field because its acceptance response lacks the required policy contract.
+Existing request documents retain their snapshotted policy and absolute expiry.
+The temporary legacy fallback may be removed only after active Courses have
+explicit values, active request-producing devices are assigned, and legacy
+open requests without policy snapshots have expired. Removal must not silently
+change the accepted Course-less behavior; that later product transition needs
+separate authorization.
+
 ### Authorization Control
 
 Fairway firmware work follows this authorization sequence:
@@ -382,7 +496,7 @@ The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tr
 
 ### Flash Procedure
 
-The current Fairway programming path is probe-rs. In USB/debug/service mode, USB is connected and PPK2 is disconnected, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+The current Fairway programming path is probe-rs. In USB/debug/service mode, disconnect V75 field power and PPK2 before connecting Feather USB. Prototype 3.3 field and USB development/service configurations are mutually exclusive, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
 After separate CPO authorization to flash, program the verified Intel HEX artifact:
 
@@ -404,7 +518,7 @@ After separate CPO authorization for runtime/manual testing, perform only the va
 
 For the validated field/measurement path:
 
-1. Disconnect USB and use PPK2 or an approved 5.0 V field supply, with the mutually exclusive power modes defined in `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+1. Disconnect Feather USB before connecting the installed generation's approved field supply; Prototype 3.3 uses V75 through VBUS. PPK2 consumption characterization remains deferred and must isolate other supplies. Follow `docs/HARDWARE_ASSEMBLY_GUIDE.md`; do not treat the historical VBAT measurement boundary as a 3.3 result.
 2. Cold-boot the approved production image.
 3. Confirm expected startup and dormant behavior described by `docs/FIRMWARE_SPECIFICATION.md` and `docs/UX_SPECIFICATION.md`.
 4. Press the Fairway button once.
@@ -423,7 +537,7 @@ A bounded investigation into a separate field→USB debug-access gap (probe-rs a
 
 Direct CPO-confirmed physical validation established a non-destructive response to this specific condition, validated on a second tested instance during the WP4 physical-validation campaign in addition to the original tested instance:
 
-1. Connect USB using the existing safe power-isolation procedure (isolate the 6106 positive output from Feather VBAT/J4 before connecting USB; the solar/LiPo side may remain connected to the 6106).
+1. Connect USB using the installed generation's safe power-isolation procedure in `docs/HARDWARE_ASSEMBLY_GUIDE.md`: for Prototype 3.3, disconnect V75 field power first. For the earlier 6106/J4 architecture, isolate the 6106 positive output from Feather VBAT/J4; its solar/LiPo side may remain connected to the 6106.
 2. Attempt the normal `probe-rs` operation (for example `probe-rs reset --chip nRF9151_xxAA`).
 3. If the established AP/DRW access fault occurs (for example "Failed to read register DRW"), press the Circuit Dojo nRF9151 Feather physical RESET button once.
 4. Verify recovery using a non-resetting check rather than another reset, for example:

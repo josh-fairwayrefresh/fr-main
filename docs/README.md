@@ -61,9 +61,10 @@ Current:
 - `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
 
 Current-state notes:
-- Prototype 3.2 for Pilot is the current validated pilot firmware generation; exact source/artifact provenance and validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`.
+- **Fairway Refresh Stable Pilot Baseline 1.0** names the accepted existing system: `6a19f83` firmware, the `8686eeb` receiver tree verified against production `00022-wxk`, and CPO-confirmed Prototype 3.3 / FRB-0003 operation. The designation is owned by `docs/ENGINEERING_GUIDE.md`; receiver verification does not establish Admin/Hosting source equivalence.
+- Prototype 3.3 is the current CPO-confirmed pilot hardware/operational milestone on FRB-0003, using the accepted Embarrassingly Small Runtime firmware generation (`6a19f83`, NCS 3.1.1). Exact firmware provenance and validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`; hardware ownership remains with the BOM and assembly guide.
 - Prototype 1.2 remains the earlier validated Device Reliability Integration milestone and LP 1.2 remains the accepted dormant-power/NCS baseline; neither is the latest golfer-facing firmware generation.
-- One Monarch Bay Pilot instance (FRB-0002) has now been assembled and functionally validated with the 5580 battery-health path, onboard J4 VBAT/GND feed, PV8 button, and three-indicator system. Batch-wide physical placement and manufacturing validation remain TBD.
+- FRB-0003 operates from Voltaic V75 field power through VBUS and has CPO-confirmed button/LED and cart UI request operation. FRB-0002's earlier 3.2 J4 VBAT/GND validation remains historical evidence. Prototype 3.3 consumption, battery/solar autonomy, endurance, and five-device fleet validation remain outstanding.
 
 Planned during documentation migration:
 

@@ -3,7 +3,7 @@
 ## Document Status
 - Status: Draft
 - Version: 0.3
-- Last updated: 2026-09-30
+- Last updated: 2026-10-09
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
@@ -100,7 +100,7 @@ Prototype 1.1 is a physical hardware milestone. It is not a firmware generation 
 
 Prototype 1.1 replaces the historical Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed solar / LiPo / Adafruit 6106 field-power architecture. Installed components and part numbers are owned by `docs/HARDWARE_BOM.md`; physical wiring detail is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
-Current vendor evidence closure for the onboard JST power feed:
+Historical vendor evidence closure for the Prototype 1.1 / 3.2 onboard JST power feed:
 
 - Official Circuit Dojo nRF9151 Feather specifications state that battery input supports LiPoly or primary cell and the battery operating range is 2.8–5.5 V.
 - The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to net 4 `VBAT` and J4 pad 2 to net 1 `GND`.
@@ -111,14 +111,14 @@ Current vendor evidence closure for the onboard JST power feed:
 
 This evidence closes the previous direct vendor-evidence gate and authorizes the documented J4 VBAT/GND feed refinement to be described as a physical interconnect refinement to the same electrical domains, not as a separate VBUS-connected topology.
 
-The current approved pilot-build hardware architecture is distinct from the current reference device:
+The earlier approved 3.2 pilot-build hardware architecture was distinct from the Prototype 1.1 reference device (both retained as historical context):
 
 - Prototype 1.1 reference device: separate solar / LiPo / 6106 architecture with the historical AA power path removed and the physically validated field-power chain retained in the reference build.
-- Monarch Bay Pilot final architecture for new builds: LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT, with the Adafruit 6106 output establishing explicit Perma-Proto +5 V/GND distribution rails, an E-Switch PV8FWY0SS pushbutton, and a three-indicator (orange/green/red) driver circuit. This supersedes the prior direct `5580 GND → J2/4` wiring and the PV4 + 220 Ω LED-resistor circuit as the active new-build hardware. Full component selection is owned by `docs/HARDWARE_BOM.md` ("Monarch Bay Pilot --- Final Hardware Architecture"); full wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md` ("Monarch Bay Pilot --- Final Wiring Record"); neither is duplicated here.
-- The approved pilot-build power feed uses the existing regulated Fairway rail/common ground into the onboard JST J4 VBAT/GND domain using the Feather's official onboard connector path; J1/1 remains electrically VBAT and J2/4 remains electrically GND.
+- At the 3.2 milestone, new builds used LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT, Perma-Proto distribution rails, the PV8 button, and three-indicator drivers. The historical 3.2 BOM and wiring remain in `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`; the 3.3 power feed supersedes that path without rewriting its validation evidence.
+- The 3.2 pilot-build power feed used the regulated rail/common ground into onboard JST J4 VBAT/GND; J1/1 remains electrically VBAT and J2/4 remains electrically GND. Prototype 3.3 instead uses VBUS, as documented by the hardware owner.
 - Exact component placement, Perma-Proto geometry, battery mounting, connector orientation, and harness routing remain TBD.
 
-Prototype 1.1 remains the current hardware milestone. The CPO-approved pilot-build architecture is a separate engineering-state record for new builds and must not be described as already installed on the reference unit.
+Prototype 1.1 and the later 3.2 pilot-build architecture retain their original validation context; neither describes the current Prototype 3.3 field-power feed. The pilot-build record must not be retroactively described as installed on the earlier reference unit.
 
 The historical TMUX1101, MAX4544, switched-SAADC/divider, and legacy power-conditioning alternatives remain historical only and are not current alternatives.
 
@@ -166,9 +166,44 @@ Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing 
 
 ## Prototype 3.2 for Pilot — Working Button and Lights
 
-Prototype 3.2 is the current validated Monarch Bay Pilot hardware/UX baseline. The current runtime preserves its golfer-first bounded transaction, scoped-awake behavior, PV8/three-indicator UX, local five-minute demand window, exact COMPLETE lifecycle, PSM/WFI, and VBUS/BUCK2 policy while retiring Device Health and unrelated background networking. Exact implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`.
+Prototype 3.2 is the earlier validated Monarch Bay Pilot hardware/UX baseline. The accepted runtime preserves its golfer-first bounded transaction, scoped-awake behavior, PV8/three-indicator UX, local five-minute demand window, exact COMPLETE lifecycle, and VBUS-dependent power policy while retiring Device Health and unrelated background networking. Exact implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`; Prototype 3.3 field power does not use the historical VBUS-absent PSM/WFI state.
 
 CPO-confirmed physical validation on FRB-0002 established orange startup and unresolved-transaction pulsing, green success and green-only in-window repeat behavior, red terminal-failure feedback, button re-arm, operator-dashboard request creation, and post-expiry return to the normal orange transaction path. Stage B2 adds a request-correlated, device-initiated HTTPS COMPLETE mailbox and status-independent post-window backend request creation. Its backend and dashboard were deployed and validated, and corrected firmware with a dedicated 3,072-byte transaction-thread stack was built, flashed, and physically validated on FRB-0002: COMPLETE terminated the active demand window early and the next press created a fresh request before the five-minute fallback. Repeat-press transport/persistence remains deferred in `docs/feature_backlog.md`.
+
+## Fairway Refresh Stable Pilot Baseline 1.0
+
+The CPO designated **Fairway Refresh Stable Pilot Baseline 1.0** on 2026-10-10:
+Embarrassingly Small Runtime firmware at `6a19f83`, receiver source tree at
+`8686eeb` verified against production `fairway-button-receiver-00022-wxk`, and
+Prototype 3.3 hardware with successful FRB-0003 button/LED, cellular request,
+and cart operator UI receipt validation. This names the existing accepted
+system; it is not a new firmware generation or deployment.
+
+Firmware/artifact provenance remains owned by `docs/FIRMWARE_SPECIFICATION.md`;
+receiver source/build/image correspondence and unresolved Admin/Hosting source
+equivalence remain owned by `docs/DEPLOYMENT_GUIDE.md`. Later undeployed
+Course-configurable demand-window development is not part of this baseline.
+Endurance, consumption, battery/solar autonomy, and five-device fleet validation
+remain outstanding; deferred PPK2 and post-pilot NCS 3.4.0 / Errata-36 work is
+owned by `docs/feature_backlog.md`.
+
+### Prototype 3.3 Operational Validation
+
+On 2026-10-09 the CPO confirmed FRB-0003 operating successfully with Voltaic V75
+field power and the accepted Embarrassingly Small Runtime (`6a19f83`, NCS 3.1.1).
+Button/LED operation and requests in the cart operator UI succeeded after
+physical wiring corrections and web-app deployment/assignment, without firmware
+changes. This is one-device physical/operational validation, not a new firmware
+generation or completed endurance, consumption, solar/autonomy, or fleet validation.
+
+Current components and VBUS wiring/voltage qualification are owned by
+`docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`; exact firmware
+build/flash evidence and unchanged VBUS-dependent service-awake behavior are
+owned by `docs/FIRMWARE_SPECIFICATION.md`. Provisioning/deployment evidence is
+owned by `docs/DEVICE_PROVISIONING_GUIDE.md`. The CPO accepts the existing power
+policy for the initial pilot; PPK2 measurements, autonomy evaluation, and the
+post-field-deployment NCS 3.4.0 / Errata-36 reassessment remain deferred in
+`docs/feature_backlog.md`.
 
 ## Documentation Philosophy
 

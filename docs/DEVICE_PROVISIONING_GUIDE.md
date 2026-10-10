@@ -189,6 +189,14 @@ WP3 migration checkpoint (CPO-authorized bootstrap writes, before the subsequent
 - Device Health commissioning passed: `latest_health` is populated and matches the single `health_history` entry, with a server-owned `received_at`, establishing a completed authenticated Device Health exchange.
 - Hologram SIM activation succeeded end-to-end using the current firmware's existing configuration, which sets no explicit APN string, no explicit data-roaming flag, and no APN credentials (see `docs/FIRMWARE_SPECIFICATION.md`/`prj.conf`: only `CONFIG_PDN=y` is set). Explicit firmware APN configuration is therefore not currently established as a required provisioning step; modem/SIM default APN selection was sufficient for this device.
 
+### FRB-0003 — Prototype 3.3 Operational Validation (2026-10-09)
+
+- FRB-0003 was allocated through the canonical provisioning primitive with a unique per-device credential and SIM ICCID `89464278206108309287`. Credential-to-verifier and SIM association checks passed; the plaintext credential remained only in the ignored isolated build header. Provisioning initially created `in_inventory` with assignment fields unset.
+- Hologram activation and cellular connectivity were subsequently established. The CPO corrected physical LED wiring/polarity, including the green path, without changing firmware, and confirmed normal button/LED operation.
+- The initial absence of requests in the cart UI was resolved by deploying/assigning FRB-0003 through the web app Admin workflow. The CPO then confirmed successful end-to-end operation with requests visible in the cart operator UI. This is deployment/assignment evidence, not a change to the policy that inventory devices may communicate.
+- The exact accepted `6a19f83` / NCS 3.1.1 build and normal verified flash/reset without erase-all are recorded in `docs/FIRMWARE_SPECIFICATION.md`; Prototype 3.3 power wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+- This is CPO-confirmed physical/operational validation for one device, not completed endurance, power, solar/autonomy, or five-device fleet validation. The exact Customer/Course/location IDs and individual request IDs were not supplied in this confirmation; no operational record or commissioning/system-identity field was changed by documenting it.
+
 ### Additional Normalization Candidates
 
 Not changed in this migration; flagged for future CPO/Architect review:

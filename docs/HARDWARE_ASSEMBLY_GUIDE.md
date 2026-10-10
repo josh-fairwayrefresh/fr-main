@@ -1,14 +1,14 @@
-# Hardware Assembly & Wiring Guide — Prototype 1.0
+# Hardware Assembly & Wiring Guide — Fairway Refresh
 
 ## Purpose
 
-This document is the canonical physical assembly record for Fairway Refresh Prototype 1.0.
+This document owns current physical wiring and preserves earlier prototype assembly records.
 
 Its purpose is to preserve exactly how the first working prototype was physically assembled so that an identical unit can be reproduced in the future.
 
 This is not a manufacturing work instruction.
 
-The current physical hardware generation is Prototype 1.1, documented in a dedicated section near the end of this document. The Prototype 1.0 wiring record below remains a historical reference for the original AA-powered build and is not the current field-power architecture.
+Prototype 3.3 on FRB-0003 is the current CPO-confirmed pilot hardware milestone. Earlier AA, solar/LiPo/6106, and 3.2 J4 VBAT records below retain their original physical/validation context and are not the current field-power path.
 
 ---
 
@@ -38,15 +38,53 @@ Official Circuit Dojo current hardware evidence verifies the following:
 
 This means the new Fairway feed using the onboard JST J4 connector is a physical interconnect refinement to the same VBAT/GND electrical domains as J1/1 and J2/4. The direct official PCB source confirms the shared net relationship and therefore closes the previous vendor-evidence gate for the current design state.
 
-## Monarch Bay Pilot --- Final Hardware Architecture (Approved, v3.2 Pilot Ready)
+## Prototype 3.3 — Current Field Power and Service Isolation
+
+CPO-confirmed FRB-0003 field-power wiring (2026-10-09):
+
+| Connection | Purpose |
+|---|---|
+| Voltaic V75 USB-A positive output -> Perma-Proto +5 V rail -> Feather J1/3 VBUS | Field power through the nPM1300 VBUS input. |
+| Voltaic V75 USB-A ground -> Perma-Proto common GND rail -> Feather J2/4 GND | Common supply and circuit return. |
+| Feather JST battery connector (J4) and J1/1 VBAT | Unused; no field-power feed here. |
+
+The existing PV8 and orange/green/red driver wiring remains as specified below;
+their indicator positive leads use the +5 V rail and their returns use common
+GND. The previous 6106/J4 feed is not an alternative concurrent supply.
+
+**Mutually exclusive configurations:** disconnect V75 field power before
+connecting Feather USB for development/service; disconnect Feather USB before
+reconnecting V75 field power. Do not power the shared VBUS domain from both
+sources simultaneously. Future PPK2 measurements must likewise isolate other
+supplies and identify the actual Prototype 3.3 measurement boundary.
+
+The nPM1300 VBUS electrical operating range is **4.0-5.5 V** (Nordic nPM1300
+Product Specification, electrical specification). The CPO observed V75 output
+of approximately **5.3-5.4 V under load**. This is within that PMIC range but
+only approximately 0.1-0.2 V below its upper limit: it does not establish
+substantial upper-limit margin or bound transients/tolerance across conditions.
+Circuit Dojo's nominal USB supply guidance is a separate board/vendor
+requirement, not an expanded PMIC operating range. References:
+https://docs.nordicsemi.com/bundle/ps_npm1300/ and
+https://docs.circuitdojo.com/nrf9151-feather/specs.html.
+
+CPO-confirmed startup/button/indicator and end-to-end operation is recorded in
+`docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`.
+Initial LED failures were corrected physically through wiring/polarity
+corrections, including the green path; no firmware change was required.
+This is functional evidence for one device, not endurance, PPK2 consumption,
+solar/autonomy, or five-device fleet validation. Firmware consequences of
+continuous VBUS are owned by `docs/FIRMWARE_SPECIFICATION.md`.
+
+## Monarch Bay Pilot --- Historical Approved v3.2 Hardware Architecture
 
 The CPO has completed the Monarch Bay Pilot hardware architecture review and
 approved the following as final for the Monarch Bay Pilot build. "Final" here
 means final for the Monarch Bay Pilot configuration specifically, not a
 permanent freeze of Fairway Refresh hardware generally; a later pilot or
-production architecture may still evolve this design. This section supersedes
+production architecture may still evolve this design. At the 3.2 milestone this section superseded
 the prior direct `5580 GND → J2/4` wiring and the PV4 + 220 Ω LED-resistor
-circuit as the active new-build hardware for this pilot. The reference-device
+circuit as the new-build hardware for that pilot milestone. Prototype 3.3 supersedes its field-power feed; shared button/indicator wiring remains applicable. The reference-device
 evidence recorded elsewhere in this document remains historical and is not
 rewritten to reflect this architecture.
 
@@ -433,16 +471,17 @@ Verify terminal assignments with a continuity meter before soldering.
 2. Disconnect USB before reconnecting battery.
 3. Never operate from USB and battery simultaneously.
 
-# Operating Power Modes
+# Historical Prototype 1.0 Operating Power Modes
 
-Fairway uses two mutually exclusive operating modes:
+Prototype 1.0 used the following mutually exclusive operating modes. Current
+Prototype 3.3 V75/USB isolation is defined near the top of this document:
 
 | Mode | Power connection | Required disconnection |
 |------|------------------|------------------------|
 | USB/debug/service | USB connected | PPK2 disconnected |
 | Field/measurement | PPK2 or future approved 5.0 V field supply connected | USB disconnected |
 
-The accepted Fairway operating and measurement input boundary for this architecture is 5.0 V.
+The accepted operating and measurement input boundary for that historical architecture was 5.0 V; it is not a Prototype 3.3 consumption result.
 
 ---
 
@@ -512,13 +551,13 @@ Observed battery behavior and engineering risks are maintained in:
 
 ---
 
-# Prototype 1.1 — Solar Power Integration (Current Field-Power Architecture)
+# Prototype 1.1 — Solar Power Integration (Historical Reference-Device Architecture)
 
 Prototype 1.1 is the reference-device solar-power generation. It replaced the historical Prototype 1.0 AA/VBAT field-power architecture recorded above with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
-This section documents the current reference-device hardware evidence. The CPO-approved pilot-build architecture above remains a separate design-state record for new builds and must not be described as already installed in the current reference unit.
+This section preserves the Prototype 1.1 reference-device evidence, not the current Prototype 3.3 field-power configuration. Later pilot-build architecture remains a separate record and must not be retroactively described as installed during this validation.
 
-## Current Field-Power Chain (CPO-Installed and Functionally Validated)
+## Prototype 1.1 Field-Power Chain (CPO-Installed and Functionally Validated)
 
 ```
 Adafruit 5366 solar panel
@@ -566,4 +605,4 @@ Detailed validation evidence and remaining characterization scope are recorded i
 
 # Notes
 
-This document is the canonical physical assembly record for Prototype 1.0. The current Prototype 1.1 field-power architecture is recorded in the section above.
+Current Prototype 3.3 wiring is owned by the section near the top of this document; Prototype 1.0, 1.1, and 3.2 assembly and validation records remain historical context.
