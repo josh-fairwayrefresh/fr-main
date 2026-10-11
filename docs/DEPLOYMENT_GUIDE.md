@@ -380,37 +380,15 @@ Firmware deployment procedures are owned by this document.
 
 Firmware implementation is owned by docs/FIRMWARE_SPECIFICATION.md.
 
-### Course-Configured Golfer Demand Window Rollout
+### Abandoned Course-Configurable Demand-Window Candidate
 
-The `sprint/modular-golfer-demand-window` candidate is implemented and passed
-automated validation at the legacy 300,000 ms behavior. It has not been
-deployed, flashed, or physically validated. Production Course configuration,
-Firestore documents, and services remain unchanged. Do not treat the candidate
-as the deployed product until the Architect/CPO separately authorizes rollout.
-
-Roll out a matched candidate backend and firmware in this order:
-
-1. Deploy the backend first. It accepts the legacy firmware's additive-response
-  contract because the accepted `9775842` parser requires `request_id` and
-  ignores unknown response fields. Course-less request acceptance likewise
-  uses the one backend-owned 300,000 ms fallback.
-2. After backend health and compatibility validation, flash the matching new
-  firmware. New firmware requires the new acceptance contract and is not
-  compatible with the old backend response.
-3. Validate matched backend/firmware behavior with Courses effectively at
-  300,000 ms before changing any Course configuration.
-4. Only after physical validation, the CPO may set the Course value to 60
-  seconds in Admin. That value is not encoded in runtime source.
-
-Rollback is reverse dependency order: restore old firmware first, then restore
-the old backend. Do not roll back the backend while new firmware remains in the
-field because its acceptance response lacks the required policy contract.
-Existing request documents retain their snapshotted policy and absolute expiry.
-The temporary legacy fallback may be removed only after active Courses have
-explicit values, active request-producing devices are assigned, and legacy
-open requests without policy snapshots have expired. Removal must not silently
-change the accepted Course-less behavior; that later product transition needs
-separate authorization.
+The matched backend/firmware rollout procedure for this candidate has been
+withdrawn. CPO abandoned the feature because it did not deliver an accepted
+working result; automated checks and a clean build do not authorize deployment.
+Production remains on the fixed five-minute contract. Candidate source and tests
+are preserved on `archive/firmware/modular-golfer-demand-window` for provenance
+only; do not use the former rollout/rollback procedure or its experimental
+protocol as current operational guidance.
 
 ### Authorization Control
 

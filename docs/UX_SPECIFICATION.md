@@ -36,7 +36,7 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - When Fairway successfully accepts the service request, orange ends.
 - Green performs a blink-blink indication, followed by approximately 5 seconds of solid green.
 - Success means the accepted golfer service request is represented in the Fairway operator workflow/dashboard.
-- Successful acceptance starts the stable baseline's five-minute demand window, measured from the initial physical button press. Course-configurable duration remains an excluded implementation candidate; no 60-second setting is accepted by this baseline.
+- Successful acceptance starts the stable baseline's five-minute demand window, measured from the initial physical button press. Course-configurable duration was abandoned and is not an accepted product setting; no 60-second setting is accepted by this baseline.
 
 ### 4. Failed request
 - If the transaction reaches terminal failure within the 15-second budget, orange ends.
@@ -45,10 +45,10 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - After the failure indication completes, the button is enabled again; the next valid press begins a completely new bounded golfer transaction.
 - There is no long retry lockout.
 
-## Five-Minute Golfer Demand Window and Excluded Course-Policy Candidate
-The implementation candidate makes duration a Course-owned setting editable in Admin in seconds. Its backend compatibility fallback remains 300 seconds for legacy Course documents and Course-less devices. The candidate is built and automated-test validated but has not been deployed or physically validated. The deployed system therefore remains at five minutes; the CPO's planned 60-second setting change is a later Admin operation, not a source-code value.
+## Five-Minute Golfer Demand Window
+The accepted product behavior uses a fixed five-minute duration. A Course-configurable duration was explored but abandoned; it is not an approved product setting or Admin workflow. See `docs/feature_backlog.md` for the disposition and archive reference.
 
-For the Monarch Bay Pilot, the configured duration from the initial physical press is the operational proxy for presses attributable to the same golfer group at that marker. This is a pilot product assumption, not a claim that every group occupies every tee box for exactly the configured duration; per-hole and par-specific windows are not introduced.
+For the Monarch Bay Pilot, the five-minute duration from the initial physical press is the operational proxy for presses attributable to the same golfer group at that marker. This is a pilot product assumption, not a claim that every group occupies every tee box for exactly five minutes; per-hole and par-specific windows are not introduced.
 
 After the originating request has succeeded, any subsequent valid physical button press during the stable five-minute window:
 
