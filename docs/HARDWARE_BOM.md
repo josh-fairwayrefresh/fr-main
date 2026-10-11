@@ -4,19 +4,22 @@ This document records the hardware installed in the Fairway Refresh prototype ac
 
 ## Prototype 3.3 — Current Pilot Hardware (FRB-0003)
 
-The CPO confirmed successful operation of FRB-0003 on Prototype 3.3 on
-2026-10-09. The field-power component is a **Voltaic V75**, using its USB-A
-output instead of the earlier LiPo/5580/6106 field-power chain. The Feather
-JST battery connector and J1/1 VBAT are unused in this configuration.
-Wiring, mutually exclusive field/service configurations, and the voltage
-qualification are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+The CPO designated the **Voltaic V25, V50, and V75** regulated USB-A power packs
+as interchangeable Prototype 3.3 field supplies: they provide the same nominal
+5 V regulated-output function and differ in capacity. FRB-0003's 2026-10-09 validation
+used a V75; V25/V50 were not separately reported as physically tested. Each
+pack replaces the earlier LiPo/5580/6106 field-power chain. Its regulated output
+feeds the Perma-Proto +5 V/GND rails, which connect directly to Feather J1/3
+VBUS and J2/4 GND; J4 and J1/1 VBAT are unused. Wiring and voltage qualification
+are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
 The Feather, cellular antenna/SIM, Perma-Proto, PV8 button, and three-indicator
-component identities remain as recorded in the 3.2 BOM below; its legacy
-power/battery-health components are not the current 3.3 field-power BOM.
-Exact V75 variant/capacity specifications, solar charging hardware/interconnect details, and batch-wide
-physical layout are not established by this validation record. Functional
-success does not establish endurance, power consumption, solar autonomy, or
+component identities remain as recorded in the 3.2 BOM below; its LiPo, 5580,
+4714, and 6106 are not part of the current 3.3 field-power path. Battery-health
+checks and reporting are abandoned. Measured runtime/autonomy for each pack,
+upstream pack charging details, and batch-wide physical layout are not
+established by this validation record. Functional
+success does not establish endurance, power consumption, VXX pack autonomy, or
 five-device fleet validation.
 
 ## Prototype 1.1 — Solar Power Integration (Reference-Device Generation)
@@ -42,7 +45,7 @@ an end-to-end LTE/HTTPS request. This establishes one validated pilot-build
 instance; it does not redefine the separate FRB-0001 reference-device history
 or establish batch-wide manufacturing validation.
 
-### Approved power / battery-health path
+### Historical 3.2 Power / Battery-Health Path
 
 - LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT
 - 5580 VIN → J2/2 3V3
@@ -56,9 +59,9 @@ or establish batch-wide manufacturing validation.
 - external polyfuse omitted
 - 1000 uF capacitor omitted
 - PV4 220 Ω LED resistor circuit retired from this build; see Pushbutton/Indicators below
-- actual LiPo voltage/trend remains the primary energy-health evidence; SOC is supplementary
+- Battery-voltage/SOC acquisition was part of the historical Device Health work; battery-health acquisition and reporting are abandoned and are not current product behavior.
 
-The Adafruit 6106 regulated output and GND now explicitly establish the
+At the 3.2 milestone, the Adafruit 6106 regulated output and GND established the
 Perma-Proto +5 V and GND rails as the system power-distribution buses, which
 in turn feed the Feather (via Adafruit 261 into onboard J4 VBAT/GND) and the
 indicator circuits below. Full connection-by-connection wiring is owned by
@@ -72,9 +75,9 @@ The pushbutton and three-indicator system previously recorded as provisional
 accepted final Monarch Bay Pilot hardware. The PV4 illuminated pushbutton is
 retired from this build; wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
-### Approved Feath er J4 power feed refinement
+### Historical 3.2 Feather J4 VBAT Power Feed
 
-The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to net 4 `VBAT` and J4 pad 2 to net 1 `GND`. The same PCB source assigns Feather J1 pad 1 to net 4 `VBAT`, and J2/4 is GND. Therefore the new Fairway feed using Adafruit 261 into the onboard JST J4 VBAT/GND connector is a physical interconnect refinement to the same VBAT/GND domains and is not a VBUS feed.
+The official Circuit Dojo PCB source assigns J4 pad 1 and J1/1 to `VBAT`, J4 pad 2 and J2/4 to `GND`. The Adafruit 261 J4 feed was used by the earlier 3.2 design; it is not the current Prototype 3.3 field-power connection, which uses J1/3 VBUS.
 
 ### Locked BOM basis for pilot builds
 
@@ -87,12 +90,12 @@ The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to
 | Solar/USB/DC charger with 5 V boost | Adafruit | 6106 | Adafruit | BQ25185 charger/power-path with TPS61023 5 V boost output; establishes the Perma-Proto +5 V/GND distribution rails. |
 | Antenna | Circuit Dojo | FLEX-LTE-GPS-UFL | Circuit Dojo | Must be LTE+GPS combo for 9151. |
 | Hologram SIM | Hologram | Hologram SIM Card | Hologram | Installed for LTE service. |
-| LiPo fuel gauge | Adafruit | 5580 / MAX17048 | Adafruit | Direct LiPo voltage and fuel-gauge sensing for Device Health; electrically between the protected LiPo and the Adafruit 6106 battery input through the approved JST path. Actual LiPo voltage/trend is the primary operational metric; SOC is supplementary. |
+| LiPo fuel gauge (historical 3.2) | Adafruit | 5580 / MAX17048 | Adafruit | Used in the superseded LiPo/6106 design. Battery-health acquisition/reporting is abandoned; not part of Prototype 3.3 operation. |
 | Barrel-to-screw-terminal adapter | Adafruit | 368 | Adafruit | 5.5 x 2.1 mm female barrel to screw-terminal adapter; solar input path. |
 | Panel connector adapter | Adafruit | 4287 | Adafruit | 3.5 x 1.1 mm to 5.5 x 2.1 mm adapter; solar input path. |
 | Cable gland | Voltaic | Appropriate IP67/68 gland | Voltaic | Enclosure cable penetration. |
-| Feather JST power pigtail | Adafruit | 261 | Adafruit | Used for the onboard J4 VBAT/GND feed from the Perma-Proto distribution rails. |
-| 5580 -> 6106 battery jumper | Adafruit | 4714 | Adafruit | Current approved battery jumper. |
+| Feather JST power pigtail (historical 3.2) | Adafruit | 261 | Adafruit | Used for the superseded onboard J4 VBAT/GND feed; Prototype 3.3 instead connects the regulated +5 V rail to J1/3 VBUS. |
+| 5580 -> 6106 battery jumper (historical 3.2) | Adafruit | 4714 | Adafruit | Used only in the superseded battery-health power path. |
 | Wiring | Adafruit | 288 | Adafruit | 22 AWG Stranded Silicone Wire. |
 | Project Board | Adafruit | 571 | Adafruit | Perma-Proto Half-Sized PCB. |
 | Feather female headers | Adafruit | 2940 | Adafruit | Short female headers for the board build. |
@@ -113,11 +116,11 @@ The table preserves the approved 3.2 BOM basis; the current 3.3 field-power comp
 
 ### Retained historical field-power evidence
 
-The current reference device remains a separate physical evidence record and is not redefined as the new-build architecture. The current reference device was functionally validated with solar / LiPo / Adafruit 6106 field power, and the physical placement and mounting details remain TBD.
+The earlier reference-device configuration remains a separate historical evidence record and is not redefined as the current Prototype 3.3 architecture. That device was functionally validated with solar / LiPo / Adafruit 6106 field power; its physical placement and mounting details remain as recorded.
 
-### Reference-Device Battery-Health Update
+### Historical Reference-Device Battery-Health Installation
 
-The Adafruit 5580 / MAX17048 fuel gauge is now physically installed and wired on the current reference device, using the approved wiring: VIN → J2/2 3V3, GND → J2/4 GND, SCL → J1/11, SDA → J1/12. I2C communication and battery-voltage acquisition were validated live on this reference device; see `docs/FIRMWARE_SPECIFICATION.md` for the validated Device Health result and `docs/HARDWARE_ASSEMBLY_GUIDE.md` for the wiring/validation record. Component placement, Perma-Proto geometry, and final mechanical layout remain TBD, as previously recorded.
+The 5580 / MAX17048 was physically installed on the earlier reference device, and its I2C path and battery-voltage acquisition were historically validated. Device Health and all battery-health checks/reporting are abandoned; this record does not describe current Prototype 3.3 behavior. The historical wiring evidence remains in `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
 ### Retained from Prototype 1.0 (CPO-confirmed installed and functioning)
 

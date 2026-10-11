@@ -22,7 +22,7 @@ The documented deployment architecture consists of:
 - A Firestore document-created Eventarc trigger that invokes a dedicated Web
   Push sender for authorized course subscriptions.
 
-Current Device API scope is `button_press` plus correlated COMPLETE poll/ack. Device Health ingestion, schedules, history, Admin display, and background firmware reporting are retired. Historical deployment records later in this guide document earlier validated revisions and must not be interpreted as current API/configuration requirements. FRB-0003 Prototype 3.3 operational validation is recorded in `docs/DEVICE_PROVISIONING_GUIDE.md`; it introduces no backend deployment or API change.
+Current source-defined Device API scope is `button_press` plus correlated COMPLETE poll/ack. Battery-health checks/reporting and Device Health ingestion are abandoned: stable firmware emits no Health reports and current receiver source does not ingest them. Existing Firestore Health records remain historical. Active restored Admin/Hosting still includes a legacy Health-history reader, a source/deployment divergence described below, not current monitoring functionality. FRB-0003 Prototype 3.3 operational validation is recorded in `docs/DEVICE_PROVISIONING_GUIDE.md`; it introduced no backend deployment or API change.
 
 Context references:
 
@@ -164,18 +164,19 @@ was not deployed or changed by this correction. The CPO refreshed the existing
 authenticated mobile Admin session on `app.fairwayrefresh.com` and confirmed
 that the production fleet loaded without the prior `Load failed` state.
 
-The production UI supports Customer/Course create and edit, Course timezone and
-service schedule, permanent Device provisioning and bounded one-time credential
-recovery, atomic Customer/Course/location deployment assignment, lifecycle
-state, SIM/comments, service and commissioning records,
+The current Admin source supports Customer/Course create and edit, Course
+timezone and service schedule, permanent Device provisioning and bounded
+one-time credential recovery, atomic Customer/Course/location deployment
+assignment, lifecycle state, SIM/comments, service and commissioning records,
 read-only verified hardware/firmware identity, and Device-to-SIM export.
 Hardware revision and firmware generation start unknown at provisioning and may
 be established only by controlled verified provenance. Neither field can be
-changed through an administrative metadata route. No Health placeholder or
-history/schedule control is part of the current product/source scope. The
-restored production artifact described below is an older retained UI build and
-its inclusion of Health history is a deployment/source divergence, not a change
-to that product decision.
+changed through an administrative metadata route. Battery-health checks and
+Device Health reporting are abandoned; current source has no active Health
+workflow. The active restored production Admin/Hosting artifacts predate the
+Health retirement and retain a legacy Health-history read surface over old
+stored records. It does not establish that current firmware is reporting health
+or that the source/runtime owns an active Health product feature.
 
 ### Restored Matched Stable Deployment — 2026-10-06
 
@@ -188,15 +189,17 @@ Device health-history endpoint. The receiver was not rolled back; it remains on
 the accepted `9775842`-matched backend revision with additive COMPLETE
 correlation logging.
 
-Deployment/source divergence requiring Architect review: the restored Oct 1
+Previously unresolved deployment/source divergence, now accepted by the CPO (2026-10-10): the restored Oct 1
 Admin API and Hosting artifacts predate the `0daf02d` Health-retirement source
-checkpoint and include the legacy Health-history read surface. The
-firmware/backlog source-of-truth describes Health Admin surfaces as retired.
-This exact retained deployment was restored under the CPO's rollback direction
-to recover FRB-0002 identity and operational metadata reads; that restoration is
-not, by itself, a product decision to re-adopt the broader Health Admin scope.
-Do not redeploy a different Admin/Hosting source or revise the Health product
-scope silently to resolve this divergence.
+checkpoint and include the legacy Health-history read surface. Exact
+Admin/Hosting source correspondence to current repository source remains
+unverified. The CPO accepts the deployed Pilot 1.0 state unchanged; this is not
+a blocker requiring a source-matched redeployment. Battery-health checks and
+reporting are abandoned, and the stable firmware/receiver source produces no
+new Health samples. The old history reader/data are residual legacy capability,
+not current monitoring. There is no requirement to retain or host that legacy
+Health data; removal/refinement is deferred to a future sprint. Do not change
+production or delete records as part of the accepted Pilot 1.0 state.
 
 | Surface | Restored/current production identity | Provenance |
 |---------|---------------------------------------|------------|
@@ -226,6 +229,55 @@ source-equivalence and Health-surface divergence described above remain
 unresolved; neither receiver verification nor successful cart UI receipt proves
 their source trees equal the baseline repository. Do not silently substitute
 Admin/Hosting versions or change production to reconcile that distinction.
+
+### Cart Inventory and Golfer Menu — Increment 1 Backend Contract
+
+The Inventory backend foundation below exists in current repository source
+only. It has not been deployed and does not change the accepted Pilot 1.0
+device/request path. It is implemented within the existing dedicated
+`fairway-admin` handler/runtime; this source integration is not evidence that
+the currently deployed Admin image matches the repository source.
+
+Inventory staff operations authenticate a Firebase ID token and authorize the
+requested Customer/Course against `inventory_course_memberships/{uid}`. The
+membership grants the same editor/publisher capability to each assigned course;
+it is separate from global `admin:true` and from operator request access. Only a
+global Admin can provision/revoke membership or configure a public menu slug.
+Firestore rules remain closed to browser writes.
+
+| Source route | Access | Contract |
+|---|---|---|
+| `GET /api/v1/inventory/bootstrap` | Inventory member | Returns only the member's assigned Courses. |
+| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Course member | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
+| `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
+| `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
+| `GET .../preview`; `POST .../publish` | Course member | Preview reads saved working inventory. Publish atomically stores a snapshot and advances the published pointer. |
+| `GET /api/v1/public/menus/{slug}` | Public, read-only | Returns only the latest published snapshot; no staff identity or draft fields. |
+| `PATCH /api/v1/admin/inventory-course-memberships/{uid}`; `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | Global Admin | Provisions/revokes course membership and reserves the stable menu slug. |
+
+Data is owned by the existing nested Course. `inventory/state` stores a
+monotonic inventory revision and last-published pointer. `inventory_products`
+stores working records; `inventory_categories` and nested `subcategories` store
+canonical labels; `inventory_product_keys` protects exact product identity;
+`inventory_events` records actor/action/revision; and
+`published_menus/{version}` contains immutable public snapshots. Top-level
+`inventory_course_memberships` and `public_menu_slugs` are access/routing
+indexes, not alternate catalog authorities.
+
+Each save transaction serializes on the course state document and increments
+the revision, so the last transaction committed wins without locking, stale
+write rejection, conflict warnings, or client-clock ordering. Publish reads the
+course revision and products in one Firestore transaction, snapshots only
+non-archived On Cart/Sold Out items, and commits snapshot, audit event, and
+pointer together. A failed commit therefore preserves the previous published
+version. The read-only public route resolves only the slug and published pointer;
+it does not query the editable catalog or require staff authorization. Snapshot
+payloads are bounded below the Firestore document-size limit.
+
+The API/data contract is source-defined and locally tested. Membership records,
+slug configuration, Catalog UI, public menu UI, CSV import, assets, and first
+publication are not deployed or populated by Increment 1. Pilot-specific
+provisioning and import are separate later increments.
 
 ### Backend Release Register — Device Firmware Compatibility
 
@@ -362,7 +414,7 @@ Current deployment depends on:
 | Item | Source | Status | Notes |
 |------|--------|--------|-------|
 | Per-device ID and credential | Local provisioning material | Required | `FAIRWAY_DEVICE_ID` and the per-device `FAIRWAY_DEVICE_KEY` macro are supplied by the local gitignored provisioning header; values are intentionally omitted. |
-| Hardware/firmware system identity | Approved firmware build | Required | `FAIRWAY_HARDWARE_REVISION` and `FAIRWAY_FIRMWARE_GENERATION` are build-owned compile definitions transmitted together in authenticated Device Health; they are not CPO-entered provisioning fields. |
+| Hardware/firmware system identity | Historical Device Health build contract | Not emitted by stable baseline | Firmware `6a19f83` does not define or transmit `FAIRWAY_HARDWARE_REVISION` / `FAIRWAY_FIRMWARE_GENERATION`. Previously stored identity values and the legacy Admin display are historical/deployment evidence, not a runtime prerequisite or current telemetry path. |
 | Firebase web configuration | Repository | Repository-managed | Web app configuration is maintained in source; this guide does not duplicate values. |
 | TLS CA chain certificates | Repository | Repository-managed | Firmware trust material is maintained in the firmware certificate directory. |
 | Cloud Run service account IAM | Historical Working State | Pending Live Verification | Historical source reports Firestore write role assignment; exact service account identity is not recorded in current repository-controlled artifacts. |
@@ -474,7 +526,7 @@ The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tr
 
 ### Flash Procedure
 
-The current Fairway programming path is probe-rs. In USB/debug/service mode, disconnect V75 field power and PPK2 before connecting Feather USB. Prototype 3.3 field and USB development/service configurations are mutually exclusive, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+The current Fairway programming path is probe-rs. In USB/debug/service mode, disconnect V25/V50/V75 field power and PPK2 before connecting Feather USB. Prototype 3.3 field and USB development/service configurations are mutually exclusive, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
 After separate CPO authorization to flash, program the verified Intel HEX artifact:
 
@@ -496,7 +548,7 @@ After separate CPO authorization for runtime/manual testing, perform only the va
 
 For the validated field/measurement path:
 
-1. Disconnect Feather USB before connecting the installed generation's approved field supply; Prototype 3.3 uses V75 through VBUS. PPK2 consumption characterization remains deferred and must isolate other supplies. Follow `docs/HARDWARE_ASSEMBLY_GUIDE.md`; do not treat the historical VBAT measurement boundary as a 3.3 result.
+1. Disconnect Feather USB before connecting the installed generation's approved field supply; Prototype 3.3 uses a V25/V50/V75 pack through the Perma-Proto rail directly to J1/3 VBUS. PPK2 consumption characterization remains deferred and must isolate other supplies. Follow `docs/HARDWARE_ASSEMBLY_GUIDE.md`; do not treat the historical VBAT measurement boundary as a 3.3 result.
 2. Cold-boot the approved production image.
 3. Confirm expected startup and dormant behavior described by `docs/FIRMWARE_SPECIFICATION.md` and `docs/UX_SPECIFICATION.md`.
 4. Press the Fairway button once.
@@ -515,7 +567,7 @@ A bounded investigation into a separate field→USB debug-access gap (probe-rs a
 
 Direct CPO-confirmed physical validation established a non-destructive response to this specific condition, validated on a second tested instance during the WP4 physical-validation campaign in addition to the original tested instance:
 
-1. Connect USB using the installed generation's safe power-isolation procedure in `docs/HARDWARE_ASSEMBLY_GUIDE.md`: for Prototype 3.3, disconnect V75 field power first. For the earlier 6106/J4 architecture, isolate the 6106 positive output from Feather VBAT/J4; its solar/LiPo side may remain connected to the 6106.
+1. Connect USB using the installed generation's safe power-isolation procedure in `docs/HARDWARE_ASSEMBLY_GUIDE.md`: for Prototype 3.3, disconnect V25/V50/V75 field power first. The 6106/J4 isolation instruction applies only to the historical 3.2 architecture; its solar/LiPo side may remain connected to the 6106 when following that historical procedure.
 2. Attempt the normal `probe-rs` operation (for example `probe-rs reset --chip nRF9151_xxAA`).
 3. If the established AP/DRW access fault occurs (for example "Failed to read register DRW"), press the Circuit Dojo nRF9151 Feather physical RESET button once.
 4. Verify recovery using a non-resetting check rather than another reset, for example:

@@ -3,7 +3,7 @@
 ## Document Status
 - Status: Draft
 - Version: 0.3
-- Last updated: 2026-10-09
+- Last updated: 2026-10-10
 - Repository-verified implementation facts, validated prototype behavior, engineering decisions, field observations, and planned backlog items are distinguished in this guide.
 - Repository-verified claims identify the relevant source path.
 - Validated prototype behavior may come from repeated real-world testing even when the supporting implementation still needs full traceability in code.
@@ -77,7 +77,7 @@ As of LP 1.2 (West SDK Offloaded, NCS 3.1.1 Upgrade), `nfed` is a freestanding p
 
 Exact build commands, the required matching Nordic toolchain, and the `BOARD_ROOT` invocation are owned by `docs/DEPLOYMENT_GUIDE.md` and are not duplicated here.
 
-The Fairway Refresh GitHub repository (`nfed`) is the off-laptop current-state recovery repository. It contains the current Fairway-owned source, board and build configuration, canonical engineering documents, and Fairway-owned development and recovery tooling required to reconstruct the current development state on a replacement machine. Recovery assumes this repository, a separately installed official Nordic NCS SDK and matching toolchain, separately secured production secrets and credentials, and publicly obtainable vendor tooling identified by repository manifests and procedures. It is not intended to preserve hosted CI, historical Git development state, obsolete branches, generated build products, historical binary backups, or abandoned development material.
+The Fairway Refresh GitHub repository (`nfed`) is the off-laptop current-state recovery repository. It contains current Fairway-owned source, board/build configuration, canonical documents, and recovery tooling. Recovery assumes a separately installed official Nordic NCS SDK and matching toolchain, separately secured production secrets and credentials, and publicly obtainable vendor tooling. Designated `archive/` Git refs intentionally preserve temporarily abandoned, rejected, or obsolete development for provenance and possible later review. They are not current product state or recovery inputs. Hosted CI, generated build products, and historical binary backups are not preserved as current-state recovery material.
 
 Canonical engineering documentation resides in `nfed/docs/`.
 Product strategy material, milestone notes, and historical business documents may exist outside `nfed`, but they are not part of the canonical engineering source of truth unless migrated into the repository-controlled documentation set.
@@ -106,10 +106,10 @@ Historical vendor evidence closure for the Prototype 1.1 / 3.2 onboard JST power
 - The current official Circuit Dojo nRF9151 Feather PCB source assigns J4 pad 1 to net 4 `VBAT` and J4 pad 2 to net 1 `GND`.
 - The same official PCB source assigns Feather J1 pad 1 to net 4 `VBAT`.
 - Therefore J4 pin 1 = J1/1 = VBAT and J4 pin 2 = common GND. This is not a VBUS domain.
-- The current Fairway measured regulated rail at approximately 5.2–5.3 V is within Circuit Dojo's published 2.8–5.5 V battery-input range.
+- A historical Prototype 3.2 measurement at the Feather VBAT/J1/1 input was approximately 5.2–5.3 V, within Circuit Dojo's published 2.8–5.5 V battery-input range. It is not the Prototype 3.3 VBUS measurement.
 - No intervening alternate power-input topology exists between J4 pin 1 and J1/1; both are direct members of the same `VBAT` net on the official PCB.
 
-This evidence closes the previous direct vendor-evidence gate and authorizes the documented J4 VBAT/GND feed refinement to be described as a physical interconnect refinement to the same electrical domains, not as a separate VBUS-connected topology.
+This evidence closed the vendor-evidence question for the historical J4 VBAT/GND path only. It does not describe or qualify the Prototype 3.3 VBUS feed.
 
 The earlier approved 3.2 pilot-build hardware architecture was distinct from the Prototype 1.1 reference device (both retained as historical context):
 
@@ -130,7 +130,7 @@ CPO-confirmed functional validation for Prototype 1.1:
 - The device transitioned from solar-supported to LiPo-only power without an observed functional interruption.
 - The device successfully completed a Fairway transaction while operating from LiPo power alone, after solar was disconnected.
 
-Not yet established by this milestone (deferred to later characterization / Device Health work):
+Not established by this historical milestone; Device Health and battery-health checks/reporting were later abandoned:
 
 - exact dormant current of the complete solar/LiPo/6106 system;
 - 6106 conversion losses and quiescent consumption;
@@ -139,13 +139,13 @@ Not yet established by this milestone (deferred to later characterization / Devi
 - battery sag under LTE load;
 - behavior across battery state-of-charge and solar irradiance/temperature conditions;
 - long-duration reliability and exact runtime/autonomy;
-- Device Health battery-voltage telemetry and watchdog/recovery behavior.
+- Device Health battery-voltage telemetry and watchdog/recovery behavior; no such battery-health reporting is current product behavior.
 
 The historical 1000 uF bulk capacitor was present during the original Prototype 1.1 solar/LiPo/LTE validation, then electrically disconnected for a CPO-performed functional validation. The device successfully completed normal Fairway cellular transactions without it. The CPO accepted that functional result as sufficient to omit the capacitor from the five-new-board architecture. This does not establish detailed electrical transient characteristics, conversion efficiency, or long-duration reliability.
 
 The historical LP 1.2 approximately 23.25 uA dormant-current measurement remains a whole-device measurement at the previously accepted 5.0 V boundary with AA batteries and USB disconnected; it is not reinterpreted as a measurement of the Prototype 1.1 solar/LiPo/6106 system.
 
-Prototype 1.1 established the physical hardware baseline for the subsequent Device Health / Reliability engineering sprint, alongside the then-current LP 1.2 firmware generation and the LP1.3 repository/workspace cleanup milestone above.
+Prototype 1.1 established the historical physical hardware baseline for the subsequent Device Health / Reliability sprint, alongside the then-current LP 1.2 firmware and LP1.3 workspace cleanup. Device Health validation remains historical; battery-health checks/reporting are abandoned.
 
 ## Prototype 1.2 — Device Reliability Integration (Hardware/System Milestone)
 
@@ -158,13 +158,13 @@ Prototype 1.2 integrates, on the existing Prototype 1.1 solar / LiPo / Adafruit 
 - the Adafruit 5580 / MAX17048 battery-health monitor, physically installed and wired on the reference device, with battery voltage/SOC acquisition integrated into the Device Health snapshot and validated against a DMM measurement;
 - the documented non-destructive physical-RESET USB service-entry procedure, owned by `docs/DEPLOYMENT_GUIDE.md`.
 
-CPO-confirmed validation: the integrated candidate built cleanly under the canonical NCS 3.1.1 procedure, flashed successfully, and operated correctly from the current field-power architecture with one normal Fairway button interaction producing the expected behavior.
+CPO-confirmed validation at the time: the integrated candidate built cleanly under NCS 3.1.1, flashed successfully, and operated from the then-current field-power architecture with one normal button interaction.
 
-Prototype 1.2 Device Health acquisition is retained as historical validation evidence. Device Health runtime, transport, persistence, scheduling, and Admin surfaces are retired from the current product; current ownership is recorded in `docs/FIRMWARE_SPECIFICATION.md` and `docs/DEVICE_PROVISIONING_GUIDE.md`.
+Prototype 1.2 Device Health acquisition is historical validation evidence only. All battery-health acquisition/reporting and Device Health firmware/backend work are abandoned. Legacy Firestore records and the restored production Admin UI's historical Health reader are deployment remnants, not current monitoring; see `docs/DEPLOYMENT_GUIDE.md`.
 
 Prototype 1.2 does not redefine or freeze still-forthcoming pilot manufacturing details (exact component placement, Perma-Proto geometry, and mechanical layout), which remain owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as previously recorded.
 
-## Prototype 3.2 for Pilot — Working Button and Lights
+## Prototype 3.2 for Pilot — Historical Working Button and Lights
 
 Prototype 3.2 is the earlier validated Monarch Bay Pilot hardware/UX baseline. The accepted runtime preserves its golfer-first bounded transaction, scoped-awake behavior, PV8/three-indicator UX, local five-minute demand window, exact COMPLETE lifecycle, and VBUS-dependent power policy while retiring Device Health and unrelated background networking. Exact implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`; Prototype 3.3 field power does not use the historical VBUS-absent PSM/WFI state.
 
@@ -175,26 +175,31 @@ CPO-confirmed physical validation on FRB-0002 established orange startup and unr
 The CPO designated **Fairway Refresh Stable Pilot Baseline 1.0** on 2026-10-10:
 Embarrassingly Small Runtime firmware at `6a19f83`, receiver source tree at
 `8686eeb` verified against production `fairway-button-receiver-00022-wxk`, and
-Prototype 3.3 hardware with successful FRB-0003 button/LED, cellular request,
-and cart operator UI receipt validation. This names the existing accepted
+Prototype 3.3 VXX power-pack hardware with successful FRB-0003 button/LED,
+cellular request, and cart operator UI receipt validation. This names the existing accepted
 system; it is not a new firmware generation or deployment.
 
 Firmware/artifact provenance remains owned by `docs/FIRMWARE_SPECIFICATION.md`;
-receiver source/build/image correspondence and unresolved Admin/Hosting source
-equivalence remain owned by `docs/DEPLOYMENT_GUIDE.md`. Later undeployed
+receiver source/build/image correspondence and the accepted Admin/Hosting
+deployment state remain owned by `docs/DEPLOYMENT_GUIDE.md`. Admin/Hosting source
+equivalence is not established, but the CPO accepts the current deployed state
+unchanged; its legacy Health-history reader is a residual surface, not active
+monitoring or a baseline blocker. Later undeployed
 Course-configurable demand-window development is not part of this baseline.
-Endurance, consumption, battery/solar autonomy, and five-device fleet validation
+Endurance, consumption, VXX pack autonomy, and five-device fleet validation
 remain outstanding; deferred PPK2 and post-pilot NCS 3.4.0 / Errata-36 work is
 owned by `docs/feature_backlog.md`.
 
 ### Prototype 3.3 Operational Validation
 
-On 2026-10-09 the CPO confirmed FRB-0003 operating successfully with Voltaic V75
-field power and the accepted Embarrassingly Small Runtime (`6a19f83`, NCS 3.1.1).
+On 2026-10-09 the CPO confirmed FRB-0003 operating successfully with a Voltaic
+V75 and the accepted Embarrassingly Small Runtime (`6a19f83`, NCS 3.1.1). The
+CPO designates V25/V50/V75 packs as interchangeable in regulated-output
+function, with different capacities; only V75 operation is recorded as tested.
 Button/LED operation and requests in the cart operator UI succeeded after
 physical wiring corrections and web-app deployment/assignment, without firmware
 changes. This is one-device physical/operational validation, not a new firmware
-generation or completed endurance, consumption, solar/autonomy, or fleet validation.
+generation or completed endurance, consumption, VXX pack-autonomy, or fleet validation.
 
 Current components and VBUS wiring/voltage qualification are owned by
 `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`; exact firmware
@@ -261,7 +266,7 @@ Prototype 1.0 hardware definition is split between two owner documents.
 `docs/HARDWARE_BOM.md` owns the installed hardware components and part numbers.
 `docs/HARDWARE_ASSEMBLY_GUIDE.md` owns Prototype 1.0 physical assembly, wiring, and maintenance power-handling guidance.
 
-The current approved pilot-build hardware architecture is owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` as the active design state for new builds, while the current reference-device evidence remains distinct and separate.
+The current Prototype 3.3 VXX power-pack architecture is owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`. Earlier 3.2 LiPo/5580/6106 and J4/VBAT records, including FRB-0002 validation, remain historical and are not the current field-power design.
 
 ## Circuit Dojo nRF9151 Feather Reference
 

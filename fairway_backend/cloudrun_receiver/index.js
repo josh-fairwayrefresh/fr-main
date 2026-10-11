@@ -31,6 +31,7 @@ const {
   DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
+const inventory = require('./lib/inventory');
 const {
   getOperatorAssignment,
   registerPushSubscription,
@@ -477,6 +478,13 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof inventory.InventoryError) {
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
+        ...(error.details ? { details: error.details } : {}),
+      });
+    }
     if (error instanceof ProvisioningError) {
       if (error.cause?.message === 'Device already has a credential') {
         return res.status(409).json({ error: error.cause.message });
@@ -752,6 +760,24 @@ function createFairwayHandlers(db, {
       const courseMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)$/);
       if (req.method === 'PATCH' && courseMatch) {
         return await patchAdminCourse(req, res, courseMatch[1], courseMatch[2]);
+      }
+
+      const inventoryMembershipMatch = path.match(/^\/api\/v1\/admin\/inventory-course-memberships\/([^/]+)$/);
+      if (req.method === 'PATCH' && inventoryMembershipMatch) {
+        requireBodyFields(req.body, ['enabled', 'courses']);
+        const membership = await inventory.setInventoryMembership(
+          db, decodeURIComponent(inventoryMembershipMatch[1]), req.body, admin.uid
+        );
+        return res.status(200).json(membership);
+      }
+
+      const menuSlugMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)\/inventory-menu$/);
+      if (req.method === 'PATCH' && menuSlugMatch) {
+        requireBodyFields(req.body, ['public_menu_slug']);
+        const configured = await inventory.configurePublicMenuSlug(
+          db, menuSlugMatch[1], menuSlugMatch[2], req.body.public_menu_slug, admin.uid
+        );
+        return res.status(200).json(configured);
       }
 
       const deviceActionMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/(assignment|state|metadata|service|commission)$/);
@@ -1154,10 +1180,96 @@ function createFairwayHandlers(db, {
       return res.status(204).send('');
     }
     const path = req.path || '/';
+    if (path.startsWith('/api/v1/inventory/')) {
+      return handleInventoryRequest(req, res, path);
+    }
+    if (path.startsWith('/api/v1/public/menus/')) {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+      try {
+        const match = path.match(/^\/api\/v1\/public\/menus\/([^/]+)$/);
+        if (!match) return res.status(404).json({ error: 'menu_not_found' });
+        return res.status(200).json(await inventory.getPublicMenu(db, decodeURIComponent(match[1])));
+      } catch (error) {
+        return sendInventoryError(res, error);
+      }
+    }
     if (!path.startsWith('/api/v1/admin/')) {
       return res.status(404).send('Not Found\n');
     }
     return handleAdminRequest(req, res, path);
+  }
+
+  async function handleInventoryRequest(req, res, path) {
+    const identity = await authenticateOperator(req, res);
+    if (!identity) return res;
+
+    try {
+      if (req.method === 'GET' && path === '/api/v1/inventory/bootstrap') {
+        return res.status(200).json(await inventory.getInventoryBootstrap(db, identity.uid));
+      }
+
+      const match = path.match(/^\/api\/v1\/inventory\/courses\/([^/]+)\/([^/]+)(?:\/(.*))?$/);
+      if (!match) return res.status(404).json({ error: 'not_found' });
+      const customerId = decodeURIComponent(match[1]);
+      const courseId = decodeURIComponent(match[2]);
+      const action = match[3] || '';
+      await inventory.requireCourseAccess(db, identity.uid, customerId, courseId);
+
+      if (req.method === 'GET' && action === '') {
+        return res.status(200).json(await inventory.listInventory(db, customerId, courseId));
+      }
+      if (req.method === 'GET' && action === 'preview') {
+        return res.status(200).json(await inventory.previewMenu(db, customerId, courseId));
+      }
+      if (req.method === 'POST' && action === 'publish') {
+        return res.status(200).json(await inventory.publishMenu(db, customerId, courseId, identity.uid));
+      }
+      if (req.method === 'POST' && action === 'categories') {
+        requireBodyFields(req.body, ['name']);
+        return res.status(201).json(await inventory.createCategory(
+          db, customerId, courseId, req.body.name, identity.uid
+        ));
+      }
+      const subcategoryMatch = action.match(/^categories\/([^/]+)\/subcategories$/);
+      if (req.method === 'POST' && subcategoryMatch) {
+        requireBodyFields(req.body, ['name']);
+        return res.status(201).json(await inventory.createSubcategory(
+          db, customerId, courseId, decodeURIComponent(subcategoryMatch[1]), req.body.name, identity.uid
+        ));
+      }
+      if (req.method === 'POST' && action === 'products') {
+        return res.status(201).json(await inventory.createProduct(
+          db, customerId, courseId, req.body, identity.uid
+        ));
+      }
+      const productMatch = action.match(/^products\/([^/]+)$/);
+      if (productMatch && req.method === 'PATCH') {
+        return res.status(200).json(await inventory.updateProduct(
+          db, customerId, courseId, decodeURIComponent(productMatch[1]), req.body, identity.uid
+        ));
+      }
+      const archiveMatch = action.match(/^products\/([^/]+)\/archive$/);
+      if (archiveMatch && req.method === 'POST') {
+        return res.status(200).json(await inventory.archiveProduct(
+          db, customerId, courseId, decodeURIComponent(archiveMatch[1]), identity.uid
+        ));
+      }
+      return res.status(404).json({ error: 'not_found' });
+    } catch (error) {
+      return sendInventoryError(res, error);
+    }
+  }
+
+  function sendInventoryError(res, error) {
+    if (error instanceof inventory.InventoryError) {
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
+        ...(error.details ? { details: error.details } : {}),
+      });
+    }
+    console.error('Failed to handle Inventory request:', error);
+    return res.status(500).json({ error: 'internal_error', message: 'Inventory request failed' });
   }
 
   return {

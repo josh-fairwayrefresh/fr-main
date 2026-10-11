@@ -61,10 +61,10 @@ Current:
 - `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
 
 Current-state notes:
-- **Fairway Refresh Stable Pilot Baseline 1.0** names the accepted existing system: `6a19f83` firmware, the `8686eeb` receiver tree verified against production `00022-wxk`, and CPO-confirmed Prototype 3.3 / FRB-0003 operation. The designation is owned by `docs/ENGINEERING_GUIDE.md`; receiver verification does not establish Admin/Hosting source equivalence.
+- **Fairway Refresh Stable Pilot Baseline 1.0** names the accepted existing system: `6a19f83` firmware, the `8686eeb` receiver tree verified against production `00022-wxk`, and CPO-confirmed Prototype 3.3 / FRB-0003 operation. The CPO accepts current production Admin/Hosting unchanged despite an unverified source match and a legacy Health-history reader; removal/refinement is deferred, not a current baseline blocker.
 - Prototype 3.3 is the current CPO-confirmed pilot hardware/operational milestone on FRB-0003, using the accepted Embarrassingly Small Runtime firmware generation (`6a19f83`, NCS 3.1.1). Exact firmware provenance and validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`; hardware ownership remains with the BOM and assembly guide.
 - Prototype 1.2 remains the earlier validated Device Reliability Integration milestone and LP 1.2 remains the accepted dormant-power/NCS baseline; neither is the latest golfer-facing firmware generation.
-- FRB-0003 operates from Voltaic V75 field power through VBUS and has CPO-confirmed button/LED and cart UI request operation. FRB-0002's earlier 3.2 J4 VBAT/GND validation remains historical evidence. Prototype 3.3 consumption, battery/solar autonomy, endurance, and five-device fleet validation remain outstanding.
+- Prototype 3.3 uses Voltaic V25, V50, or V75 packs as interchangeable field supplies with the same regulated-output function and different capacity. FRB-0003's CPO-confirmed operation was with a V75 through J1/3 VBUS; V25/V50 equivalence is a CPO-designated configuration, not separately recorded physical validation. Button/LED and cart UI request operation are confirmed. Battery-health acquisition/reporting is abandoned; PPK2 consumption, pack autonomy, endurance, and five-device fleet validation remain outstanding.
 
 Planned during documentation migration:
 

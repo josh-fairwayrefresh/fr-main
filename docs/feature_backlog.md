@@ -8,22 +8,44 @@ through sprint closeout for status traceability; they are removed when they no
 longer serve current sprint tracking and do not remain indefinitely as future
 backlog items.
 
-## Current Sprint: Embarrassingly Small Runtime
+## Completed: Embarrassingly Small Runtime — Stable Pilot Baseline 1.0
 
-The accepted runtime retains Prototype 3.2 golfer UX, scoped-awake execution, authenticated bounded HTTPS, the local five-minute demand window, exact correlated COMPLETE, Cart Operator behavior, and fleet/lifecycle/provisioning Admin. Device Health firmware, ingestion, persistence, Course scheduling, and Admin surfaces are retired. Prototype 3.3 hardware is now CPO-confirmed operational on FRB-0003 with this accepted runtime; no firmware power-policy change accompanies that milestone. Continuous VBUS uses the existing service-awake policy, accepted for the initial pilot. Detailed evidence belongs in the hardware, firmware, and provisioning owners.
+The accepted runtime retains the Prototype 3.2 golfer UX, scoped-awake execution, authenticated bounded HTTPS, fixed five-minute demand window, exact correlated COMPLETE, Cart Operator behavior, and fleet/lifecycle/provisioning Admin. Battery-health checks/reporting and Device Health firmware/backend ingestion are abandoned. CPO-confirmed Prototype 3.3 hardware uses interchangeable Voltaic V25/V50/V75 regulated-output packs; FRB-0003 operation was validated with V75. Continuous VBUS uses the existing service-awake policy, accepted for the initial pilot. Detailed baseline evidence belongs in the hardware, firmware, deployment, and provisioning owners.
 
 | WP | Work Package | Status | Notes |
 |----|---------------|--------|-------|
 | WP1 | Current-state architecture inspection | Complete | Read-only investigation; findings reconciled into `docs/DEVICE_PROVISIONING_GUIDE.md`. |
 | WP2 | Fleet data foundation (Customer -> Course -> Device) | Complete | Canonical Customer/Course/Device schema and centralized ID allocation (`fairway_backend/cloudrun_receiver/lib/fleet/`); see `docs/DEVICE_PROVISIONING_GUIDE.md`. Supersedes former backlog items "Multi-device provisioning," "Device-to-SIM registry," and "Course configuration." |
 | WP3 | Per-device credentials spike | Complete | Per-device credential generation/verification and canonical identity implemented (`fairway_backend/cloudrun_receiver/lib/fleet/credentials.js`); Device schema normalized to remove duplicate `device_id`/`hole`/`label`/`active` fields (derived from the Firestore document ID, `location`, and `state` instead); Customer/Course hierarchy corrected to nested `customers/{customerId}/courses/{courseId}` storage with `customer_name`/`course_name` synchronized display copies on Device. Live migration completed: `customers/CUST-0001`, `customers/CUST-0001/courses/COURSE-0001`, and `devices/FRB-0001` (with issued production credential) now exist in production Firestore; legacy `devices/frb-0001` and `devices/pv4` removed; obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable removed. Physically validated end-to-end via a real button press producing a successful, correctly-attributed persisted request. See `docs/DEVICE_PROVISIONING_GUIDE.md` ("Existing Reference Device: FRB-0001") for the full record. Supersedes former backlog item "Device authentication." |
-| WP4 | Historical Device Health work | Superseded | Historical validation remains recorded in owner documents; all current runtime/backend/Admin Health behavior is retired. |
-| WP5 | Fleet/device administration UI | Complete | Customer/Course hierarchy, provisioning, deployment assignment, lifecycle, SIM/comments, commissioning/service, verified identity provenance, and export remain. Health/history/schedule UI is retired. |
+| WP4 | Historical Device Health work | Abandoned | Historical validation remains recorded in owner documents. Battery-health checks/reporting and current-source Health acquisition/ingestion are abandoned; the active restored Admin/Hosting legacy history reader is a deployment divergence, not a feature in progress. |
+| WP5 | Fleet/device administration UI | Complete | Customer/Course hierarchy, provisioning, deployment assignment, lifecycle, SIM/comments, commissioning/service, verified identity provenance, and export remain. Health workflows are retired from current source; the active restored Admin/Hosting deployment retains a legacy Health-history reader as recorded in `docs/DEPLOYMENT_GUIDE.md`. |
 | WP6 | Alert engine | Retired | Health-derived thresholds, missed-report detection, and notifications are not current product scope. |
 | WP7 | Second-device deployment spike | Complete | FRB-0002 remains the validated Prototype 3.2 field reference. Historical Health commissioning evidence does not imply a current Health runtime. |
-| WP8 | Firmware modular decomposition + physical validation | Complete | `main.c` decomposed into single-responsibility modules (`button_ux.c`, `golfer_txn.c`, `golfer_protocol.c`, `http_transport.c`, `modem_service.c`, `power_policy.c`, `transaction_scheduler.c`; `command_protocol.c` extended to own both directions of the COMPLETE wire protocol); no protocol or product-behavior change. CPO-confirmed physical validation on FRB-0002: golfer button press reached the operator dashboard with a valid `request_id`, and a CPO-initiated COMPLETE command was polled, acknowledged, and cleared the active demand window. See the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md` ("Embarrassingly Small Runtime (Health Retirement + Modular Rewrite)"). Demand-window repeat-press behavior and field-power dormant-current measurement remain outstanding for this generation. |
+| WP8 | Firmware modular decomposition + physical validation | Complete | `main.c` decomposed into single-responsibility modules (`button_ux.c`, `golfer_txn.c`, `golfer_protocol.c`, `http_transport.c`, `modem_service.c`, `power_policy.c`, `transaction_scheduler.c`; `command_protocol.c` extended to own both directions of the COMPLETE wire protocol); no protocol or product-behavior change. CPO-confirmed physical validation on FRB-0002: golfer button press reached the operator dashboard with a valid `request_id`, and a CPO-initiated COMPLETE command was polled, acknowledged, and cleared the active demand window. See the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md` ("Embarrassingly Small Runtime (Health Retirement + Modular Rewrite)"). Repeat-press transport/persistence and Prototype 3.3 PPK2 consumption characterization remain outstanding; local five-minute repeat feedback has prior FRB-0002 validation. |
 
-## Future Backlog (Post Fleet Administration + Device Health Sprint)
+## Active Work Package: Cart Inventory Management & Golfer Menu — Increment 1
+
+**Status:** backend foundation implemented in source and locally tested; not
+deployed. It adds course-scoped Inventory membership/API, product/category
+persistence, server-ordered last-saved-change-wins revisions, actor audit,
+atomic immutable menu publication, and a read-only public snapshot endpoint.
+Existing device request handling is unchanged. The source-defined route/data
+contract is owned by `docs/DEPLOYMENT_GUIDE.md`; intended user behavior is owned
+by `docs/UX_SPECIFICATION.md`.
+
+Increment 1 does not include staff inventory screens, public menu presentation,
+CSV import, logos, membership provisioning for the two pilot accounts, menu-slug
+setup, or publication of a production menu. Those are dependent later work and
+must not be treated as already available in production.
+
+Before catalog import, review Product Brief v1.2 against the supplied CSV:
+“Seltzers” is entered on a Brands row, “Candy” lacks an explicit Food Type key,
+and the first CSV cell contains the stray prefix “s corrected.” Do not guess at
+these mappings. The USD currency code for future non-null prices also requires
+CPO confirmation; current source permits only an explicit currency code with a
+price, and no price is invented.
+
+## Future Backlog (Post Fleet Administration)
 
 Recently completed pilot work: Final Golfer Button / LED UX was implemented in
 `ce25e0f0b3f21fcc0af6a79e2c4aa5c2677d2c1f` and physically validated on
@@ -54,12 +76,13 @@ observable behavior are owned by `docs/DEPLOYMENT_GUIDE.md` and
 | 6 | Watchdog + fault recovery / reset diagnostics | Incorporates former items: Watchdog and fault recovery; Reset reason logging. |
 | 7 | Course analytics dashboard | Broader Admin/Course analytics remain deferred. The bounded Cart Operator day/week/month service summary and history are implemented and deployed as part of Option C. |
 | 8 | Pilot readiness review | Final validation before pilot deployment. |
-| 9 | Prototype 3.3 pilot-build validation / deployment | FRB-0003 has CPO-confirmed functional operation. Endurance, solar/autonomy, and five-device fleet validation remain outstanding; do not carry the superseded 5580/J4 battery-health path forward as a 3.3 rollout requirement. |
+| 9 | Prototype 3.3 pilot-build validation / deployment | FRB-0003 has CPO-confirmed functional operation. Endurance, VXX pack autonomy, and five-device fleet validation remain outstanding; do not carry the superseded 5580/J4 battery-health path forward as a 3.3 rollout requirement. |
 | 10 | NCS 3.4.0 migration — Post-Field Deployment | Retain the existing gate: current engineering/feature backlog complete AND pilot units deployed and operating successfully in the field. Then evaluate migration from NCS 3.1.1 to NCS 3.4.0 and reassess Nordic Errata 36 / AP-protect handling using supported newer-SDK mechanisms. Revisit VBUS-dependent BUCK2, awake-keeper, and modem PSM policies if measured evidence justifies it; preserve validated behavior. Erase-all/debug recovery improvements remain low priority unless they obstruct deployment. |
-| 11 | Prototype 3.3 consumption and battery/solar autonomy | Measure actual idle and transaction consumption with PPK2 at an explicitly documented 3.3 boundary, isolating other supplies. Evaluate battery/solar autonomy from measured evidence before deciding whether optimization is necessary. Continuous VBUS currently retains BUCK2, the awake keeper, and PSM requested off; do not assume a dormant-current target or independent USB-host detection. Preserve the unresolved historical 5580/6106 idle regression (approximately an order of magnitude versus LP 1.2 ~23.25 uA) in its original 3.2-era context; it is not a measurement or diagnosed cause of 3.3 consumption. |
+| 11 | Prototype 3.3 consumption and VXX pack autonomy | Measure actual idle and transaction consumption with PPK2 at an explicitly documented 3.3 boundary, isolating other supplies. Evaluate V25/V50/V75 pack runtime from measured evidence before deciding whether power optimization is necessary. Continuous VBUS currently retains BUCK2, the awake keeper, and PSM requested off; do not assume a dormant-current target or independent USB-host detection. Preserve the unresolved historical 5580/6106 idle regression (approximately an order of magnitude versus LP 1.2 ~23.25 uA) in its original 3.2-era context; it is not a measurement or diagnosed cause of 3.3 consumption. |
 | 12 | Repeat-press transport and persistence | Transport firmware-local in-window repeat presses and atomically update the originating request's `repeat_press_count` and `last_repeat_press_at`. This is separate deferred work; Stage B2 COMPLETE is implemented and validated. |
 | 13 | Pilot COMPLETE-check cadence reevaluation | Reevaluate the period between completion checks using pilot field evidence. The implemented 15-second active-window period is an explicit pilot hypothesis, not a permanently optimized production constant; active-window energy characterization is not an acceptance criterion for the Stage B2 implementation itself. |
 | 14 | COMPLETE no-ack root cause (pending correlation log evidence) | FRB-0002 demand windows have been observed polling reliably (no internal gap over ~53s across dozens of consecutive polls) for up to the full five-minute window, then expiring with no acknowledgement ever recorded. The specific correlation-failure reason was not previously observable from existing logs. Structured correlation logging was added and deployed 2026-10-06 (`fairway-button-receiver-00022-wxk`; see `docs/DEPLOYMENT_GUIDE.md`) to capture the exact reason on the next occurrence. No root cause is established yet. |
+| 15 | Later sprint: retire/refine residual battery-health apparatus and legacy Health history | Battery-health checks/reporting are abandoned. The CPO accepts Stable Pilot Baseline 1.0 unchanged now and has no requirement to retain old Health data or the ability to host/display it. In a later sprint, assess and remove or repurpose any residual 5580/MAX17048 apparatus as applicable, retire the legacy Admin/Hosting Health-history reader, and determine a bounded deletion approach for historical Health records. No physical, hosting, or data changes are authorized by this backlog entry; preserve current Pilot 1.0 operation until that later work is separately scoped and authorized. |
 Historical alternatives (TMUX1101, MAX4544, switched-SAADC/divider paths) remain archived and are not active backlog items for the current pilot-build architecture.
 
 ## Abandoned Development

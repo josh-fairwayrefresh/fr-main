@@ -201,27 +201,51 @@ class FakeBatch {
   }
 }
 
-/*
- * Minimal fake transaction: this in-memory double has no real concurrent
- * writers, so no optimistic-retry logic is needed. `get`/`set`/`update`
- * simply delegate straight to the referenced FakeDocRef; FakeDocRef's own
- * operations already complete synchronously before returning their
- * resolved Promise, so callers that call transaction.set()/update()
- * without awaiting (as the real Firestore transaction API allows) still
- * observe the write immediately, matching allocateNextId()'s usage.
- */
 class FakeTransaction {
+  constructor(db) {
+    this.db = db;
+    this.operations = [];
+  }
+
   async get(ref) {
+    if (this.operations.length > 0) {
+      throw new Error('Fake transaction read after write');
+    }
     return ref.get();
   }
 
   set(ref, data, options) {
-    ref.set(data, options);
+    this.operations.push({ type: 'set', ref, data, options: options || {} });
     return this;
   }
 
   update(ref, data) {
-    ref.update(data);
+    this.operations.push({ type: 'update', ref, data });
+    return this;
+  }
+
+  delete(ref) {
+    this.operations.push({ type: 'delete', ref });
+    return this;
+  }
+
+  commit() {
+    const nextDocs = new Map(this.db._docs);
+    for (const operation of this.operations) {
+      if (operation.type === 'delete') {
+        nextDocs.delete(operation.ref.path);
+      } else if (operation.type === 'update') {
+        if (!nextDocs.has(operation.ref.path)) {
+          throw new Error(`No document to update at ${operation.ref.path}`);
+        }
+        nextDocs.set(operation.ref.path, { ...nextDocs.get(operation.ref.path), ...operation.data });
+      } else if (operation.options.merge) {
+        nextDocs.set(operation.ref.path, { ...(nextDocs.get(operation.ref.path) || {}), ...operation.data });
+      } else {
+        nextDocs.set(operation.ref.path, { ...operation.data });
+      }
+    }
+    this.db._docs = nextDocs;
     return this;
   }
 }
@@ -230,6 +254,7 @@ class FakeFirestore {
   constructor() {
     this._docs = new Map();
     this._transactionTail = Promise.resolve();
+    this.failNextTransactionCommit = false;
   }
 
   collection(name) {
@@ -241,7 +266,16 @@ class FakeFirestore {
   }
 
   async runTransaction(updateFunction) {
-    const transactionRun = this._transactionTail.then(() => updateFunction(new FakeTransaction()));
+    const transactionRun = this._transactionTail.then(async () => {
+      const transaction = new FakeTransaction(this);
+      const result = await updateFunction(transaction);
+      if (this.failNextTransactionCommit) {
+        this.failNextTransactionCommit = false;
+        throw new Error('Simulated transaction commit failure');
+      }
+      transaction.commit();
+      return result;
+    });
     this._transactionTail = transactionRun.catch(() => undefined);
     return transactionRun;
   }

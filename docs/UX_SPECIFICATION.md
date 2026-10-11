@@ -79,6 +79,37 @@ Request A may still be active when Request B is created; that is valid. The oper
 - `repeat_press_count` belongs to the originating accepted request. The cart operator does not need to see each repeat press as a new request or notification.
 - How repeat presses are communicated from the marker and persisted against the originating request is an engineering/implementation decision, not specified by this document; see `docs/feature_backlog.md`.
 
+## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
+
+Product Brief v1.2 defines this capability. The backend foundation is being
+implemented in Increment 1; staff and golfer-facing screens are not yet
+implemented.
+
+- The F&B Manager and Cart Operator retain distinct accounts but have identical
+   rights to view, add, edit, move, archive, preview, and publish products for
+   the assigned course.
+- One course-level catalog is shared across staff and carts. Each active
+   product has exactly one state: **On Cart**, **Sold Out**, or **In Inventory**.
+   Archived products are retained outside active inventory.
+- Edits save automatically. Last saved edit wins. There are no edit locks,
+   conflict warnings, approval roles, or change notifications in the pilot.
+   Product changes and publications are attributed to the acting account.
+- Saved working inventory does not change the public menu. Preview shows the
+   current saved draft; only explicit Publish Menu publishes a coherent snapshot.
+   A failed save is not reported as saved, and failed publication leaves the
+   prior published menu available.
+- Anonymous golfers scan a stable course QR URL and see only the last successful
+   publication. On Cart products appear available, Sold Out products are marked,
+   and In Inventory or Archived products are omitted. The menu is read-only and
+   does not support ordering, checkout, requests, POS, or quantity tracking.
+- Product name and category are required; subcategory, brand, description, and
+   price are optional. Blank prices remain blank. Approved CSV imports begin On
+   Cart and preserve accepted names/category relationships without fabricated
+   details.
+
+Implementation/deployment status and the CSV pre-import review items are owned
+by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
+
 ## Cart Operator Push Notifications (Implemented and Physically Validated)
 
 - The Cart Operator installs Fairway from Safari as an iPhone Home Screen web

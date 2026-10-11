@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" role="img" aria-labelledby="title desc">
+<title id="title">Classic Golf Club Menu concept</title>
+<desc id="desc">Static mobile menu concept with Fairway Refresh at Monarch Bay branding placeholders, classic typography, expandable categories, and sample availability states.</desc>
+<rect width="390" height="844" fill="#f5f0e4"/>
+<rect x="0" y="0" width="390" height="8" fill="#b18b3d"/>
+<rect x="15" y="22" width="153" height="64" rx="3" fill="#fffdf8" stroke="#c7b277"/>
+<text x="91" y="47" text-anchor="middle" font-family="Georgia,serif" font-size="15" font-weight="700" fill="#0f4638">FAIRWAY REFRESH</text>
+<text x="91" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="#0f4638">LOGO ART PLACEHOLDER</text>
+<text x="195" y="60" text-anchor="middle" font-family="Georgia,serif" font-size="14" font-weight="700" fill="#a57b24">AT</text>
+<line x1="181" y1="28" x2="181" y2="80" stroke="#b18b3d" stroke-width="2"/>
+<line x1="209" y1="28" x2="209" y2="80" stroke="#b18b3d" stroke-width="2"/>
+<rect x="222" y="22" width="153" height="64" rx="3" fill="#fffdf8" stroke="#c7b277"/>
+<text x="298" y="46" text-anchor="middle" font-family="Georgia,serif" font-size="12" font-weight="700" fill="#162d3c">MONARCH BAY</text>
+<text x="298" y="62" text-anchor="middle" font-family="Georgia,serif" font-size="9" letter-spacing="2" fill="#a57b24">GOLF CLUB</text>
+<text x="298" y="76" text-anchor="middle" font-family="Georgia,serif" font-size="7" fill="#68736d">LOGO ART PLACEHOLDER</text>
+<text x="195" y="103" text-anchor="middle" font-family="Georgia,serif" font-size="10" font-style="italic" fill="#315d4b">Push Button. Stay Refreshed.</text>
+<line x1="28" y1="119" x2="362" y2="119" stroke="#b18b3d"/>
+<text x="28" y="153" font-family="Georgia,serif" font-size="23" font-weight="700" fill="#153f32">TODAY'S CART MENU</text>
+<text x="28" y="174" font-family="Georgia,serif" font-size="11" fill="#69716a">Published menu  ·  Prices not supplied</text>
+<rect x="22" y="194" width="346" height="39" fill="#153f32"/>
+<text x="36" y="219" font-family="Georgia,serif" font-size="13" font-weight="700" fill="#fffaf0">CRAFT BEERS</text>
+<text x="352" y="219" text-anchor="end" font-family="Georgia,serif" font-size="10" fill="#e5d2a4">25 items / 8 styles  −</text>
+<text x="36" y="255" font-family="Georgia,serif" font-size="10" font-style="italic" fill="#8a6827">WEST COAST IPA</text>
+<g font-family="Georgia,serif" font-size="13" fill="#26362f">
+<text x="36" y="282">Dankerman</text><text x="36" y="310">Illusion of Gravity</text><text x="36" y="338">Beachwood</text><text x="36" y="366">Drink Beer / Slay Dragon</text>
+</g>
+<line x1="36" y1="293" x2="354" y2="293" stroke="#d8ceba"/><line x1="36" y1="321" x2="354" y2="321" stroke="#d8ceba"/><line x1="36" y1="349" x2="354" y2="349" stroke="#d8ceba"/>
+<rect x="22" y="386" width="346" height="42" fill="#fffdf8" stroke="#d5cab2"/>
+<text x="36" y="412" font-family="Georgia,serif" font-size="13" fill="#243a30">COCKTAILS</text><text x="352" y="412" text-anchor="end" font-family="Georgia,serif" font-size="11" fill="#6f766f">5 items  +</text>
+<rect x="22" y="436" width="346" height="42" fill="#fffdf8" stroke="#d5cab2"/>
+<text x="36" y="462" font-family="Georgia,serif" font-size="13" fill="#243a30">SHOTS</text><text x="352" y="462" text-anchor="end" font-family="Georgia,serif" font-size="11" fill="#6f766f">7 items  +</text>
+<rect x="22" y="486" width="346" height="42" fill="#fffdf8" stroke="#d5cab2"/>
+<text x="36" y="512" font-family="Georgia,serif" font-size="13" fill="#243a30">CANNED COCKTAILS</text><text x="352" y="512" text-anchor="end" font-family="Georgia,serif" font-size="11" fill="#6f766f">9 items  +</text>
+<rect x="22" y="536" width="346" height="42" fill="#fffdf8" stroke="#d5cab2"/>
+<text x="36" y="562" font-family="Georgia,serif" font-size="13" fill="#243a30">NON-ALCOHOLIC</text><text x="352" y="562" text-anchor="end" font-family="Georgia,serif" font-size="11" fill="#6f766f">7 items  +</text>
+<rect x="22" y="586" width="346" height="42" fill="#fffdf8" stroke="#d5cab2"/>
+<text x="36" y="612" font-family="Georgia,serif" font-size="13" fill="#243a30">FOOD</text><text x="352" y="612" text-anchor="end" font-family="Georgia,serif" font-size="11" fill="#6f766f">3 items  +</text>
+<rect x="22" y="651" width="346" height="54" rx="3" fill="#eee4cd" stroke="#c4ae78"/>
+<text x="36" y="674" font-family="Georgia,serif" font-size="9" font-weight="700" fill="#805d1e">SOLD OUT DISPLAY PREVIEW</text>
+<text x="36" y="691" font-family="Georgia,serif" font-size="10" fill="#5f5a4e">Generic state example; no SKU assigned.</text>
+<text x="195" y="737" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#6a706b">LOGO ART PLACEHOLDERS — awaiting approved files</text>
+<text x="195" y="758" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#6a706b">CSV supplies no prices or current availability states.</text>
+<rect x="0" y="785" width="390" height="59" fill="#153f32"/>
+<text x="195" y="811" text-anchor="middle" font-family="Georgia,serif" font-size="10" fill="#fffaf0">MONARCH BAY  ·  CART MENU</text>
+<text x="195" y="829" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="#e5d2a4">CLASSIC GOLF CLUB MENU — STATIC CONCEPT A</text>
+</svg>

@@ -184,6 +184,8 @@ const ADMIN_ROUTES = [
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001', body: { customer_name: 'Name' } },
   { method: 'POST', path: '/api/v1/admin/customers/CUST-0001/courses', body: { course_name: 'Course', timezone: 'UTC' } },
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001', body: { course_name: 'Course' } },
+  { method: 'PATCH', path: '/api/v1/admin/inventory-course-memberships/fnb-uid', body: { enabled: true, courses: [] } },
+  { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001/inventory-menu', body: { public_menu_slug: 'monarch-bay' } },
   { method: 'POST', path: '/api/v1/admin/devices', body: { location: null } },
   { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/credential-recovery' },
   { method: 'PATCH', path: '/api/v1/admin/devices/FRB-0001/assignment', body: { location: null } },

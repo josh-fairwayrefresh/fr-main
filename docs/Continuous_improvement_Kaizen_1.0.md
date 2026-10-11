@@ -121,6 +121,14 @@ Do not require additional investigation, documentation, decomposition, or certai
 
 If VSC can responsibly resolve an implementation question without changing product intent, architecture, canonical decisions, material risk, or authorization, that question belongs to engineering execution.
 
+The Architect should normally specify the outcome and the architectural conditions the solution must satisfy, not prescribe the engineering solution.
+
+Architecture defines the durable structure that constrains engineering: responsibility and state ownership, important boundaries and interfaces, required capabilities, material system behavior, and material constraints. Within that structure and the approved scope, VSC owns the engineering solution, including ordinary technical decomposition, implementation design, choice of appropriate mechanisms, and verification approach consistent with canonical procedures.
+
+The Architect should prescribe a particular implementation mechanism only when that mechanism is itself an accepted architectural or canonical decision, is required by a material constraint, or the CPO has explicitly chosen it. Otherwise, implementation proposals from the Architect are guidance for VSC to evaluate, not instructions to reproduce.
+
+Review the result at existing acceptance and authorization points, proportionate to risk. This does not create an additional review gate. The CPO reviews product outcomes and CPO-reserved decisions; the Architect reviews architectural coherence. VSC owns routine implementation verification within the approved scope and canonical procedures.
+
 The Architect should hand VSC the largest coherent engineering objective that is ready and authorized, not the smallest safe technical step.
 
 ⸻

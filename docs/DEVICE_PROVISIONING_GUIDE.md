@@ -195,7 +195,7 @@ WP3 migration checkpoint (CPO-authorized bootstrap writes, before the subsequent
 - Hologram activation and cellular connectivity were subsequently established. The CPO corrected physical LED wiring/polarity, including the green path, without changing firmware, and confirmed normal button/LED operation.
 - The initial absence of requests in the cart UI was resolved by deploying/assigning FRB-0003 through the web app Admin workflow. The CPO then confirmed successful end-to-end operation with requests visible in the cart operator UI. This is deployment/assignment evidence, not a change to the policy that inventory devices may communicate.
 - The exact accepted `6a19f83` / NCS 3.1.1 build and normal verified flash/reset without erase-all are recorded in `docs/FIRMWARE_SPECIFICATION.md`; Prototype 3.3 power wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
-- This is CPO-confirmed physical/operational validation for one device, not completed endurance, power, solar/autonomy, or five-device fleet validation. The exact Customer/Course/location IDs and individual request IDs were not supplied in this confirmation; no operational record or commissioning/system-identity field was changed by documenting it.
+- This is CPO-confirmed physical/operational validation for one device, not completed endurance, power, VXX pack autonomy, or five-device fleet validation. The exact Customer/Course/location IDs and individual request IDs were not supplied in this confirmation; no operational record or commissioning/system-identity field was changed by documenting it.
 
 ### Additional Normalization Candidates
 
@@ -320,9 +320,9 @@ schedule. Tony Lema Course was migrated before production activation on
 and permits editing that schedule. The migration changed only
 `service_schedule` and preserved the normalized non-schedule Course fingerprint.
 
-## Device Health Retirement
+## Abandoned Device Health and Battery-Health Checks
 
-Device Health is retired from the current firmware, backend contract, Course configuration, and Admin UI. The backend accepts only authenticated `button_press` Device events; it does not create or update `latest_health` or `health_history`, and no Health schedule or history route is part of the current Admin API. Historical records may remain in Firestore as operational history but are not current schema owners or active product surfaces.
+Battery-health checks/reporting and Device Health acquisition are abandoned. Stable firmware does not emit Health reports and current receiver source does not ingest them; historical Firestore records remain. The active restored Admin/Hosting deployment still includes a legacy Health-history reader over those old records. This is a known source/deployment divergence, not active battery monitoring; see `docs/DEPLOYMENT_GUIDE.md`. Do not infer new health samples or current battery status from that display.
 
 ### Admin Authorization (Implemented and Deployed)
 

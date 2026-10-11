@@ -36,7 +36,7 @@ Official Circuit Dojo current hardware evidence verifies the following:
 - J2 pad 4 = GND
 - J4 is the onboard battery connector; it is not a VBUS domain.
 
-This means the new Fairway feed using the onboard JST J4 connector is a physical interconnect refinement to the same VBAT/GND electrical domains as J1/1 and J2/4. The direct official PCB source confirms the shared net relationship and therefore closes the previous vendor-evidence gate for the current design state.
+This confirms the historical 3.2 J4 VBAT/GND feed used the same electrical domains as J1/1 and J2/4. It is not the current Prototype 3.3 field-power connection; that design feeds J1/3 VBUS.
 
 ## Prototype 3.3 — Current Field Power and Service Isolation
 
@@ -44,23 +44,27 @@ CPO-confirmed FRB-0003 field-power wiring (2026-10-09):
 
 | Connection | Purpose |
 |---|---|
-| Voltaic V75 USB-A positive output -> Perma-Proto +5 V rail -> Feather J1/3 VBUS | Field power through the nPM1300 VBUS input. |
-| Voltaic V75 USB-A ground -> Perma-Proto common GND rail -> Feather J2/4 GND | Common supply and circuit return. |
+| Voltaic V25, V50, or V75 regulated USB-A positive output -> Perma-Proto +5 V rail -> Feather J1/3 VBUS | Field power through the nPM1300 VBUS input. V25/V50/V75 have the same regulated-output function and differ in capacity, per CPO; FRB-0003 validation used V75. |
+| Voltaic V25, V50, or V75 USB-A ground -> Perma-Proto common GND rail -> Feather J2/4 GND | Common supply and circuit return. |
 | Feather JST battery connector (J4) and J1/1 VBAT | Unused; no field-power feed here. |
 
-The existing PV8 and orange/green/red driver wiring remains as specified below;
+The VXX pack's regulated output supplies the rail; the Feather's J1/3 VBUS pad
+is powered directly from that +5 V rail and measured by the CPO at
+approximately **5.3-5.4 V under load** on FRB-0003 with V75. The V25/V50 packs
+are designated interchangeable in output function, but that loaded voltage
+measurement is not separately recorded for those capacities. The existing PV8 and orange/green/red driver wiring remains as specified below;
 their indicator positive leads use the +5 V rail and their returns use common
 GND. The previous 6106/J4 feed is not an alternative concurrent supply.
 
-**Mutually exclusive configurations:** disconnect V75 field power before
+**Mutually exclusive configurations:** disconnect VXX field power before
 connecting Feather USB for development/service; disconnect Feather USB before
-reconnecting V75 field power. Do not power the shared VBUS domain from both
+reconnecting VXX field power. Do not power the shared VBUS domain from both
 sources simultaneously. Future PPK2 measurements must likewise isolate other
 supplies and identify the actual Prototype 3.3 measurement boundary.
 
 The nPM1300 VBUS electrical operating range is **4.0-5.5 V** (Nordic nPM1300
-Product Specification, electrical specification). The CPO observed V75 output
-of approximately **5.3-5.4 V under load**. This is within that PMIC range but
+Product Specification, electrical specification). The CPO-observed V75 output
+of approximately **5.3-5.4 V under load** at J1/3 is within that PMIC range but
 only approximately 0.1-0.2 V below its upper limit: it does not establish
 substantial upper-limit margin or bound transients/tolerance across conditions.
 Circuit Dojo's nominal USB supply guidance is a separate board/vendor
@@ -73,7 +77,7 @@ CPO-confirmed startup/button/indicator and end-to-end operation is recorded in
 Initial LED failures were corrected physically through wiring/polarity
 corrections, including the green path; no firmware change was required.
 This is functional evidence for one device, not endurance, PPK2 consumption,
-solar/autonomy, or five-device fleet validation. Firmware consequences of
+VXX pack autonomy, or five-device fleet validation. Firmware consequences of
 continuous VBUS are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
 ## Monarch Bay Pilot --- Historical Approved v3.2 Hardware Architecture
@@ -465,11 +469,15 @@ Verify terminal assignments with a continuity meter before soldering.
 
 ---
 
-# Standard Maintenance Procedure
+# Historical Prototype 1.0 Standard Maintenance Procedure
 
-1. Disconnect battery before connecting USB.
-2. Disconnect USB before reconnecting battery.
-3. Never operate from USB and battery simultaneously.
+These battery-isolation steps describe the Prototype 1.0 battery configuration.
+For current Prototype 3.3 VXX field power, use the mutually exclusive VXX/USB
+procedure at the top of this guide.
+
+1. Disconnect the Prototype 1.0 battery before connecting USB.
+2. Disconnect USB before reconnecting the Prototype 1.0 battery.
+3. Never operate Prototype 1.0 from USB and its battery simultaneously.
 
 # Historical Prototype 1.0 Operating Power Modes
 
