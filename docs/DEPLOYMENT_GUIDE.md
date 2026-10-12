@@ -1,5 +1,34 @@
 # Deployment Guide
 
+## Alignment Register
+
+The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Release: Pilot 1.1 — User Management & Inventory Integration (2026-10-12)
+
+- **Release Designation**: `pilot-1.1-with-inventory-management`
+- **Accepted Git Commit SHA**: `d169b88` (integrated into `main` and tagged `pilot-1.1-with-inventory-management`)
+- **Firmware Baseline**: `6a19f83` (Embarrassingly Small Runtime / FRB-0003 Prototype 3.3, unchanged)
+- **Production Backend Revision (Receiver)**: `fairway-button-receiver-00025-mln` (100% traffic, Cloud Run `us-central1`)
+- **Production Admin Revision**: `fairway-admin-00014-8cv` (100% traffic, Cloud Run `us-central1`, `PUT` in CORS allowlist)
+- **Production Hosting Release**: Version `2f795b8a3e7b0430b9ac11af3582e0e9f9d506b23a95f9b1d09a92626e1c69aa` (serving `assets/index-CK0CNlkc.js` on `app.fairwayrefresh.com` and `savvy-kit-496703-r5.web.app`)
+- **Firestore Rules & Indexes**:
+  - Rules: Schema-v2 server-side rules deployed and active (`hasV2Access()`, customer/course isolation, browser writes denied).
+  - Composite Indexes: 3/3 in `READY` state on `savvy-kit-496703-r5` (including `requests` customer_id/course_id/received_at).
+- **Notification Sender Revision**: `fairway-request-notifier-00003-mah` (Eventarc Firestore-triggered push sender in `us-central1`, unchanged)
+- **Authorization Schema Version**: `schema_version: 2` server-authoritative (`user_access/{uid}`).
+  - Global Admins (`admin: true, customer_id: null, course_ids: []`): `admin@fairwayrefresh.com` (`8ChxN9ikI3Zi4H4Tq4cS1dJSAQH3`), `josh@fairwayrefresh.com` (`ALri7tjCy1XsXz0TcYQ6oyQs9of2`), `curry@fairwayrefresh.com` (`IquGn8YoKJRq6OgupiCG3BqAHjq1`).
+  - Safe rollback compatibility: legacy fields (`user_type: fairway_staff`, `enabled: true`, `courses: []`) preserved on records.
+- **Validation Evidence**:
+  - Automated Suites: Backend 94/94 passed, Frontend 47/47 passed, production build passed.
+  - Production Authorization & APIs: Admin CORS preflight advertises GET, POST, PUT, PATCH, DELETE (`204`); unauthenticated Admin access returns `401`; unauthenticated device ingestion returns `404` (fail-closed); public menu `/api/v1/public/menus/monarch-bay` serves accepted 57 products in version 2.
+  - Production Hosting: Returns HTTP 200 with new production bundle `index-CK0CNlkc.js`.
+- **Known Limitations / Notes**:
+  - Google Sites embedding verification for public cart menu remains open.
+  - Monarch Bay customer staff accounts (`monarch_fnb@fairwayrefresh.com`, `monarch_cart@fairwayrefresh.com`) will be configured via Admin User Management.
+
+---
+
 ## Purpose
 
 This document is the canonical deployment and operational guide for Fairway Refresh.
@@ -127,11 +156,11 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Current Admin Revision | `fairway-admin-00012-52t` (100% traffic as of 2026-10-12; shared user-class authorization) |
-| Current Receiver Revision | `fairway-button-receiver-00024-659` (100% traffic as of 2026-10-12) |
+| Current Admin Revision | `fairway-admin-00014-8cv` (100% traffic as of 2026-10-12; schema-v2 authorization, PUT in CORS allowlist) |
+| Current Receiver Revision | `fairway-button-receiver-00025-mln` (100% traffic as of 2026-10-12; schema-v2 authorization) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
-| Runtime IAM | `roles/datastore.user` only |
+| Runtime IAM | `roles/datastore.user`, `roles/firebaseauth.admin` |
 | Allowed Browser Origins | `https://savvy-kit-496703-r5.web.app`, `https://app.fairwayrefresh.com` |
 
 The production services use the canonical fleet modules in
@@ -143,8 +172,8 @@ origin allowlist (Firebase Hosting and `app.fairwayrefresh.com`); receiver mode
 rejects any Admin browser origin. The Admin target exposes only
 `/api/v1/admin/*`, and the receiver returns `404` for that surface.
 **Deployed production authorization state (2026-10-12):** Admin revision
-`fairway-admin-00012-52t` and receiver revision
-`fairway-button-receiver-00024-659` serve 100% of traffic. Admin and Cart
+`fairway-admin-00014-8cv` and receiver revision
+`fairway-button-receiver-00025-mln` serve 100% of traffic. Admin and Cart
 authorization use the shared Firestore user-access record; legacy
 `admin:true` claims and separate Operator/Inventory collections are not
 runtime authorization sources. The old Admin-claim and separate-assignment

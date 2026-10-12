@@ -10,27 +10,23 @@ backlog items.
 
 ## Current: Pilot 1.1 User Authorization and User Management
 
-**Status: CPO Sandbox Accepted — Integrated into `origin/main`.** The current
-source contract is one authoritative `user_access/{uid}` schema-v2 record with a
-global `admin` boolean or a Customer assignment and Course restrictions. An
-empty customer `course_ids` list means all Courses belonging to that Customer;
-missing, malformed, and unversioned records deny access. Cart and Inventory share
-the Firebase Auth session and entitlement; Admin remains internal-only. Admin
-User Management assigns access to existing Auth users without creating accounts
-or handling passwords.
+**Status: Production Deployed & Technically Validated (2026-10-12).** The
+canonical source contract is one authoritative `user_access/{uid}` schema-v2
+record with a global `admin` boolean or a Customer assignment and Course
+restrictions. An empty customer `course_ids` list means all Courses belonging
+to that Customer; missing, malformed, and unversioned records deny access. Cart
+and Inventory share the Firebase Auth session and entitlement; Admin remains
+internal-only. Admin User Management assigns access to existing Auth users
+without creating accounts or handling passwords.
 
-The CPO confirmed sandbox acceptance of Admin authentication, User Management,
-customer-user authorization, customer-user denial from Admin, and course
-assignment changes and persistence. Sandbox receiver
-`fairway-button-receiver-sandbox-00014-69d` and Admin
-`fairway-admin-sandbox-00010-8rp` serve 100%; schema-v2 Firestore Rules are
-deployed, all three composite indexes are ready, and sandbox accounts have valid
-v2 records. Backend tests: 94 passed; frontend tests: 47 passed; sandbox build
-passed. Production remains on receiver `fairway-button-receiver-00024-659` and
-Admin `fairway-admin-00012-52t`; the published production menu still responds
-with 57 products. The accepted increment has been integrated and pushed to
-`origin/main`. Pilot 1.1 production release tagging will follow production
-deployment and baseline reconciliation.
+Production deployment to `savvy-kit-496703-r5` completed on 2026-10-12:
+- Cloud Run Admin revision `fairway-admin-00014-8cv` (100% traffic, PUT CORS allowed)
+- Cloud Run Receiver revision `fairway-button-receiver-00025-mln` (100% traffic)
+- Firebase Hosting version `2f795b8a3e7b0430b9ac11af3582e0e9f9d506b23a95f9b1d09a92626e1c69aa` (`assets/index-CK0CNlkc.js`)
+- Firestore Rules (schema-v2 enforced) and 3 composite indexes READY
+- Existing Firebase Auth users `admin@fairwayrefresh.com`, `josh@fairwayrefresh.com`, and `curry@fairwayrefresh.com` configured as global Admins with schema-v2 (`admin: true, customer_id: null, course_ids: []`)
+- Release tag: `pilot-1.1-with-inventory-management`
+- Firmware baseline unchanged: `6a19f83` (FRB-0003 Prototype 3.3).
 
 ## Completed: Embarrassingly Small Runtime — Stable Pilot Baseline 1.0
 
