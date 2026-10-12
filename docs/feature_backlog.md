@@ -172,6 +172,9 @@ Sandbox receiver `fairway-button-receiver-sandbox-00009-d4g`, Admin/Inventory
 Cart, Inventory, and Admin SPA routes returned `200`; unauthenticated operator,
 Inventory, and Admin APIs returned `401`. Production still serves the
 previously listed revisions; production deployment remains outstanding. The
+separate production-only Web Push notifier was not redeployed, and no sandbox
+notifier/VAPID configuration exists, so dispatch-time preference enforcement
+is currently covered by tests rather than live delivery. The
 deleted Monarch test account cannot be used for authenticated customer browser
 acceptance; create and assign a new test identity when that check is needed.
 No Fairway staff Auth account or production Rules/service traffic was changed.

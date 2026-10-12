@@ -316,7 +316,12 @@ was deleted by CPO direction and no replacement customer account was created.
 The Fairway staff accounts were not used to impersonate users for browser
 validation. Automated handler tests cover the customer Course boundary and
 Fairway staff global access; live staff/customer session acceptance remains
-outstanding.
+outstanding. The new delivery-time filtering is committed and test-verified,
+but the production-only notifier has not been redeployed, so production push
+delivery does not yet enforce saved notification preferences or recheck
+current user access. Updating that function is part of the separately
+authorized production rollout; no sandbox notifier or VAPID secret was
+created.
 
 The accepted Pilot 1.0 receiver revision remains a retained rollback target,
 not the current traffic pin after the explicitly authorized authorization
@@ -1444,6 +1449,10 @@ destination.
     retain their prior enabled behavior until the user changes the choice.
   - Push delivery runs asynchronously from request creation; delivery failure
     does not affect Cart request persistence or operator access.
+  - The existing notifier function is production-only and validates the
+    production project ID. Sandbox has no notifier/VAPID delivery deployment;
+    delivery-time preference and entitlement filtering is therefore validated
+    by backend tests, not by a sandbox Web Push delivery.
 - Firestore document events are delivered as `application/protobuf`; the sender
   obtains the request document path from the CloudEvent `subject` envelope.
 
