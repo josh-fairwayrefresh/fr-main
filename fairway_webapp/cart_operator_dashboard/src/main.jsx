@@ -609,7 +609,7 @@ function App() {
       try {
         const access = await inventoryRequest(nextUser, adminApiBaseUrl, '/api/v1/access/bootstrap');
         if (isMounted) {
-          setIsAdmin(access.user_type === 'fairway_staff');
+          setIsAdmin(access.admin === true);
         }
       } catch (error) {
         console.error('Unable to load account access:', error);
@@ -705,8 +705,8 @@ function App() {
       return undefined;
     }
 
-    const courseIds = operatorConfig.courses.map((course) => course.course_id);
-    if (courseIds.length === 0) {
+    const courses = operatorConfig.courses;
+    if (courses.length === 0) {
       setRequests([]);
       setLoadState('ready');
       return undefined;
@@ -728,14 +728,15 @@ function App() {
         .slice(0, 100);
       if (active) {
         setRequests(nextRequests);
-        if (loadedCourses.size === courseIds.length) setLoadState('ready');
+        if (loadedCourses.size === courses.length) setLoadState('ready');
       }
     }
 
-    const unsubscribers = courseIds.map((courseId) => onSnapshot(
+    const unsubscribers = courses.map((course) => onSnapshot(
       query(
         collection(db, 'requests'),
-        where('course_id', '==', courseId),
+        where('customer_id', '==', course.customer_id),
+        where('course_id', '==', course.course_id),
         orderBy('received_at', 'desc'),
         limit(100)
       ),
@@ -753,13 +754,15 @@ function App() {
             cancelled_at: data.cancelled_at,
             device_id: data.device_id,
             location_label: data.device_label,
+            customer_id: data.customer_id,
             course_id: data.course_id,
             course_name: data.course_name,
             age: formatRequestAge(data.received_at),
           };
         });
-        requestsByCourse.set(courseId, nextCourseRequests);
-        loadedCourses.add(courseId);
+        const key = `${course.customer_id}/${course.course_id}`;
+        requestsByCourse.set(key, nextCourseRequests);
+        loadedCourses.add(key);
         updateRequests();
       },
       (error) => {
@@ -860,7 +863,7 @@ function App() {
   }
 
   if (entry === 'inventory') {
-    return <Suspense fallback={<EntryStatus title="Inventory Management" message="Loading course inventory…" />}><InventoryApp user={user} apiBaseUrl={adminApiBaseUrl} courses={inventoryCourses} onSignOut={() => signOut(auth)} /></Suspense>;
+    return <Suspense fallback={<EntryStatus title="Inventory Management" message="Loading course inventory…" />}><InventoryApp user={user} apiBaseUrl={adminApiBaseUrl} courses={inventoryCourses} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={() => signOut(auth)} /></Suspense>;
   }
 
   return (

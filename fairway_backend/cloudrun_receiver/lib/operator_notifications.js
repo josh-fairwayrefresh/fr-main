@@ -4,28 +4,20 @@ const crypto = require('crypto');
 const {
   USER_ACCESS_COLLECTION,
   getUserAccess,
+  resolveAuthorizedCourses,
 } = require('./user_access');
 
 const COURSE_SUBSCRIPTIONS_COLLECTION = 'course_push_subscriptions';
 const NOTIFICATION_PREFERENCES_COLLECTION = 'user_notification_preferences';
 
-async function listAllCourses(db) {
-  const customers = await db.collection('customers').get();
-  const courseSnapshots = await Promise.all(customers.docs.map((customer) => (
-    db.collection('customers').doc(customer.id).collection('courses').get()
-  )));
-  return courseSnapshots.flatMap((snapshot, index) => snapshot.docs.map((course) => ({
-    ...course.data(),
-    customer_id: customers.docs[index].id,
-    course_id: course.id,
-    customer_name: customers.docs[index].data().customer_name || customers.docs[index].id,
-  }))).filter((course) => (
-    typeof course.course_name === 'string'
-  ));
-}
-
 function subscriptionId(endpoint) {
   return crypto.createHash('sha256').update(endpoint).digest('hex');
+}
+
+function notificationPreferenceId(customerId, courseId) {
+  return crypto.createHash('sha256')
+    .update(JSON.stringify([customerId, courseId]))
+    .digest('hex');
 }
 
 function isValidSubscription(subscription) {
@@ -46,61 +38,87 @@ async function getOperatorAssignment(db, operatorUid) {
   const access = await getUserAccess(db, operatorUid);
   if (!access) return null;
 
-  const courses = access.user_type === 'fairway_staff'
-    ? await listAllCourses(db)
-    : access.courses;
+  const courses = await resolveAuthorizedCourses(db, access);
   return courses.length > 0 ? { ...access, courses } : null;
 }
 
 async function getNotificationPreferences(db, operatorUid, courses) {
   const preferences = await Promise.all(courses.map(async (course) => {
-    const preferenceRef = db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
-      .doc(operatorUid).collection('courses').doc(course.course_id);
+    const coursePreferences = db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
+      .doc(operatorUid).collection('courses');
+    const preferenceRef = coursePreferences.doc(
+      notificationPreferenceId(course.customer_id, course.course_id)
+    );
     const preference = await preferenceRef.get();
     if (preference.exists) {
-      return [course.course_id, preference.data().enabled === true];
+      return [`${course.customer_id}/${course.course_id}`, preference.data().enabled === true];
+    }
+    const hasDuplicateCourseId = courses.some((candidate) => (
+      candidate.course_id === course.course_id && candidate.customer_id !== course.customer_id
+    ));
+    const legacyPreference = hasDuplicateCourseId
+      ? null
+      : await coursePreferences.doc(course.course_id).get();
+    if (legacyPreference?.exists) {
+      return [`${course.customer_id}/${course.course_id}`, legacyPreference.data().enabled === true];
     }
 
     const activeSubscription = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
       .doc(course.course_id).collection('subscriptions')
       .where('operator_uid', '==', operatorUid)
+      .where('customer_id', '==', course.customer_id)
       .where('status', '==', 'active')
       .limit(1)
       .get();
-    return [course.course_id, !activeSubscription.empty];
+    return [`${course.customer_id}/${course.course_id}`, !activeSubscription.empty];
   }));
   return Object.fromEntries(preferences);
 }
 
-async function setNotificationPreference(db, operatorUid, courseId, enabled, now = new Date()) {
-  if (typeof courseId !== 'string' || typeof enabled !== 'boolean') {
+async function setNotificationPreference(db, operatorUid, customerId, courseId, enabled, now = new Date()) {
+  if (typeof customerId !== 'string' || typeof courseId !== 'string' || typeof enabled !== 'boolean') {
     throw new Error('Invalid notification preference');
   }
   const assignment = await getOperatorAssignment(db, operatorUid);
-  const course = assignment?.courses.find((candidate) => candidate.course_id === courseId);
+  const course = assignment?.courses.find((candidate) => (
+    candidate.customer_id === customerId && candidate.course_id === courseId
+  ));
   if (!course) {
     throw new Error('Operator is not authorized for this Course');
   }
 
   await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
-    .doc(operatorUid).collection('courses').doc(courseId).set({
+    .doc(operatorUid).collection('courses')
+    .doc(notificationPreferenceId(customerId, courseId)).set({
+      customer_id: customerId,
       course_id: courseId,
       enabled,
       updated_at: now,
     });
-  return { course_id: courseId, enabled };
+  return { customer_id: customerId, course_id: courseId, enabled };
 }
 
-async function isNotificationEnabled(db, operatorUid, courseId) {
+async function isNotificationEnabled(db, operatorUid, customerId, courseId) {
   const preference = await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
-    .doc(operatorUid).collection('courses').doc(courseId).get();
+    .doc(operatorUid).collection('courses')
+    .doc(notificationPreferenceId(customerId, courseId)).get();
   if (preference.exists) {
     return preference.data().enabled === true;
+  }
+  const assignment = await getOperatorAssignment(db, operatorUid);
+  const hasDuplicateCourseId = assignment?.courses.some((course) => (
+    course.course_id === courseId && course.customer_id !== customerId
+  ));
+  if (!hasDuplicateCourseId) {
+    const legacyPreference = await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
+      .doc(operatorUid).collection('courses').doc(courseId).get();
+    if (legacyPreference.exists) return legacyPreference.data().enabled === true;
   }
 
   const legacySubscription = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
     .doc(courseId).collection('subscriptions')
     .where('operator_uid', '==', operatorUid)
+    .where('customer_id', '==', customerId)
     .where('status', '==', 'active')
     .limit(1)
     .get();
@@ -108,6 +126,7 @@ async function isNotificationEnabled(db, operatorUid, courseId) {
 }
 
 async function registerPushSubscription(db, operatorUid, {
+  customerId,
   courseId,
   subscription,
   userAgent = null,
@@ -119,12 +138,14 @@ async function registerPushSubscription(db, operatorUid, {
   }
 
   const assignment = await getOperatorAssignment(db, operatorUid);
-  const course = assignment?.courses.find((candidate) => candidate.course_id === courseId);
+  const course = assignment?.courses.find((candidate) => (
+    candidate.customer_id === customerId && candidate.course_id === courseId
+  ));
   if (!course) {
     throw new Error('Operator is not authorized for this Course');
   }
 
-  const id = subscriptionId(subscription.endpoint);
+  const id = subscriptionId(`${customerId}/${courseId}/${subscription.endpoint}`);
   const ref = db.collection(COURSE_SUBSCRIPTIONS_COLLECTION).doc(courseId)
     .collection('subscriptions').doc(id);
   const existing = await ref.get();

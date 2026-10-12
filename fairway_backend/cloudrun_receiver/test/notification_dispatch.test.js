@@ -16,14 +16,15 @@ function test(name, fn) {
 }
 
 async function seedRequestAndSubscription(db) {
+  await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Monarch Bay GC' });
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .set({ course_name: 'Tony Lema Course' });
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0002')
+    .set({ course_name: 'Second Course' });
   await db.collection('user_access').doc('operator-123').set({
-    user_type: 'customer_staff',
-    enabled: true,
-    courses: [{
-      customer_id: 'CUST-0001',
-      course_id: 'COURSE-0001',
-      course_name: 'Tony Lema Course',
-    }],
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
     course_ids: ['COURSE-0001'],
   });
   await db.collection('requests').doc('request-a').set({
@@ -89,10 +90,10 @@ test('revoked course access prevents push delivery even when the subscription re
   const db = new FakeFirestore();
   await seedRequestAndSubscription(db);
   await db.collection('user_access').doc('operator-123').set({
-    user_type: 'customer_staff',
-    enabled: true,
-    courses: [],
-    course_ids: [],
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
+    course_ids: ['COURSE-0002'],
   });
   let sends = 0;
 

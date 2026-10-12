@@ -84,10 +84,12 @@ fail before deployment/runtime traffic. The local `.env.sandbox` deployment
 configuration is gitignored; `.env.sandbox.example` is the tracked template.
 
 The sandbox has a distinct Firebase web application and email/password Auth
-configuration. The sandbox Auth record for `admin@fairwayrefresh.com` has the
-`admin: true` custom claim; this is a sandbox-local UID and does not establish
-or modify a production claim. Firestore rules and indexes were deployed from
-the repository. The runtime identity has `roles/datastore.user`; the sandbox
+configuration. The sandbox Auth record for `admin@fairwayrefresh.com` has a
+historical `admin: true` custom claim, but current authorization ignores custom
+claims and uses the schema-v2 Firestore access record. This is a sandbox-local
+UID and does not establish or modify a production claim. Firestore rules and
+indexes were deployed from the repository. The runtime identity has
+`roles/datastore.user`; the sandbox
 build identity has `roles/run.builder`. Organization policy rejected an
 `allUsers` IAM binding, so the sandbox Cloud Run service uses the supported
 no-invoker-IAM-check service setting while application authentication remains
@@ -151,76 +153,106 @@ exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
 
 Fairway Refresh has exactly two application entry points: the customer-facing
 **Cart UI** and the administrative **Admin UI**. Inventory Management is a
-modular feature within the Cart UI, not a third application. There are exactly
-two user classes: `fairway_staff` (Fairway Refresh internal personnel) and
-`customer_staff` (customer personnel). Both use one Firebase Authentication
-session. One authoritative Firestore record, `user_access/{uid}`, stores the
-class and any explicitly assigned Courses; it is the only runtime customer
-course-entitlement source for Cart Operations and Inventory. Every customer
-user with an assigned Course receives the same full customer-editable Cart UI
-capability for that Course, including Inventory. No separate Inventory
-membership, role tier, or login exists. Assignment to one Course does not grant
-access to any other Course.
+modular feature within the Cart UI, not a third application. Both entry points
+use the existing Firebase Authentication session. One server-authoritative
+Firestore record, `user_access/{uid}`, controls Admin entitlement and
+customer/course access; there is no separate Inventory login, membership, or
+role tier.
 
-The `user_access/{uid}` record is server-read and not browser-readable or
-browser-writable under the repository Firestore Rules. Its fields are
-`user_type` (`fairway_staff` or `customer_staff`), `enabled` (`true` for an
-active record), `courses` (an array of `{ customer_id, course_id, course_name
-}` assignments), and `course_ids` (the matching Course ID list required by
-Firestore Rules for request reads). The `courses` and `course_ids` values must
-describe the same assignments. A `customer_staff` record needs one or more
-valid Course assignments to enter customer features. `fairway_staff` may use
-the Admin UI without a Course assignment; Cart customer features still require
-an explicit Course assignment. Create the Firebase Authentication user first,
-then create this document using that exact Auth UID in the Firestore Studio.
-Changing `user_type` classifies the account; adding/removing entries in both
-Course fields grants/revokes customer-feature access. Missing, disabled, or
-malformed documents fail closed. Email names are not a runtime authorization
-rule. The `admin:true` custom claim is not the Admin authorization source.
-
-For example, the Studio document for a customer assigned to the production
-Monarch Bay course has this shape (use the actual Auth UID as the document ID):
+The active record uses schema version 2:
 
 ```json
 {
-  "user_type": "customer_staff",
-  "enabled": true,
-  "courses": [
-    {
-      "customer_id": "CUST-0001",
-      "course_id": "COURSE-0001",
-      "course_name": "Tony Lema Course"
-    }
-  ],
+  "schema_version": 2,
+  "admin": false,
+  "customer_id": "CUST-0001",
   "course_ids": ["COURSE-0001"]
 }
 ```
 
-An internal Fairway Refresh user uses `"user_type": "fairway_staff"`,
-`"enabled": true`, `"courses": []`, and `"course_ids": []`. Fairway staff access
-all existing Courses in Cart UI and Inventory; the backend resolves the current
-Customer/Course catalog rather than requiring per-user Course provisioning.
-The same staff class is the sole Admin entitlement.
+`admin: true` grants global Admin, Cart, and Inventory access across all
+Customers and Courses; its `customer_id` is null. For `admin: false`, one
+existing `customer_id` is required. A non-empty `course_ids` list restricts the
+user to those Courses within that Customer. An empty list deliberately grants
+all Courses belonging to that Customer. Missing, unsupported, or malformed
+schema fields deny access; a missing `user_access/{uid}` record never defaults
+to unrestricted access. Customer users cannot enter Admin UI or call protected
+Admin APIs. Email addresses and Firebase custom claims do not determine
+authorization.
 
-`/admin` is the Admin UI entry and is allowed only when the authenticated UID's
-active `user_access` record has `user_type: "fairway_staff"`. A customer user's
-Firebase token claims cannot grant Admin access. `/` and
-`/requests/{requestId}` enter the Cart UI: `fairway_staff` can access all
-existing Courses, while `customer_staff` requires at least one explicit
-assignment in the same active user-access record. `/inventory` is a feature
-route inside Cart UI and uses the same global staff or assigned-customer-course
-entitlement. The backend rechecks the exact Course on every Inventory
-operation; the public menu remains anonymous and read-only. The conditional
-Inventory navigation is available throughout authorized Cart Operations. All
-customer features share the authenticated session, and the established
-Cart-first sign-in, direct-route, and Cart Operations return-navigation
-behavior remains.
+The record is server-read and is neither browser-readable nor browser-writable
+under Firestore Rules. Admin User Management edits the authorization settings
+for existing Firebase Auth users. It does not create Auth accounts or manage
+passwords. Onboarding creates an Email/Password Auth account first, then an
+Admin uses **User Management** to assign Admin access or select a Customer and
+Courses. Until a valid version-2 record is saved, the account is denied.
+Disabling an Auth account and revoking tokens are enforced independently of
+the access record.
 
-The Admin API and UI both enforce the staff class on the server. The shared
-`user_access/{uid}` record is authoritative; legacy Operator or Inventory
-membership records cannot grant customer access.
+Runtime services and Firestore Rules accept only schema version 2. The
+one-time, sandbox-restricted `migrate_authorization_v2.js` script reads
+well-formed schema-v1 records only to migrate them; the old class and assignment
+fields remain on migrated documents solely to support a coordinated rollback.
+Separate legacy Operator and Inventory membership collections never grant
+runtime access. A rollback must restore a matching service-and-rules revision;
+the retained fields are not an active second authorization model.
 
-#### User-Class Authorization Rollout State — 2026-10-12
+`/admin` is allowed only when the authoritative record has `admin: true`.
+`/` and `/requests/{requestId}` enter the Cart UI and require either global Admin
+access or a valid Customer/Course entitlement. `/inventory` is a feature route
+inside Cart UI and uses the same Firebase session and entitlement. The
+backend rechecks the exact Customer and Course for every protected operation;
+the public menu remains anonymous and read-only. The conditional Inventory
+navigation remains in Cart Operations, and Inventory navigation returns to
+Cart Operations without another sign-in.
+
+#### Pilot 1.1 Authorization — Sandbox Deployment and Validation (2026-10-12)
+
+Schema-v2 is the current source authorization contract and is deployed to the
+sandbox only. The sandbox receiver revision
+`fairway-button-receiver-sandbox-00012-pcx` and Admin revision
+`fairway-admin-sandbox-00008-fxz` each serve 100% of traffic. Firestore Rules
+compile and require schema-v2; unversioned records cannot authorize Firestore
+request reads. All three sandbox composite indexes are `READY`, including the
+Customer/Course/received-time index used by Cart queries.
+
+A read-only Auth/Firestore audit found four sandbox Auth accounts and four
+matching, valid schema-v2 access records: one global Admin and three customer
+accounts scoped to `CUST-0003` / `COURSE-0002`. The migration script's
+sandbox-only dry run reported zero remaining records to migrate. No account,
+password, production record, or published menu was changed by this release.
+The scoped course is Monarch Bay GC / Tony Lema Course. Its Inventory
+collection contains 57 active On Cart products and three retained archived
+products; the active Inventory view therefore presents the accepted 57 items.
+Unauthenticated smoke checks returned `401` from the Admin access-bootstrap,
+Inventory bootstrap, Admin user-management, and receiver operator-bootstrap
+endpoints; the receiver continues to return `404` for the Admin fleet API.
+The sandbox Hosting Cart, Inventory, and Admin routes each returned `200`.
+
+Validation on this source: 94 backend tests and 47 frontend tests passed;
+`npm run build:sandbox` passed with the existing large-chunk advisory.
+The production Cloud Run revisions remain receiver
+`fairway-button-receiver-00024-659` and Admin `fairway-admin-00012-52t`, each
+serving 100% of traffic; no production deployment, traffic change, Rules
+change, or account change was made. The anonymous production menu endpoint
+returned `200` with published snapshot version 2 and 57 products, all `on_cart`.
+The sandbox public-menu endpoint remains unpublished (`404`); no menu was
+published.
+
+Automated authorization and notification tests pass, but authenticated
+customer/Admin API and browser acceptance have not been performed with a real
+Firebase session. Sandbox has no Web Push notifier/VAPID deployment, so
+delivery-time notification filtering is test-verified only. Keep Pilot 1.1
+acceptance open until the CPO signs into the sandbox, verifies Cart and
+Inventory access and course isolation, and confirms Admin denial for a
+customer account. Production remains on its prior authorization and notifier
+deployment until separately authorized.
+
+#### Historical Schema-v1 Authorization Rollout — 2026-10-12 (Superseded)
+
+The following records document the initial rollout and are not the current
+authorization contract. The Pilot 1.1 schema-v2 implementation and deployment
+state are recorded in the section below.
 
 The shared `user_access/{uid}` contract is deployed. The migration is
 dry-run-by-default, requires an explicit Firebase project, unions enabled
@@ -274,7 +306,12 @@ Fairway staff Auth accounts were rechecked as enabled and left unchanged.
 Customer account creation and Course assignment remain explicit onboarding
 steps; email prefixes are not a runtime authorization rule.
 
-#### Authorization and Notification Source Completion — 2026-10-12
+#### Historical Authorization and Notification Source Snapshot — 2026-10-12
+
+This records the earlier schema-v1 implementation and deployment evidence. It
+is superseded for current source and sandbox state by the Pilot 1.1 section
+above; the production deployment and notifier status below remain historical
+production evidence, not a claim that schema-v2 has been deployed there.
 
 The accepted source now gives enabled `fairway_staff` global Cart and
 Inventory access by resolving Courses from the canonical Customer/Course
@@ -451,26 +488,28 @@ integration is not evidence that the currently deployed production Admin
 image matches the repository source.
 
 Customer feature operations authenticate a Firebase ID token and authorize the
-requested Customer/Course against `user_access/{uid}`. Each active customer
-class record has one Course assignment list shared by Cart Operations and
-Inventory; every assigned customer user has the same full feature capability.
-There is no separate Inventory membership or editor-role tier. The independent
-`fairway_staff` class gates Admin UI/API access and does not grant customer
-Course access. Firestore Rules permit assigned users to read only requests in
-their Course ID list and remain closed to browser writes.
+requested Customer/Course against a valid schema-v2 `user_access/{uid}`.
+Customer users have one Course restriction list shared by Cart Operations and
+Inventory; an empty list means all Courses belonging to the selected Customer.
+There is no separate Inventory membership or editor-role tier. The `admin`
+boolean grants global Admin, Cart, and Inventory access when true; when false,
+the record must name one Customer and is restricted to that Customer. Firestore
+Rules require a valid schema-v2 record, scope request reads by Customer and
+Course, deny unversioned legacy records, and remain closed to browser writes.
 
 | Source route | Access | Contract |
 |---|---|---|
-| `GET /api/v1/access/bootstrap` | Any active `user_access/{uid}` | Returns the authoritative user class; used by the UI to gate Admin entry. |
-| `GET /api/v1/operator/bootstrap` | Any active user with assigned Courses | Returns only the user's assigned Courses and push configuration. |
-| `GET /api/v1/inventory/bootstrap` | Any active user with assigned Courses | Returns only the user's assigned Courses; same entitlement as Cart Operations. |
-| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | User assigned to exact Customer/Course | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
+| `GET /api/v1/access/bootstrap` | Any user with valid schema-v2 access | Returns `admin`, `customer_id`, and `course_ids` (plus a compatibility-only `user_type` response field); the UI uses `admin` to gate Admin entry. |
+| `GET /api/v1/operator/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses and push configuration. |
+| `GET /api/v1/inventory/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses; same entitlement as Cart Operations. |
+| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Admin or user entitled to the exact Customer/Course | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
 | `GET .../preview`; `POST .../publish` | Course member | Preview reads saved working inventory. Publish atomically stores a snapshot and advances the published pointer. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Returns only the latest published snapshot; no staff identity or draft fields. |
-| `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `fairway_staff` | Reserves the stable menu slug. User classes and course assignments are managed in `user_access/{uid}` through Firestore Studio, not a feature-specific API. |
+| `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
+| `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; it does not create Auth users or manage passwords. |
 
 Data is owned by the existing nested Course. `inventory/state` stores a
 monotonic inventory revision and last-published pointer. `inventory_products`
@@ -1374,7 +1413,7 @@ Current Backend Deployment Facts:
 - Documented deployed service name: fairway-button-receiver
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
 - Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
-- The deployed backend requires a Firebase bearer ID token on operator mutations, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The active Cart Operator workflow has no CONFIRM interaction; COMPLETE, Cancel, Suspend/Resume, and dashboard-summary calls are restricted by enabled Course assignment. The WP5 admin API continues to require the out-of-band-assigned Firebase custom claim `admin: true` on every `/api/v1/admin/*` route and returns HTTP 403 before fleet reads or writes for authenticated non-admins.
+- The deployed backend requires a Firebase bearer ID token on operator mutations, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The active Cart Operator workflow has no CONFIRM interaction; COMPLETE, Cancel, Suspend/Resume, and dashboard-summary calls require the current server-side user-access entitlement. Production's deployed authorization uses the schema-v1 `user_access` staff/customer class; the sandbox uses schema-v2 `admin` and Customer/Course settings. Firebase custom claims do not grant Admin access. The Admin API returns HTTP 403 before protected reads or writes for authenticated non-admins.
 - Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
 - Supported request routes:
   - POST /
@@ -1417,11 +1456,11 @@ API, Notifications API, a root service worker, and VAPID. It does not use FCM,
 a native application, Apple ID addressing, or an Apple account as a push
 destination.
 
-- `user_access/{uid}` is the server-owned class and Course-entitlement record.
-  Its `courses` array authorizes backend customer-feature operations and
-  `course_ids` scopes Firestore Rules request reads; these fields must remain
-  synchronized. Legacy Operator assignments are not a runtime authorization
-  source.
+- `user_access/{uid}` is the server-owned schema-v2 entitlement. `admin: true`
+  grants global access; otherwise `customer_id` and `course_ids` scope Cart and
+  Inventory. Empty `course_ids` means all Courses belonging to that Customer.
+  Legacy/unversioned records and separate Operator assignments do not grant
+  runtime access.
 - `course_push_subscriptions/{courseId}/subscriptions/{subscriptionId}` stores
   endpoint and encryption material server-side. Browser bootstrap responses are
   redacted and never return stored subscription secrets.
@@ -1438,15 +1477,22 @@ destination.
 - The VAPID private key is stored in Secret Manager. The public key and key
   version are supplied through operator bootstrap and may be present in public
   client configuration.
-  - `user_notification_preferences/{uid}/courses/{courseId}` stores each user's
-    explicit enable/disable choice independently for every authorized Course.
-    Browser notification permission and installed-app support are separate
-    device conditions, not substitutes for the saved preference.
-  - Delivery rechecks the subscriber's active `user_access/{uid}` entitlement
-    and the current Course preference. Revoked Course access or an explicit
-    disabled preference excludes a subscription even while its stored push
-    endpoint remains active. Existing active subscriptions without a preference
-    retain their prior enabled behavior until the user changes the choice.
+  - `user_notification_preferences/{uid}/courses/{pairId}` stores each user's
+    explicit enable/disable choice independently for each authorized
+    Customer/Course pair. `pairId` is the SHA-256 digest of the JSON pair
+    `[customer_id, course_id]`; the document also stores both IDs. The former
+    Course-ID-only preference is read only when that Course ID is unambiguous
+    across the user's authorized Courses. Browser notification permission and
+    installed-app support are separate device conditions, not substitutes for
+    the saved preference.
+  - Current repository source rechecks the subscriber's active
+    `user_access/{uid}` entitlement and the current Customer/Course preference.
+    Revoked access or an explicit disabled preference excludes a subscription
+    even while its stored push endpoint remains active. Existing active
+    subscriptions without a preference retain their prior enabled behavior
+    until the user changes the choice. These checks are covered by backend
+    tests; the production notifier remains on its earlier deployed revision and
+    does not yet enforce the new preference behavior.
   - Push delivery runs asynchronously from request creation; delivery failure
     does not affect Cart request persistence or operator access.
   - The existing notifier function is production-only and validates the
@@ -1509,14 +1555,15 @@ Repository-Derived and Historical Web Deployment Facts:
 - Primary production application origin: `https://app.fairwayrefresh.com`
 - Firebase Hosting origin: `https://savvy-kit-496703-r5.web.app`
 - First-class entry routes:
-  - `https://app.fairwayrefresh.com/admin` for `fairway_staff` administration
+  - `https://app.fairwayrefresh.com/admin` for authorized Admin users
   - `https://app.fairwayrefresh.com/` and `/requests/{requestId}` for
-    explicitly Course-assigned users
+    authorized users; customer users require their assigned Course scope
   - `https://app.fairwayrefresh.com/inventory` for the Inventory feature within
-    Cart UI, using the same assigned-Course entitlement
+    Cart UI, using the same global or Customer/Course entitlement
 - Firebase Authentication sessions are shared across routes, but each route
-  uses the authoritative `user_access/{uid}` record; Admin entry requires
-  `fairway_staff` and customer routes require an explicit Course assignment.
+  uses the authoritative schema-v2 `user_access/{uid}` record; Admin entry
+  requires `admin: true`, while customer routes require global Admin access or
+  a valid Customer/Course assignment.
 - Validated WP5-S1 sandbox deployment command:
   - npx firebase-tools deploy --only hosting --project fairway-refresh-sandbox-260930 --non-interactive
 - Validated production deployment command:
@@ -1599,9 +1646,10 @@ Repository-Derived Firestore Configuration:
 
 - Rules file path: fairway_webapp/cart_operator_dashboard/firestore.rules
 - Current rule behavior in repository:
-  - requests are readable only when the authenticated UID has an enabled,
-    valid `user_access/{uid}` record whose `course_ids` contains the request's
-    `course_id`
+  - requests are readable only when the authenticated UID has a valid
+    schema-v2 `user_access/{uid}` record and is global Admin or the request
+    matches the record's Customer and Course scope; an empty `course_ids` list
+    permits all Courses belonging to that Customer
   - Browser writes are denied by rules
   - Catch-all deny for other document paths
 
@@ -1612,10 +1660,10 @@ Repository-Derived collection usage in repository code:
 - `devices/{FRB-XXXX}` (Device registry, metadata, state-derived communication permission, and credential verifier)
 - `counters/CUST`, `counters/COURSE`, and `counters/FRB` (central ID allocation)
 - `requests/{requestId}` (request creation, lookup, and status updates)
-- `user_access/{uid}` (server-owned user-class and customer-course entitlement)
+- `user_access/{uid}` (server-owned schema-v2 Admin/customer-course entitlement)
 - `operator_course_assignments/{uid}` and
-  `inventory_course_memberships/{uid}` (legacy records retained as migration
-  inputs; not runtime authorization sources)
+  `inventory_course_memberships/{uid}` (legacy migration inputs; not runtime
+  authorization sources)
 - `course_push_subscriptions/{courseId}/subscriptions/{subscriptionId}` (private push subscription material)
 - `notification_dispatches/{requestId}/subscriptions/{subscriptionId}` (effective-once dispatch state)
 

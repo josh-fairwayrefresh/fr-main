@@ -2,14 +2,35 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /requests/{requestId} {
-      allow read: if request.auth != null
-        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.enabled == true
+    function hasV2Access() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/user_access/$(request.auth.uid))
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.schema_version == 2
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin is bool
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids is list
         && (
-          get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.user_type == 'fairway_staff'
+          (
+            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == null
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids.size() == 0
+          )
           || (
-            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.user_type == 'customer_staff'
-            && resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids
+            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id is string
+          )
+        );
+    }
+
+    match /requests/{requestId} {
+      allow read: if hasV2Access() && (
+          get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
+          || (
+            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == resource.data.customer_id
+            && (
+              get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids.size() == 0
+              || resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids
+            )
           )
         );
       allow write: if false;

@@ -95,7 +95,9 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
     const currentlyAuthorized = assignment?.courses.some((course) => (
       course.course_id === request.course_id && course.customer_id === subscription.customer_id
     ));
-    if (!currentlyAuthorized || !(await isNotificationEnabled(db, subscription.operator_uid, request.course_id))) {
+    if (!currentlyAuthorized || !(await isNotificationEnabled(
+      db, subscription.operator_uid, request.customer_id, request.course_id
+    ))) {
       continue;
     }
 

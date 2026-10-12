@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import NotificationSetup from './NotificationSetup';
 import { operatorRequest } from './lib/operator';
+import { courseKey, courseContextUrl, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -106,23 +107,36 @@ export default function OperatorApp({
   const [tab, setTab] = useState('requests');
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState('');
-  const [selectedCourseId, setSelectedCourseId] = useState(operatorConfig.courses[0]?.course_id || '');
+  const [selectedCourseKey, setSelectedCourseKey] = useState(() => {
+    const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
+    return selected ? courseKey(selected) : '';
+  });
   const [pending, setPending] = useState('');
   const [celebration, setCelebration] = useState('');
 
-  async function refreshDashboard() {
+  async function refreshDashboard(selectedCourse = course) {
+    setDashboard(null);
+    const query = selectedCourse
+      ? `?customer_id=${encodeURIComponent(selectedCourse.customer_id)}&course_id=${encodeURIComponent(selectedCourse.course_id)}`
+      : '';
     try {
-      setDashboard(await operatorRequest(user, apiBaseUrl, '/api/v1/operator/dashboard'));
+      setDashboard(await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`));
       setDashboardError('');
     } catch (reason) {
       setDashboardError(reason.message);
     }
   }
 
-  useEffect(() => { refreshDashboard(); }, [user, apiBaseUrl]);
-  const course = dashboard?.courses?.find((item) => item.course_id === selectedCourseId)
-    || dashboard?.courses?.[0];
-  const selectedRequests = requests.filter((request) => !selectedCourseId || request.course_id === selectedCourseId);
+  const selectedCourse = operatorConfig.courses.find((item) => courseKey(item) === selectedCourseKey)
+    || selectedCourseFromLocation(operatorConfig.courses, window.location.search);
+  const course = dashboard?.courses?.find((item) => (
+    item.customer_id === selectedCourse?.customer_id &&
+    item.course_id === selectedCourse?.course_id
+  )) || selectedCourse;
+  useEffect(() => { refreshDashboard(course); }, [user, apiBaseUrl, course?.customer_id, course?.course_id]);
+  const selectedRequests = requests.filter((request) => (
+    !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
+  ));
 
   async function actOnRequest(request, action) {
     setPending(request.id);
@@ -148,7 +162,7 @@ export default function OperatorApp({
     setPending('service');
     try {
       await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${action}`, {
-        method: 'POST', body: { course_id: course.course_id },
+        method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id },
       });
       await refreshDashboard();
     } finally {
@@ -156,5 +170,5 @@ export default function OperatorApp({
     }
   }
 
-  return <main className="operator-app"><header className="op-header"><Brand /><nav><button className={tab === 'requests' ? 'active' : ''} type="button" onClick={() => setTab('requests')}>Requests</button><button className={tab === 'history' ? 'active' : ''} type="button" onClick={() => setTab('history')}>History</button></nav><a className="op-inventory" href="/inventory" title="Inventory management"><Package size={17} />Inventory</a>{operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)}>{operatorConfig.courses.map((item) => <option key={item.course_id} value={item.course_id}>{item.course_name}</option>)}</select></label>}<ServiceStatus course={course} /><button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course}>{course?.service_state?.suspended ? <Play size={17} /> : <Pause size={17} />}<span>{course?.service_state?.suspended ? 'Resume Service' : 'Suspend Service'}</span></button>{isAdmin && <button className="op-icon" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}<button className="op-icon" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button></header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  return <main className="operator-app"><header className="op-header"><Brand /><nav><button className={tab === 'requests' ? 'active' : ''} type="button" onClick={() => setTab('requests')}>Requests</button><button className={tab === 'history' ? 'active' : ''} type="button" onClick={() => setTab('history')}>History</button></nav><a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>{operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); setDashboard(null); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}<span className="op-current-course">{course ? `${course.customer_name} · ${course.course_name}` : 'No authorized Course'}</span><ServiceStatus course={course} /><button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course}>{course?.service_state?.suspended ? <Play size={17} /> : <Pause size={17} />}<span>{course?.service_state?.suspended ? 'Resume Service' : 'Suspend Service'}</span></button>{isAdmin && <button className="op-icon" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}<button className="op-icon" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button></header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

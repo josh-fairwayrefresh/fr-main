@@ -64,13 +64,9 @@ async function seedCourse(db, courseId = COURSE_ID) {
 
 async function seedCustomerAssignment(db, uid, courseIds = [COURSE_ID]) {
   await db.collection('user_access').doc(uid).set({
-    user_type: 'customer_staff',
-    enabled: true,
-    courses: courseIds.map((courseId) => ({
-      customer_id: CUSTOMER_ID,
-      course_id: courseId,
-      course_name: 'Monarch Bay Course',
-    })),
+    schema_version: 2,
+    admin: false,
+    customer_id: CUSTOMER_ID,
     course_ids: courseIds,
   });
 }
@@ -116,9 +112,9 @@ test('Customer course assignment grants full Inventory access without an Invento
   await seedCustomerAssignment(db, TOKENS.fnb.uid);
   await seedCustomerAssignment(db, TOKENS.cart.uid);
   await db.collection('user_access').doc(TOKENS.admin.uid).set({
-    user_type: 'fairway_staff',
-    enabled: true,
-    courses: [],
+    schema_version: 2,
+    admin: true,
+    customer_id: null,
     course_ids: [],
   });
   await db.collection('inventory_course_memberships').doc(TOKENS.outsider.uid).set({
@@ -163,9 +159,9 @@ test('Legacy Inventory membership provisioning endpoint no longer manages custom
   const db = new FakeFirestore();
   await seedCourse(db);
   await db.collection('user_access').doc(TOKENS.admin.uid).set({
-    user_type: 'fairway_staff',
-    enabled: true,
-    courses: [],
+    schema_version: 2,
+    admin: true,
+    customer_id: null,
     course_ids: [],
   });
   const request = createApi(db);
@@ -177,24 +173,34 @@ test('Legacy Inventory membership provisioning endpoint no longer manages custom
   assert.strictEqual((await db.collection('inventory_course_memberships').doc('fnb-manager').get()).exists, false);
 });
 
-test('Access bootstrap reports Firestore user class separately from course resolution', async () => {
+test('Access bootstrap returns the authoritative global Admin and Customer/Course scope', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
   await seedCustomerAssignment(db, TOKENS.fnb.uid);
   await db.collection('user_access').doc(TOKENS.admin.uid).set({
-    user_type: 'fairway_staff',
-    enabled: true,
-    courses: [],
+    schema_version: 2,
+    admin: true,
+    customer_id: null,
     course_ids: [],
   });
   const request = createApi(db);
 
   const customer = await request({ path: '/api/v1/access/bootstrap', token: 'fnb' });
   assert.strictEqual(customer.statusCode, 200);
-  assert.deepStrictEqual(customer.body, { user_type: 'customer_staff' });
+  assert.deepStrictEqual(customer.body, {
+    admin: false,
+    customer_id: CUSTOMER_ID,
+    course_ids: [COURSE_ID],
+    user_type: 'customer_staff',
+  });
   const staff = await request({ path: '/api/v1/access/bootstrap', token: 'admin' });
   assert.strictEqual(staff.statusCode, 200);
-  assert.deepStrictEqual(staff.body, { user_type: 'fairway_staff' });
+  assert.deepStrictEqual(staff.body, {
+    admin: true,
+    customer_id: null,
+    course_ids: [],
+    user_type: 'fairway_staff',
+  });
   const unclassified = await request({ path: '/api/v1/access/bootstrap', token: 'outsider' });
   assert.strictEqual(unclassified.statusCode, 403);
 });
@@ -375,9 +381,9 @@ test('Publication snapshots are atomic, preserve last success on failure, and pu
   await seedCustomerAssignment(db, TOKENS.fnb.uid);
   await seedCustomerAssignment(db, TOKENS.cart.uid);
   await db.collection('user_access').doc(TOKENS.admin.uid).set({
-    user_type: 'fairway_staff',
-    enabled: true,
-    courses: [],
+    schema_version: 2,
+    admin: true,
+    customer_id: null,
     course_ids: [],
   });
   const request = createApi(db);

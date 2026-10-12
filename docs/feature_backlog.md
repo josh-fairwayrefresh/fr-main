@@ -8,6 +8,32 @@ through sprint closeout for status traceability; they are removed when they no
 longer serve current sprint tracking and do not remain indefinitely as future
 backlog items.
 
+## Current: Pilot 1.1 User Authorization and User Management
+
+**Status: Implemented and deployed to sandbox; CPO authenticated browser
+acceptance remains open.** The current source contract is one authoritative
+`user_access/{uid}` schema-v2 record with a global `admin` boolean or a
+Customer assignment and Course restrictions. An empty customer `course_ids`
+list means all Courses belonging to that Customer; missing, malformed, and
+unversioned records deny access. Cart and Inventory share the Firebase Auth
+session and entitlement; Admin remains internal-only. Admin User Management
+assigns access to existing Auth users without creating accounts or handling
+passwords.
+
+Sandbox receiver `fairway-button-receiver-sandbox-00012-pcx` and Admin
+`fairway-admin-sandbox-00008-fxz` serve 100%; schema-v2 Firestore Rules are
+deployed, all three composite indexes are ready, and the four sandbox Auth
+accounts have valid v2 records (one global Admin and three assigned to
+`CUST-0003` / `COURSE-0002`). Backend tests: 94 passed; frontend tests: 47
+passed; sandbox build passed. The assigned course has 57 active products and
+three retained archived products. Production remains unchanged on receiver
+`fairway-button-receiver-00024-659` and Admin `fairway-admin-00012-52t`; the
+published production menu still responds with 57 products. No sandbox push
+delivery service is configured, so notification delivery filtering is
+automated-test verified only. Customer/Admin authenticated browser/API
+acceptance remains a CPO action; do not mark this increment Done before that
+acceptance.
+
 ## Completed: Embarrassingly Small Runtime — Stable Pilot Baseline 1.0
 
 The accepted runtime retains the Prototype 3.2 golfer UX, scoped-awake execution, authenticated bounded HTTPS, fixed five-minute demand window, exact correlated COMPLETE, Cart Operator behavior, and fleet/lifecycle/provisioning Admin. Battery-health checks/reporting and Device Health firmware/backend ingestion are abandoned. CPO-confirmed Prototype 3.3 hardware uses interchangeable Voltaic V25/V50/V75 regulated-output packs; FRB-0003 operation was validated with V75. Continuous VBUS uses the existing service-awake policy, accepted for the initial pilot. Detailed baseline evidence belongs in the hardware, firmware, deployment, and provisioning owners.
@@ -131,9 +157,10 @@ prices were invented. The source attachment is not copied into the repository.
 USD currency code confirmation is still needed before entering any non-null
 price; the current import leaves all price fields blank.
 
-**Unified customer and staff authorization — deployed 2026-10-12.** The two
+**Historical schema-v1 customer and staff authorization — deployed 2026-10-12;
+superseded in sandbox by Pilot 1.1 above.** The two
 application entry points remain Cart UI and internal Admin UI; Inventory is a
-Cart UI feature. Production and sandbox now use the shared
+Cart UI feature. At that historical snapshot, Production and sandbox used the shared
 `user_access/{uid}` record for the two user classes (`customer_staff` and
 `fairway_staff`) and explicit course assignments. Assigned customer users
 receive all customer-editable Cart UI features for those courses; course
@@ -156,8 +183,8 @@ record were deleted. The three enabled Fairway staff Auth accounts were
 verified and preserved. Future customer accounts require explicit Course
 assignment; email prefixes do not authorize access.
 
-**Authorization and notification source completion — 2026-10-12; sandbox
-deployed, production deployment pending.** Fairway staff now resolve all Courses from the canonical catalog
+**Historical authorization and notification source completion — 2026-10-12;
+superseded in sandbox by Pilot 1.1 above.** Fairway staff now resolved all Courses from the canonical catalog
 for Cart and Inventory, while customer staff remain restricted to explicit
 assignments. Admin remains internal-only. Per-user/per-Course notification
 preferences are persisted independently; dispatch rechecks current course

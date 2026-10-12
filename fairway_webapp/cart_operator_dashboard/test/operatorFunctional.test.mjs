@@ -17,6 +17,6 @@ test('functional Option C operator surface keeps the approved workflow contract'
 });
 
 test('Assigned customer users have an Inventory link into the shared authenticated session', () => {
-  assert.match(source, /<a className="op-inventory" href="\/inventory"/);
+  assert.match(source, /<a className="op-inventory" href=\{courseContextUrl\('\/inventory', course\)\}/);
   assert.doesNotMatch(source, /canManageInventory/);
 });

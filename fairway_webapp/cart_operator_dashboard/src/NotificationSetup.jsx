@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, BellOff, Smartphone } from 'lucide-react';
 import { operatorRequest } from './lib/operator';
+import { courseKey } from './lib/courseContext.mjs';
 
 function applicationServerKey(value) {
   const padding = '='.repeat((4 - value.length % 4) % 4);
@@ -23,16 +24,16 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
   async function registerWithBackend(course, subscription) {
     await operatorRequest(user, apiBaseUrl, '/api/v1/operator/push-subscriptions', {
       method: 'POST',
-      body: { course_id: course.course_id, subscription: subscription.toJSON() },
+      body: { customer_id: course.customer_id, course_id: course.course_id, subscription: subscription.toJSON() },
     });
   }
 
-  async function savePreference(courseId, enabled) {
+  async function savePreference(course, enabled) {
     await operatorRequest(user, apiBaseUrl, '/api/v1/operator/notification-preferences', {
       method: 'PATCH',
-      body: { course_id: courseId, enabled },
+      body: { customer_id: course.customer_id, course_id: course.course_id, enabled },
     });
-    setPreferences((current) => ({ ...current, [courseId]: enabled }));
+    setPreferences((current) => ({ ...current, [courseKey(course)]: enabled }));
   }
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
       .then(async (subscription) => {
         if (!active || !subscription) return;
         const enabledCourses = operatorConfig.courses.filter((course) => (
-          operatorConfig.notification_preferences?.[course.course_id] === true
+          operatorConfig.notification_preferences?.[courseKey(course)] === true
         ));
         await Promise.all(enabledCourses.map((course) => registerWithBackend(course, subscription)));
       })
@@ -59,11 +60,12 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
   }, [apiBaseUrl, installed, operatorConfig, supported, user]);
 
   async function changePreference(course, enabled) {
-    setBusyCourse(course.course_id);
+    const key = courseKey(course);
+    setBusyCourse(key);
     setError('');
     try {
       if (!enabled) {
-        await savePreference(course.course_id, false);
+        await savePreference(course, false);
         return;
       }
       if (!canEnable) {
@@ -84,7 +86,7 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
         applicationServerKey: applicationServerKey(operatorConfig.push.vapid_public_key),
       });
       await registerWithBackend(course, subscription);
-      await savePreference(course.course_id, true);
+      await savePreference(course, true);
     } catch (reason) {
       setError(reason.message);
     } finally {
@@ -112,13 +114,14 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
       </div>
       <div className="notification-course-options">
         {operatorConfig.courses.map((course) => {
-          const enabled = preferences[course.course_id] === true;
+          const key = courseKey(course);
+          const enabled = preferences[key] === true;
           return (
-            <label key={course.course_id}>
+            <label key={key}>
               <input
                 type="checkbox"
                 checked={enabled}
-                disabled={busyCourse === course.course_id || (!enabled && !canEnable)}
+                disabled={busyCourse === key || (!enabled && !canEnable)}
                 onChange={(event) => changePreference(course, event.target.checked)}
               />
               <span>{course.course_name}</span>

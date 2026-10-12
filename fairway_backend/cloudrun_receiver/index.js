@@ -38,7 +38,12 @@ const {
   registerPushSubscription,
   setNotificationPreference,
 } = require('./lib/operator_notifications');
-const { getUserAccess } = require('./lib/user_access');
+const {
+  AUTHORIZATION_SCHEMA_VERSION,
+  getUserAccess,
+  listCustomerCourses,
+  normalizeAccessRecord,
+} = require('./lib/user_access');
 
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
@@ -63,7 +68,7 @@ async function verifyFirebaseIdToken(token) {
     initializeApp();
   }
 
-  return getAuth().verifyIdToken(token);
+  return getAuth().verifyIdToken(token, true);
 }
 
 function completeCommandId(requestId) {
@@ -102,6 +107,7 @@ function sendCorsOk(res) {
  */
 function createFairwayHandlers(db, {
   verifyOperatorToken = verifyFirebaseIdToken,
+  firebaseAuth = null,
   now = () => new Date(),
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
@@ -288,7 +294,7 @@ function createFairwayHandlers(db, {
     }
 
     const access = await getUserAccess(db, identity.uid);
-    if (access?.user_type !== 'fairway_staff') {
+    if (!access?.admin) {
       res.status(403).send('Admin access required\n');
       return null;
     }
@@ -307,6 +313,127 @@ function createFairwayHandlers(db, {
     }
 
     return { identity, assignment };
+  }
+
+  function authClient() {
+    if (firebaseAuth) return firebaseAuth;
+    const { getApps, initializeApp } = require('firebase-admin/app');
+    const { getAuth } = require('firebase-admin/auth');
+    if (getApps().length === 0) initializeApp();
+    return getAuth();
+  }
+
+  async function listAdminUsers(req, res) {
+    const pageToken = req.query?.page_token || undefined;
+    const page = await authClient().listUsers(1000, pageToken);
+    const accessSnapshot = await db.collection('user_access').get();
+    const records = new Map(accessSnapshot.docs.map((doc) => [
+      doc.id,
+      normalizeAccessRecord(doc.data()),
+    ]));
+    return res.status(200).json({
+      users: page.users.map((user) => ({
+        uid: user.uid,
+        email: user.email || null,
+        display_name: user.displayName || null,
+        disabled: user.disabled === true,
+        authorization: records.get(user.uid) || null,
+      })),
+      next_page_token: page.pageToken || null,
+    });
+  }
+
+  async function updateAdminUserAccess(req, res, actingAdmin, uid) {
+    const body = req.body;
+    const allowedFields = ['admin', 'customer_id', 'course_ids'];
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).length !== allowedFields.length ||
+        Object.keys(body).some((field) => !allowedFields.includes(field)) ||
+        typeof body.admin !== 'boolean' ||
+        !Array.isArray(body.course_ids) ||
+        body.course_ids.some((courseId) => typeof courseId !== 'string' || !courseId) ||
+        new Set(body.course_ids).size !== body.course_ids.length) {
+      return res.status(400).json({ error: 'invalid_authorization' });
+    }
+
+    let authUser;
+    try {
+      authUser = await authClient().getUser(uid);
+    } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: 'user_not_found' });
+      }
+      throw error;
+    }
+    const courseIds = body.admin ? [] : body.course_ids;
+    let customerId = null;
+    let canonicalCourses = [];
+    if (!body.admin) {
+      if (typeof body.customer_id !== 'string' || !body.customer_id) {
+        return res.status(400).json({ error: 'customer_required' });
+      }
+      customerId = body.customer_id;
+      canonicalCourses = await listCustomerCourses(db, customerId);
+      if (!canonicalCourses) return res.status(400).json({ error: 'customer_not_found' });
+      if (courseIds.some((courseId) => !canonicalCourses.some((course) => course.course_id === courseId))) {
+        return res.status(400).json({ error: 'course_not_in_customer' });
+      }
+    } else if (body.customer_id !== null || body.course_ids.length !== 0) {
+      return res.status(400).json({ error: 'admin_scope_must_be_global' });
+    }
+
+    const legacyCourses = body.admin
+      ? []
+      : courseIds.length
+        ? canonicalCourses.filter((course) => courseIds.includes(course.course_id))
+        : canonicalCourses;
+    const accessRef = db.collection('user_access').doc(uid);
+    const accessCollection = db.collection('user_access');
+    const record = {
+      schema_version: AUTHORIZATION_SCHEMA_VERSION,
+      admin: body.admin,
+      customer_id: customerId,
+      course_ids: courseIds,
+      updated_at: FieldValue.serverTimestamp(),
+      updated_by: actingAdmin.uid,
+      user_type: body.admin ? 'fairway_staff' : 'customer_staff',
+      enabled: true,
+      courses: legacyCourses.map((course) => ({
+        customer_id: course.customer_id,
+        course_id: course.course_id,
+        course_name: course.course_name,
+      })),
+    };
+
+    let activeAuthUsers = null;
+    await db.runTransaction(async (transaction) => {
+      const records = await transaction.get(accessCollection);
+      const current = records.docs.find((doc) => doc.id === uid);
+      const currentAccess = current ? normalizeAccessRecord(current.data()) : null;
+      if (currentAccess?.admin === true && body.admin === false && !activeAuthUsers) {
+        activeAuthUsers = new Set();
+        let token;
+        do {
+          // eslint-disable-next-line no-await-in-loop
+          const page = await authClient().listUsers(1000, token);
+          page.users.filter((user) => !user.disabled).forEach((user) => activeAuthUsers.add(user.uid));
+          token = page.pageToken;
+        } while (token);
+      }
+      const adminCount = records.docs.filter((doc) => (
+        normalizeAccessRecord(doc.data())?.admin &&
+        (!activeAuthUsers || activeAuthUsers.has(doc.id))
+      )).length;
+      if (currentAccess?.admin === true && body.admin === false && adminCount <= 1) {
+        const error = new Error('At least one Admin must remain authorized');
+        error.code = 'last_admin';
+        throw error;
+      }
+      transaction.set(accessRef, record);
+    });
+
+    const saved = await getUserAccess(db, authUser.uid);
+    return res.status(200).json({ uid, authorization: saved });
   }
 
   async function getOperatorBootstrap(req, res) {
@@ -334,6 +461,7 @@ function createFairwayHandlers(db, {
       const preference = await setNotificationPreference(
         db,
         operator.identity.uid,
+        req.body?.customer_id,
         req.body?.course_id,
         req.body?.enabled,
         now()
@@ -359,6 +487,7 @@ function createFairwayHandlers(db, {
 
     try {
       const result = await registerPushSubscription(db, operator.identity.uid, {
+        customerId: req.body?.customer_id,
         courseId: req.body?.course_id,
         subscription: req.body?.subscription,
         userAgent: req.get('user-agent'),
@@ -377,9 +506,12 @@ function createFairwayHandlers(db, {
     }
   }
 
-  async function authorizedCourse(operator, courseId) {
-    const assignment = operator.assignment.courses.find((course) => course.course_id === courseId);
-    if (!assignment) return null;
+  async function authorizedCourse(operator, courseId, customerId = null) {
+    const matches = operator.assignment.courses.filter((course) => (
+      course.course_id === courseId && (!customerId || course.customer_id === customerId)
+    ));
+    if (matches.length !== 1) return null;
+    const assignment = matches[0];
     return getCourseForCustomer(db, assignment.customer_id, assignment.course_id);
   }
 
@@ -406,13 +538,28 @@ function createFairwayHandlers(db, {
     const operator = await authorizeOperator(req, res);
     if (!operator) return res;
     const requestTime = now();
-    const courses = (await Promise.all(operator.assignment.courses.map((assignment) =>
+    let assignedCourses = operator.assignment.courses;
+    if (req.query?.course_id !== undefined || req.query?.customer_id !== undefined) {
+      const courseId = req.query.course_id;
+      const customerId = req.query.customer_id;
+      if (typeof courseId !== 'string' || typeof customerId !== 'string') {
+        return res.status(400).json({ error: 'invalid_course_context' });
+      }
+      assignedCourses = assignedCourses.filter((course) => (
+        course.course_id === courseId && course.customer_id === customerId
+      ));
+      if (assignedCourses.length !== 1) {
+        return res.status(403).send('Operator is not authorized for this Course\n');
+      }
+    }
+    const courses = (await Promise.all(assignedCourses.map((assignment) =>
       getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
       .filter(Boolean);
     const serviceCourses = await Promise.all(courses.map((course) =>
       courseServiceReadModel(course, requestTime)));
     const requestSnapshots = await Promise.all(courses.map((course) => (
       db.collection('requests')
+        .where('customer_id', '==', course.customer_id)
         .where('course_id', '==', course.course_id)
         .limit(5000)
         .get()
@@ -470,7 +617,7 @@ function createFairwayHandlers(db, {
     const operator = await authorizeOperator(req, res);
     if (!operator) return res;
     const courseId = req.body?.course_id;
-    const course = await authorizedCourse(operator, courseId);
+    const course = await authorizedCourse(operator, courseId, req.body?.customer_id);
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
     const requestTime = now();
     const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
@@ -764,6 +911,15 @@ function createFairwayHandlers(db, {
     }
 
     try {
+      if (req.method === 'GET' && path === '/api/v1/admin/users') {
+        return await listAdminUsers(req, res);
+      }
+      const userAccessMatch = path.match(/^\/api\/v1\/admin\/users\/([^/]+)\/access$/);
+      if (req.method === 'PUT' && userAccessMatch) {
+        return await updateAdminUserAccess(
+          req, res, admin, decodeURIComponent(userAccessMatch[1])
+        );
+      }
       if (req.method === 'GET' && path === '/api/v1/admin/fleet') {
         return await listAdminFleet(req, res);
       }
@@ -825,6 +981,9 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error.code === 'last_admin') {
+        return res.status(409).json({ error: 'last_admin_required' });
+      }
       return sendAdminError(res, error);
     }
   }
@@ -891,7 +1050,10 @@ function createFairwayHandlers(db, {
         }
 
         const requestData = requestSnap.data();
-        if (!operator.assignment.courses.some((course) => course.course_id === requestData.course_id)) {
+        if (!operator.assignment.courses.some((course) => (
+          course.customer_id === requestData.customer_id &&
+          course.course_id === requestData.course_id
+        ))) {
           return { forbidden: true };
         }
         const expiresAt = toDate(requestData.demand_window_expires_at);
@@ -953,7 +1115,10 @@ function createFairwayHandlers(db, {
         return res.status(404).send('Request not found\n');
       }
 
-      if (!operator.assignment.courses.some((course) => course.course_id === requestSnap.data().course_id)) {
+      if (!operator.assignment.courses.some((course) => (
+        course.customer_id === requestSnap.data().customer_id &&
+        course.course_id === requestSnap.data().course_id
+      ))) {
         return res.status(403).send('Operator is not authorized for this Course\n');
       }
 
@@ -1209,7 +1374,12 @@ function createFairwayHandlers(db, {
       try {
         const access = await getUserAccess(db, identity.uid);
         if (!access) return res.status(403).json({ error: 'user_access_required' });
-        return res.status(200).json({ user_type: access.user_type });
+        return res.status(200).json({
+          admin: access.admin,
+          customer_id: access.customer_id,
+          course_ids: access.course_ids,
+          user_type: access.admin ? 'fairway_staff' : 'customer_staff',
+        });
       } catch (error) {
         console.error('Failed to read user access record:', error);
         return res.status(500).json({ error: 'internal_error' });

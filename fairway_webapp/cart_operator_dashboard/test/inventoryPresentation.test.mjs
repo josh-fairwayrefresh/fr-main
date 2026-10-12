@@ -15,7 +15,11 @@ test('Inventory dashboard uses the concise title and keeps readable course ident
 test('Inventory is a feature within Cart UI: no independent auth system and a clear return to Cart Operations', () => {
   assert.doesNotMatch(inventorySource, /firebase|getAuth|initializeApp|signIn/i);
   assert.match(inventorySource, /className="inv-brand" title="Return to Cart Operations"/);
-  assert.match(inventorySource, /className="inv-cart-link" href="\/" title="Return to Cart Operations"/);
+  assert.match(inventorySource, /fairway-refresh-stacked-transparent\.png/);
+  assert.match(inventorySource, /src=\{fairwayRefreshStackedLogo\} alt="Fairway Refresh"/);
+  assert.match(inventorySource, /className="inv-cart-link" href=\{courseContextUrl\('\/', course\)\} title="Return to Cart Operations"/);
+  assert.match(inventorySource, /replaceCourseContext\('\/inventory', selected\)/);
+  assert.match(inventorySource, /onOpenAdmin/);
   assert.match(inventorySource, />Cart Operations<\/a>/);
 });
 

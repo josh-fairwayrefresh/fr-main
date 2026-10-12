@@ -4,8 +4,10 @@ import {
   Send, Settings, Trash2, X,
 } from 'lucide-react';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
+import { courseContextUrl, courseKey, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
 import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
 import { presentationForCourse } from './lib/courseMenuConfig';
+import fairwayRefreshStackedLogo from '../../../docs/logo_source_files/fairway-refresh/fairway-refresh-stacked-transparent.png';
 import './inventory.css';
 
 const STATE_LABELS = Object.freeze({
@@ -301,8 +303,11 @@ function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArc
   </section>;
 }
 
-export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
-  const [selectedKey, setSelectedKey] = useState(() => courses[0] ? `${courses[0].customer_id}/${courses[0].course_id}` : '');
+export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = false, onOpenAdmin, onSignOut }) {
+  const [selectedKey, setSelectedKey] = useState(() => {
+    const selected = selectedCourseFromLocation(courses, window.location.search);
+    return selected ? courseKey(selected) : '';
+  });
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState('all');
   const [inventory, setInventory] = useState(null);
@@ -318,7 +323,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   const [publication, setPublication] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const refreshRef = useRef(async () => {});
-  const course = courses.find((item) => `${item.customer_id}/${item.course_id}` === selectedKey) || courses[0];
+  const course = courses.find((item) => courseKey(item) === selectedKey)
+    || selectedCourseFromLocation(courses, window.location.search);
   const coursePresentation = course && presentationForCourse(course);
   const categories = inventory?.categories || [];
   const products = (inventory?.products || []).filter((product) => product.archived !== true);
@@ -351,8 +357,14 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   useEffect(() => {
     if (!course) return undefined;
     let active = true;
+    setInventory(null);
+    setPreview(null);
+    setPublication(null);
+    setSelectedCategory('all');
+    setSelectedSubcategory('all');
+    setLoadError('');
     async function refresh(silent = false) {
-      if (!silent) setLoadStatus(inventory ? 'refreshing' : 'loading');
+      if (!silent) setLoadStatus('loading');
       try {
         const result = await inventoryRequest(user, apiBaseUrl, coursePath(course));
         if (!active) return;
@@ -462,9 +474,10 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No course access</h1><p>This account is not assigned to a customer course.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
 
   return <main className="inventory-app">
-    <header className="inv-header"><a href="/" className="inv-brand" title="Return to Cart Operations"><img src={coursePresentation?.fairwayLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
-      <a className="inv-cart-link" href="/" title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
-      {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={selectedKey} onChange={(event) => { setSelectedKey(event.target.value); setPublication(null); }} aria-label="Select course">{courses.map((item) => <option key={`${item.customer_id}/${item.course_id}`} value={`${item.customer_id}/${item.course_id}`}>{item.course_name}</option>)}</select></label>}
+    <header className="inv-header"><a href={courseContextUrl('/', course)} className="inv-brand" title="Return to Cart Operations"><img src={fairwayRefreshStackedLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
+      <a className="inv-cart-link" href={courseContextUrl('/', course)} title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
+      {isAdmin && <button className="inv-cart-link" type="button" onClick={onOpenAdmin} title="Return to Admin">Admin</button>}
+      {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
     </div></header>
     <div className="inv-main">

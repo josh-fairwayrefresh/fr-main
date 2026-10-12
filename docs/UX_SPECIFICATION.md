@@ -85,17 +85,19 @@ Product Brief v1.2 defines this capability. The current implementation and
 deployment status are owned by `docs/DEPLOYMENT_GUIDE.md` and
 `docs/feature_backlog.md`.
 
-- Fairway Refresh has exactly two user classes: `fairway_staff` (internal
-  personnel) and `customer_staff` (customer personnel). Every customer user
-  assigned to a course has the same full access to all customer-editable Cart
-  UI features for that course, including Cart Operations and Inventory.
-  Fairway Refresh staff can use Cart Operations and Inventory across all
-  customers and courses. Customers never access the Admin UI; it is exclusively
-  for Fairway Refresh staff. User class and customer Course assignments are
-  stored together in `user_access/{uid}`; email naming is not an authorization rule. The
-  `monarch*` prefix was used only to classify existing accounts during the
-  one-time migration; future accounts are classified explicitly in Firestore
-  Studio.
+- There are exactly two application entry points: Cart UI and Admin UI.
+  Inventory is a feature within Cart UI. Both use the existing Firebase Auth
+  session; Inventory does not have a separate login.
+- In Admin User Management, an existing Auth user can be granted global Admin
+  access, or assigned to one Customer and selected Courses. Leaving the Course
+  selection empty means all Courses belonging to that Customer. An account
+  without a valid assignment is denied access. Fairway Refresh staff can use
+  Admin, Cart, and Inventory across all Customers and Courses; customer users
+  can use Cart and Inventory only within their Customer/Course entitlement and
+  cannot access Admin. Email naming is not an authorization rule.
+- The authoritative settings are stored in `user_access/{uid}` as schema
+  version 2: `admin`, `customer_id`, and `course_ids`. Technical validation and
+  onboarding details are owned by `docs/DEPLOYMENT_GUIDE.md`.
 - Course assignment is the shared entitlement for Cart Operations and
    Inventory. Inventory has no separate membership or user class. An assigned
    user can view, add, edit, move, archive, preview, and publish products for
@@ -187,8 +189,9 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    application, signs in with an approved Fairway account, and independently
    enables new-request notifications for each authorized Course.
 - The saved notification preference belongs to the authenticated user and
-   Course. It is separate from browser/device notification permission; disabling
-   one Course does not disable Cart access or another Course's preference.
+   Customer/Course pair. It is separate from browser/device notification
+   permission; disabling one Course does not disable Cart access or another
+   Course's preference.
 - One newly accepted golfer request produces one visible notification for each
    active subscription whose user still has Course access and has enabled that
    Course's preference. The notification identifies the request location.
@@ -216,9 +219,10 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    login shown at `/inventory`; both are one shared customer-facing
    experience with no separate Inventory login. `/admin` is the distinct
    Admin UI entry point, with an unobtrusive Admin Login link from the
-   standard Cart login and a Cart Login link back from Admin. All
-   entry paths retain the same Firebase Authentication and route-preservation
-   behavior.
+    standard Cart login and a Cart Login link back from Admin. Inventory
+    navigation returns to Cart Operations and preserves the authenticated
+    session. All entry paths use the same Firebase Authentication session and
+    preserve the intended route through sign-in.
 - The application is a full-surface, landscape-iPad-first responsive workspace.
 - The active queue is oldest first. The oldest request receives the strongest
    visual focus while all remaining active requests stay visible in order.

@@ -86,17 +86,17 @@ function createAdminApi(db) {
   return async ({ method, path, body, token = 'admin-token' }) => {
     if (token === 'admin-token' || token === 'staff-token') {
       await db.collection('user_access').doc('staff-uid').set({
-        user_type: 'fairway_staff',
-        enabled: true,
-        courses: [],
+        schema_version: 2,
+        admin: true,
+        customer_id: null,
         course_ids: [],
       });
     } else if (token === 'customer-admin-token') {
       const uid = 'customer-uid';
       await db.collection('user_access').doc(uid).set({
-        user_type: 'customer_staff',
-        enabled: true,
-        courses: [{ customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Course' }],
+        schema_version: 2,
+        admin: false,
+        customer_id: 'CUST-0001',
         course_ids: ['COURSE-0001'],
       });
     }
@@ -106,6 +106,36 @@ function createAdminApi(db) {
       path,
       body,
       headers: token ? { authorization: `Bearer ${token}` } : {},
+    }), res);
+    return res;
+  };
+}
+
+function createAdminUserApi(db, authUsers = []) {
+  const firebaseAuth = {
+    getUser: async (uid) => {
+      const user = authUsers.find((item) => item.uid === uid);
+      if (!user) {
+        const error = new Error('User not found');
+        error.code = 'auth/user-not-found';
+        throw error;
+      }
+      return user;
+    },
+    listUsers: async () => ({ users: authUsers, pageToken: undefined }),
+  };
+  const { fairwayAdmin } = createFairwayHandlers(db, {
+    firebaseAuth,
+    verifyOperatorToken: async (token) => ({ uid: token === 'admin-token' ? 'staff-uid' : 'customer-uid' }),
+  });
+
+  return async ({ method, path, body, token = 'admin-token' }) => {
+    const res = createResponse();
+    await fairwayAdmin(createRequest({
+      method,
+      path,
+      body,
+      headers: { authorization: `Bearer ${token}` },
     }), res);
     return res;
   };
@@ -217,9 +247,9 @@ test('every admin route rejects non-admin tokens before any write', async () => 
   for (const route of ADMIN_ROUTES) {
     const db = new FakeFirestore();
     await db.collection('user_access').doc('operator-uid').set({
-      user_type: 'customer_staff',
-      enabled: true,
-      courses: [{ customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Course' }],
+      schema_version: 2,
+      admin: false,
+      customer_id: 'CUST-0001',
       course_ids: ['COURSE-0001'],
     });
     const request = createAdminApi(db);
@@ -638,6 +668,90 @@ test('CORS advertises GET and PATCH for admin browser clients', async () => {
   await createFairwayHandlers(db).fairwayButtonReceiver(createRequest({ method: 'OPTIONS', path: '/' }), res);
   assert.match(res.headers['Access-Control-Allow-Methods'], /GET/);
   assert.match(res.headers['Access-Control-Allow-Methods'], /PATCH/);
+});
+
+test('Admin User Management lists Firebase identities with authoritative access records', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const request = createAdminUserApi(db, [
+    { uid: 'staff-uid', email: 'admin@example.test', displayName: 'Admin', disabled: false },
+    { uid: 'new-uid', email: 'new@example.test', displayName: '', disabled: true },
+  ]);
+
+  const response = await request({ method: 'GET', path: '/api/v1/admin/users' });
+  assert.strictEqual(response.statusCode, 200);
+  assert.deepStrictEqual(response.body.users.map((user) => user.uid), ['staff-uid', 'new-uid']);
+  assert.strictEqual(response.body.users[0].authorization.admin, true);
+  assert.strictEqual(response.body.users[1].authorization, null);
+  assert.strictEqual(response.body.users[1].disabled, true);
+});
+
+test('Admin User Management writes strict course-scoped access with empty meaning all courses for that Customer', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0002')
+    .set({ course_name: 'Second Course' });
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const request = createAdminUserApi(db, [
+    { uid: 'staff-uid', email: 'admin@example.test', disabled: false },
+    { uid: 'customer-uid', email: 'customer@example.test', disabled: false },
+  ]);
+
+  const response = await request({
+    method: 'PUT',
+    path: '/api/v1/admin/users/customer-uid/access',
+    body: { admin: false, customer_id: 'CUST-0001', course_ids: [] },
+  });
+  assert.strictEqual(response.statusCode, 200);
+  assert.deepStrictEqual(response.body.authorization.course_ids, []);
+  const stored = await db.collection('user_access').doc('customer-uid').get();
+  assert.strictEqual(stored.data().admin, false);
+  assert.deepStrictEqual(stored.data().course_ids, []);
+  assert.deepStrictEqual(stored.data().courses.map((course) => course.course_id), ['COURSE-0001', 'COURSE-0002']);
+
+  const invalid = await request({
+    method: 'PUT',
+    path: '/api/v1/admin/users/customer-uid/access',
+    body: { admin: false, customer_id: 'CUST-0001', course_ids: ['COURSE-9999'] },
+  });
+  assert.strictEqual(invalid.statusCode, 400);
+  assert.strictEqual(invalid.body.error, 'course_not_in_customer');
+});
+
+test('Admin User Management denies customer users and protects the last active Admin', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  await db.collection('user_access').doc('customer-uid').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: [],
+  });
+  const request = createAdminUserApi(db, [
+    { uid: 'staff-uid', email: 'admin@example.test', disabled: false },
+    { uid: 'customer-uid', email: 'customer@example.test', disabled: false },
+  ]);
+
+  const denied = await request({
+    method: 'GET',
+    path: '/api/v1/admin/users',
+    token: 'customer-token',
+  });
+  assert.strictEqual(denied.statusCode, 403);
+
+  const demotion = await request({
+    method: 'PUT',
+    path: '/api/v1/admin/users/staff-uid/access',
+    body: { admin: false, customer_id: 'CUST-0001', course_ids: [] },
+  });
+  assert.strictEqual(demotion.statusCode, 409);
+  assert.strictEqual(demotion.body.error, 'last_admin_required');
+  assert.strictEqual((await db.collection('user_access').doc('staff-uid').get()).data().admin, true);
 });
 
 run();
