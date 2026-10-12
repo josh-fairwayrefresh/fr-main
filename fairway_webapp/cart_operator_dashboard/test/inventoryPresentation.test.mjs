@@ -11,3 +11,41 @@ test('Inventory dashboard uses the concise title and keeps readable course ident
   assert.match(inventorySource, /<p className="inv-subtitle">\{course\.course_name\}<\/p>/);
   assert.doesNotMatch(inventorySource, /<p className="inv-eyebrow">\{course\.customer_name[^<]+course\.course_id/);
 });
+
+test('Inventory is a feature within Cart UI: no independent auth system and a clear return to Cart Operations', () => {
+  assert.doesNotMatch(inventorySource, /firebase|getAuth|initializeApp|signIn/i);
+  assert.match(inventorySource, /className="inv-brand" title="Return to Cart Operations"/);
+  assert.match(inventorySource, /className="inv-cart-link" href="\/" title="Return to Cart Operations"/);
+  assert.match(inventorySource, />Cart Operations<\/a>/);
+});
+
+test('Add Product shows exactly one plus sign and no duplicate icon+text plus', () => {
+  assert.match(inventorySource, />\+ Add Product<\/button>/);
+  assert.doesNotMatch(inventorySource, /<Plus size=\{17\} \/>\+ (Add )?Product/);
+  assert.doesNotMatch(inventorySource, /\bPlus,/); // the bare Plus icon import is no longer used
+});
+
+test('category filters open a management card with Delete Category, protected against nonempty categories', () => {
+  assert.match(inventorySource, /setCategoryManager\(category\)/);
+  assert.match(inventorySource, /function CategoryManagerDialog/);
+  assert.match(inventorySource, /Delete Category/);
+  assert.match(inventorySource, /Are you sure you want to delete the/);
+  assert.match(inventorySource, /category\.name/); // confirmation identifies the category by name
+  assert.match(inventorySource, /canDelete = productCount === 0/);
+  assert.match(inventorySource, /disabled=\{!canDelete\}/);
+  assert.match(inventorySource, /This category still has products\. Reassign or remove its products before deleting it\./);
+  assert.match(inventorySource, /method: 'DELETE'/);
+  assert.doesNotMatch(inventorySource, /deleteProduct|cascadeDelete/i);
+  assert.match(inventorySource, /onDeleted=\{async \(\) => \{/);
+  assert.match(inventorySource, /await refreshInventory\(true\);\s*\}\}/);
+});
+
+test('subcategory filters appear as a second row, reset on category change, and never mutate inventory', () => {
+  assert.match(inventorySource, /className="inv-subcategory-filters"/);
+  assert.match(inventorySource, /function selectCategory\(categoryName\) \{\s*setSelectedCategory\(categoryName\);\s*setSelectedSubcategory\('all'\);\s*\}/);
+  assert.match(inventorySource, /onClick=\{\(\) => selectCategory\('all'\)\}/);
+  assert.match(inventorySource, /onClick=\{\(\) => selectCategory\(category\.name\)\}/);
+  assert.match(inventorySource, /selectedCategory !== 'all' && subcategoryNames\.length > 0/);
+  assert.match(inventorySource, /filterInventoryBySubcategory/);
+  assert.doesNotMatch(inventorySource, /inventoryRequest.*subcategory.*selectedSubcategory/i);
+});

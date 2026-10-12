@@ -15,12 +15,16 @@ test('logged-out entry uses the responsive application surface and preserves sig
   assert.doesNotMatch(loginSource, /phone-shell|login-shell/);
   assert.match(loginSource, /onSubmit=\{handleEmailSubmit\}/);
   assert.match(loginSource, /onClick=\{onGoogleSignIn\}/);
-  assert.match(mainSource, /sendPasswordResetEmail\(auth, email\)/);
-  assert.match(loginSource, /Set or reset password/);
-  assert.match(loginSource, /isInventoryEntry = mode === APP_MODE\.INVENTORY/);
-  assert.match(loginSource, /href="\/inventory">Inventory Staff Login/);
-  assert.match(loginSource, /href="\/admin">Admin Login/);
   assert.match(styles, /\.auth-layout/);
   assert.match(styles, /@media \(max-width: 850px\)/);
   assert.match(styles, /@media \(max-width: 560px\)/);
+});
+
+test('standard Cart login is the single customer-facing sign-in experience (no separate Inventory login)', () => {
+  assert.doesNotMatch(loginSource, /isInventoryEntry/);
+  assert.doesNotMatch(loginSource, /Inventory staff|Inventory Staff Login|Set or reset password/);
+  assert.doesNotMatch(mainSource, /sendPasswordResetEmail/);
+  assert.match(loginSource, /isAdminEntry \? 'Administration access' : 'Cart Operator access'/);
+  assert.match(loginSource, /isAdminEntry\s*\n?\s*\?\s*<a className="mode-entry-link" href="\/">Cart Operator Login<\/a>\s*\n?\s*:\s*<a className="mode-entry-link" href="\/admin">Admin Login<\/a>/);
+  assert.doesNotMatch(loginSource, /href="\/inventory">Inventory Staff Login/);
 });

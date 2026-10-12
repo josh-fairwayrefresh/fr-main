@@ -23,7 +23,7 @@ The accepted runtime retains the Prototype 3.2 golfer UX, scoped-awake execution
 | WP7 | Second-device deployment spike | Complete | FRB-0002 remains the validated Prototype 3.2 field reference. Historical Health commissioning evidence does not imply a current Health runtime. |
 | WP8 | Firmware modular decomposition + physical validation | Complete | `main.c` decomposed into single-responsibility modules (`button_ux.c`, `golfer_txn.c`, `golfer_protocol.c`, `http_transport.c`, `modem_service.c`, `power_policy.c`, `transaction_scheduler.c`; `command_protocol.c` extended to own both directions of the COMPLETE wire protocol); no protocol or product-behavior change. CPO-confirmed physical validation on FRB-0002: golfer button press reached the operator dashboard with a valid `request_id`, and a CPO-initiated COMPLETE command was polled, acknowledged, and cleared the active demand window. See the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md` ("Embarrassingly Small Runtime (Health Retirement + Modular Rewrite)"). Repeat-press transport/persistence and Prototype 3.3 PPK2 consumption characterization remain outstanding; local five-minute repeat feedback has prior FRB-0002 validation. |
 
-## Active Work Package: Cart Inventory Management & Golfer Menu — Increments 1–2
+## Completed (Sandbox-Accepted): Cart Inventory Management & Golfer Menu — Increments 1–2
 
 **Status:** Inventory backend/UI and the separate Admin API are deployed to the
 isolated sandbox and tested against real Firestore. Sandbox Hosting is deployed
@@ -39,6 +39,19 @@ horizontal All Products/top-level category filter across the unchanged three
 state columns, a USD-only Price ($) input, separate edit/publish action groups,
 automatic server synchronization, and a title without internal IDs. Production
 remains unchanged.
+
+**Final CPO acceptance — 2026-10-12:** following the Cart UI / Inventory
+integration (unified Cart-first login, Cart-to-Inventory navigation), the
+four post-acceptance corrections (Cart-first entry enforcement, category
+management/deletion, the Add Product button fix, subcategory filtering),
+and the archived-product deletion bug fix below, the CPO completed a full
+sandbox browser acceptance pass and confirmed the functionality works. This
+sandbox-accepted implementation is the new canonical Git baseline on `main`.
+Production deployment of this increment, Google Sites embedding, validating
+the two existing Monarch Bay staff accounts, and the first public menu
+publication remain separate, explicitly not-yet-authorized activities — see
+`docs/DEPLOYMENT_GUIDE.md` ("Final Baseline and Production-Readiness
+Status").
 Detailed deployment and validation evidence are in
 `docs/DEPLOYMENT_GUIDE.md`; user behavior is owned by `docs/UX_SPECIFICATION.md`.
 
@@ -49,10 +62,44 @@ the CPO has reserved the first publication for hands-on testing. The in-memory
 atomic-failure test is distinct evidence and is not represented as a live
 transaction test.
 
-Customer-scoped Cart UI authorization/navigation remains the next increment.
-The current conditional Operator Inventory link is preliminary and is not
-represented as CPO-accepted end-to-end Cart-to-Inventory integration. Preserve
-existing Cart request behavior while completing that work.
+Customer-scoped Cart UI authorization/navigation integration (unified Cart
+login covering `/`, `/requests/{requestId}`, and `/inventory`; the Cart
+banner's conditional Inventory link; and an explicit Inventory-to-Cart
+Operations return control) is implemented, sandbox-deployed, automated/API-
+verified, and CPO-accepted in the browser: see `docs/DEPLOYMENT_GUIDE.md`
+("Cart UI / Inventory Integration" and "CPO browser acceptance —
+2026-10-11"). A pre-existing sandbox receiver gap (missing VAPID
+configuration, unrelated to Inventory) was found and fixed during this
+acceptance pass. Existing Cart request behavior was preserved. This
+integration milestone is accepted and preserved unchanged by the
+corrections below.
+
+During that acceptance pass the CPO identified four remaining corrections,
+implemented additively on top of the accepted integration (not a redesign):
+Cart UI is now enforced as the permanent customer entry point so a
+completed sign-in on `/inventory` always lands on Cart Operations first; a
+category management card with a protected, course-scoped Delete Category
+action was added; the Add Product button's duplicate plus sign was
+corrected to read exactly "+ Add Product"; and a second subcategory filter
+row was added below the category filters. See `docs/DEPLOYMENT_GUIDE.md`
+("Post-Acceptance Corrections — Cart-First Entry, Category Management,
+Product Button, Subcategory Filters") for implementation, validation
+(backend 74/74, frontend 39/39 tests; real-sandbox-data verification of the
+deletion rule), and sandbox deployment detail. CPO acceptance testing then
+found a real deletion bug (an archived product silently blocked deleting an
+otherwise-empty category, contradicting the UI's own displayed count); this
+was root-caused against real data, fixed so the backend's emptiness check
+matches the UI's active-only count, covered by a new regression test, and
+redeployed; the CPO's stuck test category was deleted using the corrected
+code. The subcategory row was also confirmed, against real data, to be
+working as designed but visible only for "Craft Beers" (the only category
+with subcategorized products in the real catalog) — see
+`docs/DEPLOYMENT_GUIDE.md` for full detail on both findings. These four
+corrections, and the fix above, are sandbox-deployed, automated/API-
+verified, and **CPO-browser-accepted (2026-10-12)**. First public menu
+publication, Google Sites embedding, validating the two existing Monarch
+Bay staff accounts through this integration, and production deployment of
+this increment all remain separate, not-yet-authorized activities.
 
 The CPO-resolved mappings are applied in
 `docs/catalogs/monarch-bay-inventory-import.csv`: the source entry “Seltzers”

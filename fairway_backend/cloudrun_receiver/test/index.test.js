@@ -85,6 +85,7 @@ async function setUpOperatorAssignment(db, uid = 'operator-123', courseId = 'COU
       course_id: courseId,
       course_name: 'Tony Lema Course',
     }],
+    course_ids: [courseId],
   });
 }
 
@@ -695,6 +696,15 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
   assert.strictEqual(response.body.summaries.daily.completed_transactions, 1);
   assert.strictEqual(response.body.summaries.daily.average_completion_minutes, 10);
   assert.deepStrictEqual(response.body.history.map((request) => request.request_id), ['completed-assigned']);
+});
+
+test('operator assignment fixture keeps course_ids consistent with courses for Firestore Rules authorization', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db, 'operator-456', 'COURSE-0002');
+  const assignment = await db.collection('operator_course_assignments').doc('operator-456').get();
+  const data = assignment.data();
+  assert.deepStrictEqual(data.course_ids, data.courses.map((course) => course.course_id));
+  assert.deepStrictEqual(data.course_ids, ['COURSE-0002']);
 });
 
 test('operator bootstrap and push subscription are restricted to assigned Courses', async () => {

@@ -646,6 +646,64 @@ async function createSubcategory(db, customerId, courseId, categoryId, value, ac
   return { subcategory_id: subcategoryDocument.id, ...saved.data(), created: result.created };
 }
 
+/*
+ * Deletes a category (and its purely organizational subcategory labels) when
+ * it holds no ACTIVE products. Products are never deleted, modified, or
+ * reassigned by this operation. This mirrors the product count shown to
+ * staff in the Inventory UI (which also counts only active, non-archived
+ * products) so "0 products in this category" and "can this be deleted" never
+ * disagree. An archived product may still carry this category's id as a
+ * harmless, non-blocking historical reference: archived products display
+ * using their own already-cached category_name string and are never
+ * re-resolved through the live category collection, so a dangling
+ * category_id on an archived product after its category is deleted does not
+ * break anything. A category with any ACTIVE product still assigned to it
+ * (checked by category_id, which subcategories under it cannot reference
+ * without also belonging to the category) is rejected with a caller-facing
+ * explanation instead.
+ */
+async function deleteCategory(db, customerId, courseId, categoryId, actorUid) {
+  const courseDocument = courseRef(db, customerId, courseId);
+  const stateDocument = inventoryStateRef(db, customerId, courseId);
+  const categoryDocument = categoryRefById(db, customerId, courseId, categoryId);
+  const productsQuery = productsCollection(db, customerId, courseId)
+    .where('category_id', '==', categoryId);
+  const subcategoriesCollection = categoryDocument.collection(SUBCATEGORIES_COLLECTION);
+
+  await db.runTransaction(async (transaction) => {
+    const [courseSnapshot, stateSnapshot, categorySnapshot, productsSnapshot, subcategoriesSnapshot] = await Promise.all([
+      transaction.get(courseDocument),
+      transaction.get(stateDocument),
+      transaction.get(categoryDocument),
+      transaction.get(productsQuery),
+      transaction.get(subcategoriesCollection),
+    ]);
+    if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
+    if (!categorySnapshot.exists) fail(404, 'category_not_found', 'Category not found');
+    if (productsSnapshot.docs.some((productDoc) => productDoc.data().archived !== true)) {
+      fail(409, 'category_not_empty', 'This category still has products. Reassign or remove its products before deleting it.');
+    }
+
+    const timestamp = FieldValue.serverTimestamp();
+    const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
+    const categoryName = categorySnapshot.data().name;
+    transaction.delete(categoryDocument);
+    for (const subcategoryDoc of subcategoriesSnapshot.docs) {
+      transaction.delete(subcategoryDoc.ref);
+    }
+    transaction.set(stateDocument, nextState(stateSnapshot?.data() || {}, actorUid, timestamp));
+    transaction.set(mutationEventRef(db, customerId, courseId), {
+      action: 'category_deleted',
+      category_id: categoryId,
+      category_name: categoryName,
+      actor_uid: actorUid,
+      inventory_revision: revision,
+      created_at: timestamp,
+    });
+  });
+  return { category_id: categoryId, deleted: true };
+}
+
 async function setInventoryMembership(db, uid, body, actorUid) {
   if (typeof uid !== 'string' || !uid.trim() || uid.includes('/')) {
     fail(400, 'invalid_uid', 'A valid Firebase UID is required');
@@ -875,6 +933,7 @@ module.exports = {
   configurePublicMenuSlug,
   createCategory,
   createSubcategory,
+  deleteCategory,
   createProduct,
   updateProduct,
   archiveProduct,

@@ -387,10 +387,6 @@ button {
 .auth-footer { min-height: 48px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--auth-line); color: var(--auth-muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .mode-entry-links { margin-top: 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 18px; }
 .mode-entry-link { width: fit-content; color: var(--auth-muted); font-size: 11px; text-underline-offset: 3px; }
-.inventory-password-setup { margin-top: 12px; text-align: center; }
-.inventory-password-setup button { min-height: 34px; padding: 0 8px; border: 0; background: transparent; color: var(--auth-green); font-size: 11px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.inventory-password-setup button:disabled { opacity: .6; cursor: wait; }
-.inventory-password-setup p { margin: 5px 0 0; color: var(--auth-muted); font-size: 10px; line-height: 1.4; }
 
 .auth-status-panel .login-subtitle {
   line-height: 1.5;

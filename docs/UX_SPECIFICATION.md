@@ -107,10 +107,20 @@ status are owned by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    price are optional. Blank prices remain blank. Approved CSV imports begin On
    Cart and preserve accepted names/category relationships without fabricated
    details.
-- The Inventory entry at `/inventory` requires Firebase sign-in and assigned
-   course Inventory membership only. It does not require the global Admin claim
-   or Cart Operator assignment. Assigned Cart Operators may enter Inventory
-   from the Operator application; membership does not grant unrelated roles.
+- The Inventory entry at `/inventory` is a feature within the Cart UI: it uses
+   the same shared Firebase Authentication session and the same standard Cart
+   login presentation as Cart Operations, with no separate Inventory login
+   screen. It requires Firebase sign-in and assigned course Inventory
+   membership only; it does not require the global Admin claim or Cart
+   Operator assignment. Assigned Cart Operators may enter Inventory from the
+   Operator application's conditional banner link; membership does not grant
+   unrelated roles. The Inventory header provides an explicit "Cart
+   Operations" control that returns to Cart Operations without re-authenticating.
+   A sign-in that completes while on `/inventory` always lands on Cart
+   Operations first, never directly on Inventory, consistent with the
+   two-application-entry-point architecture owned by `docs/DEPLOYMENT_GUIDE.md`;
+   an already-authenticated session continuing a direct or Cart-banner
+   Inventory visit is unaffected and opens Inventory directly as above.
 - Inventory edits are sent to the backend and displayed as saved only after a
    successful response. Product fields autosave; availability can be changed
    with a state selector or drag-and-drop. The board refreshes from the server
@@ -123,9 +133,23 @@ status are owned by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    followed by the active Course's top-level categories; selecting one filters
    products across all three state columns, and All Products restores all active
    products. There is no free-text product search or nested category navigation
-   on the inventory board.
-- Catalog actions pair **+ Category** with **+ Product**. **Preview Draft** and
-   **Publish Menu** are a separate adjacent action group. The three state
+   on the inventory board. Each category also has a small management trigger
+   that opens a card showing the category name, its product count, and its
+   subcategories, with a **Delete Category** action. Deletion requires an
+   explicit "Are you sure?" confirmation naming the category, succeeds only
+   for an empty category, is disabled in the UI and rejected by the backend
+   for a category with any product, explains that products must be
+   reassigned or removed first, never deletes a product, and refreshes the
+   category filters on success.
+- When a specific category (not All Products) is selected and its products
+   include a subcategory, a second filter row appears directly below the
+   category filters and above the unchanged three-column board, listing
+   **All** plus that category's distinct subcategories with counts. Selecting
+   a subcategory filters the visible products only; it does not change
+   inventory data. Switching categories resets the subcategory selection to
+   All.
+- Catalog actions pair **+ Category** with **+ Add Product**. **Preview Draft**
+   and **Publish Menu** are a separate adjacent action group. The three state
    columns remain the sole product organization; subcategory remains product
    metadata and does not create nested inventory groups.
 - The optional Inventory price control is **Price ($)**. It converts a valid
@@ -163,10 +187,15 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
 ## Cart Operator Application (Implemented and Accepted in Production)
 
-- The logged-out Operator and Admin entries use the full responsive browser/PWA
-   surface without a simulated phone or device bezel. Cart Operator sign-in is
-   primary on `/`, with an unobtrusive Admin Login link to `/admin`; both entry
-   paths retain the same Firebase Authentication and route-preservation behavior.
+- The logged-out Operator, Inventory, and Admin entries use the full
+   responsive browser/PWA surface without a simulated phone or device bezel.
+   Cart Operator sign-in is primary on `/` and is the identical standard Cart
+   login shown at `/inventory`; both are one shared customer-facing
+   experience with no separate Inventory login. `/admin` is the distinct
+   Admin UI entry point, with an unobtrusive Admin Login link from the
+   standard Cart login and a Cart Operator Login link back from Admin. All
+   entry paths retain the same Firebase Authentication and route-preservation
+   behavior.
 - The application is a full-surface, landscape-iPad-first responsive workspace.
 - The active queue is oldest first. The oldest request receives the strongest
    visual focus while all remaining active requests stay visible in order.

@@ -67,7 +67,7 @@ claims, sessions, or runtime identities.
 | Region | `us-central1` |
 | Firestore Database | `(default)`, Native mode |
 | Cloud Run Service | `fairway-button-receiver-sandbox` |
-| Cloud Run Revision | `fairway-button-receiver-sandbox-00002-vh7` (100% traffic at validation) |
+| Cloud Run Revision | `fairway-button-receiver-sandbox-00002-vh7` (100% traffic at WP5-S1 validation; superseded by a later revision not deployed as part of this work — see "Cart UI / Inventory Integration" below for the currently serving revision) |
 | Cloud Run API URL | `https://fairway-button-receiver-sandbox-269424081919.us-central1.run.app` |
 | Runtime Identity | `fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com` |
 | Firebase Hosting URL | `https://fairway-refresh-sandbox-260930.web.app` |
@@ -141,18 +141,43 @@ server-verified `admin: true` claim. Production `admin@fairwayrefresh.com`
 retains its password provider and has that claim. Responses use `no-store`,
 exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
 
+Fairway Refresh has exactly two application entry points: the customer-facing
+**Cart UI** and the administrative **Admin UI**. Inventory Management is a
+modular feature within the Cart UI, not a third application; it uses the same
+Firebase Authentication session and its own independent course-scoped
+authorization, with no separate login experience. This is a permanent
+canonical architectural requirement: a successful customer sign-in must
+always land on Cart Operations, never directly on Inventory. Inventory is
+reached only through authorized in-app navigation (the Cart banner's
+conditional Inventory link, or an already-authenticated direct/bookmarked
+`/inventory` visit that is not itself a sign-in event).
+
 Web application entry is role-specific while sharing the same persistent
-Firebase Authentication session. `/admin` is the first-class Admin entry: it
+Firebase Authentication session. `/admin` is the first-class Admin UI entry: it
 checks the signed-in user's `admin: true` claim and renders the Admin UI without
 calling operator bootstrap. `/` and `/requests/{requestId}` are Cart Operator
-entries: they call `/api/v1/operator/bootstrap` and require an enabled
-`operator_course_assignments/{uid}` record. Entry path selects the initial mode;
-neither role requires the other role's authorization. An authenticated Admin
-without an operator assignment can therefore use `/admin`, while an operator
-without the Admin claim receives an access-denied response at `/admin`. Login
-and redirect flows retain the current path and query so Admin entry and operator
-notification deep links return to their original destinations. Backend claim,
-assignment, and Firestore Rules enforcement remain the security boundaries.
+entries within the Cart UI: they call `/api/v1/operator/bootstrap` and require
+an enabled `operator_course_assignments/{uid}` record. `/inventory` is the
+Inventory feature route within the same Cart UI: it requires an enabled
+`inventory_course_memberships/{uid}` record and does not require the Admin
+claim or an Operator assignment. All three non-public routes render the
+identical standard Cart login (or, for `/admin`, the Admin login) when signed
+out; Inventory has no distinct login presentation. Entry path selects the
+initial mode; no route's authorization requires another route's authorization.
+An authenticated Admin without an operator assignment can therefore use
+`/admin`, an operator without the Admin claim receives an access-denied
+response at `/admin`, and an Inventory member without an Operator assignment
+can still use `/inventory` directly. Login and redirect flows retain the
+current path and query so Admin entry and operator notification deep links
+return to their original destinations; Inventory is the one exception by
+architectural requirement above — a sign-in that completes on `/inventory`
+redirects to Cart Operations instead, while an already-authenticated session
+continuing a direct or Cart-banner Inventory visit (no sign-in on that page
+load) is unaffected and opens Inventory directly. The Inventory
+header's brand link and an adjacent explicit "Cart Operations" control both
+return to `/` without re-authenticating, since Firebase Auth session state
+persists across this full-page navigation. Backend claim, assignment,
+membership, and Firestore Rules enforcement remain the security boundaries.
 
 Admin revision `fairway-admin-00007-znz` corrected the custom-domain CORS
 configuration after mobile Admin requests from `app.fairwayrefresh.com` were
@@ -232,11 +257,13 @@ Admin/Hosting versions or change production to reconcile that distinction.
 
 ### Cart Inventory and Golfer Menu — Increment 1 Backend Contract
 
-The Inventory backend foundation below exists in current repository source
-only. It has not been deployed and does not change the accepted Pilot 1.0
-device/request path. It is implemented within the existing dedicated
-`fairway-admin` handler/runtime; this source integration is not evidence that
-the currently deployed Admin image matches the repository source.
+The Inventory backend foundation below was implemented in repository source
+first and is now deployed to the isolated sandbox (see the Sandbox Inventory
+Integration and Cart UI / Inventory Integration sections below); it does not
+change the accepted Pilot 1.0 device/request path. It is implemented within
+the existing dedicated `fairway-admin` handler/runtime; this source
+integration is not evidence that the currently deployed production Admin
+image matches the repository source.
 
 Inventory staff operations authenticate a Firebase ID token and authorize the
 requested Customer/Course against `inventory_course_memberships/{uid}`. The
@@ -250,6 +277,7 @@ Firestore rules remain closed to browser writes.
 | `GET /api/v1/inventory/bootstrap` | Inventory member | Returns only the member's assigned Courses. |
 | `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Course member | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
+| `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
 | `GET .../preview`; `POST .../publish` | Course member | Preview reads saved working inventory. Publish atomically stores a snapshot and advances the published pointer. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Returns only the latest published snapshot; no staff identity or draft fields. |
@@ -416,6 +444,272 @@ remains outstanding.
   Operator-side membership lookup and conditional Inventory navigation link.
   Customer-scoped Cart UI access/navigation has not been separately accepted;
   this increment must not be treated as closing that next work package.
+
+#### Cart UI / Inventory Integration — Phases 1-3 Completed, CPO Browser Acceptance Pending
+
+This phase closed the "Cart UI integration remains open" gap above. It did
+not change the accepted Inventory dashboard, catalog, or backend contracts.
+
+**Phase 1 — sandbox test identity.** The CPO created one new Email/Password
+user directly in the `fairway-refresh-sandbox-260930` Identity Platform
+project (the Firebase Console's Authentication product does not list users
+for this project because it was upgraded to full Identity Platform; Google
+Cloud Console's Identity Platform Users page is the correct management
+surface — `https://console.cloud.google.com/customer-identity/users?project=fairway-refresh-sandbox-260930`).
+Only the resulting Firebase UID was shared; no password was handled or
+stored. VSC verified the UID was distinct from both existing Monarch Bay
+pilot accounts, then provisioned matching `inventory_course_memberships/{uid}`
+and `operator_course_assignments/{uid}` records scoped only to
+`CUST-0003`/`COURSE-0002`, using the exact existing schema (including the
+`course_ids` field the deployed Firestore Rules require). Running the actual
+production authorization functions (`inventory.getInventoryBootstrap`,
+`inventory.requireCourseAccess`, `getOperatorAssignment`) against real
+sandbox Firestore confirmed: bootstrap returns only the assigned course,
+access to that course is allowed, and access to an unrelated course
+(`CUST-0001`/`COURSE-0001`) is denied with `403`. A full HTTP-level check
+with a live Firebase ID token was not performed in this phase: minting one
+requires `iam.serviceAccounts.signBlob` on the sandbox's service account,
+which the CPO's Owner identity does not hold (deliberately excluded by
+Google); the CPO chose to defer that proof to their own final browser
+sign-in rather than grant the extra IAM permission. Neither existing
+Monarch Bay account was read, modified, or exposed.
+- **Sandbox-only test identity provisioned:** UID `UKQ8UlrZy9N00dbs5IeEa7Jzzb53`
+  (`monarchbay_fnb@fairwayrefresh.com`), Course-scoped Inventory and Operator
+  access to `CUST-0003`/`COURSE-0002` only, no `admin:true` claim.
+
+**Phase 2 — minimal frontend integration.** `/`, `/requests/{requestId}`, and
+`/inventory` now render the identical standard Cart login when signed out;
+the separate "Inventory staff access" copy, the Inventory-only password-reset
+UI, and the "Inventory Staff Login" nav link were removed. `/admin` keeps its
+distinct Admin UI entry and login copy, preserving the two-entry-point
+architecture above. The Inventory header's existing brand link now carries an
+explicit "Return to Cart Operations" title, and a new adjacent
+`Cart Operations` text link (with a back arrow) was added for clarity; both
+still navigate to `/` as a full-page request, which the persisted Firebase
+Auth session survives without re-authentication. The conditional Inventory
+link in the Cart Operator banner, the `/inventory` route, and all independent
+backend authorization were preserved unchanged. The accepted Inventory
+dashboard, catalog, and workflow were not redesigned.
+
+**Phase 3 — tests and sandbox deployment.** The Operator assignment test
+fixture in `fairway_backend/cloudrun_receiver/test/index.test.js` now
+includes `course_ids` consistent with `courses`, matching the Firestore
+Rules contract, with a dedicated regression test. Focused frontend
+regression tests were added/updated for the unified login presentation, the
+shared logged-out-to-authenticated flow across Cart Operator and Inventory
+modes, the Cart Operations return link, and the preserved Cart banner link.
+Full suite results: **frontend 30/30 and backend 72/72 tests passed**;
+`npm run build:sandbox` succeeded. Only sandbox Hosting was redeployed (via
+`firebase.sandbox.json`, matching the established sandbox-site-targeted
+command) to `fairway-refresh-sandbox-260930`; no backend/Cloud Run revision
+was redeployed, no production resource was touched, and no Firestore data
+beyond the new UID's two course-scoped records was written. Post-deploy
+checks confirmed `/`, `/inventory`, and `/admin` Hosting routes return `200`;
+unauthenticated receiver and Admin API bootstrap routes still return `401`;
+the deployed JS bundle contains the new unified login and Cart Operations
+link text and no longer contains the removed Inventory-specific strings; and
+`published_version` remains `0`.
+
+**Sandbox receiver VAPID configuration gap found and fixed during CPO
+acceptance.** The CPO's first sandbox sign-in attempt returned `503 Push
+notifications are not configured` from `/api/v1/operator/bootstrap` for
+Cart Operations — a pre-existing gap unrelated to Inventory or to this
+account: the sandbox receiver had no `FAIRWAY_VAPID_PUBLIC_KEY` or
+`FAIRWAY_VAPID_KEY_VERSION` configured at all, which 503s that endpoint for
+every operator regardless of authorization. With CPO authorization, VSC
+generated one sandbox-only VAPID key pair and set
+`FAIRWAY_VAPID_PUBLIC_KEY`/`FAIRWAY_VAPID_KEY_VERSION` (key version
+`sandbox-v1-2026-10-11`) as Cloud Run environment variables on
+`fairway-button-receiver-sandbox`, redeploying only that env-var change (no
+code or image change). The corresponding private key was initially also set
+on the receiver, then removed in a follow-up update once source inspection
+confirmed the receiver never reads it — only the separate, production-only
+`fairway-request-notifier` function does, and that function already refuses
+to run outside the production project; the private key was discarded
+locally and is not stored anywhere. The sandbox receiver currently serving
+100% of traffic is revision `fairway-button-receiver-sandbox-00007-dkv`
+(superseding the `-00002-vh7` revision recorded in earlier sections of this
+guide, and the `-00005-tjc` revision that was serving before this fix); this
+guide's receiver revision references above are reconciled to flag that
+drift rather than silently overwritten. Re-running the real production
+`getOperatorBootstrap` code path (ID-token verification stubbed, as in
+Phase 1, against real sandbox Firestore and the real deployed env values)
+confirmed a `200` response with the correct course and push configuration
+for the new UID. No production resource, Secret Manager entry, or
+production VAPID material was touched.
+
+**CPO browser acceptance — 2026-10-11.** The CPO signed in at the sandbox
+Cart URL with `monarchbay_fnb@fairwayrefresh.com`, signed out, and signed
+back in; Cart Operations loaded normally; the Inventory link from the Cart
+banner opened the Inventory dashboard without a second sign-in; and the CPO
+navigated back and forth between Cart Operations and Inventory successfully.
+This accepts the Cart UI / Inventory integration work in this section (AC1-
+AC5, AC9 preserved: the first public menu remains unpublished). It does not
+by itself constitute full Inventory sprint closure: first public menu
+publication, Google Sites embedding, and validating the two existing
+Monarch Bay staff accounts through this same integration remain separate,
+not-yet-accepted items per the "CPO Acceptance and Remaining Work" section
+above.
+
+#### Post-Acceptance Corrections — Cart-First Entry, Category Management, Product Button, Subcategory Filters
+
+During acceptance testing the CPO identified four remaining issues with the
+accepted integration. The accepted integration milestone above (shared
+session, Cart Operations access, Inventory access, Cart-to-Inventory
+navigation, explicit return navigation, sandbox receiver VAPID
+configuration, course-scoped authorization) was preserved unchanged; these
+are additive corrections, not a redesign.
+
+1. **Cart UI as the permanent customer entry point.** A sign-in completed
+   while on the Inventory route previously resolved directly to Inventory
+   instead of Cart Operations. `fairway_webapp/cart_operator_dashboard/src/main.jsx`
+   now sets a `sessionStorage` marker (`fairway.freshSignIn`) immediately
+   before both the email/password and Google-redirect sign-in actions, and
+   checks it exactly once when `onAuthStateChanged` reports a signed-in
+   user. The marker survives the full-page navigation used by Google
+   redirect sign-in and is consumed (removed) on every auth-state
+   transition, including sign-out. If a sign-in just completed (marker
+   present) and the route is Inventory, the browser is redirected to `/`
+   before any Inventory-specific state is set; the pure decision
+   (`shouldRedirectFreshSignInToCartOperations`, added to
+   `src/lib/appEntry.mjs`) only applies to the Inventory route — Admin keeps
+   landing directly on Admin as the legitimate second application entry,
+   and Operator/request deep links are unaffected. An already-authenticated
+   session continuing a direct or Cart-banner Inventory visit (no sign-in
+   action on that page load) is unaffected and keeps resolving directly to
+   Inventory, preserving the accepted navigation. The existing explicit
+   Inventory-to-Cart-Operations return control is unchanged.
+2. **Category management and deletion.** Each category filter chip now has
+   an adjacent management trigger that opens a card showing the category
+   name, its product count, and its existing subcategories, with a Delete
+   Category action. Deletion requires an explicit in-dialog "Are you sure
+   you want to delete the '{name}' category?" confirmation (naming the
+   category), is disabled in the UI when the category still has products,
+   and is independently enforced server-side: a new `deleteCategory`
+   function in `fairway_backend/cloudrun_receiver/lib/inventory.js`, reached
+   via a new `DELETE /api/v1/inventory/courses/{customerId}/{courseId}/categories/{categoryId}`
+   route in `index.js`, rejects nonempty categories with `409
+   category_not_empty` and never deletes products; it only removes the
+   category document and its own (necessarily also-empty) subcategory label
+   documents. The Admin API's CORS preflight now allows `DELETE`. Category
+   filters refresh from the server after a successful deletion, and the
+   active filter resets to "All Products" if the deleted category was
+   selected.
+3. **Add Product button.** The button previously rendered a `Plus` icon
+   immediately before literal "+ Product" text, showing two plus signs. It
+   now renders exactly "+ Add Product" with no icon, in the same place and
+   style as before.
+4. **Subcategory filters.** A second filter row appears directly below the
+   category filters and above the unchanged three-column board only when a
+   specific category (not "All Products") is selected and that category's
+   products include at least one subcategory. It lists "All" plus the
+   distinct subcategory names found on that category's own products (read
+   from existing product data; no new classification or catalog migration
+   was introduced), with per-chip counts. Selecting a subcategory filters
+   the visible products client-side only; switching categories resets the
+   subcategory selection to "All". This composes with the existing category
+   filter via a new pure `filterInventoryBySubcategory` helper in
+   `src/lib/inventoryModel.mjs` and does not call the backend.
+
+**Validation.** Backend: 73/73 tests passed, including a new case that
+exercises course-scoped authorization, the empty/nonempty deletion rule, the
+409 explanation, category-filter refresh after deletion, and that the
+nonempty category's product is never touched. Frontend: 39/39 tests passed,
+including the new fresh-sign-in redirect behavior (pure-function and
+source-level), the subcategory pure-function tests, and the Add Product/
+category-management/subcategory-filter UI assertions. `npm run build:sandbox`
+succeeded. Beyond the automated suite, the category-deletion protection and
+success path were additionally verified by running the real
+`inventory.deleteCategory`/`listInventory` functions against real sandbox
+Firestore (ID-token verification stubbed, as in earlier phases): an attempt
+to delete the real, populated "Canned Cocktails" category was correctly
+rejected with `409 category_not_empty` and left untouched, and a throwaway
+empty category was created, deleted, and confirmed gone with no residue.
+The real catalog was reconfirmed unchanged afterward: 57 active products, 3
+archived, 8 categories, `published_version` still `0`.
+
+**Deployment.** Both affected sandbox services were redeployed: the Admin
+API (`fairway-admin-sandbox`, new revision `fairway-admin-sandbox-00002-g5p`,
+same env vars, `FAIRWAY_ALLOWED_ORIGIN`, ingress, and
+`invoker-iam-disabled` setting as before, explicitly reconfirmed after
+deploy) for the new category-deletion route, and sandbox Hosting for the
+frontend changes. No other service was touched; no production, firmware, or
+Firebase Auth user/password change was made. Post-deploy checks confirmed
+`/`, `/inventory`, and `/admin` still return `200`; the deployed bundles
+contain all four corrections (`+ Add Product`, the category-management/
+deletion strings, the subcategory filter class, and the fresh-sign-in
+marker); and the Admin API's unauthenticated `DELETE` route returns `401`
+(reaching the auth check, not a stale `404`).
+
+**Bug found during CPO acceptance testing and fixed — category deletion
+blocked by an archived product.** The CPO's own "THC Drinks" test category
+(0 active products) repeatedly failed to delete with "This category still
+has products," contradicting the dashboard's own displayed count. The
+automated test suite had not caught this because it only exercised active
+products; it had not been checked against real data showing the discrepancy
+between what the UI counts (active products only) and what the original
+`deleteCategory` check counted (active and archived). Read-only inspection
+of real sandbox Firestore confirmed the root cause directly: one archived
+product ("Seniorita") still referenced the category's id. `deleteCategory`
+in `lib/inventory.js` now counts only active (non-archived) products when
+deciding whether a category is empty, exactly matching the count shown in
+the Inventory UI; an archived product may still carry a deleted category's
+id as a harmless historical reference, since archived products display
+using their own already-cached `category_name` string and are never
+re-resolved through the live category collection. A new backend regression
+test reproduces this exact scenario (a category whose only product is
+archived) and asserts deletion succeeds while the archived product is
+completely untouched. Backend suite: 74/74 passed. `fairway-admin-sandbox`
+was redeployed again (revision `fairway-admin-sandbox-00003-6kd`, same env
+vars, ingress, and `invoker-iam-disabled` setting reconfirmed after deploy).
+Using the corrected, deployed code, the CPO's actual stuck "THC Drinks"
+category was deleted directly (not just a throwaway test category this
+time): the category is gone, the real catalog is unchanged at 57 active /
+3 archived products, and the archived "Seniorita" product remains present
+and unmodified with its `category_name` still reading "THC Drinks."
+
+**Subcategory filter row — real-data finding.** Direct inspection of the
+real Monarch Bay catalog found that only the "Craft Beers" category (25
+products) has any subcategory assigned; all seven other categories have
+zero subcategorized products. The subcategory row is therefore expected to
+appear only when "Craft Beers" is selected, by the original design
+("Selecting a category displays its applicable subcategories" — only when
+applicable); selecting any other category correctly shows no second row
+because there is nothing to filter by, not because the feature is broken.
+This was confirmed by replaying the exact frontend filtering/derivation
+logic against the real "Craft Beers" product set (25 products, 8 distinct
+subcategory names) and by diffing the live deployed bundle byte-for-byte
+against the local build to rule out a stale deployment. This data
+distribution was not checked before the correction pass was first reported
+as validated; it should have been.
+
+**CPO final acceptance — 2026-10-12.** The CPO performed a full sandbox
+browser acceptance pass of all four corrections above (Cart-first entry,
+category management/deletion including the "THC Drinks" fix, the Add
+Product button, and subcategory filtering) and confirmed the functionality
+works. This closes the Cart UI / Inventory integration increment, including
+the post-acceptance corrections and the archived-product deletion bug fix,
+as CPO-accepted.
+
+#### Final Baseline and Production-Readiness Status
+
+This CPO-accepted increment was established as the new canonical Git
+baseline on `main` (superseding `d4dd48db9e3bcdc6814d2d902519a7e8593e5bd0`);
+see `docs/feature_backlog.md` for the accepted commit record. The
+two-application-entry-point architecture above (Cart UI, Admin UI; Inventory
+as a Cart UI feature with no separate login) is now the permanent canonical
+architecture, not a point-in-time correction.
+
+Remaining before any production release of this increment: the first public
+menu publication (explicitly reserved for CPO hands-on action, still
+unpublished), Google Sites embedding validation, validating the two existing
+Monarch Bay staff accounts (`monarch_fnb@fairwayrefresh.com`,
+`monarch_cart@fairwayrefresh.com`) through this same Cart-to-Inventory
+integration, and an explicit, separately authorized decision to deploy this
+Inventory work to the production Admin/Hosting/Firestore environment (not
+authorized or performed as part of this acceptance). No production
+resource, Cloud Run service, Firebase Auth account, course permission, or
+firmware was modified to reach this sandbox acceptance.
 
 ### Backend Release Register — Device Firmware Compatibility
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterInventoryByCategory, formatPrice, formatPublishedAt, groupPublishedProducts, matchCoursePresentation, mergeProductDraft, usdPriceFromInput, usdPriceInput } from '../src/lib/inventoryModel.mjs';
+import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, matchCoursePresentation, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from '../src/lib/inventoryModel.mjs';
 
 test('course branding matches the authoritative names, not colliding environment-local IDs', () => {
   const monarchPresentation = { customerName: 'Monarch Bay GC', courseName: 'Tony Lema Course', apiSlug: 'monarch-bay' };
@@ -83,4 +83,28 @@ test('category filtering applies one top-level category to active products and A
   ];
   assert.deepEqual(filterInventoryByCategory(products, 'Craft Beers').map(product => product.name), ['Beer']);
   assert.deepEqual(filterInventoryByCategory(products, 'all').map(product => product.name), ['Beer', 'Water']);
+});
+
+test('subcategory filtering narrows an already category-filtered list without modifying inventory data', () => {
+  const products = [
+    { name: 'Lager', category_name: 'Craft Beers', subcategory_name: 'Lager', state: 'on_cart' },
+    { name: 'IPA', category_name: 'Craft Beers', subcategory_name: 'IPA', state: 'on_cart' },
+    { name: 'Misc Beer', category_name: 'Craft Beers', subcategory_name: null, state: 'on_cart' },
+  ];
+  assert.deepEqual(filterInventoryBySubcategory(products, 'Lager').map((p) => p.name), ['Lager']);
+  assert.deepEqual(filterInventoryBySubcategory(products, 'all').map((p) => p.name), ['Lager', 'IPA', 'Misc Beer']);
+  // Pure filtering: the input array and its objects are untouched.
+  assert.deepEqual(products.map((p) => p.name), ['Lager', 'IPA', 'Misc Beer']);
+});
+
+test('subcategory names are derived from existing product data only, sorted, and deduplicated', () => {
+  const products = [
+    { name: 'A', subcategory_name: 'Lager' },
+    { name: 'B', subcategory_name: 'IPA' },
+    { name: 'C', subcategory_name: 'Lager' },
+    { name: 'D', subcategory_name: null },
+    { name: 'E', subcategory_name: '' },
+  ];
+  assert.deepEqual(subcategoryNamesInProducts(products), ['IPA', 'Lager']);
+  assert.deepEqual(subcategoryNamesInProducts([]), []);
 });

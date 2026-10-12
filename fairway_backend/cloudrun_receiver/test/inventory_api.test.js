@@ -222,6 +222,101 @@ test('Course category names normalize without duplicates and staff saves use las
   assert.ok(events.docs.some((event) => event.data().actor_uid === TOKENS.cart.uid));
 });
 
+test('Empty categories can be deleted by any course member; nonempty categories are protected and never cascade-delete products', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db);
+  await seedMembership(db, TOKENS.fnb.uid);
+  await seedMembership(db, TOKENS.cart.uid);
+  const request = createApi(db);
+
+  const emptyCategory = await request({
+    method: 'POST', path: `${coursePath()}/categories`, token: 'fnb', body: { name: 'Snacks' },
+  });
+  assert.strictEqual(emptyCategory.statusCode, 201);
+
+  const nonEmptyCategory = await request({
+    method: 'POST', path: `${coursePath()}/categories`, token: 'fnb', body: { name: 'Craft Beers' },
+  });
+  assert.strictEqual(nonEmptyCategory.statusCode, 201);
+  const createdProduct = await request({
+    method: 'POST', path: `${coursePath()}/products`, token: 'fnb', body: product('Coors Banquet'),
+  });
+  assert.strictEqual(createdProduct.statusCode, 201);
+
+  const outsiderAttempt = await request({
+    method: 'DELETE', path: `${coursePath()}/categories/${emptyCategory.body.category_id}`, token: 'outsider',
+  });
+  assert.strictEqual(outsiderAttempt.statusCode, 403);
+
+  const nonEmptyAttempt = await request({
+    method: 'DELETE', path: `${coursePath()}/categories/${nonEmptyCategory.body.category_id}`, token: 'cart',
+  });
+  assert.strictEqual(nonEmptyAttempt.statusCode, 409);
+  assert.match(nonEmptyAttempt.body.message, /Reassign or remove/);
+
+  const beforeDelete = await request({ path: coursePath(), token: 'fnb' });
+  assert.ok(beforeDelete.body.categories.some((category) => category.category_id === emptyCategory.body.category_id));
+
+  const deleted = await request({
+    method: 'DELETE', path: `${coursePath()}/categories/${emptyCategory.body.category_id}`, token: 'cart',
+  });
+  assert.strictEqual(deleted.statusCode, 200);
+  assert.deepStrictEqual(deleted.body, { category_id: emptyCategory.body.category_id, deleted: true });
+
+  const afterDelete = await request({ path: coursePath(), token: 'fnb' });
+  assert.ok(!afterDelete.body.categories.some((category) => category.category_id === emptyCategory.body.category_id));
+  assert.ok(afterDelete.body.categories.some((category) => category.category_id === nonEmptyCategory.body.category_id));
+  assert.strictEqual(
+    afterDelete.body.products.find((item) => item.product_id === createdProduct.body.product_id)?.name,
+    'Coors Banquet'
+  );
+
+  const notFound = await request({
+    method: 'DELETE', path: `${coursePath()}/categories/does-not-exist`, token: 'fnb',
+  });
+  assert.strictEqual(notFound.statusCode, 404);
+});
+
+test('A category whose only product is archived is deletable, matching the active-only count shown to staff; the archived product is never touched', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db);
+  await seedMembership(db, TOKENS.fnb.uid);
+  const request = createApi(db);
+
+  const category = await request({
+    method: 'POST', path: `${coursePath()}/categories`, token: 'fnb', body: { name: 'THC Drinks' },
+  });
+  assert.strictEqual(category.statusCode, 201);
+  const created = await request({
+    method: 'POST', path: `${coursePath()}/products`, token: 'fnb',
+    body: product('Seniorita', 'on_cart', { category_name: 'THC Drinks', subcategory_name: null }),
+  });
+  assert.strictEqual(created.statusCode, 201);
+  const archived = await request({
+    method: 'POST', path: `${coursePath()}/products/${created.body.product_id}/archive`, token: 'fnb',
+  });
+  assert.strictEqual(archived.statusCode, 200);
+
+  // The category now has zero ACTIVE products (one archived product still
+  // references it); this must match what the Inventory UI counts and
+  // displays, so deletion must be allowed, not rejected.
+  const beforeDelete = await request({ path: coursePath(), token: 'fnb' });
+  assert.strictEqual(beforeDelete.body.products.filter((p) => p.category_name === 'THC Drinks').length, 0);
+
+  const deleted = await request({
+    method: 'DELETE', path: `${coursePath()}/categories/${category.body.category_id}`, token: 'fnb',
+  });
+  assert.strictEqual(deleted.statusCode, 200);
+  assert.deepStrictEqual(deleted.body, { category_id: category.body.category_id, deleted: true });
+
+  const afterDelete = await request({ path: coursePath(), token: 'fnb' });
+  assert.ok(!afterDelete.body.categories.some((c) => c.category_id === category.body.category_id));
+  const archivedProductStillPresent = afterDelete.body.archived_products
+    .find((p) => p.product_id === created.body.product_id);
+  assert.strictEqual(archivedProductStillPresent?.name, 'Seniorita');
+  assert.strictEqual(archivedProductStillPresent?.category_name, 'THC Drinks');
+});
+
 test('Publication snapshots are atomic, preserve last success on failure, and public reads exclude drafts', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);

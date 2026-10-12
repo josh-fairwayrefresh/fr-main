@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, Check, ChevronDown, CircleAlert, Eye, LogOut, PackagePlus,
-  Plus, Send, X,
+  Archive, ArrowLeft, Check, ChevronDown, CircleAlert, Eye, LogOut, PackagePlus,
+  Send, Settings, Trash2, X,
 } from 'lucide-react';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
-import { filterInventoryByCategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, mergeProductDraft, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
+import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
 import { presentationForCourse } from './lib/courseMenuConfig';
 import './inventory.css';
 
@@ -220,6 +220,57 @@ function CategoryDialog({ course, categories, apiBaseUrl, user, onClose, onSaved
   </section></div>;
 }
 
+function CategoryManagerDialog({ course, category, productCount, apiBaseUrl, user, onClose, onDeleted }) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const canDelete = productCount === 0;
+
+  async function confirmDelete() {
+    setPending(true);
+    setError('');
+    try {
+      await inventoryRequest(
+        user, apiBaseUrl, coursePath(course, `/categories/${encodeURIComponent(category.category_id)}`),
+        { method: 'DELETE' }
+      );
+      await onDeleted();
+      onClose();
+    } catch (reason) {
+      setError(reason.message);
+      setConfirming(false);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <div className="inv-overlay"><section className="inv-dialog inv-small-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-category-manage-title">
+    <header><div><span className="inv-eyebrow">CATEGORY MANAGEMENT</span><h2 id="inv-category-manage-title">{category.name}</h2></div><button className="inv-icon-button" type="button" onClick={onClose} disabled={pending} aria-label="Close category management"><X size={19} /></button></header>
+    <div className="inv-category-manage-body">
+      <p className="inv-category-manage-detail"><strong>{productCount}</strong> {productCount === 1 ? 'product' : 'products'} in this category</p>
+      {category.subcategories?.length > 0 && <div className="inv-category-manage-subcategories"><span>Subcategories</span><ul>{category.subcategories.map((subcategory) => <li key={subcategory.subcategory_id}>{subcategory.name}</li>)}</ul></div>}
+      {!canDelete && <p className="inv-category-manage-note">This category still has products. Reassign or remove its products before deleting it.</p>}
+      {error && <p className="inv-form-error" role="alert">{error}</p>}
+      {confirming ? (
+        <div className="inv-category-manage-confirm" role="alertdialog" aria-label={`Confirm deletion of ${category.name}`}>
+          <p>Are you sure you want to delete the “{category.name}” category? This cannot be undone.</p>
+          <div className="inv-category-manage-confirm-actions">
+            <button className="inv-secondary" type="button" onClick={() => setConfirming(false)} disabled={pending}>Cancel</button>
+            <button className="inv-danger" type="button" onClick={confirmDelete} disabled={pending}>{pending ? 'Deleting…' : 'Yes, delete category'}</button>
+          </div>
+        </div>
+      ) : (
+        <footer>
+          <button className="inv-secondary" type="button" onClick={onClose}>Close</button>
+          <button className="inv-danger" type="button" onClick={() => setConfirming(true)} disabled={!canDelete} title={canDelete ? undefined : 'Reassign or remove its products first'}>
+            <Trash2 size={15} />Delete Category
+          </button>
+        </footer>
+      )}
+    </div>
+  </section></div>;
+}
+
 function DraftPreviewDialog({ preview, course, onClose }) {
   const categories = groupPublishedProducts(preview.products);
   return <div className="inv-overlay"><section className="inv-dialog inv-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-preview-title">
@@ -253,6 +304,7 @@ function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArc
 export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   const [selectedKey, setSelectedKey] = useState(() => courses[0] ? `${courses[0].customer_id}/${courses[0].course_id}` : '');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState('all');
   const [inventory, setInventory] = useState(null);
   const [loadStatus, setLoadStatus] = useState('loading');
   const [loadError, setLoadError] = useState('');
@@ -260,6 +312,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   const [busyId, setBusyId] = useState('');
   const [editor, setEditor] = useState(null);
   const [categoryEditor, setCategoryEditor] = useState(false);
+  const [categoryManager, setCategoryManager] = useState(null);
   const [preview, setPreview] = useState(null);
   const [publishing, setPublishing] = useState(false);
   const [publication, setPublication] = useState(null);
@@ -269,12 +322,31 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   const coursePresentation = course && presentationForCourse(course);
   const categories = inventory?.categories || [];
   const products = (inventory?.products || []).filter((product) => product.archived !== true);
-  const visibleProducts = useMemo(() => filterInventoryByCategory(products, selectedCategory), [products, selectedCategory]);
+  const categoryFilteredProducts = useMemo(() => (
+    filterInventoryByCategory(products, selectedCategory)
+  ), [products, selectedCategory]);
+  const visibleProducts = useMemo(() => (
+    selectedCategory === 'all'
+      ? categoryFilteredProducts
+      : filterInventoryBySubcategory(categoryFilteredProducts, selectedSubcategory)
+  ), [categoryFilteredProducts, selectedCategory, selectedSubcategory]);
   const categoryCounts = useMemo(() => products.reduce((counts, product) => {
     counts[product.category_name] = (counts[product.category_name] || 0) + 1;
     return counts;
   }, {}), [products]);
+  const subcategoryNames = useMemo(() => (
+    selectedCategory === 'all' ? [] : subcategoryNamesInProducts(categoryFilteredProducts)
+  ), [categoryFilteredProducts, selectedCategory]);
+  const subcategoryCounts = useMemo(() => categoryFilteredProducts.reduce((counts, product) => {
+    if (product.subcategory_name) counts[product.subcategory_name] = (counts[product.subcategory_name] || 0) + 1;
+    return counts;
+  }, {}), [categoryFilteredProducts]);
   const localTimeZone = coursePresentation?.timeZone;
+
+  function selectCategory(categoryName) {
+    setSelectedCategory(categoryName);
+    setSelectedSubcategory('all');
+  }
 
   useEffect(() => {
     if (!course) return undefined;
@@ -390,19 +462,27 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No Inventory course access</h1><p>This account is not assigned to an Inventory course.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
 
   return <main className="inventory-app">
-    <header className="inv-header"><a href="/" className="inv-brand"><img src={coursePresentation?.fairwayLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
+    <header className="inv-header"><a href="/" className="inv-brand" title="Return to Cart Operations"><img src={coursePresentation?.fairwayLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
+      <a className="inv-cart-link" href="/" title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
       {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={selectedKey} onChange={(event) => { setSelectedKey(event.target.value); setPublication(null); }} aria-label="Select course">{courses.map((item) => <option key={`${item.customer_id}/${item.course_id}`} value={`${item.customer_id}/${item.course_id}`}>{item.course_name}</option>)}</select></label>}
       <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
     </div></header>
     <div className="inv-main">
-      <section className="inv-title-row"><div><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div><div className="inv-title-actions"><div className="inv-edit-actions"><button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />+ Category</button><button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}><Plus size={17} />+ Product</button></div><div className="inv-publication-actions"><button className="inv-secondary" type="button" onClick={loadPreview}><Eye size={16} />Preview Draft</button><button className="inv-publish" type="button" onClick={publishMenu} disabled={publishing || loadStatus !== 'ready'}><Send size={16} />{publishing ? 'Publishing…' : 'Publish Menu'}</button></div></div></section>
+      <section className="inv-title-row"><div><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div><div className="inv-title-actions"><div className="inv-edit-actions"><button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />+ Category</button><button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}>+ Add Product</button></div><div className="inv-publication-actions"><button className="inv-secondary" type="button" onClick={loadPreview}><Eye size={16} />Preview Draft</button><button className="inv-publish" type="button" onClick={publishMenu} disabled={publishing || loadStatus !== 'ready'}><Send size={16} />{publishing ? 'Publishing…' : 'Publish Menu'}</button></div></div></section>
       <section className={`inv-revision ${inventory?.has_unpublished_changes ? 'is-dirty' : ''}`} role="status"><span className="inv-revision-dot" /><strong>{inventory?.has_unpublished_changes ? 'Unpublished changes' : inventory?.published_version ? 'Published menu is current' : 'No menu published yet'}</strong><span>Revision {inventory?.inventory_revision ?? '—'}</span>{inventory?.published_version > 0 && <span>Published version {inventory.published_version}</span>}</section>
       {loadError && <div className="inv-alert" role="alert"><CircleAlert size={17} /><span>{loadError}</span><button type="button" onClick={() => refreshInventory(false)}>Retry</button></div>}
       {notice && <div className="inv-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
       {loadStatus === 'loading' && <div className="inv-loading" role="status">Loading course inventory…</div>}
       {inventory && <nav className="inv-category-filters" aria-label="Filter inventory by category">
-        <button className={`inv-category-filter ${selectedCategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === 'all'} onClick={() => setSelectedCategory('all')}>All Products <span>{products.length}</span></button>
-        {categories.map((category) => <button className={`inv-category-filter ${selectedCategory === category.name ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === category.name} key={category.category_id} onClick={() => setSelectedCategory(category.name)}>{category.name} <span>{categoryCounts[category.name] || 0}</span></button>)}
+        <button className={`inv-category-filter ${selectedCategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === 'all'} onClick={() => selectCategory('all')}>All Products <span>{products.length}</span></button>
+        {categories.map((category) => <div className="inv-category-filter-group" key={category.category_id}>
+          <button className={`inv-category-filter ${selectedCategory === category.name ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === category.name} onClick={() => selectCategory(category.name)}>{category.name} <span>{categoryCounts[category.name] || 0}</span></button>
+          <button className="inv-category-manage-trigger" type="button" onClick={() => setCategoryManager(category)} title={`Manage ${category.name}`} aria-label={`Manage ${category.name} category`}><Settings size={13} /></button>
+        </div>)}
+      </nav>}
+      {inventory && selectedCategory !== 'all' && subcategoryNames.length > 0 && <nav className="inv-subcategory-filters" aria-label="Filter inventory by subcategory">
+        <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>
+        {subcategoryNames.map((name) => <button className={`inv-subcategory-filter ${selectedSubcategory === name ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === name} key={name} onClick={() => setSelectedSubcategory(name)}>{name} <span>{subcategoryCounts[name] || 0}</span></button>)}
       </nav>}
       {inventory && <div className="inv-board">{columnStates.map((state) => <InventoryColumn key={state} state={state} products={visibleProducts.filter((product) => product.state === state)} busyId={busyId} onStateChange={changeState} onEdit={(product) => setEditor({ product })} onArchive={archiveProduct} onDrop={dropProduct} onDragStart={startProductDrag} />)}</div>}
       {inventory?.archived_products?.length > 0 && <section className="inv-archive"><button type="button" className="inv-archive-toggle" aria-expanded={showArchived} onClick={() => setShowArchived(!showArchived)}><Archive size={16} />Archived products <span>{inventory.archived_products.length}</span><ChevronDown size={16} /></button>{showArchived && <ul>{inventory.archived_products.map((product) => <li key={product.product_id}><strong>{product.name}</strong><span>{product.category_name}</span></li>)}</ul>}</section>}
@@ -411,6 +491,18 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
     </div>
     {editor && <ProductDialog key={editor.product?.product_id || 'new'} product={editor.product} categories={categories} onClose={() => setEditor(null)} onCreate={createProduct} onSave={saveProduct} />}
     {categoryEditor && <CategoryDialog course={course} categories={categories} apiBaseUrl={apiBaseUrl} user={user} onClose={() => setCategoryEditor(false)} onSaved={() => refreshInventory(true)} />}
+    {categoryManager && <CategoryManagerDialog
+      course={course}
+      category={categoryManager}
+      productCount={categoryCounts[categoryManager.name] || 0}
+      apiBaseUrl={apiBaseUrl}
+      user={user}
+      onClose={() => setCategoryManager(null)}
+      onDeleted={async () => {
+        if (selectedCategory === categoryManager.name) selectCategory('all');
+        await refreshInventory(true);
+      }}
+    />}
     {preview && <DraftPreviewDialog preview={preview} course={course} onClose={() => setPreview(null)} />}
   </main>;
 }

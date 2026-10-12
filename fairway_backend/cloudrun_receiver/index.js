@@ -1175,7 +1175,7 @@ function createFairwayHandlers(db, {
       res.set('Access-Control-Allow-Origin', origin);
     }
     if (req.method === 'OPTIONS') {
-      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
       res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
       return res.status(204).send('');
     }
@@ -1235,6 +1235,12 @@ function createFairwayHandlers(db, {
         requireBodyFields(req.body, ['name']);
         return res.status(201).json(await inventory.createSubcategory(
           db, customerId, courseId, decodeURIComponent(subcategoryMatch[1]), req.body.name, identity.uid
+        ));
+      }
+      const categoryIdMatch = action.match(/^categories\/([^/]+)$/);
+      if (req.method === 'DELETE' && categoryIdMatch) {
+        return res.status(200).json(await inventory.deleteCategory(
+          db, customerId, courseId, decodeURIComponent(categoryIdMatch[1]), identity.uid
         ));
       }
       if (req.method === 'POST' && action === 'products') {

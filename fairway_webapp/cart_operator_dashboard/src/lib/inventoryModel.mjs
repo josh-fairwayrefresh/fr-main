@@ -41,6 +41,20 @@ export function filterInventoryByCategory(products = [], categoryName = 'all') {
     : active.filter((product) => product.category_name === categoryName);
 }
 
+export function filterInventoryBySubcategory(products = [], subcategoryName = 'all') {
+  return subcategoryName === 'all'
+    ? products
+    : products.filter((product) => product.subcategory_name === subcategoryName);
+}
+
+export function subcategoryNamesInProducts(products = []) {
+  const names = new Set();
+  for (const product of products) {
+    if (product.subcategory_name) names.add(product.subcategory_name);
+  }
+  return [...names].sort((left, right) => left.localeCompare(right));
+}
+
 export function matchCoursePresentation(course, presentations) {
   if (!course) return null;
   return presentations.find((presentation) => (

@@ -5,7 +5,6 @@ import {
   getRedirectResult,
   getIdTokenResult,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithRedirect,
   signOut,
@@ -17,12 +16,23 @@ import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
 import OperatorDesignReview from './operator-design/OperatorDesignReview';
-import { APP_MODE, modeForPath, resolveEntry } from './lib/appEntry.mjs';
+import { APP_MODE, modeForPath, resolveEntry, shouldRedirectFreshSignInToCartOperations } from './lib/appEntry.mjs';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
 import { operatorRequest } from './lib/operator';
 import './styles.css';
 
 export const API_BASE_URL = apiBaseUrl;
+
+// Fairway Refresh has exactly two application entry points: Cart UI and Admin
+// UI. Inventory is a feature within Cart UI, not a third entry point, so a
+// sign-in that completes while on /inventory must land on Cart Operations
+// first. This sessionStorage marker survives the full-page navigation used by
+// both email/password sign-in (same page load) and Google redirect sign-in
+// (separate page load after returning from Google), letting the auth-state
+// handler distinguish "a sign-in just completed here" from "an already
+// authenticated session is continuing a direct or Cart-banner Inventory
+// visit" without depending on SDK callback ordering.
+const FRESH_SIGN_IN_STORAGE_KEY = 'fairway.freshSignIn';
 
 const InventoryApp = lazy(() => import('./InventoryApp'));
 const PublicMenuApp = lazy(() => import('./PublicMenuApp'));
@@ -129,33 +139,14 @@ async function updateRequestStatus(requestId, action) {
   return response.text();
 }
 
-function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn, onPasswordSetup }) {
+function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [setupMessage, setSetupMessage] = useState('');
-  const [setupPending, setSetupPending] = useState(false);
   const isAdminEntry = mode === APP_MODE.ADMIN;
-  const isInventoryEntry = mode === APP_MODE.INVENTORY;
 
   async function handleEmailSubmit(event) {
     event.preventDefault();
     await onEmailSignIn(email, password);
-  }
-
-  async function handlePasswordSetup() {
-    if (!email.trim()) {
-      setSetupMessage('Enter the approved account email first.');
-      return;
-    }
-    setSetupPending(true);
-    try {
-      await onPasswordSetup(email.trim());
-      setSetupMessage('If this account is provisioned, a password setup link has been emailed.');
-    } catch (_error) {
-      setSetupMessage('Unable to send a password setup email. Contact the Fairway administrator.');
-    } finally {
-      setSetupPending(false);
-    }
   }
 
   return (
@@ -164,19 +155,19 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn, onPasswor
         <a href="/" aria-label="Fairway Refresh home">
           <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
         </a>
-        <span>{isAdminEntry ? 'Administration' : isInventoryEntry ? 'Inventory management' : 'Cart operations'}</span>
+        <span>{isAdminEntry ? 'Administration' : 'Cart operations'}</span>
       </header>
       <div className="auth-layout">
         <section className="auth-intro" aria-labelledby="auth-title">
           <p>COURSE SERVICE OPERATIONS</p>
-          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : isInventoryEntry ? 'Inventory staff access' : 'Cart Operator access'}</h1>
-          <span>{isAdminEntry ? 'Authorized fleet administration.' : isInventoryEntry ? 'Sign in to manage assigned course inventory.' : 'Sign in to begin course service.'}</span>
+          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart Operator access'}</h1>
+          <span>{isAdminEntry ? 'Authorized fleet administration.' : 'Sign in to begin course service.'}</span>
         </section>
         <div className="auth-entry">
-          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : isInventoryEntry ? 'Inventory staff sign in' : 'Cart Operator sign in'}>
+          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}>
             <div className="auth-panel-heading">
               <span>AUTHORIZED ACCESS</span>
-              <h2>{isAdminEntry ? 'Admin sign in' : isInventoryEntry ? 'Inventory staff sign in' : 'Cart Operator sign in'}</h2>
+              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}</h2>
             </div>
             <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
@@ -206,13 +197,6 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn, onPasswor
               </button>
             </form>
 
-            {isInventoryEntry && <div className="inventory-password-setup">
-              <button type="button" onClick={handlePasswordSetup} disabled={setupPending}>
-                {setupPending ? 'Sending…' : 'Set or reset password'}
-              </button>
-              {setupMessage && <p role="status">{setupMessage}</p>}
-            </div>}
-
             <div className="login-divider">or</div>
 
             <button className="google-secondary-button" onClick={onGoogleSignIn}>
@@ -230,9 +214,9 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn, onPasswor
             )}
           </section>
           <nav className="mode-entry-links" aria-label="Other Fairway Refresh sign-in options">
-            {isAdminEntry ? <a className="mode-entry-link" href="/">Cart Operator Login</a> : isInventoryEntry
+            {isAdminEntry
               ? <a className="mode-entry-link" href="/">Cart Operator Login</a>
-              : <><a className="mode-entry-link" href="/admin">Admin Login</a><a className="mode-entry-link" href="/inventory">Inventory Staff Login</a></>}
+              : <a className="mode-entry-link" href="/admin">Admin Login</a>}
           </nav>
         </div>
       </div>
@@ -606,6 +590,19 @@ function App() {
         setAuthState('signed_out');
         setOperatorConfig(null);
         setOperatorState('not_requested');
+        window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
+        return;
+      }
+
+      // Customer login must always land on Cart Operations, never directly on
+      // Inventory. This only applies to a sign-in that just completed on
+      // this load; an already-authenticated session continuing a direct or
+      // Cart-banner Inventory visit is unaffected and keeps working exactly
+      // as before.
+      const freshSignIn = window.sessionStorage.getItem(FRESH_SIGN_IN_STORAGE_KEY) === '1';
+      window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
+      if (freshSignIn && shouldRedirectFreshSignInToCartOperations(entryMode)) {
+        window.location.assign('/');
         return;
       }
 
@@ -769,9 +766,11 @@ function App() {
     setAuthState('checking');
 
     try {
+      window.sessionStorage.setItem(FRESH_SIGN_IN_STORAGE_KEY, '1');
       await signInWithRedirect(auth, googleProvider);
     } catch (error) {
       console.error('Google sign-in failed:', error);
+      window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
       setAuthState('signed_out');
     }
   }
@@ -780,15 +779,13 @@ function App() {
     setAuthState('checking');
 
     try {
+      window.sessionStorage.setItem(FRESH_SIGN_IN_STORAGE_KEY, '1');
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
       console.error('Email sign-in failed:', error);
+      window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
       setAuthState('denied');
     }
-  }
-
-  async function handlePasswordSetup(email) {
-    await sendPasswordResetEmail(auth, email);
   }
 
   const activeRequests = useMemo(() => {
@@ -824,7 +821,6 @@ function App() {
         mode={entryMode}
         onGoogleSignIn={handleGoogleSignIn}
         onEmailSignIn={handleEmailSignIn}
-        onPasswordSetup={handlePasswordSetup}
       />
     );
   }

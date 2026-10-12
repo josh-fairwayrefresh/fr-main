@@ -39,3 +39,15 @@ export function resolveEntry({ mode, authenticated, claimsReady, isAdmin, operat
   if (operatorState === 'checking') return 'checking';
   return operatorState === 'authorized' ? 'operator' : 'denied';
 }
+
+// Fairway Refresh has exactly two application entry points: Cart UI and Admin
+// UI. Inventory is a feature within Cart UI, not a separate entry point, so a
+// sign-in that completes while on the Inventory route must land on Cart
+// Operations rather than resolving directly to Inventory. Admin keeps its own
+// first-class landing because it is the legitimate second application entry.
+// This only applies to a sign-in that just completed on this page load; an
+// already-authenticated session continuing a direct or Cart-banner Inventory
+// visit is unaffected.
+export function shouldRedirectFreshSignInToCartOperations(mode) {
+  return mode === APP_MODE.INVENTORY;
+}
