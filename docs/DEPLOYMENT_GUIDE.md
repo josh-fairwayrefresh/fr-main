@@ -297,8 +297,8 @@ the sandbox frontend configuration validation and Vite build passed. The build
 reported the existing large-main-chunk advisory.
 
 - **Sandbox source validation (2026-10-12):** receiver revision
-  `fairway-button-receiver-sandbox-00009-d4g` and Admin/Inventory revision
-  `fairway-admin-sandbox-00005-cff` each serve 100% of traffic. Firebase Rules
+  `fairway-button-receiver-sandbox-00010-lh8` and Admin/Inventory revision
+  `fairway-admin-sandbox-00006-74x` each serve 100% of traffic. Firebase Rules
   compiled and were released; Hosting deployed to
   `https://fairway-refresh-sandbox-260930.web.app` (the CLI live-channel record
   reports 2026-10-12 01:56:20). Cart `/`, Inventory `/inventory`, and Admin

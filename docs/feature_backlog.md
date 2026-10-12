@@ -167,8 +167,8 @@ staff, avoiding a multi-course query limit.
 
 The source regression suites passed (80 backend, 44 frontend), and the
 sandbox-configured frontend build passed with a large-bundle advisory.
-Sandbox receiver `fairway-button-receiver-sandbox-00009-d4g`, Admin/Inventory
-`fairway-admin-sandbox-00005-cff`, Firestore Rules, and Hosting were deployed.
+Sandbox receiver `fairway-button-receiver-sandbox-00010-lh8`, Admin/Inventory
+`fairway-admin-sandbox-00006-74x`, Firestore Rules, and Hosting were deployed.
 Cart, Inventory, and Admin SPA routes returned `200`; unauthenticated operator,
 Inventory, and Admin APIs returned `401`. Production still serves the
 previously listed revisions; production deployment remains outstanding. The

@@ -10,9 +10,9 @@ const COURSE_SUBSCRIPTIONS_COLLECTION = 'course_push_subscriptions';
 const NOTIFICATION_PREFERENCES_COLLECTION = 'user_notification_preferences';
 
 async function listAllCourses(db) {
-  const customers = await db.collection('customers').limit(500).get();
+  const customers = await db.collection('customers').get();
   const courseSnapshots = await Promise.all(customers.docs.map((customer) => (
-    db.collection('customers').doc(customer.id).collection('courses').limit(500).get()
+    db.collection('customers').doc(customer.id).collection('courses').get()
   )));
   return courseSnapshots.flatMap((snapshot, index) => snapshot.docs.map((course) => ({
     ...course.data(),
