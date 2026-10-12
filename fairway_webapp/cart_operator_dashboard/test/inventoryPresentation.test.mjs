@@ -49,3 +49,15 @@ test('subcategory filters appear as a second row, reset on category change, and 
   assert.match(inventorySource, /filterInventoryBySubcategory/);
   assert.doesNotMatch(inventorySource, /inventoryRequest.*subcategory.*selectedSubcategory/i);
 });
+
+test('public menu uses category icons and retains NA for Non-Alcoholic', async () => {
+  const publicMenuSource = await readFile(new URL('../src/PublicMenuApp.jsx', import.meta.url), 'utf8');
+  assert.match(publicMenuSource, /'craft beers': Beer/);
+  assert.match(publicMenuSource, /shots: GlassWater/);
+  assert.match(publicMenuSource, /cocktails: Martini/);
+  assert.match(publicMenuSource, /'canned cocktails': CannedCocktailIcon/);
+  assert.match(publicMenuSource, /food: Sandwich/);
+  assert.match(publicMenuSource, /name\.trim\(\)\.toLowerCase\(\) === 'non-alcoholic'\) return 'NA'/);
+  assert.match(publicMenuSource, /<CategoryMark name=\{category\.name\} \/>/);
+  assert.doesNotMatch(publicMenuSource, /categoryInitials/);
+});

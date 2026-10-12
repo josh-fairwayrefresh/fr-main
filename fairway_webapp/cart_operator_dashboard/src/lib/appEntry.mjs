@@ -15,8 +15,7 @@ export function modeForPath(pathname) {
 export function authorizationRequirements(mode) {
   return Object.freeze({
     adminClaim: mode === APP_MODE.ADMIN,
-    operatorBootstrap: mode === APP_MODE.OPERATOR,
-    inventoryMembership: mode === APP_MODE.INVENTORY,
+    customerCourseAssignment: mode === APP_MODE.OPERATOR || mode === APP_MODE.INVENTORY,
     publicReadOnly: mode === APP_MODE.PUBLIC_MENU,
   });
 }

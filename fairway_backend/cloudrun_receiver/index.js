@@ -34,8 +34,11 @@ const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fl
 const inventory = require('./lib/inventory');
 const {
   getOperatorAssignment,
+  getNotificationPreferences,
   registerPushSubscription,
+  setNotificationPreference,
 } = require('./lib/operator_notifications');
+const { getUserAccess } = require('./lib/user_access');
 
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
@@ -284,7 +287,8 @@ function createFairwayHandlers(db, {
       return null;
     }
 
-    if (identity.admin !== true) {
+    const access = await getUserAccess(db, identity.uid);
+    if (access?.user_type !== 'fairway_staff') {
       res.status(403).send('Admin access required\n');
       return null;
     }
@@ -298,7 +302,7 @@ function createFairwayHandlers(db, {
 
     const assignment = await getOperatorAssignment(db, identity.uid);
     if (!assignment) {
-      res.status(403).send('Operator course access required\n');
+      res.status(403).send('Assigned course access required\n');
       return null;
     }
 
@@ -308,17 +312,42 @@ function createFairwayHandlers(db, {
   async function getOperatorBootstrap(req, res) {
     const operator = await authorizeOperator(req, res);
     if (!operator) return res;
-    if (!vapidPublicKey || !vapidKeyVersion) {
-      return res.status(503).send('Push notifications are not configured\n');
-    }
 
     return res.status(200).json({
       courses: operator.assignment.courses,
-      push: {
+      push: vapidPublicKey && vapidKeyVersion ? {
         vapid_public_key: vapidPublicKey,
         vapid_key_version: vapidKeyVersion,
-      },
+      } : null,
+      notification_preferences: await getNotificationPreferences(
+        db,
+        operator.identity.uid,
+        operator.assignment.courses
+      ),
     });
+  }
+
+  async function updateOperatorNotificationPreference(req, res) {
+    const operator = await authorizeOperator(req, res);
+    if (!operator) return res;
+    try {
+      const preference = await setNotificationPreference(
+        db,
+        operator.identity.uid,
+        req.body?.course_id,
+        req.body?.enabled,
+        now()
+      );
+      return res.status(200).json(preference);
+    } catch (error) {
+      if (/not authorized/.test(error.message)) {
+        return res.status(403).send(`${error.message}\n`);
+      }
+      if (/Invalid notification preference/.test(error.message)) {
+        return res.status(400).send(`${error.message}\n`);
+      }
+      throw error;
+    }
   }
 
   async function postOperatorPushSubscription(req, res) {
@@ -382,14 +411,15 @@ function createFairwayHandlers(db, {
       .filter(Boolean);
     const serviceCourses = await Promise.all(courses.map((course) =>
       courseServiceReadModel(course, requestTime)));
-    const allowedCourseIds = new Set(courses.map((course) => course.course_id));
-    const requestSnap = await db.collection('requests')
-      .where('course_id', 'in', [...allowedCourseIds])
-      .limit(5000)
-      .get();
-    const requests = requestSnap.docs
-      .map((snapshot) => ({ request_id: snapshot.id, ...snapshot.data() }))
-      .filter((request) => allowedCourseIds.has(request.course_id));
+    const requestSnapshots = await Promise.all(courses.map((course) => (
+      db.collection('requests')
+        .where('course_id', '==', course.course_id)
+        .limit(5000)
+        .get()
+    )));
+    const requests = requestSnapshots.flatMap((snapshot) => (
+      snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
+    ));
     const periods = [
       ['daily', 24 * 60],
       ['weekly', 7 * 24 * 60],
@@ -762,15 +792,6 @@ function createFairwayHandlers(db, {
         return await patchAdminCourse(req, res, courseMatch[1], courseMatch[2]);
       }
 
-      const inventoryMembershipMatch = path.match(/^\/api\/v1\/admin\/inventory-course-memberships\/([^/]+)$/);
-      if (req.method === 'PATCH' && inventoryMembershipMatch) {
-        requireBodyFields(req.body, ['enabled', 'courses']);
-        const membership = await inventory.setInventoryMembership(
-          db, decodeURIComponent(inventoryMembershipMatch[1]), req.body, admin.uid
-        );
-        return res.status(200).json(membership);
-      }
-
       const menuSlugMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)\/inventory-menu$/);
       if (req.method === 'PATCH' && menuSlugMatch) {
         requireBodyFields(req.body, ['public_menu_slug']);
@@ -1107,7 +1128,6 @@ function createFairwayHandlers(db, {
       }
 
       const path = req.path || '/';
-
       if (path.startsWith('/api/v1/admin/')) {
         return res.status(404).send('Not Found\n');
       }
@@ -1117,6 +1137,9 @@ function createFairwayHandlers(db, {
       }
       if (req.method === 'GET' && path === '/api/v1/operator/dashboard') {
         return await getOperatorDashboard(req, res);
+      }
+      if (req.method === 'PATCH' && path === '/api/v1/operator/notification-preferences') {
+        return await updateOperatorNotificationPreference(req, res);
       }
       if (req.method === 'POST' && path === '/api/v1/operator/push-subscriptions') {
         return await postOperatorPushSubscription(req, res);
@@ -1180,6 +1203,18 @@ function createFairwayHandlers(db, {
       return res.status(204).send('');
     }
     const path = req.path || '/';
+    if (req.method === 'GET' && path === '/api/v1/access/bootstrap') {
+      const identity = await authenticateOperator(req, res);
+      if (!identity) return res;
+      try {
+        const access = await getUserAccess(db, identity.uid);
+        if (!access) return res.status(403).json({ error: 'user_access_required' });
+        return res.status(200).json({ user_type: access.user_type });
+      } catch (error) {
+        console.error('Failed to read user access record:', error);
+        return res.status(500).json({ error: 'internal_error' });
+      }
+    }
     if (path.startsWith('/api/v1/inventory/')) {
       return handleInventoryRequest(req, res, path);
     }

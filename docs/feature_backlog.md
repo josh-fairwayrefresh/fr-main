@@ -117,8 +117,10 @@ Bay GC / Tony Lema Course") for full detail, including the Google Sites
 embedding gap at the originally-targeted `www.fairwayrefresh.com` address
 (a separate, non-engineering action) and confirmation that Cart Operations,
 existing production data, and existing user/course permissions were
-unaffected. Google Sites embedding and validating the two existing Monarch
-Bay staff accounts through this integration remain separate activities.
+unaffected at the time of this menu release; the later shared user-access
+migration and deployment are recorded below. Google Sites embedding and
+validating the two existing Monarch Bay staff accounts through this integration
+remain separate activities.
 
 The CPO-resolved mappings are applied in
 `docs/catalogs/monarch-bay-inventory-import.csv`: “Seltzers” is under Canned
@@ -128,6 +130,51 @@ Product names are preserved exactly. The normalized file contains
 prices were invented. The source attachment is not copied into the repository.
 USD currency code confirmation is still needed before entering any non-null
 price; the current import leaves all price fields blank.
+
+**Unified customer and staff authorization — deployed 2026-10-12.** The two
+application entry points remain Cart UI and internal Admin UI; Inventory is a
+Cart UI feature. Production and sandbox now use the shared
+`user_access/{uid}` record for the two user classes (`customer_staff` and
+`fairway_staff`) and explicit course assignments. Assigned customer users
+receive all customer-editable Cart UI features for those courses; course
+isolation remains enforced, and customer class never grants Admin access.
+Legacy Operator and Inventory records were migrated into the new records and
+remain only as historical migration inputs. Backend/frontend regressions
+passed (80 backend, 40 frontend); production and sandbox builds passed.
+Production services are serving receiver revision
+`fairway-button-receiver-00024-659` and Admin revision `fairway-admin-00012-52t`;
+sandbox serves receiver revision
+`fairway-button-receiver-sandbox-00008-xpf` and Admin revision
+`fairway-admin-sandbox-00004-9jp`. Hosting and Firestore Rules were deployed
+in both environments. Existing Firebase Auth accounts, passwords, and claims
+were not changed.
+
+At migration time, production had one customer-class Monarch test account with
+no Course assignment; the second expected test account was absent. By later
+CPO direction, the remaining Monarch-prefixed account and its empty access
+record were deleted. The three enabled Fairway staff Auth accounts were
+verified and preserved. Future customer accounts require explicit Course
+assignment; email prefixes do not authorize access.
+
+**Authorization and notification source completion — 2026-10-12; sandbox
+deployed, production deployment pending.** Fairway staff now resolve all Courses from the canonical catalog
+for Cart and Inventory, while customer staff remain restricted to explicit
+assignments. Admin remains internal-only. Per-user/per-Course notification
+preferences are persisted independently; dispatch rechecks current course
+entitlement and the saved preference before sending. Frontend request
+listeners and backend dashboard reads operate course-by-course for global
+staff, avoiding a multi-course query limit.
+
+The source regression suites passed (80 backend, 44 frontend), and the
+sandbox-configured frontend build passed with a large-bundle advisory.
+Sandbox receiver `fairway-button-receiver-sandbox-00009-d4g`, Admin/Inventory
+`fairway-admin-sandbox-00005-cff`, Firestore Rules, and Hosting were deployed.
+Cart, Inventory, and Admin SPA routes returned `200`; unauthenticated operator,
+Inventory, and Admin APIs returned `401`. Production still serves the
+previously listed revisions; production deployment remains outstanding. The
+deleted Monarch test account cannot be used for authenticated customer browser
+acceptance; create and assign a new test identity when that check is needed.
+No Fairway staff Auth account or production Rules/service traffic was changed.
 
 ## Future Backlog (Post Fleet Administration)
 

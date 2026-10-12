@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, BellOff, CheckCircle, Smartphone } from 'lucide-react';
+import { Bell, BellOff, Smartphone } from 'lucide-react';
 import { operatorRequest } from './lib/operator';
 
 function applicationServerKey(value) {
@@ -13,27 +13,32 @@ function isInstalled() {
 }
 
 export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) {
-  const [state, setState] = useState('checking');
+  const [preferences, setPreferences] = useState(operatorConfig.notification_preferences || {});
+  const [busyCourse, setBusyCourse] = useState('');
   const [error, setError] = useState('');
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const installed = isInstalled();
+  const canEnable = supported && installed && Boolean(operatorConfig.push?.vapid_public_key);
 
-  async function registerWithBackend(subscription) {
-    await Promise.all(operatorConfig.courses.map((course) => operatorRequest(
-      user,
-      apiBaseUrl,
-      '/api/v1/operator/push-subscriptions',
-      {
-        method: 'POST',
-        body: { course_id: course.course_id, subscription: subscription.toJSON() },
-      }
-    )));
+  async function registerWithBackend(course, subscription) {
+    await operatorRequest(user, apiBaseUrl, '/api/v1/operator/push-subscriptions', {
+      method: 'POST',
+      body: { course_id: course.course_id, subscription: subscription.toJSON() },
+    });
+  }
+
+  async function savePreference(courseId, enabled) {
+    await operatorRequest(user, apiBaseUrl, '/api/v1/operator/notification-preferences', {
+      method: 'PATCH',
+      body: { course_id: courseId, enabled },
+    });
+    setPreferences((current) => ({ ...current, [courseId]: enabled }));
   }
 
   useEffect(() => {
     let active = true;
-    if (!supported || !installed) {
-      setState(supported ? 'install_required' : 'unsupported');
+    setPreferences(operatorConfig.notification_preferences || {});
+    if (!supported || !installed || !operatorConfig.push?.vapid_public_key) {
       return () => { active = false; };
     }
 
@@ -41,30 +46,35 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
       .then(() => navigator.serviceWorker.ready)
       .then((registration) => registration.pushManager.getSubscription())
       .then(async (subscription) => {
-        if (!active) return;
-        if (!subscription) {
-          setState(Notification.permission === 'denied' ? 'denied' : 'ready');
-          return;
-        }
-        await registerWithBackend(subscription);
-        if (active) setState('enabled');
+        if (!active || !subscription) return;
+        const enabledCourses = operatorConfig.courses.filter((course) => (
+          operatorConfig.notification_preferences?.[course.course_id] === true
+        ));
+        await Promise.all(enabledCourses.map((course) => registerWithBackend(course, subscription)));
       })
       .catch((reason) => {
-        if (active) {
-          setError(reason.message);
-          setState('error');
-        }
+        if (active) setError(reason.message);
       });
     return () => { active = false; };
   }, [apiBaseUrl, installed, operatorConfig, supported, user]);
 
-  async function enable() {
-    setState('enabling');
+  async function changePreference(course, enabled) {
+    setBusyCourse(course.course_id);
     setError('');
     try {
+      if (!enabled) {
+        await savePreference(course.course_id, false);
+        return;
+      }
+      if (!canEnable) {
+        setError('Push notifications are unavailable on this device or environment.');
+        return;
+      }
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
-        setState(permission === 'denied' ? 'denied' : 'ready');
+        setError(permission === 'denied'
+          ? 'Notifications are blocked by this browser or device.'
+          : 'Browser notification permission was not granted.');
         return;
       }
       const registration = await navigator.serviceWorker.ready;
@@ -73,26 +83,50 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey(operatorConfig.push.vapid_public_key),
       });
-      await registerWithBackend(subscription);
-      setState('enabled');
+      await registerWithBackend(course, subscription);
+      await savePreference(course.course_id, true);
     } catch (reason) {
       setError(reason.message);
-      setState('error');
+    } finally {
+      setBusyCourse('');
     }
   }
 
-  if (state === 'enabled') {
-    return <div className="notification-setup notification-ok"><CheckCircle size={18} /><span>Notifications enabled for {operatorConfig.courses.map((course) => course.course_name).join(', ')}</span></div>;
-  }
-  if (state === 'install_required') {
-    return <div className="notification-setup"><Smartphone size={18} /><span>Add Fairway to the Home Screen, then open the installed app to enable notifications.</span></div>;
-  }
-  if (state === 'unsupported') {
-    return <div className="notification-setup notification-error"><BellOff size={18} /><span>Web Push is unavailable on this device.</span></div>;
-  }
-  if (state === 'denied') {
-    return <div className="notification-setup notification-error"><BellOff size={18} /><span>Notifications are blocked. Allow Fairway in iPhone Settings.</span></div>;
-  }
+  const permission = supported ? Notification.permission : 'unsupported';
+  const permissionText = permission === 'granted'
+    ? 'Browser permission granted'
+    : permission === 'denied'
+      ? 'Browser permission blocked'
+      : permission === 'unsupported'
+        ? 'Web Push unavailable on this device'
+        : 'Browser permission not yet granted';
 
-  return <div className={`notification-setup ${state === 'error' ? 'notification-error' : ''}`}><Bell size={18} /><span>{error || 'Receive new golfer requests when Fairway is closed.'}</span><button type="button" onClick={enable} disabled={state === 'checking' || state === 'enabling'}>{state === 'enabling' ? 'Enabling...' : 'Enable notifications'}</button></div>;
+  return (
+    <section className="notification-setup" aria-label="New request notifications">
+      <div className="notification-heading">
+        {!supported ? <BellOff size={18} /> : installed ? <Bell size={18} /> : <Smartphone size={18} />}
+        <div>
+          <strong>New request notifications</strong>
+          <span>{permissionText}{!installed && supported ? ' · install Fairway to enable push' : ''}</span>
+        </div>
+      </div>
+      <div className="notification-course-options">
+        {operatorConfig.courses.map((course) => {
+          const enabled = preferences[course.course_id] === true;
+          return (
+            <label key={course.course_id}>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={busyCourse === course.course_id || (!enabled && !canEnable)}
+                onChange={(event) => changePreference(course, event.target.checked)}
+              />
+              <span>{course.course_name}</span>
+            </label>
+          );
+        })}
+      </div>
+      {error && <p role="alert">{error}</p>}
+    </section>
+  );
 }

@@ -50,9 +50,12 @@ Context references:
 
 WP3 deployment validation on 2026-09-18 established that Cloud Run revision
 `fairway-button-receiver-00009-c5j` was healthy and receiving 100% of service
-traffic. The revision identifies that validation event only; deployment and
-operational procedures target the durable service name, not a permanent
-revision ID.
+traffic. That revision identifies the historical validation event only.
+Deployment procedures normally target the durable service name; the separate
+Stable Pilot Baseline 1.0 record below identifies the exact known-good
+production receiver revision and source provenance retained for rollback.
+Revision identification is a production traffic safeguard, not a restriction
+on source changes, builds, tests, or authorized Git commits.
 
 ### WP5-S1 Isolated Sandbox Environment
 
@@ -122,7 +125,8 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Current Restored Admin Revision | `fairway-admin-00008-sjt` (100% traffic as of 2026-10-06) |
+| Current Admin Revision | `fairway-admin-00012-52t` (100% traffic as of 2026-10-12; shared user-class authorization) |
+| Current Receiver Revision | `fairway-button-receiver-00024-659` (100% traffic as of 2026-10-12) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user` only |
@@ -134,50 +138,200 @@ receiver targets. Runtime initialization requires `FAIRWAY_ENV=production`, an
 explicit supported `FAIRWAY_SERVICE_MODE`, and both project variables equal to
 `savvy-kit-496703-r5`. Admin mode additionally requires the exact production
 origin allowlist (Firebase Hosting and `app.fairwayrefresh.com`); receiver mode
-rejects any Admin browser origin. The Admin target
-exposes only `/api/v1/admin/*`, and the receiver returns `404` for that surface.
-Every Admin request requires a production Firebase ID token with the
-server-verified `admin: true` claim. Production `admin@fairwayrefresh.com`
-retains its password provider and has that claim. Responses use `no-store`,
+rejects any Admin browser origin. The Admin target exposes only
+`/api/v1/admin/*`, and the receiver returns `404` for that surface.
+**Deployed production authorization state (2026-10-12):** Admin revision
+`fairway-admin-00012-52t` and receiver revision
+`fairway-button-receiver-00024-659` serve 100% of traffic. Admin and Cart
+authorization use the shared Firestore user-access record; legacy
+`admin:true` claims and separate Operator/Inventory collections are not
+runtime authorization sources. The old Admin-claim and separate-assignment
+checks are historical deployment behavior only. Responses use `no-store`,
 exact-origin CORS, allowlisted fleet DTOs, and credential-verifier redaction.
 
 Fairway Refresh has exactly two application entry points: the customer-facing
 **Cart UI** and the administrative **Admin UI**. Inventory Management is a
-modular feature within the Cart UI, not a third application; it uses the same
-Firebase Authentication session and its own independent course-scoped
-authorization, with no separate login experience. This is a permanent
-canonical architectural requirement: a successful customer sign-in must
-always land on Cart Operations, never directly on Inventory. Inventory is
-reached only through authorized in-app navigation (the Cart banner's
-conditional Inventory link, or an already-authenticated direct/bookmarked
-`/inventory` visit that is not itself a sign-in event).
+modular feature within the Cart UI, not a third application. There are exactly
+two user classes: `fairway_staff` (Fairway Refresh internal personnel) and
+`customer_staff` (customer personnel). Both use one Firebase Authentication
+session. One authoritative Firestore record, `user_access/{uid}`, stores the
+class and any explicitly assigned Courses; it is the only runtime customer
+course-entitlement source for Cart Operations and Inventory. Every customer
+user with an assigned Course receives the same full customer-editable Cart UI
+capability for that Course, including Inventory. No separate Inventory
+membership, role tier, or login exists. Assignment to one Course does not grant
+access to any other Course.
 
-Web application entry is role-specific while sharing the same persistent
-Firebase Authentication session. `/admin` is the first-class Admin UI entry: it
-checks the signed-in user's `admin: true` claim and renders the Admin UI without
-calling operator bootstrap. `/` and `/requests/{requestId}` are Cart Operator
-entries within the Cart UI: they call `/api/v1/operator/bootstrap` and require
-an enabled `operator_course_assignments/{uid}` record. `/inventory` is the
-Inventory feature route within the same Cart UI: it requires an enabled
-`inventory_course_memberships/{uid}` record and does not require the Admin
-claim or an Operator assignment. All three non-public routes render the
-identical standard Cart login (or, for `/admin`, the Admin login) when signed
-out; Inventory has no distinct login presentation. Entry path selects the
-initial mode; no route's authorization requires another route's authorization.
-An authenticated Admin without an operator assignment can therefore use
-`/admin`, an operator without the Admin claim receives an access-denied
-response at `/admin`, and an Inventory member without an Operator assignment
-can still use `/inventory` directly. Login and redirect flows retain the
-current path and query so Admin entry and operator notification deep links
-return to their original destinations; Inventory is the one exception by
-architectural requirement above — a sign-in that completes on `/inventory`
-redirects to Cart Operations instead, while an already-authenticated session
-continuing a direct or Cart-banner Inventory visit (no sign-in on that page
-load) is unaffected and opens Inventory directly. The Inventory
-header's brand link and an adjacent explicit "Cart Operations" control both
-return to `/` without re-authenticating, since Firebase Auth session state
-persists across this full-page navigation. Backend claim, assignment,
-membership, and Firestore Rules enforcement remain the security boundaries.
+The `user_access/{uid}` record is server-read and not browser-readable or
+browser-writable under the repository Firestore Rules. Its fields are
+`user_type` (`fairway_staff` or `customer_staff`), `enabled` (`true` for an
+active record), `courses` (an array of `{ customer_id, course_id, course_name
+}` assignments), and `course_ids` (the matching Course ID list required by
+Firestore Rules for request reads). The `courses` and `course_ids` values must
+describe the same assignments. A `customer_staff` record needs one or more
+valid Course assignments to enter customer features. `fairway_staff` may use
+the Admin UI without a Course assignment; Cart customer features still require
+an explicit Course assignment. Create the Firebase Authentication user first,
+then create this document using that exact Auth UID in the Firestore Studio.
+Changing `user_type` classifies the account; adding/removing entries in both
+Course fields grants/revokes customer-feature access. Missing, disabled, or
+malformed documents fail closed. Email names are not a runtime authorization
+rule. The `admin:true` custom claim is not the Admin authorization source.
+
+For example, the Studio document for a customer assigned to the production
+Monarch Bay course has this shape (use the actual Auth UID as the document ID):
+
+```json
+{
+  "user_type": "customer_staff",
+  "enabled": true,
+  "courses": [
+    {
+      "customer_id": "CUST-0001",
+      "course_id": "COURSE-0001",
+      "course_name": "Tony Lema Course"
+    }
+  ],
+  "course_ids": ["COURSE-0001"]
+}
+```
+
+An internal Fairway Refresh user uses `"user_type": "fairway_staff"`,
+`"enabled": true`, `"courses": []`, and `"course_ids": []`. Fairway staff access
+all existing Courses in Cart UI and Inventory; the backend resolves the current
+Customer/Course catalog rather than requiring per-user Course provisioning.
+The same staff class is the sole Admin entitlement.
+
+`/admin` is the Admin UI entry and is allowed only when the authenticated UID's
+active `user_access` record has `user_type: "fairway_staff"`. A customer user's
+Firebase token claims cannot grant Admin access. `/` and
+`/requests/{requestId}` enter the Cart UI: `fairway_staff` can access all
+existing Courses, while `customer_staff` requires at least one explicit
+assignment in the same active user-access record. `/inventory` is a feature
+route inside Cart UI and uses the same global staff or assigned-customer-course
+entitlement. The backend rechecks the exact Course on every Inventory
+operation; the public menu remains anonymous and read-only. The conditional
+Inventory navigation is available throughout authorized Cart Operations. All
+customer features share the authenticated session, and the established
+Cart-first sign-in, direct-route, and Cart Operations return-navigation
+behavior remains.
+
+The Admin API and UI both enforce the staff class on the server. The shared
+`user_access/{uid}` record is authoritative; legacy Operator or Inventory
+membership records cannot grant customer access.
+
+#### User-Class Authorization Rollout State — 2026-10-12
+
+The shared `user_access/{uid}` contract is deployed. The migration is
+dry-run-by-default, requires an explicit Firebase project, unions enabled
+legacy Operator and Inventory Course assignments, classifies existing
+email-bearing accounts, and does not overwrite an existing access document.
+The one-time `monarch*` email-prefix classifier was used only to seed existing
+accounts; future user classes are set explicitly in Firestore Studio.
+
+- **Sandbox initial rollout (2026-10-12):** migration created four access records (one
+  `fairway_staff`, three `customer_staff`) and carried forward three assigned
+  Courses. Firestore Rules, receiver revision
+  `fairway-button-receiver-sandbox-00008-xpf`, Admin revision
+  `fairway-admin-sandbox-00004-9jp`, and Hosting were deployed. Hosting
+  `/` and `/inventory` returned `200`; unauthenticated access-bootstrap,
+  operator-bootstrap, and Inventory bootstrap returned `401`. The sandbox
+  public-menu API remained unpublished (`404`).
+- **Production (2026-10-12):** migration created four access records (three
+  `fairway_staff`, one `customer_staff`) and carried forward the one existing
+  Course assignment. Firestore Rules, receiver revision
+  `fairway-button-receiver-00024-659`, Admin revision `fairway-admin-00012-52t`,
+  and Hosting were deployed; both Cloud Run revisions serve 100% of traffic.
+  Receiver build `f71514c0-2dd1-4765-a4b7-3bb8d417745f` produced image
+  `sha256:a45a89f9f173b7d137980d944af39df282b7edf10d2834c50afccda31842782f`;
+  Admin build `e914f870-0534-42dc-b9be-3ad594641847` produced image
+  `sha256:3e614cbc3bec5422dd3befc3512d45d5a97c91c42bdd3e29d3fceafcf15424df`.
+  Hosting live version is `98089aa083c1c03d`, released at
+  `2026-10-12T08:30:06Z`.
+  Smoke checks returned `200` for the Cart, Admin, Inventory, and published
+  menu routes; unauthenticated access-bootstrap, operator-bootstrap, Inventory
+  bootstrap, and Admin fleet API returned `401`; the anonymous production menu
+  API returned `200`.
+
+The production deployment used the working source tree at Git HEAD `c641a6c`
+plus its then-uncommitted implementation changes; this deployment identity is
+not asserted as a Git commit. The CPO has clarified that production revision
+pinning does not constrain source development, tests, builds, or authorized
+commits. Source changes made after that deployment do not change live traffic.
+
+The pre-authorization Admin revision `fairway-admin-00011-8ks` remains
+identifiable as the preceding production release (Cloud Build
+`e25836ea-212b-4e55-8c98-d231a9a458d4`, image
+`sha256:a5631d4992c01ae8ca7c7c049eb30b361ff055709f069d24e18a42a15ff48358`).
+It is not the Pilot 1.0 receiver pin; the known-good receiver rollback target
+is `fairway-button-receiver-00022-wxk` as documented below.
+
+At the 2026-10-12 rollout, one existing customer-class test account had no
+legacy Course assignment and the second expected Monarch test account was not
+present. By later CPO direction, the one remaining Monarch-prefixed production
+test account and its empty `user_access` document were deleted. The three
+Fairway staff Auth accounts were rechecked as enabled and left unchanged.
+Customer account creation and Course assignment remain explicit onboarding
+steps; email prefixes are not a runtime authorization rule.
+
+#### Authorization and Notification Source Completion — 2026-10-12
+
+The accepted source now gives enabled `fairway_staff` global Cart and
+Inventory access by resolving Courses from the canonical Customer/Course
+catalog. `customer_staff` continues to be restricted to explicit Course
+assignments, and only `fairway_staff` passes the Admin boundary. Cart request
+listeners and backend dashboard queries now handle one Course at a time, so
+global staff access does not depend on a Firestore `in` query's course-count
+limit. Firestore Rules allow enabled Fairway staff request reads globally and
+keep customer reads Course-scoped.
+
+Saved notification preferences are per-user and per-Course. The Cart UI
+separates a saved preference from browser permission and installed-app support.
+Delivery checks both the subscriber's current `user_access` Course entitlement
+and saved preference; legacy active subscriptions without a preference keep
+their existing enabled behavior until explicitly changed. Push failures remain
+asynchronous to Cart request handling.
+
+Validation on this source tree: 80 backend tests and 44 frontend tests passed;
+the sandbox frontend configuration validation and Vite build passed. The build
+reported the existing large-main-chunk advisory.
+
+- **Sandbox source validation (2026-10-12):** receiver revision
+  `fairway-button-receiver-sandbox-00009-d4g` and Admin/Inventory revision
+  `fairway-admin-sandbox-00005-cff` each serve 100% of traffic. Firebase Rules
+  compiled and were released; Hosting deployed to
+  `https://fairway-refresh-sandbox-260930.web.app` (the CLI live-channel record
+  reports 2026-10-12 01:56:20). Cart `/`, Inventory `/inventory`, and Admin
+  `/admin` returned `200`. Unauthenticated operator bootstrap, Inventory
+  bootstrap, and Admin fleet API returned `401`.
+- **Production after source validation:** still serves receiver revision
+  `fairway-button-receiver-00024-659` and Admin revision
+  `fairway-admin-00012-52t`, each at 100% traffic. No production source,
+  Hosting, Firestore Rules, Cloud Run configuration, or traffic was changed.
+  The production code correction remains pending separate deployment
+  authorization.
+
+Authenticated browser validation was not performed: the Monarch test account
+was deleted by CPO direction and no replacement customer account was created.
+The Fairway staff accounts were not used to impersonate users for browser
+validation. Automated handler tests cover the customer Course boundary and
+Fairway staff global access; live staff/customer session acceptance remains
+outstanding.
+
+The accepted Pilot 1.0 receiver revision remains a retained rollback target,
+not the current traffic pin after the explicitly authorized authorization
+deployment. The prior known-good revision is
+`fairway-button-receiver-00022-wxk` (Cloud Build
+`6a448151-0523-4009-a1a1-f6ebe33967fe`, image
+`sha256:535fe5e874dbc0a4aefc95981b35073b49a68fd4b21069e6fa7dc3fbb77dd8cf`,
+source archive recorded above). To restore its traffic, with separate CPO
+authorization:
+
+```sh
+gcloud run services update-traffic fairway-button-receiver \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=fairway-button-receiver-00022-wxk=100
+```
 
 Admin revision `fairway-admin-00007-znz` corrected the custom-domain CORS
 configuration after mobile Admin requests from `app.fairwayrefresh.com` were
@@ -189,6 +343,13 @@ was not deployed or changed by this correction. The CPO refreshed the existing
 authenticated mobile Admin session on `app.fairwayrefresh.com` and confirmed
 that the production fleet loaded without the prior `Load failed` state.
 
+At the time of the 2026-10-06 restoration, the active production Admin/Hosting
+artifacts predated the Health-retirement source checkpoint and retained a
+legacy Health-history read surface over old records. This is historical
+deployment state, not a restriction on repository source changes. The
+2026-10-12 authorization deployment replaced those Admin/Hosting artifacts
+with the current Cart/Admin source; it did not delete the old Health data.
+
 The current Admin source supports Customer/Course create and edit, Course
 timezone and service schedule, permanent Device provisioning and bounded
 one-time credential recovery, atomic Customer/Course/location deployment
@@ -198,10 +359,7 @@ Hardware revision and firmware generation start unknown at provisioning and may
 be established only by controlled verified provenance. Neither field can be
 changed through an administrative metadata route. Battery-health checks and
 Device Health reporting are abandoned; current source has no active Health
-workflow. The active restored production Admin/Hosting artifacts predate the
-Health retirement and retain a legacy Health-history read surface over old
-stored records. It does not establish that current firmware is reporting health
-or that the source/runtime owns an active Health product feature.
+workflow. Historical Health data remains untouched.
 
 ### Restored Matched Stable Deployment — 2026-10-06
 
@@ -214,19 +372,22 @@ Device health-history endpoint. The receiver was not rolled back; it remains on
 the accepted `9775842`-matched backend revision with additive COMPLETE
 correlation logging.
 
-Previously unresolved deployment/source divergence, now accepted by the CPO (2026-10-10): the restored Oct 1
+Previously unresolved deployment/source divergence, accepted by the CPO on
+2026-10-10: the restored Oct 1
 Admin API and Hosting artifacts predate the `0daf02d` Health-retirement source
 checkpoint and include the legacy Health-history read surface. Exact
 Admin/Hosting source correspondence to current repository source remains
-unverified. The CPO accepts the deployed Pilot 1.0 state unchanged; this is not
-a blocker requiring a source-matched redeployment. Battery-health checks and
-reporting are abandoned, and the stable firmware/receiver source produces no
-new Health samples. The old history reader/data are residual legacy capability,
-not current monitoring. There is no requirement to retain or host that legacy
-Health data; removal/refinement is deferred to a future sprint. Do not change
-production or delete records as part of the accepted Pilot 1.0 state.
+unverified at that historical point. The CPO accepted the deployed Pilot 1.0
+state unchanged as of 2026-10-10; that acceptance controlled production traffic
+and did not freeze source development, testing, builds, or Git progression.
+Battery-health checks and reporting are abandoned, and the stable
+firmware/receiver source produces no new Health samples. The old history
+reader/data were residual legacy capability, not current monitoring. There is
+no requirement to retain or host that legacy Health data; removal/refinement
+is deferred to a future sprint. Any production deployment or traffic change
+still requires explicit CPO authorization.
 
-| Surface | Restored/current production identity | Provenance |
+| Surface | Production identity at the 2026-10-06 restore (historical rollback context) | Provenance |
 |---------|---------------------------------------|------------|
 | Receiver | `fairway-button-receiver-00022-wxk`, 100% traffic | Image SHA-256 `535fe5e874dbc0a4aefc95981b35073b49a68fd4b21069e6fa7dc3fbb77dd8cf`; Cloud Build `6a448151-0523-4009-a1a1-f6ebe33967fe`; logging-only COMPLETE correlation deployment described below. Source change is committed as `8686eeb`; the 2026-10-06 deployment immediately preceded that commit. |
 | Admin API | `fairway-admin-00008-sjt`, 100% traffic | Retained Oct 1 image SHA-256 `d1341c1dc6ccd9b9542f90df4ecbfb57524310bad42b6c014d3cb1606ed199f2`; Cloud Build `b9620a32-2c87-4791-b9a2-d89957fef0d0`. No source commit is asserted because the retained revision provenance records its Cloud Build source archive, not a verified Git SHA. |
@@ -244,16 +405,35 @@ FRB-0002 identity fields (`hardware_revision`, `firmware_generation`,
 Read-only production/Git verification on 2026-10-10 established the receiver
 component of **Fairway Refresh Stable Pilot Baseline 1.0**:
 
-- Production traffic is 100% on `fairway-button-receiver-00022-wxk`; latest-ready `00023-dff` receives no traffic. Existing FRB-0003 activity is recorded on `00022-wxk`.
+- At baseline acceptance, production traffic was 100% on
+  `fairway-button-receiver-00022-wxk`; latest-ready `00023-dff` received no
+  traffic. Existing FRB-0003 activity is recorded on `00022-wxk`.
 - Revision annotations identify Cloud Build `6a448151-0523-4009-a1a1-f6ebe33967fe`; its successful output matches the serving image digest `535fe5e874dbc0a4aefc95981b35073b49a68fd4b21069e6fa7dc3fbb77dd8cf` recorded above.
 - The revision pins source archive `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-button-receiver/1791276191.783936-5af0e81b6f4f4957867829a308b0db45.zip#1791276191998024`, SHA-256 `63adb75dbf293772cfc211a1e06345276aeb2a1314f55c7a37d0373e06a51f40`. All 29 packaged files match `8686eeb:fairway_backend/cloudrun_receiver` byte-for-byte, with no extras; only tracked `.gcloudignore` is omitted from the archive. `9775842` has the same backend tree.
-- The baseline pairs that receiver with accepted `6a19f83` firmware and CPO-confirmed Prototype 3.3 / FRB-0003 operation. Naming it is not a new deployment. Receiver correlation logging is retained; later undeployed demand-window source introduced in `62a2122` is excluded from the baseline.
+- The baseline pairs that receiver with accepted `6a19f83` firmware and
+  CPO-confirmed Prototype 3.3 / FRB-0003 operation. Naming it is not a new
+  deployment. Receiver correlation logging is retained; later undeployed
+  demand-window source introduced in `62a2122` is excluded from the baseline.
 
-This verifies receiver source correspondence only. The restored Admin/Hosting
-source-equivalence and Health-surface divergence described above remain
-unresolved; neither receiver verification nor successful cart UI receipt proves
-their source trees equal the baseline repository. Do not silently substitute
-Admin/Hosting versions or change production to reconcile that distinction.
+**Pin scope and source progression:** the Pilot 1.0 pin identifies the
+production revision and source archive that must remain available as the
+known-good rollback target. It governs which revision receives production
+traffic; it does not freeze repository source or prevent authorized source
+changes, builds, tests, or commits. The user-authorization deployment on
+2026-10-12 moved receiver traffic from the Pilot 1.0 revision
+`fairway-button-receiver-00022-wxk` to
+`fairway-button-receiver-00024-659` under explicit CPO authorization. The
+baseline revision, image, build, and source archive above remain identified
+and retained. Restoring traffic to it is possible, but requires explicit CPO
+deployment authorization; no rollback was performed as part of the subsequent
+pin clarification.
+
+This baseline record verifies receiver source correspondence only. The
+Admin/Hosting divergence described above was historical; the authorization
+release below deployed the current repository's Admin/UI source. Admin/Hosting
+deployments remain separate from the Pilot 1.0 receiver pin and require their
+own authorization. Do not silently substitute deployed artifacts to reconcile
+source differences.
 
 ### Cart Inventory and Golfer Menu — Increment 1 Backend Contract
 
@@ -265,32 +445,38 @@ the existing dedicated `fairway-admin` handler/runtime; this source
 integration is not evidence that the currently deployed production Admin
 image matches the repository source.
 
-Inventory staff operations authenticate a Firebase ID token and authorize the
-requested Customer/Course against `inventory_course_memberships/{uid}`. The
-membership grants the same editor/publisher capability to each assigned course;
-it is separate from global `admin:true` and from operator request access. Only a
-global Admin can provision/revoke membership or configure a public menu slug.
-Firestore rules remain closed to browser writes.
+Customer feature operations authenticate a Firebase ID token and authorize the
+requested Customer/Course against `user_access/{uid}`. Each active customer
+class record has one Course assignment list shared by Cart Operations and
+Inventory; every assigned customer user has the same full feature capability.
+There is no separate Inventory membership or editor-role tier. The independent
+`fairway_staff` class gates Admin UI/API access and does not grant customer
+Course access. Firestore Rules permit assigned users to read only requests in
+their Course ID list and remain closed to browser writes.
 
 | Source route | Access | Contract |
 |---|---|---|
-| `GET /api/v1/inventory/bootstrap` | Inventory member | Returns only the member's assigned Courses. |
-| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Course member | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
+| `GET /api/v1/access/bootstrap` | Any active `user_access/{uid}` | Returns the authoritative user class; used by the UI to gate Admin entry. |
+| `GET /api/v1/operator/bootstrap` | Any active user with assigned Courses | Returns only the user's assigned Courses and push configuration. |
+| `GET /api/v1/inventory/bootstrap` | Any active user with assigned Courses | Returns only the user's assigned Courses; same entitlement as Cart Operations. |
+| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | User assigned to exact Customer/Course | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
 | `GET .../preview`; `POST .../publish` | Course member | Preview reads saved working inventory. Publish atomically stores a snapshot and advances the published pointer. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Returns only the latest published snapshot; no staff identity or draft fields. |
-| `PATCH /api/v1/admin/inventory-course-memberships/{uid}`; `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | Global Admin | Provisions/revokes course membership and reserves the stable menu slug. |
+| `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `fairway_staff` | Reserves the stable menu slug. User classes and course assignments are managed in `user_access/{uid}` through Firestore Studio, not a feature-specific API. |
 
 Data is owned by the existing nested Course. `inventory/state` stores a
 monotonic inventory revision and last-published pointer. `inventory_products`
 stores working records; `inventory_categories` and nested `subcategories` store
 canonical labels; `inventory_product_keys` protects exact product identity;
 `inventory_events` records actor/action/revision; and
-`published_menus/{version}` contains immutable public snapshots. Top-level
-`inventory_course_memberships` and `public_menu_slugs` are access/routing
-indexes, not alternate catalog authorities.
+`published_menus/{version}` contains immutable public snapshots.
+`user_access/{uid}` is the sole user-class and Course-entitlement authority;
+`public_menu_slugs` is a public-routing index, not an alternate catalog
+authority. `operator_course_assignments` and `inventory_course_memberships`
+are legacy migration inputs only and are not read at runtime.
 
 Each save transaction serializes on the course state document and increments
 the revision, so the last transaction committed wins without locking, stale
@@ -302,18 +488,16 @@ version. The read-only public route resolves only the slug and published pointer
 it does not query the editable catalog or require staff authorization. Snapshot
 payloads are bounded below the Firestore document-size limit.
 
-The API/data contract is source-defined and locally tested. Increment 2 now adds
-the Inventory and public-menu React routes for local validation; neither the
-backend source nor these routes have been deployed. Membership records, slug
-configuration, CSV import, and first publication are not populated. Pilot
-account provisioning and import remain separate operations.
+The API/data contract is source-defined, locally tested, and deployed as
+recorded above. The Inventory and public-menu React routes are deployed.
+Current live menu publication is recorded under the release section.
 
 #### Increment 2 Local UI and Public Route
 
 - `/inventory` uses the existing Inventory bootstrap/course APIs. Firebase
-  authentication is followed by course-membership authorization; it does not
-  require `admin:true` or Operator bootstrap. The existing Operator application
-  shows an Inventory entry only when Inventory membership is present.
+  authentication is followed by the same assigned-Course authorization as
+  Cart Operations; it does not require the Fairway staff class or a separate
+  Inventory membership.
 - Inventory edits call the existing course-scoped API and refresh the server
   response after accepted mutations. The three state columns support drag and
   drop plus a tap-based state selector, product create/edit/archive, category
@@ -762,15 +946,17 @@ commit; (2) production Admin API (`fairway-admin`,
 `gcloud run deploy fairway-admin --project=savvy-kit-496703-r5
 --source=fairway_backend/cloudrun_receiver --function=fairwayAdmin`). The
 production receiver (`fairway-button-receiver`, Cart Operator/device path)
-was not touched; its revision (`fairway-button-receiver-00023-dff`) was
-confirmed unchanged before and after this release.
+was not touched; its live revision before and after this menu release was
+`fairway-button-receiver-00022-wxk`. Revision `00023-dff` was a later
+diagnostic revision and received no traffic.
 
-A pre-existing, deliberate safety configuration was discovered and
-respected: `fairway-admin`'s production traffic was explicitly pinned to a
-specific stable revision (`fairway-admin-00008-sjt`, the documented "Stable
-Pilot Baseline 1.0" identity) rather than auto-following new deploys. The
-newly built revision (`fairway-admin-00011-8ks`) was first verified healthy
-via a temporary Cloud Run traffic tag (`candidate`) and tested in isolation
+At the start of this menu release, the Admin service was serving the restored
+`fairway-admin-00008-sjt` revision from the 2026-10-06 deployment. This was an
+Admin deployment state, not the Pilot 1.0 receiver pin. The Pilot 1.0 pin
+identified receiver revision `fairway-button-receiver-00022-wxk`; it did not
+freeze either service's source code or Git history. The newly built Admin
+revision (`fairway-admin-00011-8ks`) was first verified healthy via a
+temporary Cloud Run traffic tag (`candidate`) and tested in isolation
 — public menu `200` with 57 products, unauthenticated Inventory/Fleet routes
 still correctly `401`, CORS preflight from `https://app.fairwayrefresh.com`
 correct including the new `DELETE` method — before deliberately migrating
@@ -793,6 +979,10 @@ existing production Fairway Refresh application origin:
 routing or hosting configuration change.
 
 **Live validation (real browser, unauthenticated, 2026-10-12):**
+
+The checks below record state at the public-menu release, before the
+subsequent, separately authorized user-authorization migration and deployment.
+They are release-time evidence and do not describe current authorization data.
 
 The following category breakdown records the initial version 1 validation;
 the corrected version 2 state is recorded in the post-release correction
@@ -1222,9 +1412,11 @@ API, Notifications API, a root service worker, and VAPID. It does not use FCM,
 a native application, Apple ID addressing, or an Apple account as a push
 destination.
 
-- `operator_course_assignments/{uid}` is the server-owned operator entitlement.
-  Each enabled record contains canonical `courses` for backend authorization
-  and `course_ids` for Firestore Rules query authorization.
+- `user_access/{uid}` is the server-owned class and Course-entitlement record.
+  Its `courses` array authorizes backend customer-feature operations and
+  `course_ids` scopes Firestore Rules request reads; these fields must remain
+  synchronized. Legacy Operator assignments are not a runtime authorization
+  source.
 - `course_push_subscriptions/{courseId}/subscriptions/{subscriptionId}` stores
   endpoint and encryption material server-side. Browser bootstrap responses are
   redacted and never return stored subscription secrets.
@@ -1241,6 +1433,17 @@ destination.
 - The VAPID private key is stored in Secret Manager. The public key and key
   version are supplied through operator bootstrap and may be present in public
   client configuration.
+  - `user_notification_preferences/{uid}/courses/{courseId}` stores each user's
+    explicit enable/disable choice independently for every authorized Course.
+    Browser notification permission and installed-app support are separate
+    device conditions, not substitutes for the saved preference.
+  - Delivery rechecks the subscriber's active `user_access/{uid}` entitlement
+    and the current Course preference. Revoked Course access or an explicit
+    disabled preference excludes a subscription even while its stored push
+    endpoint remains active. Existing active subscriptions without a preference
+    retain their prior enabled behavior until the user changes the choice.
+  - Push delivery runs asynchronously from request creation; delivery failure
+    does not affect Cart request persistence or operator access.
 - Firestore document events are delivered as `application/protobuf`; the sender
   obtains the request document path from the CloudEvent `subject` envelope.
 
@@ -1297,11 +1500,14 @@ Repository-Derived and Historical Web Deployment Facts:
 - Primary production application origin: `https://app.fairwayrefresh.com`
 - Firebase Hosting origin: `https://savvy-kit-496703-r5.web.app`
 - First-class entry routes:
-  - `https://app.fairwayrefresh.com/admin` for claim-authorized production administration
-  - `https://app.fairwayrefresh.com/` and `/requests/{requestId}` for Course-assigned Cart Operators
+  - `https://app.fairwayrefresh.com/admin` for `fairway_staff` administration
+  - `https://app.fairwayrefresh.com/` and `/requests/{requestId}` for
+    explicitly Course-assigned users
+  - `https://app.fairwayrefresh.com/inventory` for the Inventory feature within
+    Cart UI, using the same assigned-Course entitlement
 - Firebase Authentication sessions are shared across routes, but each route
-  invokes only its own authorization path; Admin entry never depends on
-  operator bootstrap.
+  uses the authoritative `user_access/{uid}` record; Admin entry requires
+  `fairway_staff` and customer routes require an explicit Course assignment.
 - Validated WP5-S1 sandbox deployment command:
   - npx firebase-tools deploy --only hosting --project fairway-refresh-sandbox-260930 --non-interactive
 - Validated production deployment command:
@@ -1384,8 +1590,9 @@ Repository-Derived Firestore Configuration:
 
 - Rules file path: fairway_webapp/cart_operator_dashboard/firestore.rules
 - Current rule behavior in repository:
-  - requests are readable only when the authenticated UID has an enabled
-    `operator_course_assignments` record containing the request's `course_id`
+  - requests are readable only when the authenticated UID has an enabled,
+    valid `user_access/{uid}` record whose `course_ids` contains the request's
+    `course_id`
   - Browser writes are denied by rules
   - Catch-all deny for other document paths
 
@@ -1396,7 +1603,10 @@ Repository-Derived collection usage in repository code:
 - `devices/{FRB-XXXX}` (Device registry, metadata, state-derived communication permission, and credential verifier)
 - `counters/CUST`, `counters/COURSE`, and `counters/FRB` (central ID allocation)
 - `requests/{requestId}` (request creation, lookup, and status updates)
-- `operator_course_assignments/{uid}` (server-owned operator/course entitlement)
+- `user_access/{uid}` (server-owned user-class and customer-course entitlement)
+- `operator_course_assignments/{uid}` and
+  `inventory_course_memberships/{uid}` (legacy records retained as migration
+  inputs; not runtime authorization sources)
 - `course_push_subscriptions/{courseId}/subscriptions/{subscriptionId}` (private push subscription material)
 - `notification_dispatches/{requestId}/subscriptions/{subscriptionId}` (effective-once dispatch state)
 

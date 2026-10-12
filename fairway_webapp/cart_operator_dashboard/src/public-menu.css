@@ -33,6 +33,7 @@
 .pm-category-card > svg { transition: transform .18s ease; }
 .pm-category-card.expanded > svg { transform: rotate(180deg); }
 .pm-category-mark { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #c8ad68; color: #fff; font-size: 8px; font-weight: 900; }
+.pm-category-mark svg { display: block; }
 .pm-category-copy { min-width: 0; display: grid; gap: 3px; }
 .pm-category-copy strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 700; line-height: 1.2; }
 .pm-category-copy small { color: #66736a; font-size: 9px; font-weight: 700; text-transform: uppercase; }

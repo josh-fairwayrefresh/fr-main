@@ -1,9 +1,28 @@
 'use strict';
 
 const crypto = require('crypto');
+const {
+  USER_ACCESS_COLLECTION,
+  getUserAccess,
+} = require('./user_access');
 
-const OPERATOR_ASSIGNMENTS_COLLECTION = 'operator_course_assignments';
 const COURSE_SUBSCRIPTIONS_COLLECTION = 'course_push_subscriptions';
+const NOTIFICATION_PREFERENCES_COLLECTION = 'user_notification_preferences';
+
+async function listAllCourses(db) {
+  const customers = await db.collection('customers').limit(500).get();
+  const courseSnapshots = await Promise.all(customers.docs.map((customer) => (
+    db.collection('customers').doc(customer.id).collection('courses').limit(500).get()
+  )));
+  return courseSnapshots.flatMap((snapshot, index) => snapshot.docs.map((course) => ({
+    ...course.data(),
+    customer_id: customers.docs[index].id,
+    course_id: course.id,
+    customer_name: customers.docs[index].data().customer_name || customers.docs[index].id,
+  }))).filter((course) => (
+    typeof course.course_name === 'string'
+  ));
+}
 
 function subscriptionId(endpoint) {
   return crypto.createHash('sha256').update(endpoint).digest('hex');
@@ -24,22 +43,68 @@ function isValidSubscription(subscription) {
 }
 
 async function getOperatorAssignment(db, operatorUid) {
-  const snapshot = await db.collection(OPERATOR_ASSIGNMENTS_COLLECTION).doc(operatorUid).get();
-  if (!snapshot.exists || snapshot.data().enabled !== true) {
-    return null;
+  const access = await getUserAccess(db, operatorUid);
+  if (!access) return null;
+
+  const courses = access.user_type === 'fairway_staff'
+    ? await listAllCourses(db)
+    : access.courses;
+  return courses.length > 0 ? { ...access, courses } : null;
+}
+
+async function getNotificationPreferences(db, operatorUid, courses) {
+  const preferences = await Promise.all(courses.map(async (course) => {
+    const preferenceRef = db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
+      .doc(operatorUid).collection('courses').doc(course.course_id);
+    const preference = await preferenceRef.get();
+    if (preference.exists) {
+      return [course.course_id, preference.data().enabled === true];
+    }
+
+    const activeSubscription = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
+      .doc(course.course_id).collection('subscriptions')
+      .where('operator_uid', '==', operatorUid)
+      .where('status', '==', 'active')
+      .limit(1)
+      .get();
+    return [course.course_id, !activeSubscription.empty];
+  }));
+  return Object.fromEntries(preferences);
+}
+
+async function setNotificationPreference(db, operatorUid, courseId, enabled, now = new Date()) {
+  if (typeof courseId !== 'string' || typeof enabled !== 'boolean') {
+    throw new Error('Invalid notification preference');
+  }
+  const assignment = await getOperatorAssignment(db, operatorUid);
+  const course = assignment?.courses.find((candidate) => candidate.course_id === courseId);
+  if (!course) {
+    throw new Error('Operator is not authorized for this Course');
   }
 
-  const assignment = snapshot.data();
-  const courses = Array.isArray(assignment.courses)
-    ? assignment.courses.filter((course) => (
-      course &&
-      typeof course.customer_id === 'string' &&
-      typeof course.course_id === 'string' &&
-      typeof course.course_name === 'string'
-    ))
-    : [];
+  await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
+    .doc(operatorUid).collection('courses').doc(courseId).set({
+      course_id: courseId,
+      enabled,
+      updated_at: now,
+    });
+  return { course_id: courseId, enabled };
+}
 
-  return courses.length > 0 ? { courses } : null;
+async function isNotificationEnabled(db, operatorUid, courseId) {
+  const preference = await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
+    .doc(operatorUid).collection('courses').doc(courseId).get();
+  if (preference.exists) {
+    return preference.data().enabled === true;
+  }
+
+  const legacySubscription = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
+    .doc(courseId).collection('subscriptions')
+    .where('operator_uid', '==', operatorUid)
+    .where('status', '==', 'active')
+    .limit(1)
+    .get();
+  return !legacySubscription.empty;
 }
 
 async function registerPushSubscription(db, operatorUid, {
@@ -93,9 +158,12 @@ async function registerPushSubscription(db, operatorUid, {
 
 module.exports = {
   COURSE_SUBSCRIPTIONS_COLLECTION,
-  OPERATOR_ASSIGNMENTS_COLLECTION,
+  USER_ACCESS_COLLECTION,
   getOperatorAssignment,
+  getNotificationPreferences,
+  isNotificationEnabled,
   isValidSubscription,
   registerPushSubscription,
+  setNotificationPreference,
   subscriptionId,
 };

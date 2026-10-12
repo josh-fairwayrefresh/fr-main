@@ -459,7 +459,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, onSignOut }) {
   }
 
   const columnStates = ['on_cart', 'sold_out', 'in_inventory'];
-  if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No Inventory course access</h1><p>This account is not assigned to an Inventory course.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
+  if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No course access</h1><p>This account is not assigned to a customer course.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
 
   return <main className="inventory-app">
     <header className="inv-header"><a href="/" className="inv-brand" title="Return to Cart Operations"><img src={coursePresentation?.fairwayLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">

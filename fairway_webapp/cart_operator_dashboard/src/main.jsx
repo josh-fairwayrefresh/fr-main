@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { collection, onSnapshot, orderBy, query, limit, where } from 'firebase/firestore';
 import {
   getRedirectResult,
-  getIdTokenResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithRedirect,
@@ -155,19 +154,19 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
         <a href="/" aria-label="Fairway Refresh home">
           <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
         </a>
-        <span>{isAdminEntry ? 'Administration' : 'Cart operations'}</span>
+        <span>{isAdminEntry ? 'Administration' : 'Customer access'}</span>
       </header>
       <div className="auth-layout">
         <section className="auth-intro" aria-labelledby="auth-title">
-          <p>COURSE SERVICE OPERATIONS</p>
-          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart Operator access'}</h1>
-          <span>{isAdminEntry ? 'Authorized fleet administration.' : 'Sign in to begin course service.'}</span>
+          <p>{isAdminEntry ? 'INTERNAL ADMINISTRATION' : 'CUSTOMER COURSE ACCESS'}</p>
+          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart access'}</h1>
+          <span>{isAdminEntry ? 'Authorized Fairway Refresh personnel only.' : 'Sign in to access your assigned course.'}</span>
         </section>
         <div className="auth-entry">
-          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}>
+          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart sign in'}>
             <div className="auth-panel-heading">
               <span>AUTHORIZED ACCESS</span>
-              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}</h2>
+              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart sign in'}</h2>
             </div>
             <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
@@ -215,7 +214,7 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
           </section>
           <nav className="mode-entry-links" aria-label="Other Fairway Refresh sign-in options">
             {isAdminEntry
-              ? <a className="mode-entry-link" href="/">Cart Operator Login</a>
+              ? <a className="mode-entry-link" href="/">Cart Login</a>
               : <a className="mode-entry-link" href="/admin">Admin Login</a>}
           </nav>
         </div>
@@ -569,7 +568,6 @@ function App() {
   const [inventoryCourses, setInventoryCourses] = useState([]);
   const [inventoryState, setInventoryState] = useState('not_requested');
   const [inventoryError, setInventoryError] = useState('');
-  const [canManageInventory, setCanManageInventory] = useState(false);
   const [focusedRequestId] = useState(() => {
     const match = window.location.pathname.match(/^\/requests\/([^/]+)$/);
     return match ? decodeURIComponent(match[1]) : null;
@@ -609,12 +607,12 @@ function App() {
       setUser(nextUser);
       setClaimsReady(false);
       try {
-        const tokenResult = await getIdTokenResult(nextUser);
+        const access = await inventoryRequest(nextUser, adminApiBaseUrl, '/api/v1/access/bootstrap');
         if (isMounted) {
-          setIsAdmin(tokenResult.claims.admin === true);
+          setIsAdmin(access.user_type === 'fairway_staff');
         }
       } catch (error) {
-        console.error('Unable to inspect account permissions:', error);
+        console.error('Unable to load account access:', error);
         if (isMounted) {
           setIsAdmin(false);
         }
@@ -675,38 +673,27 @@ function App() {
   }, [entryMode, user]);
 
   useEffect(() => {
-    if (!user || ![APP_MODE.OPERATOR, APP_MODE.INVENTORY].includes(entryMode)) {
+    if (!user || entryMode !== APP_MODE.INVENTORY) {
       setInventoryCourses([]);
       setInventoryState('not_requested');
       setInventoryError('');
-      setCanManageInventory(false);
       return undefined;
     }
     let active = true;
-    if (entryMode === APP_MODE.INVENTORY) {
-      setInventoryState('checking');
-      setInventoryError('');
-    }
+    setInventoryState('checking');
+    setInventoryError('');
     inventoryRequest(user, adminApiBaseUrl, '/api/v1/inventory/bootstrap')
       .then((result) => {
         if (!active) return;
         const assignedCourses = result.courses || [];
-        if (entryMode === APP_MODE.INVENTORY) {
-          setInventoryCourses(assignedCourses);
-          setInventoryState(assignedCourses.length ? 'authorized' : 'denied');
-          setInventoryError(assignedCourses.length ? '' : 'Inventory course access is required for this account.');
-        } else {
-          setCanManageInventory(assignedCourses.length > 0);
-        }
+        setInventoryCourses(assignedCourses);
+        setInventoryState(assignedCourses.length ? 'authorized' : 'denied');
+        setInventoryError(assignedCourses.length ? '' : 'Assigned course access is required for this account.');
       })
       .catch((error) => {
         if (!active) return;
-        if (entryMode === APP_MODE.INVENTORY) {
-          setInventoryError(error.message);
-          setInventoryState('denied');
-        } else {
-          setCanManageInventory(false);
-        }
+        setInventoryError(error.message);
+        setInventoryState('denied');
       });
     return () => { active = false; };
   }, [adminApiBaseUrl, entryMode, user]);
@@ -719,18 +706,41 @@ function App() {
     }
 
     const courseIds = operatorConfig.courses.map((course) => course.course_id);
+    if (courseIds.length === 0) {
+      setRequests([]);
+      setLoadState('ready');
+      return undefined;
+    }
 
-    const requestsQuery = query(
-      collection(db, 'requests'),
-      where('course_id', 'in', courseIds),
-      orderBy('received_at', 'desc'),
-      limit(100)
-    );
+    let active = true;
+    const requestsByCourse = new Map();
+    const loadedCourses = new Set();
+    setLoadState('loading');
+    setLoadError('');
 
-    const unsubscribe = onSnapshot(
-      requestsQuery,
+    function updateRequests() {
+      const nextRequests = [...requestsByCourse.values()].flat()
+        .sort((left, right) => {
+          const leftTime = left.received_at?.toMillis?.() ?? new Date(left.received_at).getTime();
+          const rightTime = right.received_at?.toMillis?.() ?? new Date(right.received_at).getTime();
+          return rightTime - leftTime;
+        })
+        .slice(0, 100);
+      if (active) {
+        setRequests(nextRequests);
+        if (loadedCourses.size === courseIds.length) setLoadState('ready');
+      }
+    }
+
+    const unsubscribers = courseIds.map((courseId) => onSnapshot(
+      query(
+        collection(db, 'requests'),
+        where('course_id', '==', courseId),
+        orderBy('received_at', 'desc'),
+        limit(100)
+      ),
       (snapshot) => {
-        const nextRequests = snapshot.docs.map((doc) => {
+        const nextCourseRequests = snapshot.docs.map((doc) => {
           const data = doc.data();
 
           return {
@@ -748,18 +758,23 @@ function App() {
             age: formatRequestAge(data.received_at),
           };
         });
-
-        setRequests(nextRequests);
-        setLoadState('ready');
+        requestsByCourse.set(courseId, nextCourseRequests);
+        loadedCourses.add(courseId);
+        updateRequests();
       },
       (error) => {
         console.error('Failed to load requests:', error);
-        setLoadError(error.code || 'unknown');
-        setLoadState('error');
+        if (active) {
+          setLoadError(error.code || 'unknown');
+          setLoadState('error');
+        }
       }
-    );
+    ));
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
   }, [operatorConfig, user]);
 
   async function handleGoogleSignIn() {
@@ -834,7 +849,7 @@ function App() {
     return (
       <EntryStatus
         title="Access denied"
-        message={adminEntry ? 'Administrator access is required.' : entryMode === APP_MODE.INVENTORY ? inventoryError : (operatorError || 'Operator course access is required.')}
+        message={adminEntry ? 'Fairway Refresh staff access is required.' : entryMode === APP_MODE.INVENTORY ? inventoryError : (operatorError || 'Assigned course access is required.')}
         showAdminLink={!adminEntry && claimsReady && isAdmin}
       />
     );
@@ -858,7 +873,7 @@ function App() {
       loadError={loadError}
       focusedRequestId={focusedRequestId}
       isAdmin={isAdmin}
-      canManageInventory={canManageInventory}
+      canManageInventory={operatorState === 'authorized'}
       onOpenAdmin={() => window.location.assign('/admin')}
       onOpenInventory={() => window.location.assign('/inventory')}
       onSignOut={() => signOut(auth)}

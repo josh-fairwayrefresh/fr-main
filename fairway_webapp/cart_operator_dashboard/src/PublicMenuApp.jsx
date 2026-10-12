@@ -1,12 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, RefreshCw } from 'lucide-react';
+import { Beer, ChevronDown, GlassWater, Martini, RefreshCw, Sandwich } from 'lucide-react';
 import { publicMenuRequest } from './lib/inventoryApi.mjs';
 import { formatPrice, formatPublishedAt, groupPublishedProducts } from './lib/inventoryModel.mjs';
 import { courseMenuConfig } from './lib/courseMenuConfig';
 import './public-menu.css';
 
-function categoryInitials(name) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase();
+const CATEGORY_ICONS = {
+  'craft beers': Beer,
+  shots: GlassWater,
+  cocktails: Martini,
+  'canned cocktails': CannedCocktailIcon,
+  food: Sandwich,
+};
+
+function CannedCocktailIcon({ size = 24 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M7 3h10l-.8 17H7.8L7 3Z" />
+    <path d="M7.2 6h9.6M9 3V2h6v1M10 11h4" />
+  </svg>;
+}
+
+function CategoryMark({ name }) {
+  if (name.trim().toLowerCase() === 'non-alcoholic') return 'NA';
+  const Icon = CATEGORY_ICONS[name.trim().toLowerCase()] || Utensils;
+  return <Icon size={16} strokeWidth={2.25} />;
 }
 
 function ProductRow({ product }) {
@@ -40,7 +57,7 @@ function CategorySection({ category, expanded, onToggle, index }) {
       aria-controls={`pm-products-${index}`}
       onClick={onToggle}
     >
-      <span className="pm-category-mark" aria-hidden="true">{categoryInitials(category.name)}</span>
+      <span className="pm-category-mark" aria-hidden="true"><CategoryMark name={category.name} /></span>
       <span className="pm-category-copy"><strong>{category.name}</strong><small>{category.count} {category.count === 1 ? 'item' : 'items'}</small></span>
       <ChevronDown size={19} aria-hidden="true" />
     </button>

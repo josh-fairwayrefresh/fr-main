@@ -9,12 +9,11 @@ import {
   shouldRedirectFreshSignInToCartOperations,
 } from '../src/lib/appEntry.mjs';
 
-test('Admin-only account enters Admin without operator bootstrap', () => {
+test('Internal Admin enters Admin without a customer course assignment', () => {
   const mode = modeForPath('/admin');
   assert.deepEqual(authorizationRequirements(mode), {
     adminClaim: true,
-    operatorBootstrap: false,
-    inventoryMembership: false,
+    customerCourseAssignment: false,
     publicReadOnly: false,
   });
   assert.equal(resolveEntry({
@@ -26,7 +25,12 @@ test('Admin-only account enters Admin without operator bootstrap', () => {
   }), 'admin');
 });
 
-test('Operator-only account enters operator mode but cannot enter Admin', () => {
+test('Customer course assignment grants Cart access but cannot enter Admin', () => {
+  assert.deepEqual(authorizationRequirements(APP_MODE.OPERATOR), {
+    adminClaim: false,
+    customerCourseAssignment: true,
+    publicReadOnly: false,
+  });
   assert.equal(resolveEntry({
     mode: APP_MODE.OPERATOR,
     authenticated: true,
@@ -43,7 +47,7 @@ test('Operator-only account enters operator mode but cannot enter Admin', () => 
   }), 'denied');
 });
 
-test('Dual-role account starts in the mode selected by its entry path', () => {
+test('Internal Admin and customer course assignment remain separate access checks', () => {
   assert.equal(resolveEntry({
     mode: APP_MODE.ADMIN,
     authenticated: true,
@@ -103,13 +107,12 @@ test('Logged-out operator deep link retains its request destination', () => {
   );
 });
 
-test('Inventory entry requires course membership but not Admin or Operator access', () => {
+test('Inventory entry requires the same customer course assignment as Cart', () => {
   const mode = modeForPath('/inventory');
   assert.equal(mode, APP_MODE.INVENTORY);
   assert.deepEqual(authorizationRequirements(mode), {
     adminClaim: false,
-    operatorBootstrap: false,
-    inventoryMembership: true,
+    customerCourseAssignment: true,
     publicReadOnly: false,
   });
   assert.equal(resolveEntry({
@@ -173,8 +176,7 @@ test('Public cart menu entry is available without authentication', () => {
   assert.equal(mode, APP_MODE.PUBLIC_MENU);
   assert.deepEqual(authorizationRequirements(mode), {
     adminClaim: false,
-    operatorBootstrap: false,
-    inventoryMembership: false,
+    customerCourseAssignment: false,
     publicReadOnly: true,
   });
   assert.equal(resolveEntry({

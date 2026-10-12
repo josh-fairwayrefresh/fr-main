@@ -3,8 +3,8 @@
 const crypto = require('crypto');
 const { FieldValue } = require('@google-cloud/firestore');
 const { coursesCollection } = require('./fleet/courses');
+const { getOperatorAssignment } = require('./operator_notifications');
 
-const INVENTORY_MEMBERSHIPS = 'inventory_course_memberships';
 const PUBLIC_MENU_SLUGS = 'public_menu_slugs';
 const INVENTORY_COLLECTION = 'inventory';
 const INVENTORY_STATE_DOC = 'state';
@@ -111,21 +111,21 @@ function isValidCoursePair(value) {
   return value && typeof value.customer_id === 'string' && typeof value.course_id === 'string';
 }
 
-async function getMembership(db, uid) {
-  const membership = await db.collection(INVENTORY_MEMBERSHIPS).doc(uid).get();
-  if (!membership.exists || membership.data().enabled !== true || !Array.isArray(membership.data().courses)) {
-    fail(403, 'inventory_access_denied', 'Inventory course access required');
+async function getCustomerCourses(db, uid) {
+  const assignment = await getOperatorAssignment(db, uid);
+  if (!assignment) {
+    fail(403, 'customer_course_access_denied', 'Assigned customer course access required');
   }
-  return membership.data().courses.filter(isValidCoursePair);
+  return assignment.courses.filter(isValidCoursePair);
 }
 
 async function requireCourseAccess(db, uid, customerId, courseId) {
-  const memberships = await getMembership(db, uid);
-  const hasAccess = memberships.some((entry) => (
+  const courses = await getCustomerCourses(db, uid);
+  const hasAccess = courses.some((entry) => (
     entry.customer_id === customerId && entry.course_id === courseId
   ));
   if (!hasAccess) {
-    fail(403, 'inventory_course_access_denied', 'Inventory access is not authorized for this Course');
+    fail(403, 'customer_course_access_denied', 'Access is not authorized for this Course');
   }
 
   const ref = courseRef(db, customerId, courseId);
@@ -137,17 +137,16 @@ async function requireCourseAccess(db, uid, customerId, courseId) {
 }
 
 async function getInventoryBootstrap(db, uid) {
-  const memberships = await getMembership(db, uid);
-  const courses = await Promise.all(memberships.map(async (membership) => {
-    const snapshot = await courseRef(db, membership.customer_id, membership.course_id).get();
+  const assignments = await getCustomerCourses(db, uid);
+  const courses = await Promise.all(assignments.map(async (assignment) => {
+    const snapshot = await courseRef(db, assignment.customer_id, assignment.course_id).get();
     if (!snapshot.exists) return null;
     const data = snapshot.data();
     return {
-      customer_id: membership.customer_id,
-      course_id: membership.course_id,
+      customer_id: assignment.customer_id,
+      course_id: assignment.course_id,
       customer_name: data.customer_name || null,
       course_name: data.course_name || null,
-      permission: 'editor',
     };
   }));
   return { courses: courses.filter(Boolean) };
@@ -704,36 +703,6 @@ async function deleteCategory(db, customerId, courseId, categoryId, actorUid) {
   return { category_id: categoryId, deleted: true };
 }
 
-async function setInventoryMembership(db, uid, body, actorUid) {
-  if (typeof uid !== 'string' || !uid.trim() || uid.includes('/')) {
-    fail(400, 'invalid_uid', 'A valid Firebase UID is required');
-  }
-  if (!body || typeof body.enabled !== 'boolean' ||
-      (body.enabled && (!Array.isArray(body.courses) || body.courses.length === 0)) ||
-      (!body.enabled && body.courses !== undefined && !Array.isArray(body.courses))) {
-    fail(400, 'invalid_membership', 'enabled must be boolean and enabled memberships require course assignments');
-  }
-  const deduped = new Map();
-  for (const assignment of (body.courses || [])) {
-    if (!isValidCoursePair(assignment)) fail(400, 'invalid_membership', 'Each course requires customer_id and course_id');
-    const key = `${assignment.customer_id}/${assignment.course_id}`;
-    const course = await courseRef(db, assignment.customer_id, assignment.course_id).get();
-    if (!course.exists) fail(404, 'course_not_found', `Course not found: ${key}`);
-    deduped.set(key, { customer_id: assignment.customer_id, course_id: assignment.course_id });
-  }
-  const timestamp = FieldValue.serverTimestamp();
-  const membership = {
-    enabled: body.enabled,
-    courses: [...deduped.values()],
-    updated_at: timestamp,
-    updated_by: actorUid,
-  };
-  const membershipRef = db.collection(INVENTORY_MEMBERSHIPS).doc(uid);
-  await membershipRef.set(membership);
-  const saved = await membershipRef.get();
-  return { uid, ...saved.data() };
-}
-
 async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid) {
   const slug = validateSlug(value);
   const courseDocument = courseRef(db, customerId, courseId);
@@ -923,13 +892,10 @@ async function getPublicMenu(db, slugValue) {
 
 module.exports = {
   InventoryError,
-  INVENTORY_MEMBERSHIPS,
   INVENTORY_STATES,
-  getMembership,
   getInventoryBootstrap,
   requireCourseAccess,
   listInventory,
-  setInventoryMembership,
   configurePublicMenuSlug,
   createCategory,
   createSubcategory,

@@ -78,7 +78,8 @@ function operatorVerifier(validToken = 'valid-token', uid = 'operator-123') {
 }
 
 async function setUpOperatorAssignment(db, uid = 'operator-123', courseId = 'COURSE-0001') {
-  await db.collection('operator_course_assignments').doc(uid).set({
+  await db.collection('user_access').doc(uid).set({
+    user_type: 'customer_staff',
     enabled: true,
     courses: [{
       customer_id: 'CUST-0001',
@@ -701,7 +702,7 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
 test('operator assignment fixture keeps course_ids consistent with courses for Firestore Rules authorization', async () => {
   const db = new FakeFirestore();
   await setUpOperatorAssignment(db, 'operator-456', 'COURSE-0002');
-  const assignment = await db.collection('operator_course_assignments').doc('operator-456').get();
+  const assignment = await db.collection('user_access').doc('operator-456').get();
   const data = assignment.data();
   assert.deepStrictEqual(data.course_ids, data.courses.map((course) => course.course_id));
   assert.deepStrictEqual(data.course_ids, ['COURSE-0002']);
@@ -746,6 +747,118 @@ test('operator bootstrap and push subscription are restricted to assigned Course
     method: 'POST',
     path: '/api/v1/operator/push-subscriptions',
     body: { course_id: 'COURSE-9999', subscription },
+    headers: { authorization: 'Bearer valid-token' },
+  }), denied);
+  assert.strictEqual(denied.statusCode, 403);
+});
+
+test('Fairway Refresh Staff receive Cart access to courses across customers', async () => {
+  const db = new FakeFirestore();
+  await db.collection('user_access').doc('operator-123').set({
+    user_type: 'fairway_staff',
+    enabled: true,
+    courses: [],
+    course_ids: [],
+  });
+  await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Monarch Bay GC' });
+  await db.collection('customers').doc('CUST-0001').collection('courses')
+    .doc('COURSE-0001').set({ course_name: 'Tony Lema Course' });
+  await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Other Customer' });
+  await db.collection('customers').doc('CUST-0002').collection('courses')
+    .doc('COURSE-0002').set({ course_name: 'Other Course' });
+  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+    vapidPublicKey: 'public-vapid-key',
+    vapidKeyVersion: 'v1',
+  });
+
+  const response = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/bootstrap',
+    headers: { authorization: 'Bearer valid-token' },
+  }), response);
+
+  assert.strictEqual(response.statusCode, 200);
+  assert.deepStrictEqual(
+    response.body.courses.map((course) => [course.customer_id, course.course_id]),
+    [['CUST-0001', 'COURSE-0001'], ['CUST-0002', 'COURSE-0002']]
+  );
+});
+
+test('notification preferences are per user and authorized course', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
+  const secondCourse = {
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0002',
+    course_name: 'Second Course',
+  };
+  await db.collection('user_access').doc('operator-123').set({
+    user_type: 'customer_staff',
+    enabled: true,
+    courses: [
+      {
+        customer_id: 'CUST-0001',
+        course_id: 'COURSE-0001',
+        course_name: 'Tony Lema Course',
+      },
+      secondCourse,
+    ],
+    course_ids: ['COURSE-0001', 'COURSE-0002'],
+  });
+  await db.collection('user_access').doc('operator-456').set({
+    user_type: 'customer_staff',
+    enabled: true,
+    courses: [
+      {
+        customer_id: 'CUST-0001',
+        course_id: 'COURSE-0001',
+        course_name: 'Tony Lema Course',
+      },
+      secondCourse,
+    ],
+    course_ids: ['COURSE-0001', 'COURSE-0002'],
+  });
+  const handlers = createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier(),
+  });
+
+  const enabled = createResponse();
+  await handlers.fairwayButtonReceiver(createRequest({
+    method: 'PATCH',
+    path: '/api/v1/operator/notification-preferences',
+    body: { course_id: 'COURSE-0001', enabled: true },
+    headers: { authorization: 'Bearer valid-token' },
+  }), enabled);
+  assert.strictEqual(enabled.statusCode, 200);
+
+  const sameUser = createResponse();
+  await handlers.fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/bootstrap',
+    headers: { authorization: 'Bearer valid-token' },
+  }), sameUser);
+  assert.deepStrictEqual(sameUser.body.notification_preferences, {
+    'COURSE-0001': true,
+    'COURSE-0002': false,
+  });
+
+  const otherUser = createResponse();
+  await createFairwayHandlers(db, {
+    verifyOperatorToken: operatorVerifier('valid-token', 'operator-456'),
+  }).fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/bootstrap',
+    headers: { authorization: 'Bearer valid-token' },
+  }), otherUser);
+  assert.strictEqual(otherUser.body.notification_preferences['COURSE-0001'], false);
+
+  const denied = createResponse();
+  await handlers.fairwayButtonReceiver(createRequest({
+    method: 'PATCH',
+    path: '/api/v1/operator/notification-preferences',
+    body: { course_id: 'COURSE-9999', enabled: true },
     headers: { authorization: 'Bearer valid-token' },
   }), denied);
   assert.strictEqual(denied.statusCode, 403);

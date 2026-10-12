@@ -62,10 +62,16 @@ async function seedCourse(db, courseId = COURSE_ID) {
   });
 }
 
-async function seedMembership(db, uid, courseIds = [COURSE_ID]) {
-  await db.collection('inventory_course_memberships').doc(uid).set({
+async function seedCustomerAssignment(db, uid, courseIds = [COURSE_ID]) {
+  await db.collection('user_access').doc(uid).set({
+    user_type: 'customer_staff',
     enabled: true,
-    courses: courseIds.map((courseId) => ({ customer_id: CUSTOMER_ID, course_id: courseId })),
+    courses: courseIds.map((courseId) => ({
+      customer_id: CUSTOMER_ID,
+      course_id: courseId,
+      course_name: 'Monarch Bay Course',
+    })),
+    course_ids: courseIds,
   });
 }
 
@@ -103,55 +109,101 @@ async function run() {
   if (failed) process.exitCode = 1;
 }
 
-test('Inventory membership is course-scoped and gives both staff identities equal editor access', async () => {
+test('Customer course assignment grants full Inventory access without an Inventory membership', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
   await seedCourse(db, SECOND_COURSE_ID);
-  await seedMembership(db, TOKENS.fnb.uid);
-  await seedMembership(db, TOKENS.cart.uid);
+  await seedCustomerAssignment(db, TOKENS.fnb.uid);
+  await seedCustomerAssignment(db, TOKENS.cart.uid);
+  await db.collection('user_access').doc(TOKENS.admin.uid).set({
+    user_type: 'fairway_staff',
+    enabled: true,
+    courses: [],
+    course_ids: [],
+  });
+  await db.collection('inventory_course_memberships').doc(TOKENS.outsider.uid).set({
+    enabled: true,
+    courses: [{ customer_id: CUSTOMER_ID, course_id: COURSE_ID }],
+  });
   const request = createApi(db);
 
   const fnbBootstrap = await request({ path: '/api/v1/inventory/bootstrap', token: 'fnb' });
   const cartBootstrap = await request({ path: '/api/v1/inventory/bootstrap', token: 'cart' });
   assert.strictEqual(fnbBootstrap.statusCode, 200);
   assert.deepStrictEqual(fnbBootstrap.body, cartBootstrap.body);
-  assert.strictEqual(fnbBootstrap.body.courses[0].permission, 'editor');
+  assert.strictEqual(fnbBootstrap.body.courses[0].course_id, COURSE_ID);
+  assert.strictEqual('permission' in fnbBootstrap.body.courses[0], false);
 
   const allowed = await request({ path: coursePath(), token: 'fnb' });
   assert.strictEqual(allowed.statusCode, 200);
+  const cartAllowed = await request({ path: coursePath(), token: 'cart' });
+  assert.strictEqual(cartAllowed.statusCode, 200);
   const crossCourse = await request({ path: coursePath(SECOND_COURSE_ID), token: 'fnb' });
   assert.strictEqual(crossCourse.statusCode, 403);
   const outsider = await request({ path: coursePath(), token: 'outsider' });
   assert.strictEqual(outsider.statusCode, 403);
+  const staffBootstrap = await request({ path: '/api/v1/inventory/bootstrap', token: 'admin' });
+  assert.strictEqual(staffBootstrap.statusCode, 200);
+  assert.deepStrictEqual(
+    staffBootstrap.body.courses.map((course) => course.course_id).sort(),
+    [COURSE_ID, SECOND_COURSE_ID]
+  );
+  const staffCanEdit = await request({
+    method: 'POST',
+    path: `${coursePath()}/categories`,
+    token: 'admin',
+    body: { name: 'Staff Managed' },
+  });
+  assert.strictEqual(staffCanEdit.statusCode, 201);
   const missingToken = await request({ path: coursePath() });
   assert.strictEqual(missingToken.statusCode, 401);
 });
 
-test('Global Admin provisions equal course access; staff accounts cannot grant access', async () => {
+test('Legacy Inventory membership provisioning endpoint no longer manages customer access', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
+  await db.collection('user_access').doc(TOKENS.admin.uid).set({
+    user_type: 'fairway_staff',
+    enabled: true,
+    courses: [],
+    course_ids: [],
+  });
   const request = createApi(db);
   const path = '/api/v1/admin/inventory-course-memberships/fnb-manager';
   const body = { enabled: true, courses: [{ customer_id: CUSTOMER_ID, course_id: COURSE_ID }] };
 
-  const denied = await request({ method: 'PATCH', path, body, token: 'fnb' });
-  assert.strictEqual(denied.statusCode, 403);
-  const granted = await request({ method: 'PATCH', path, body, token: 'admin' });
-  assert.strictEqual(granted.statusCode, 200);
-  const bootstrap = await request({ path: '/api/v1/inventory/bootstrap', token: 'fnb' });
-  assert.strictEqual(bootstrap.statusCode, 200);
-  assert.strictEqual(bootstrap.body.courses[0].course_id, COURSE_ID);
+  const notFound = await request({ method: 'PATCH', path, body, token: 'admin' });
+  assert.strictEqual(notFound.statusCode, 404);
+  assert.strictEqual((await db.collection('inventory_course_memberships').doc('fnb-manager').get()).exists, false);
+});
 
-  const revoked = await request({ method: 'PATCH', path, body: { enabled: false, courses: [] }, token: 'admin' });
-  assert.strictEqual(revoked.statusCode, 200);
-  assert.strictEqual((await request({ path: '/api/v1/inventory/bootstrap', token: 'fnb' })).statusCode, 403);
+test('Access bootstrap reports Firestore user class separately from course resolution', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db);
+  await seedCustomerAssignment(db, TOKENS.fnb.uid);
+  await db.collection('user_access').doc(TOKENS.admin.uid).set({
+    user_type: 'fairway_staff',
+    enabled: true,
+    courses: [],
+    course_ids: [],
+  });
+  const request = createApi(db);
+
+  const customer = await request({ path: '/api/v1/access/bootstrap', token: 'fnb' });
+  assert.strictEqual(customer.statusCode, 200);
+  assert.deepStrictEqual(customer.body, { user_type: 'customer_staff' });
+  const staff = await request({ path: '/api/v1/access/bootstrap', token: 'admin' });
+  assert.strictEqual(staff.statusCode, 200);
+  assert.deepStrictEqual(staff.body, { user_type: 'fairway_staff' });
+  const unclassified = await request({ path: '/api/v1/access/bootstrap', token: 'outsider' });
+  assert.strictEqual(unclassified.statusCode, 403);
 });
 
 test('Course category names normalize without duplicates and staff saves use last committed write', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
-  await seedMembership(db, TOKENS.fnb.uid);
-  await seedMembership(db, TOKENS.cart.uid);
+  await seedCustomerAssignment(db, TOKENS.fnb.uid);
+  await seedCustomerAssignment(db, TOKENS.cart.uid);
   const request = createApi(db);
 
   const category = await request({
@@ -225,8 +277,8 @@ test('Course category names normalize without duplicates and staff saves use las
 test('Empty categories can be deleted by any course member; nonempty categories are protected and never cascade-delete products', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
-  await seedMembership(db, TOKENS.fnb.uid);
-  await seedMembership(db, TOKENS.cart.uid);
+  await seedCustomerAssignment(db, TOKENS.fnb.uid);
+  await seedCustomerAssignment(db, TOKENS.cart.uid);
   const request = createApi(db);
 
   const emptyCategory = await request({
@@ -280,7 +332,7 @@ test('Empty categories can be deleted by any course member; nonempty categories 
 test('A category whose only product is archived is deletable, matching the active-only count shown to staff; the archived product is never touched', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
-  await seedMembership(db, TOKENS.fnb.uid);
+  await seedCustomerAssignment(db, TOKENS.fnb.uid);
   const request = createApi(db);
 
   const category = await request({
@@ -320,8 +372,14 @@ test('A category whose only product is archived is deletable, matching the activ
 test('Publication snapshots are atomic, preserve last success on failure, and public reads exclude drafts', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
-  await seedMembership(db, TOKENS.fnb.uid);
-  await seedMembership(db, TOKENS.cart.uid);
+  await seedCustomerAssignment(db, TOKENS.fnb.uid);
+  await seedCustomerAssignment(db, TOKENS.cart.uid);
+  await db.collection('user_access').doc(TOKENS.admin.uid).set({
+    user_type: 'fairway_staff',
+    enabled: true,
+    courses: [],
+    course_ids: [],
+  });
   const request = createApi(db);
 
   const configured = await request({

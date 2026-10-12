@@ -1,7 +1,11 @@
 'use strict';
 
 const crypto = require('crypto');
-const { COURSE_SUBSCRIPTIONS_COLLECTION } = require('./operator_notifications');
+const {
+  COURSE_SUBSCRIPTIONS_COLLECTION,
+  getOperatorAssignment,
+  isNotificationEnabled,
+} = require('./operator_notifications');
 
 const DISPATCH_COLLECTION = 'notification_dispatches';
 const MAX_ATTEMPTS = 5;
@@ -78,13 +82,26 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
     .where('status', '==', 'active').get();
   const payload = JSON.stringify(notificationPayload(requestId, request));
   const transientFailures = [];
+  const assignments = new Map();
   let accepted = 0;
 
   for (const subscriptionSnapshot of subscriptions.docs) {
+    const subscription = subscriptionSnapshot.data();
+    if (typeof subscription.operator_uid !== 'string') continue;
+    if (!assignments.has(subscription.operator_uid)) {
+      assignments.set(subscription.operator_uid, getOperatorAssignment(db, subscription.operator_uid));
+    }
+    const assignment = await assignments.get(subscription.operator_uid);
+    const currentlyAuthorized = assignment?.courses.some((course) => (
+      course.course_id === request.course_id && course.customer_id === subscription.customer_id
+    ));
+    if (!currentlyAuthorized || !(await isNotificationEnabled(db, subscription.operator_uid, request.course_id))) {
+      continue;
+    }
+
     const acquired = await acquireDispatch(db, requestId, subscriptionSnapshot.id, now);
     if (!acquired) continue;
 
-    const subscription = subscriptionSnapshot.data();
     try {
       await sendNotification({
         endpoint: subscription.endpoint,

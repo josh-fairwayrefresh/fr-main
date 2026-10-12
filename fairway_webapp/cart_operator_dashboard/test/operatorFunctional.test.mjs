@@ -16,6 +16,7 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.doesNotMatch(source, />CONFIRM</);
 });
 
-test('Cart banner shows a conditional Inventory link into the shared authenticated session', () => {
-  assert.match(source, /canManageInventory && <a className="op-inventory" href="\/inventory"/);
+test('Assigned customer users have an Inventory link into the shared authenticated session', () => {
+  assert.match(source, /<a className="op-inventory" href="\/inventory"/);
+  assert.doesNotMatch(source, /canManageInventory/);
 });

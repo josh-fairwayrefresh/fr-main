@@ -16,9 +16,20 @@ function test(name, fn) {
 }
 
 async function seedRequestAndSubscription(db) {
+  await db.collection('user_access').doc('operator-123').set({
+    user_type: 'customer_staff',
+    enabled: true,
+    courses: [{
+      customer_id: 'CUST-0001',
+      course_id: 'COURSE-0001',
+      course_name: 'Tony Lema Course',
+    }],
+    course_ids: ['COURSE-0001'],
+  });
   await db.collection('requests').doc('request-a').set({
     event_type: 'button_press',
     course_id: 'COURSE-0001',
+    customer_id: 'CUST-0001',
     course_name: 'Tony Lema Course',
     device_label: 'Hole 7',
     hole: 7,
@@ -26,6 +37,9 @@ async function seedRequestAndSubscription(db) {
   });
   await db.collection('course_push_subscriptions').doc('COURSE-0001')
     .collection('subscriptions').doc('subscription-a').set({
+      operator_uid: 'operator-123',
+      customer_id: 'CUST-0001',
+      course_id: 'COURSE-0001',
       endpoint: 'https://push.example.test/device-a',
       keys: { auth: 'auth-a', p256dh: 'p256dh-a' },
       status: 'active',
@@ -56,6 +70,36 @@ test('dispatch sends one useful notification and does not mutate the request', a
   });
   const after = (await db.collection('requests').doc('request-a').get()).data();
   assert.deepStrictEqual(after, before);
+});
+
+test('disabled per-course preference prevents push delivery', async () => {
+  const db = new FakeFirestore();
+  await seedRequestAndSubscription(db);
+  await db.collection('user_notification_preferences').doc('operator-123')
+    .collection('courses').doc('COURSE-0001').set({ enabled: false });
+  let sends = 0;
+
+  const result = await dispatchRequestNotifications(db, 'request-a', async () => { sends += 1; });
+
+  assert.deepStrictEqual(result, { accepted: 0, subscriptions: 1 });
+  assert.strictEqual(sends, 0);
+});
+
+test('revoked course access prevents push delivery even when the subscription remains active', async () => {
+  const db = new FakeFirestore();
+  await seedRequestAndSubscription(db);
+  await db.collection('user_access').doc('operator-123').set({
+    user_type: 'customer_staff',
+    enabled: true,
+    courses: [],
+    course_ids: [],
+  });
+  let sends = 0;
+
+  const result = await dispatchRequestNotifications(db, 'request-a', async () => { sends += 1; });
+
+  assert.deepStrictEqual(result, { accepted: 0, subscriptions: 1 });
+  assert.strictEqual(sends, 0);
 });
 
 test('accepted dispatch identity prevents a repeated trigger from sending again', async () => {

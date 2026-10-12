@@ -4,8 +4,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /requests/{requestId} {
       allow read: if request.auth != null
-        && get(/databases/$(database)/documents/operator_course_assignments/$(request.auth.uid)).data.enabled == true
-        && resource.data.course_id in get(/databases/$(database)/documents/operator_course_assignments/$(request.auth.uid)).data.course_ids;
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.enabled == true
+        && (
+          get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.user_type == 'fairway_staff'
+          || (
+            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.user_type == 'customer_staff'
+            && resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids
+          )
+        );
       allow write: if false;
     }
 

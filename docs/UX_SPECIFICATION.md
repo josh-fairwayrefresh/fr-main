@@ -81,14 +81,25 @@ Request A may still be active when Request B is created; that is valid. The oper
 
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 
-Product Brief v1.2 defines this capability. Increment 1 backend contracts and
-Increment 2 Inventory/Public Menu screens are implemented in repository source
-for local validation; they have not been deployed. Deployment and validation
-status are owned by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
+Product Brief v1.2 defines this capability. The current implementation and
+deployment status are owned by `docs/DEPLOYMENT_GUIDE.md` and
+`docs/feature_backlog.md`.
 
-- The F&B Manager and Cart Operator retain distinct accounts but have identical
-   rights to view, add, edit, move, archive, preview, and publish products for
-   the assigned course.
+- Fairway Refresh has exactly two user classes: `fairway_staff` (internal
+  personnel) and `customer_staff` (customer personnel). Every customer user
+  assigned to a course has the same full access to all customer-editable Cart
+  UI features for that course, including Cart Operations and Inventory.
+  Fairway Refresh staff can use Cart Operations and Inventory across all
+  customers and courses. Customers never access the Admin UI; it is exclusively
+  for Fairway Refresh staff. User class and customer Course assignments are
+  stored together in `user_access/{uid}`; email naming is not an authorization rule. The
+  `monarch*` prefix was used only to classify existing accounts during the
+  one-time migration; future accounts are classified explicitly in Firestore
+  Studio.
+- Course assignment is the shared entitlement for Cart Operations and
+   Inventory. Inventory has no separate membership or user class. An assigned
+   user can view, add, edit, move, archive, preview, and publish products for
+   that course; another course remains inaccessible unless separately assigned.
 - One course-level catalog is shared across staff and carts. Each active
    product has exactly one state: **On Cart**, **Sold Out**, or **In Inventory**.
    Archived products are retained outside active inventory.
@@ -103,6 +114,8 @@ status are owned by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    publication. On Cart products appear available, Sold Out products are marked,
    and In Inventory or Archived products are omitted. The menu is read-only and
    does not support ordering, checkout, requests, POS, or quantity tracking.
+- Public menu category badges use category-appropriate icons; the
+   Non-Alcoholic badge retains the text "NA".
 - Product name and category are required; subcategory, brand, description, and
    price are optional. Blank prices remain blank. Approved CSV imports begin On
    Cart and preserve accepted names/category relationships without fabricated
@@ -110,11 +123,11 @@ status are owned by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 - The Inventory entry at `/inventory` is a feature within the Cart UI: it uses
    the same shared Firebase Authentication session and the same standard Cart
    login presentation as Cart Operations, with no separate Inventory login
-   screen. It requires Firebase sign-in and assigned course Inventory
-   membership only; it does not require the global Admin claim or Cart
-   Operator assignment. Assigned Cart Operators may enter Inventory from the
-   Operator application's conditional banner link; membership does not grant
-   unrelated roles. The Inventory header provides an explicit "Cart
+   screen. It requires Firebase sign-in and an explicit assignment to the
+   requested course, the same entitlement as Cart Operations; it does not
+   require the Fairway staff class. Assigned customer users may enter Inventory
+   from the Cart application's Inventory link. Course assignment does not
+   grant Admin access. The Inventory header provides an explicit "Cart
    Operations" control that returns to Cart Operations without re-authenticating.
    A sign-in that completes while on `/inventory` always lands on Cart
    Operations first, never directly on Inventory, consistent with the
@@ -171,11 +184,17 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 ## Cart Operator Push Notifications (Implemented and Physically Validated)
 
 - The Cart Operator installs Fairway from Safari as an iPhone Home Screen web
-   application, signs in with an approved Fairway account, and explicitly enables
-   notifications.
+   application, signs in with an approved Fairway account, and independently
+   enables new-request notifications for each authorized Course.
+- The saved notification preference belongs to the authenticated user and
+   Course. It is separate from browser/device notification permission; disabling
+   one Course does not disable Cart access or another Course's preference.
 - One newly accepted golfer request produces one visible notification for each
-   active, authorized course subscription. The notification identifies the
-   request location.
+   active subscription whose user still has Course access and has enabled that
+   Course's preference. The notification identifies the request location.
+- Revoking a user's Course access or disabling their saved preference prevents
+   subsequent delivery even if the device's push subscription remains stored.
+  Push delivery failures are asynchronous and do not block Cart Operations.
 - Tapping the notification opens or focuses the authenticated Fairway
    application at the originating request and course. The request remains
    actionable through the normal operator workflow.
@@ -184,6 +203,10 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 - Physical production acceptance on 2026-10-01 used FRB-0002 at Hole 2. The CPO
    observed exactly one notification for one authoritative request, successful
    deep-link focus, and no notification for the in-window duplicate press.
+- Per-user/per-Course preference controls and delivery-time authorization
+   filtering are implemented in source and covered by automated regression
+   tests; their environment deployment status is owned by
+   `docs/DEPLOYMENT_GUIDE.md`.
 
 ## Cart Operator Application (Implemented and Accepted in Production)
 
@@ -193,7 +216,7 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    login shown at `/inventory`; both are one shared customer-facing
    experience with no separate Inventory login. `/admin` is the distinct
    Admin UI entry point, with an unobtrusive Admin Login link from the
-   standard Cart login and a Cart Operator Login link back from Admin. All
+   standard Cart login and a Cart Login link back from Admin. All
    entry paths retain the same Firebase Authentication and route-preservation
    behavior.
 - The application is a full-surface, landscape-iPad-first responsive workspace.

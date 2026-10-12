@@ -148,32 +148,51 @@ button {
   border: 1px solid #4b4b4b;
   border-radius: 8px;
   background: #282828;
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
   color: #d8d8d8;
   font-size: 13px;
 }
 
-.notification-setup button {
-  grid-column: 1 / -1;
-  min-height: 42px;
-  border: 0;
-  border-radius: 6px;
-  background: #2fb34e;
-  color: #fff;
-  font-weight: 800;
+.notification-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
 }
 
-.notification-ok {
-  border-color: #2fb34e;
-  color: #7ee29a;
+.notification-heading div {
+  display: grid;
+  gap: 3px;
 }
 
-.notification-error {
-  border-color: #a94b4b;
+.notification-heading span {
+  color: #a9a9a9;
+}
+
+.notification-course-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.notification-course-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.notification-setup [role="alert"] {
+  flex-basis: 100%;
+  margin: 0;
   color: #ff9b9b;
+}
+
+.notification-course-options input {
+  width: 18px;
+  height: 18px;
 }
 
 .request-header {

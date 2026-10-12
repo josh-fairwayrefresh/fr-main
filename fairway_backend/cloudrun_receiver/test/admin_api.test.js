@@ -75,13 +75,31 @@ function createRequest({ body = {}, headers = {}, method = 'GET', path } = {}) {
 
 function createAdminApi(db) {
   const { fairwayAdmin } = createFairwayHandlers(db, {
-    verifyOperatorToken: async (token) => ({
-      uid: token === 'admin-token' ? 'admin-uid' : 'operator-uid',
-      admin: token === 'admin-token',
-    }),
+    verifyOperatorToken: async (token) => {
+      const uid = token === 'admin-token' || token === 'staff-token'
+        ? 'staff-uid'
+        : token === 'customer-admin-token' ? 'customer-uid' : 'operator-uid';
+      return { uid, admin: token === 'admin-token' || token === 'customer-admin-token' };
+    },
   });
 
   return async ({ method, path, body, token = 'admin-token' }) => {
+    if (token === 'admin-token' || token === 'staff-token') {
+      await db.collection('user_access').doc('staff-uid').set({
+        user_type: 'fairway_staff',
+        enabled: true,
+        courses: [],
+        course_ids: [],
+      });
+    } else if (token === 'customer-admin-token') {
+      const uid = 'customer-uid';
+      await db.collection('user_access').doc(uid).set({
+        user_type: 'customer_staff',
+        enabled: true,
+        courses: [{ customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Course' }],
+        course_ids: ['COURSE-0001'],
+      });
+    }
     const res = createResponse();
     await fairwayAdmin(createRequest({
       method,
@@ -184,7 +202,6 @@ const ADMIN_ROUTES = [
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001', body: { customer_name: 'Name' } },
   { method: 'POST', path: '/api/v1/admin/customers/CUST-0001/courses', body: { course_name: 'Course', timezone: 'UTC' } },
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001', body: { course_name: 'Course' } },
-  { method: 'PATCH', path: '/api/v1/admin/inventory-course-memberships/fnb-uid', body: { enabled: true, courses: [] } },
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001/inventory-menu', body: { public_menu_slug: 'monarch-bay' } },
   { method: 'POST', path: '/api/v1/admin/devices', body: { location: null } },
   { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/credential-recovery' },
@@ -199,6 +216,12 @@ const ADMIN_ROUTES = [
 test('every admin route rejects non-admin tokens before any write', async () => {
   for (const route of ADMIN_ROUTES) {
     const db = new FakeFirestore();
+    await db.collection('user_access').doc('operator-uid').set({
+      user_type: 'customer_staff',
+      enabled: true,
+      courses: [{ customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Course' }],
+      course_ids: ['COURSE-0001'],
+    });
     const request = createAdminApi(db);
     const before = JSON.stringify([...db._docs.entries()]);
     // eslint-disable-next-line no-await-in-loop
@@ -217,6 +240,17 @@ test('every admin route rejects a missing Firebase token before any write', asyn
     assert.strictEqual(res.statusCode, 401, `${route.method} ${route.path}`);
     assert.strictEqual(db._docs.size, 0, `${route.path} wrote before authentication`);
   }
+});
+
+test('Firestore user class, not an Admin token claim, is the Admin authorization boundary', async () => {
+  const db = new FakeFirestore();
+  const request = createAdminApi(db);
+  const staffRoute = await request({ method: 'GET', path: '/api/v1/admin/fleet', token: 'staff-token' });
+  assert.notStrictEqual(staffRoute.statusCode, 403);
+  const customerWithLegacyAdminClaim = await request({
+    method: 'GET', path: '/api/v1/admin/fleet', token: 'customer-admin-token',
+  });
+  assert.strictEqual(customerWithLegacyAdminClaim.statusCode, 403);
 });
 
 test('customer and Course routes allocate backend IDs, validate configuration, and synchronize Device display copies', async () => {
@@ -570,8 +604,8 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
   assert.strictEqual(commission.statusCode, 200);
 
   const stored = await db.collection('devices').doc('FRB-0001').get();
-  assert.strictEqual(stored.data().service.last_service_by, 'admin-uid');
-  assert.strictEqual(stored.data().commissioning.commissioned_by, 'admin-uid');
+  assert.strictEqual(stored.data().service.last_service_by, 'staff-uid');
+  assert.strictEqual(stored.data().commissioning.commissioned_by, 'staff-uid');
   assert.ok(stored.data().service.last_service_at, 'service time must be backend-owned');
   assert.ok(stored.data().commissioning.commissioned_at, 'commissioning time must be backend-owned');
   assert.strictEqual(stored.data().device_id, undefined, 'Device identity must remain document-ID only');
