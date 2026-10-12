@@ -350,11 +350,11 @@ administration. No production resource or receiver configuration was changed.
   (“Tony Lema Course”) with the production-verified `America/Los_Angeles`
   timezone and Sunday-Saturday 00:00-23:59 service schedule.
 - Firebase Auth identities `monarch_fnb@fairwayrefresh.com` and
-  `monarch_cart@fairwayrefresh.com` were created without passwords or custom
-  claims. Both have enabled Inventory membership for only CUST-0003 / COURSE-0002;
-  neither has global Admin privileges. The existing sandbox Admin was used for
-  membership/import audit attribution. Use the deployed Inventory sign-in
-  screen’s password-reset email flow for secure first sign-in; no password or
+  `monarch_cart@fairwayrefresh.com` reused their original UIDs and were
+  activated with CPO-entered hidden terminal passwords. Both have enabled
+  Inventory membership for only CUST-0003 / COURSE-0002; neither has global
+  Admin privileges. Firebase password sign-in was verified for each UID, and
+  memberships/claims were rechecked after activation. No password, token, or
   reset link is stored in this repository or report.
 - The approved CSV at `docs/catalogs/monarch-bay-inventory-import.csv` was
   dry-run against the actual Course: zero active/archived products existed and
@@ -383,11 +383,9 @@ administration. No production resource or receiver configuration was changed.
 - Public menu: `https://fairway-refresh-sandbox-260930.web.app/cartmenus/monarchbay_tony_lema_course`
 
 The deployed Inventory API returns 401 without Firebase authentication; the
-public API returns 404 until the first explicit publication. Use each approved
-account's “Set or reset password” action on the Inventory sign-in page. The
-reset email is delivered directly to that account; no password or reset link is
-stored in this repository or report. After setup, sign in with
-`monarch_fnb@fairwayrefresh.com` or `monarch_cart@fairwayrefresh.com`.
+public API returns 404 until the first explicit publication. Sign in with
+`monarch_fnb@fairwayrefresh.com` or `monarch_cart@fairwayrefresh.com` using the
+passwords the CPO set through the hidden terminal flow.
 
 The refinement was deployed to sandbox Hosting after the initial Increment 2
 release. Post-release HTTP smoke checks returned `200` for `/inventory` and
@@ -397,8 +395,27 @@ and the sandbox receiver were not changed. The public menu remains unpublished
 until the CPO signs in and explicitly publishes from Inventory.
 
 No Google Sites, DNS, production Hosting, production Cloud Run, production
-Firestore, or IAM changes were made. Actual embedding inside Google Sites and
-CPO hands-on acceptance remain outstanding.
+Firestore, or IAM changes were made. Actual embedding inside Google Sites
+remains outstanding.
+
+#### CPO Acceptance and Remaining Work — 2026-10-11
+
+- **CPO-observed acceptance:** the CPO reviewed the current deployed Inventory
+  UI and accepts its present functionality as the stable development baseline.
+  This is not a declaration that the Inventory sprint is Done. The first menu
+  remains unpublished, and Google Sites embedding has not been accepted.
+- **Automated evidence:** frontend 26/26 and backend 71/71 tests passed; sandbox
+  build/config validation passed. These results are distinct from CPO-observed
+  behavior and real Firestore integration evidence.
+- **Real sandbox evidence:** both permanent pilot UIDs authenticate, have equal
+  Course-scoped Inventory membership, and have no global Admin claim. The 57
+  On Cart products are in Firestore. Authorization, concurrent committed saves,
+  persistence, and draft/public isolation were exercised. Real commit-failure
+  rollback was not tested because no first publication has been made.
+- **Cart UI integration remains open:** source includes a preliminary
+  Operator-side membership lookup and conditional Inventory navigation link.
+  Customer-scoped Cart UI access/navigation has not been separately accepted;
+  this increment must not be treated as closing that next work package.
 
 ### Backend Release Register — Device Firmware Compatibility
 

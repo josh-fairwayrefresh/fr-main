@@ -32,7 +32,9 @@ passed. Both permanent pilot Auth identities are activated using passwords
 entered through the hidden local terminal flow, have equal course memberships,
 and have no global Admin claims. The 57 imported active On Cart products and
 stable public API slug are present in sandbox. The first menu remains
-unpublished for CPO acceptance. The Inventory board uses a
+unpublished. On 2026-10-11 the CPO reviewed and accepted the current deployed
+Inventory UI as a stable development baseline; this is not sprint completion.
+The Inventory board uses a
 horizontal All Products/top-level category filter across the unchanged three
 state columns, a USD-only Price ($) input, separate edit/publish action groups,
 automatic server synchronization, and a title without internal IDs. Production
@@ -46,6 +48,11 @@ Actual commit-failure rollback was not tested against real Firestore because
 the CPO has reserved the first publication for hands-on testing. The in-memory
 atomic-failure test is distinct evidence and is not represented as a live
 transaction test.
+
+Customer-scoped Cart UI authorization/navigation remains the next increment.
+The current conditional Operator Inventory link is preliminary and is not
+represented as CPO-accepted end-to-end Cart-to-Inventory integration. Preserve
+existing Cart request behavior while completing that work.
 
 The CPO-resolved mappings are applied in
 `docs/catalogs/monarch-bay-inventory-import.csv`: the source entry “Seltzers”
