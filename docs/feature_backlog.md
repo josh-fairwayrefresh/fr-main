@@ -10,29 +10,27 @@ backlog items.
 
 ## Current: Pilot 1.1 User Authorization and User Management
 
-**Status: Implemented and deployed to sandbox; CPO authenticated browser
-acceptance remains open.** The current source contract is one authoritative
-`user_access/{uid}` schema-v2 record with a global `admin` boolean or a
-Customer assignment and Course restrictions. An empty customer `course_ids`
-list means all Courses belonging to that Customer; missing, malformed, and
-unversioned records deny access. Cart and Inventory share the Firebase Auth
-session and entitlement; Admin remains internal-only. Admin User Management
-assigns access to existing Auth users without creating accounts or handling
-passwords.
+**Status: CPO Sandbox Accepted — Integrated into `origin/main`.** The current
+source contract is one authoritative `user_access/{uid}` schema-v2 record with a
+global `admin` boolean or a Customer assignment and Course restrictions. An
+empty customer `course_ids` list means all Courses belonging to that Customer;
+missing, malformed, and unversioned records deny access. Cart and Inventory share
+the Firebase Auth session and entitlement; Admin remains internal-only. Admin
+User Management assigns access to existing Auth users without creating accounts
+or handling passwords.
 
-Sandbox receiver `fairway-button-receiver-sandbox-00012-pcx` and Admin
-`fairway-admin-sandbox-00008-fxz` serve 100%; schema-v2 Firestore Rules are
-deployed, all three composite indexes are ready, and the four sandbox Auth
-accounts have valid v2 records (one global Admin and three assigned to
-`CUST-0003` / `COURSE-0002`). Backend tests: 94 passed; frontend tests: 47
-passed; sandbox build passed. The assigned course has 57 active products and
-three retained archived products. Production remains unchanged on receiver
-`fairway-button-receiver-00024-659` and Admin `fairway-admin-00012-52t`; the
-published production menu still responds with 57 products. No sandbox push
-delivery service is configured, so notification delivery filtering is
-automated-test verified only. Customer/Admin authenticated browser/API
-acceptance remains a CPO action; do not mark this increment Done before that
-acceptance.
+The CPO confirmed sandbox acceptance of Admin authentication, User Management,
+customer-user authorization, customer-user denial from Admin, and course
+assignment changes and persistence. Sandbox receiver
+`fairway-button-receiver-sandbox-00014-69d` and Admin
+`fairway-admin-sandbox-00010-8rp` serve 100%; schema-v2 Firestore Rules are
+deployed, all three composite indexes are ready, and sandbox accounts have valid
+v2 records. Backend tests: 94 passed; frontend tests: 47 passed; sandbox build
+passed. Production remains on receiver `fairway-button-receiver-00024-659` and
+Admin `fairway-admin-00012-52t`; the published production menu still responds
+with 57 products. The accepted increment has been integrated and pushed to
+`origin/main`. Pilot 1.1 production release tagging will follow production
+deployment and baseline reconciliation.
 
 ## Completed: Embarrassingly Small Runtime — Stable Pilot Baseline 1.0
 

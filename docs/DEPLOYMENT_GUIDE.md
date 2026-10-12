@@ -243,14 +243,15 @@ returned `200` with published snapshot version 2 and 57 products, all `on_cart`.
 The sandbox public-menu endpoint remains unpublished (`404`); no menu was
 published.
 
-Automated authorization and notification tests pass, but authenticated
-customer/Admin API and browser acceptance have not been performed with a real
-Firebase session. Sandbox has no Web Push notifier/VAPID deployment, so
-delivery-time notification filtering is test-verified only. Keep Pilot 1.1
-acceptance open until the CPO signs into the sandbox, verifies Cart and
-Inventory access and course isolation, and confirms Admin denial for a
-customer account. Production remains on its prior authorization and notifier
-deployment until separately authorized.
+Automated authorization and notification tests pass. CPO authenticated sandbox
+acceptance confirmed Admin authentication, User Management, customer-user
+authorization, customer-user denial from Admin, and course assignment updates
+and persistence. Sandbox has no Web Push notifier/VAPID deployment, so
+delivery-time notification filtering is test-verified only. The accepted
+implementation is integrated and pushed to `origin/main`. Production remains on
+its prior authorization and notifier deployment until separately authorized;
+Pilot 1.1 production release tagging will follow production deployment and
+baseline reconciliation.
 
 #### Historical Schema-v1 Authorization Rollout — 2026-10-12 (Superseded)
 
