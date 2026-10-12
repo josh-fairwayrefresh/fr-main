@@ -91,7 +91,7 @@ function toDate(value) {
 
 function setCorsHeaders(res) {
   res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
@@ -1369,7 +1369,7 @@ function createFairwayHandlers(db, {
       res.set('Access-Control-Allow-Origin', origin);
     }
     if (req.method === 'OPTIONS') {
-      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
       res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
       return res.status(204).send('');
     }

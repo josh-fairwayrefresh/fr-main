@@ -222,6 +222,7 @@ test('production Admin environment and dedicated handler fail closed', async () 
     }), preflight);
     assert.strictEqual(preflight.statusCode, 204);
     assert.strictEqual(preflight.headers['Access-Control-Allow-Origin'], origin);
+    assert.match(preflight.headers['Access-Control-Allow-Methods'], /PUT/);
   }
 });
 
@@ -241,6 +242,7 @@ const ADMIN_ROUTES = [
   { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/service' },
   { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/commission' },
   { method: 'GET', path: '/api/v1/admin/export/device-sim' },
+  { method: 'PUT', path: '/api/v1/admin/users/test-uid/access', body: { admin: false, customer_id: 'CUST-0001', course_ids: [] } },
 ];
 
 test('every admin route rejects non-admin tokens before any write', async () => {
@@ -662,11 +664,12 @@ test('device-SIM CSV includes fleet mapping and excludes all credential data', a
   assert.strictEqual(res.body.includes('secret-digest'), false);
 });
 
-test('CORS advertises GET and PATCH for admin browser clients', async () => {
+test('CORS advertises GET, POST, PUT, and PATCH for admin browser clients', async () => {
   const db = new FakeFirestore();
   const res = createResponse();
   await createFairwayHandlers(db).fairwayButtonReceiver(createRequest({ method: 'OPTIONS', path: '/' }), res);
   assert.match(res.headers['Access-Control-Allow-Methods'], /GET/);
+  assert.match(res.headers['Access-Control-Allow-Methods'], /PUT/);
   assert.match(res.headers['Access-Control-Allow-Methods'], /PATCH/);
 });
 

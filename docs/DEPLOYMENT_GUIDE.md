@@ -210,14 +210,15 @@ Cart Operations without another sign-in.
 
 Schema-v2 is the current source authorization contract and is deployed to the
 sandbox only. The sandbox receiver revision
-`fairway-button-receiver-sandbox-00013-bt7` and Admin revision
-`fairway-admin-sandbox-00009-kzl` each serve 100% of traffic. Firestore Rules
+`fairway-button-receiver-sandbox-00014-69d` and Admin revision
+`fairway-admin-sandbox-00010-8rp` each serve 100% of traffic. Firestore Rules
 compile and require schema-v2; unversioned records cannot authorize Firestore
 request reads. All three sandbox composite indexes are `READY`, including the
 Customer/Course/received-time index used by Cart queries.
 The sandbox backend service account (`fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com`)
 has `roles/datastore.user` and `roles/firebaseauth.admin` (for Auth user listing).
 Firebase ID token verification performs local JWT validation and explicit project binding.
+CORS preflight advertises GET, POST, PUT, PATCH, and DELETE on Admin routes.
 
 A read-only Auth/Firestore audit found four sandbox Auth accounts and four
 matching, valid schema-v2 access records: one global Admin and three customer
