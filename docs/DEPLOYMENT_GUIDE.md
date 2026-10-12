@@ -694,22 +694,152 @@ as CPO-accepted.
 #### Final Baseline and Production-Readiness Status
 
 This CPO-accepted increment was established as the new canonical Git
-baseline on `main` (superseding `d4dd48db9e3bcdc6814d2d902519a7e8593e5bd0`);
-see `docs/feature_backlog.md` for the accepted commit record. The
+baseline on `main` (superseding `d4dd48db9e3bcdc6814d2d902519a7e8593e5bd0`
+with commit `db183a17197e2659132759d1115420c1a7cc1181`); see
+`docs/feature_backlog.md` for the accepted commit record. The
 two-application-entry-point architecture above (Cart UI, Admin UI; Inventory
 as a Cart UI feature with no separate login) is now the permanent canonical
 architecture, not a point-in-time correction.
 
-Remaining before any production release of this increment: the first public
-menu publication (explicitly reserved for CPO hands-on action, still
-unpublished), Google Sites embedding validation, validating the two existing
-Monarch Bay staff accounts (`monarch_fnb@fairwayrefresh.com`,
-`monarch_cart@fairwayrefresh.com`) through this same Cart-to-Inventory
-integration, and an explicit, separately authorized decision to deploy this
-Inventory work to the production Admin/Hosting/Firestore environment (not
-authorized or performed as part of this acceptance). No production
-resource, Cloud Run service, Firebase Auth account, course permission, or
-firmware was modified to reach this sandbox acceptance.
+Google Sites embedding validation and validating the two existing Monarch
+Bay staff accounts (`monarch_fnb@fairwayrefresh.com`,
+`monarch_cart@fairwayrefresh.com`) through this Cart-to-Inventory
+integration remain separately open; see the first-release record
+immediately below for what has now shipped to production.
+
+**Current production public-menu state (verified 2026-10-12):** published
+version 2 is live at
+`https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`.
+It contains 57 products in six categories, with "Seltzers" under Canned
+Cocktails and no Craft Cocktails category. The live page displays
+"LAST UPDATED: 10/12/2026 12:49 AM PDT." The release and correction history
+follows; earlier pre-release sections record the state at the time of those
+sandbox deployments.
+
+#### First Live Public Menu Release — Monarch Bay GC / Tony Lema Course (2026-10-12)
+
+CPO-authorized production release of the public Cart food and beverage menu,
+executed as one systematic workflow from the already CPO-accepted commit
+`db183a1` (no source changes beyond this release were made or committed).
+
+**Production data gap found and resolved.** The entire Inventory catalog
+built during the sprint existed only in the sandbox Firestore project
+(`fairway-refresh-sandbox-260930`), under sandbox's own independently
+allocated `CUST-0003`/`COURSE-0002`. Production Firestore
+(`savvy-kit-496703-r5`) had zero Inventory products for its Monarch Bay
+course. Critically, production's real Monarch Bay GC / Tony Lema Course
+already exists as **`CUST-0001`/`COURSE-0001`** (production's own first
+customer, allocated before the sandbox project existed) — not
+`CUST-0003`/`COURSE-0002`. With explicit CPO authorization in response to
+this finding, the approved `docs/catalogs/monarch-bay-inventory-import.csv`
+(57 rows, unchanged) was imported directly into production's real
+`CUST-0001`/`COURSE-0001` via the same `inventory.createProduct` function
+the authorized API route uses (dry-run confirmed 0 existing products before
+import; all 57 created with 0 failures), reproducing the same 7
+categories/8 Craft Beers subcategories as sandbox. No Firebase Auth account
+or `inventory_course_memberships`/`operator_course_assignments` record was
+created or modified for this release; the import, slug configuration, and
+publish were performed as direct, attributed backend actions
+(`vsc-engineering-release-2026-10-12`), not through a new user permission
+grant, consistent with the release authorization's exclusion of "existing
+production user or permission changes."
+
+**Publication:** `inventory.configurePublicMenuSlug` reserved slug
+`monarch-bay` for `CUST-0001`/`COURSE-0001` (previously unconfigured in
+production); `inventory.publishMenu` created the first published snapshot —
+**version 1**, `inventory_revision` 57, all 57 products (all imported as
+`on_cart`, matching the CSV; no product outside On Cart exists yet to
+exclude). This is the course's first-ever production publication.
+
+**Production deployment — smallest scope the existing architecture
+supports.** The public menu is one route within the same single-bundle Cart
+UI SPA and is served by the same `fairwayAdmin` Cloud Run service as the
+rest of the Admin API; neither can be deployed independently of their
+respective existing codebases. Deployed: (1) production Hosting
+(`savvy-kit-496703-r5`, `npx firebase-tools deploy --only hosting --project
+savvy-kit-496703-r5`) with the production build of the accepted `main`
+commit; (2) production Admin API (`fairway-admin`,
+`gcloud run deploy fairway-admin --project=savvy-kit-496703-r5
+--source=fairway_backend/cloudrun_receiver --function=fairwayAdmin`). The
+production receiver (`fairway-button-receiver`, Cart Operator/device path)
+was not touched; its revision (`fairway-button-receiver-00023-dff`) was
+confirmed unchanged before and after this release.
+
+A pre-existing, deliberate safety configuration was discovered and
+respected: `fairway-admin`'s production traffic was explicitly pinned to a
+specific stable revision (`fairway-admin-00008-sjt`, the documented "Stable
+Pilot Baseline 1.0" identity) rather than auto-following new deploys. The
+newly built revision (`fairway-admin-00011-8ks`) was first verified healthy
+via a temporary Cloud Run traffic tag (`candidate`) and tested in isolation
+— public menu `200` with 57 products, unauthenticated Inventory/Fleet routes
+still correctly `401`, CORS preflight from `https://app.fairwayrefresh.com`
+correct including the new `DELETE` method — before deliberately migrating
+100% of traffic to it and removing the temporary tag. Cart Operator
+functionality is served entirely by the separate, untouched receiver
+service and was not implicated.
+
+**Target address finding:** the task's stated target,
+`https://www.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`, is a
+Google Sites property (confirmed via its Google-specific CSP/frame headers),
+not Firebase Hosting; that exact path currently returns `404` there because
+the corresponding Google Sites page/embed has never been created — a
+content/CMS action on a third-party site builder, outside this engineering
+deployment's reach, consistent with "Actual embedding inside Google Sites
+remains outstanding" recorded earlier in this document. The smallest viable
+supported alternative, already fully live and verified below, is the
+existing production Fairway Refresh application origin:
+**`https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`**
+— Firebase Hosting's existing catch-all rewrite serves this route with no
+routing or hosting configuration change.
+
+**Live validation (real browser, unauthenticated, 2026-10-12):**
+
+The following category breakdown records the initial version 1 validation;
+the corrected version 2 state is recorded in the post-release correction
+below.
+
+| Check | Result |
+|---|---|
+| AC1 loads without login | Confirmed — no auth UI after load; a `Sign out` button only appears momentarily as the shared loading fallback's incidental artifact, not part of the rendered public menu |
+| AC2 identifies course | "Tony Lema Course" / Monarch Bay Golf Club branding confirmed |
+| AC3/AC4 On Cart only | All 57 rendered products show "Available" (On Cart); none excluded since none are Sold Out/In Inventory/Archived yet |
+| AC5 names/categories/subcategories/prices | Verified against the CSV: 7 categories (Canned Cocktails 9, Cocktails 5, Craft Beers 25, Craft Cocktails 1, Food 3, Non-Alcoholic 7, Shots 7 = 57) and all 8 Craft Beers subcategories exactly match; all prices blank as approved |
+| AC6 mobile rendering | 390×844 viewport: no horizontal overflow, category cards and product lists render cleanly |
+| AC7 draft/public separation | Structural guarantee verified by source/test inspection (immutable `published_menus/{version}` snapshot; public read only resolves the `published_version` pointer, never live draft state) — not re-validated by making a live draft edit against this first real publication |
+| AC8 Cart Operations unaffected | Receiver service untouched (`fairway-button-receiver-00023-dff`, unchanged); unauthenticated operator bootstrap still `401` |
+| AC9 no existing data modified | `CUST-0001`/`COURSE-0001` document `updated_at` timestamps confirmed unchanged by this release (only new Inventory subcollections were added); no Firebase Auth account, `operator_course_assignments`, or `inventory_course_memberships` record was created or modified |
+| AC10 existing architecture only | Served via the existing `/cartmenus/{slug}` route, existing Admin API, existing public-menu-slug mechanism; no third application entry point or new menu system introduced |
+
+**Known limitations:** Google Sites embedding at the originally-targeted
+`www.fairwayrefresh.com` path remains outstanding (separate, non-engineering
+action). The two existing Monarch Bay staff accounts have not been
+validated against production Inventory access as part of this release (no
+membership grant was made, consistent with this release's "no existing
+production user or permission changes" boundary); that remains a distinct,
+separately authorized activity if production Inventory-dashboard access for
+those accounts is wanted.
+
+**Post-release correction — 2026-10-12.** The CPO identified a catalog
+error immediately after reviewing the live menu: "Seltzers" was miscategorized
+under a "Craft Cocktails" category that should not exist at all; it belongs
+under "Canned Cocktails". Corrected in the approved
+`docs/catalogs/monarch-bay-inventory-import.csv` (moved the row), in
+production (`CUST-0001`/`COURSE-0001`: `updateProduct` moved Seltzers to
+Canned Cocktails, then `deleteCategory` removed the now-empty "Craft
+Cocktails" category — the same archived-product-aware emptiness check
+proved out again), and in sandbox (`CUST-0003`/`COURSE-0002`, for
+consistency; its one archived "Michele" product under the old category did
+not block deletion, and the sandbox menu's `published_version` correctly
+remained `0`, unaffected). Production was republished as **version 2** (57
+products across six categories: Canned Cocktails 10, Cocktails 5, Craft
+Beers 25, Food 3, Non-Alcoholic 7, Shots 7; Craft Cocktails removed) and
+reverified live in a real browser at
+`https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`:
+Canned Cocktails correctly lists all 10 items including Seltzers, and no
+Craft Cocktails category or products remain. The live menu displays
+"LAST UPDATED: 10/12/2026 12:49 AM PDT." No product was deleted; no other
+category or product was affected.
+
 
 ### Backend Release Register — Device Firmware Compatibility
 

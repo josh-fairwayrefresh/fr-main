@@ -31,14 +31,15 @@ at `https://fairway-refresh-sandbox-260930.web.app`; direct route smoke checks
 passed. Both permanent pilot Auth identities are activated using passwords
 entered through the hidden local terminal flow, have equal course memberships,
 and have no global Admin claims. The 57 imported active On Cart products and
-stable public API slug are present in sandbox. The first menu remains
+stable public API slug are present in sandbox. The sandbox menu remains
 unpublished. On 2026-10-11 the CPO reviewed and accepted the current deployed
 Inventory UI as a stable development baseline; this is not sprint completion.
 The Inventory board uses a
 horizontal All Products/top-level category filter across the unchanged three
 state columns, a USD-only Price ($) input, separate edit/publish action groups,
 automatic server synchronization, and a title without internal IDs. Production
-remains unchanged.
+was unchanged at this sandbox-acceptance point; the subsequent live public-menu
+release and catalog correction are recorded below.
 
 **Final CPO acceptance — 2026-10-12:** following the Cart UI / Inventory
 integration (unified Cart-first login, Cart-to-Inventory navigation), the
@@ -47,20 +48,20 @@ management/deletion, the Add Product button fix, subcategory filtering),
 and the archived-product deletion bug fix below, the CPO completed a full
 sandbox browser acceptance pass and confirmed the functionality works. This
 sandbox-accepted implementation is the new canonical Git baseline on `main`.
-Production deployment of this increment, Google Sites embedding, validating
-the two existing Monarch Bay staff accounts, and the first public menu
-publication remain separate, explicitly not-yet-authorized activities — see
-`docs/DEPLOYMENT_GUIDE.md` ("Final Baseline and Production-Readiness
-Status").
+At sandbox acceptance, production deployment, Google Sites embedding, testing
+the two existing Monarch Bay staff accounts, and public-menu publication were
+still outstanding. The CPO subsequently authorized the first live menu release
+and its catalog correction; current release state and remaining limitations
+are recorded below and in `docs/DEPLOYMENT_GUIDE.md`.
 Detailed deployment and validation evidence are in
 `docs/DEPLOYMENT_GUIDE.md`; user behavior is owned by `docs/UX_SPECIFICATION.md`.
 
 Real Firestore membership checks, product import/persistence, concurrent
 last-committed-save-wins edits, and draft/public isolation were exercised.
-Actual commit-failure rollback was not tested against real Firestore because
-the CPO has reserved the first publication for hands-on testing. The in-memory
-atomic-failure test is distinct evidence and is not represented as a live
-transaction test.
+At sandbox acceptance, actual commit-failure rollback had not been tested
+against real Firestore because the CPO had reserved the first publication for
+hands-on testing. The in-memory atomic-failure test is distinct evidence and
+is not represented as a live transaction test.
 
 Customer-scoped Cart UI authorization/navigation integration (unified Cart
 login covering `/`, `/requests/{requestId}`, and `/inventory`; the Cart
@@ -96,15 +97,33 @@ working as designed but visible only for "Craft Beers" (the only category
 with subcategorized products in the real catalog) — see
 `docs/DEPLOYMENT_GUIDE.md` for full detail on both findings. These four
 corrections, and the fix above, are sandbox-deployed, automated/API-
-verified, and **CPO-browser-accepted (2026-10-12)**. First public menu
-publication, Google Sites embedding, validating the two existing Monarch
-Bay staff accounts through this integration, and production deployment of
-this increment all remain separate, not-yet-authorized activities.
+verified, and **CPO-browser-accepted (2026-10-12)**.
+
+**First live public menu release — 2026-10-12.** The CPO authorized a
+production release of the public Cart menu for Monarch Bay GC / Tony Lema
+Course, completed as one workflow from the accepted commit `db183a1`. This
+required discovering and resolving a real production data gap (the
+Inventory catalog only existed in sandbox, and production's real Monarch
+Bay course is `CUST-0001`/`COURSE-0001`, not sandbox's `CUST-0003`/
+`COURSE-0002`); the CPO explicitly authorized importing the same approved
+57-product CSV into production's real course. The initial publication was
+version 1 (57 products, all On Cart); following the CPO-requested category
+correction it was republished as version 2. Version 2 is the current live
+snapshot, with 57 products across six categories, verified by real-browser
+validation at
+`https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`.
+See `docs/DEPLOYMENT_GUIDE.md` ("First Live Public Menu Release — Monarch
+Bay GC / Tony Lema Course") for full detail, including the Google Sites
+embedding gap at the originally-targeted `www.fairwayrefresh.com` address
+(a separate, non-engineering action) and confirmation that Cart Operations,
+existing production data, and existing user/course permissions were
+unaffected. Google Sites embedding and validating the two existing Monarch
+Bay staff accounts through this integration remain separate activities.
 
 The CPO-resolved mappings are applied in
-`docs/catalogs/monarch-bay-inventory-import.csv`: the source entry “Seltzers”
-is under Craft Cocktails, Candy is under Food, and the stray leading “s” is
-discarded. Product names are preserved exactly. The normalized file contains
+`docs/catalogs/monarch-bay-inventory-import.csv`: “Seltzers” is under Canned
+Cocktails, Candy is under Food, and the stray leading “s” is discarded.
+Product names are preserved exactly. The normalized file contains
 57 product rows; every product starts On Cart, and no brands, descriptions, or
 prices were invented. The source attachment is not copied into the repository.
 USD currency code confirmation is still needed before entering any non-null
