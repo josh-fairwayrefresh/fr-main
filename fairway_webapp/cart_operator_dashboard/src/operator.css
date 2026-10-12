@@ -18,6 +18,8 @@
 .op-header nav { align-self: stretch; display: flex; gap: 22px; }
 .op-header nav button { padding: 0 4px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--op-muted); font-size: 11px; font-weight: 800; cursor: pointer; }
 .op-header nav button.active { border-color: var(--op-green); color: var(--op-ink); }
+.op-inventory { min-height: 38px; padding: 0 9px; border: 1px solid var(--op-line); border-radius: 5px; display: inline-flex; align-items: center; gap: 6px; color: var(--op-ink); font-size: 10px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.op-inventory:hover { background: #edf4ef; }
 .op-course-select { display: grid; gap: 3px; color: var(--op-muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .op-course-select select { min-height: 34px; max-width: 180px; border: 1px solid var(--op-line); border-radius: 4px; background: #fff; color: var(--op-ink); font-size: 11px; }
 .op-status { min-height: 32px; padding: 0 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 7px; background: #ecefed; color: #647068; font-size: 11px; font-weight: 800; white-space: nowrap; }

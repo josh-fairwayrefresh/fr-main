@@ -81,9 +81,10 @@ Request A may still be active when Request B is created; that is valid. The oper
 
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 
-Product Brief v1.2 defines this capability. The backend foundation is being
-implemented in Increment 1; staff and golfer-facing screens are not yet
-implemented.
+Product Brief v1.2 defines this capability. Increment 1 backend contracts and
+Increment 2 Inventory/Public Menu screens are implemented in repository source
+for local validation; they have not been deployed. Deployment and validation
+status are owned by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
 - The F&B Manager and Cart Operator retain distinct accounts but have identical
    rights to view, add, edit, move, archive, preview, and publish products for
@@ -106,6 +107,39 @@ implemented.
    price are optional. Blank prices remain blank. Approved CSV imports begin On
    Cart and preserve accepted names/category relationships without fabricated
    details.
+- The Inventory entry at `/inventory` requires Firebase sign-in and assigned
+   course Inventory membership only. It does not require the global Admin claim
+   or Cart Operator assignment. Assigned Cart Operators may enter Inventory
+   from the Operator application; membership does not grant unrelated roles.
+- Inventory edits are sent to the backend and displayed as saved only after a
+   successful response. Product fields autosave; availability can be changed
+   with a state selector or drag-and-drop. The board refreshes from the server
+   while open so other authorized staff edits become visible. Publish remains
+   explicit; draft preview does not alter the public menu.
+- The Inventory dashboard title is **CART INVENTORY MANAGEMENT DASHBOARD**.
+   The Customer name appears above and the readable Course name below it;
+   internal Firestore IDs are not displayed. A horizontal category-filter row
+   contains **All Products**
+   followed by the active Course's top-level categories; selecting one filters
+   products across all three state columns, and All Products restores all active
+   products. There is no free-text product search or nested category navigation
+   on the inventory board.
+- Catalog actions pair **+ Category** with **+ Product**. **Preview Draft** and
+   **Publish Menu** are a separate adjacent action group. The three state
+   columns remain the sole product organization; subcategory remains product
+   metadata and does not create nested inventory groups.
+- The optional Inventory price control is **Price ($)**. It converts a valid
+   dollar amount to the existing `{ amount_minor, currency_code: "USD" }`
+   representation. Blank remains null. Existing non-USD values are preserved
+   unchanged while other fields are edited.
+- Inventory automatically synchronizes from the server while open and when the
+   browser regains focus. An open editor adopts server changes in untouched
+   fields while preserving that user's active field edits; there is no manual
+   Refresh control, edit lock, or conflict warning.
+- The anonymous course menu uses the last published snapshot. Its categories,
+   product counts, states, optional descriptions/prices, and Last Updated value
+   come from that snapshot; the timestamp is formatted in the configured Course
+   timezone. In Inventory and archived products are not presented.
 
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.

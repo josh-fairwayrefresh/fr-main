@@ -23,27 +23,38 @@ The accepted runtime retains the Prototype 3.2 golfer UX, scoped-awake execution
 | WP7 | Second-device deployment spike | Complete | FRB-0002 remains the validated Prototype 3.2 field reference. Historical Health commissioning evidence does not imply a current Health runtime. |
 | WP8 | Firmware modular decomposition + physical validation | Complete | `main.c` decomposed into single-responsibility modules (`button_ux.c`, `golfer_txn.c`, `golfer_protocol.c`, `http_transport.c`, `modem_service.c`, `power_policy.c`, `transaction_scheduler.c`; `command_protocol.c` extended to own both directions of the COMPLETE wire protocol); no protocol or product-behavior change. CPO-confirmed physical validation on FRB-0002: golfer button press reached the operator dashboard with a valid `request_id`, and a CPO-initiated COMPLETE command was polled, acknowledged, and cleared the active demand window. See the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md` ("Embarrassingly Small Runtime (Health Retirement + Modular Rewrite)"). Repeat-press transport/persistence and Prototype 3.3 PPK2 consumption characterization remain outstanding; local five-minute repeat feedback has prior FRB-0002 validation. |
 
-## Active Work Package: Cart Inventory Management & Golfer Menu — Increment 1
+## Active Work Package: Cart Inventory Management & Golfer Menu — Increments 1–2
 
-**Status:** backend foundation implemented in source and locally tested; not
-deployed. It adds course-scoped Inventory membership/API, product/category
-persistence, server-ordered last-saved-change-wins revisions, actor audit,
-atomic immutable menu publication, and a read-only public snapshot endpoint.
-Existing device request handling is unchanged. The source-defined route/data
-contract is owned by `docs/DEPLOYMENT_GUIDE.md`; intended user behavior is owned
-by `docs/UX_SPECIFICATION.md`.
+**Status:** Inventory backend/UI and the separate Admin API are deployed to the
+isolated sandbox and tested against real Firestore. Sandbox Hosting is deployed
+at `https://fairway-refresh-sandbox-260930.web.app`; direct route smoke checks
+passed. Both permanent pilot Auth identities are activated using passwords
+entered through the hidden local terminal flow, have equal course memberships,
+and have no global Admin claims. The 57 imported active On Cart products and
+stable public API slug are present in sandbox. The first menu remains
+unpublished for CPO acceptance. The Inventory board uses a
+horizontal All Products/top-level category filter across the unchanged three
+state columns, a USD-only Price ($) input, separate edit/publish action groups,
+automatic server synchronization, and a title without internal IDs. Production
+remains unchanged.
+Detailed deployment and validation evidence are in
+`docs/DEPLOYMENT_GUIDE.md`; user behavior is owned by `docs/UX_SPECIFICATION.md`.
 
-Increment 1 does not include staff inventory screens, public menu presentation,
-CSV import, logos, membership provisioning for the two pilot accounts, menu-slug
-setup, or publication of a production menu. Those are dependent later work and
-must not be treated as already available in production.
+Real Firestore membership checks, product import/persistence, concurrent
+last-committed-save-wins edits, and draft/public isolation were exercised.
+Actual commit-failure rollback was not tested against real Firestore because
+the CPO has reserved the first publication for hands-on testing. The in-memory
+atomic-failure test is distinct evidence and is not represented as a live
+transaction test.
 
-Before catalog import, review Product Brief v1.2 against the supplied CSV:
-“Seltzers” is entered on a Brands row, “Candy” lacks an explicit Food Type key,
-and the first CSV cell contains the stray prefix “s corrected.” Do not guess at
-these mappings. The USD currency code for future non-null prices also requires
-CPO confirmation; current source permits only an explicit currency code with a
-price, and no price is invented.
+The CPO-resolved mappings are applied in
+`docs/catalogs/monarch-bay-inventory-import.csv`: the source entry “Seltzers”
+is under Craft Cocktails, Candy is under Food, and the stray leading “s” is
+discarded. Product names are preserved exactly. The normalized file contains
+57 product rows; every product starts On Cart, and no brands, descriptions, or
+prices were invented. The source attachment is not copied into the repository.
+USD currency code confirmation is still needed before entering any non-null
+price; the current import leaves all price fields blank.
 
 ## Future Backlog (Post Fleet Administration)
 

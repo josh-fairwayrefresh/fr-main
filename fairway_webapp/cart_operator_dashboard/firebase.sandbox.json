@@ -1,0 +1,18 @@
+{
+  "hosting": {
+    "site": "fairway-refresh-sandbox-260930",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "firebase.sandbox.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

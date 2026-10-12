@@ -1,6 +1,6 @@
 const SANDBOX_PROJECT_PREFIX = 'fairway-refresh-sandbox-';
 const PRODUCTION_PROJECT_ID = 'savvy-kit-496703-r5';
-const PRODUCTION_PROJECT_NUMBER = '936892386735';
+import { isExpectedCloudRunUrl } from './cloudRunService.mjs';
 
 function required(name) {
   const values = {
@@ -49,23 +49,10 @@ if (!firebaseConfig.authDomain.includes(firebaseConfig.projectId)) {
 if (!firebaseConfig.storageBucket.includes(firebaseConfig.projectId)) {
   throw new Error('Firebase storage bucket does not match the configured sandbox project');
 }
-if (!apiBaseUrl.startsWith('https://')) {
-  throw new Error('Sandbox API base URL must use HTTPS');
-}
-const apiUrl = new URL(apiBaseUrl);
-const expectedReceiverPrefix = fairwayEnvironment === 'production'
-  ? `fairway-button-receiver-${PRODUCTION_PROJECT_NUMBER}`
-  : 'fairway-button-receiver-sandbox';
-if (!apiUrl.hostname.startsWith(expectedReceiverPrefix) || !apiUrl.hostname.endsWith('.run.app')) {
+if (!isExpectedCloudRunUrl(apiBaseUrl, fairwayEnvironment, 'receiver')) {
   throw new Error('API URL does not match the configured Fairway environment');
 }
-const adminApiUrl = new URL(adminApiBaseUrl);
-const expectedAdminPrefix = fairwayEnvironment === 'production'
-  ? `fairway-admin-${PRODUCTION_PROJECT_NUMBER}`
-  : 'fairway-button-receiver-sandbox';
-if (adminApiUrl.protocol !== 'https:' ||
-    !adminApiUrl.hostname.startsWith(expectedAdminPrefix) ||
-    !adminApiUrl.hostname.endsWith('.run.app')) {
+if (!isExpectedCloudRunUrl(adminApiBaseUrl, fairwayEnvironment, 'admin')) {
   throw new Error('Admin API URL does not match the configured Fairway environment');
 }
 

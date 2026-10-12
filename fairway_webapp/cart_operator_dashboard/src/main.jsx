@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { collection, onSnapshot, orderBy, query, limit, where } from 'firebase/firestore';
 import {
   getRedirectResult,
   getIdTokenResult,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithRedirect,
   signOut,
@@ -17,10 +18,14 @@ import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
 import OperatorDesignReview from './operator-design/OperatorDesignReview';
 import { APP_MODE, modeForPath, resolveEntry } from './lib/appEntry.mjs';
+import { inventoryRequest } from './lib/inventoryApi.mjs';
 import { operatorRequest } from './lib/operator';
 import './styles.css';
 
 export const API_BASE_URL = apiBaseUrl;
+
+const InventoryApp = lazy(() => import('./InventoryApp'));
+const PublicMenuApp = lazy(() => import('./PublicMenuApp'));
 
 function timestampToDate(timestamp) {
   if (!timestamp?.toDate) {
@@ -124,14 +129,33 @@ async function updateRequestStatus(requestId, action) {
   return response.text();
 }
 
-function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
+function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn, onPasswordSetup }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [setupMessage, setSetupMessage] = useState('');
+  const [setupPending, setSetupPending] = useState(false);
   const isAdminEntry = mode === APP_MODE.ADMIN;
+  const isInventoryEntry = mode === APP_MODE.INVENTORY;
 
   async function handleEmailSubmit(event) {
     event.preventDefault();
     await onEmailSignIn(email, password);
+  }
+
+  async function handlePasswordSetup() {
+    if (!email.trim()) {
+      setSetupMessage('Enter the approved account email first.');
+      return;
+    }
+    setSetupPending(true);
+    try {
+      await onPasswordSetup(email.trim());
+      setSetupMessage('If this account is provisioned, a password setup link has been emailed.');
+    } catch (_error) {
+      setSetupMessage('Unable to send a password setup email. Contact the Fairway administrator.');
+    } finally {
+      setSetupPending(false);
+    }
   }
 
   return (
@@ -140,19 +164,19 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
         <a href="/" aria-label="Fairway Refresh home">
           <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
         </a>
-        <span>{isAdminEntry ? 'Administration' : 'Cart operations'}</span>
+        <span>{isAdminEntry ? 'Administration' : isInventoryEntry ? 'Inventory management' : 'Cart operations'}</span>
       </header>
       <div className="auth-layout">
         <section className="auth-intro" aria-labelledby="auth-title">
           <p>COURSE SERVICE OPERATIONS</p>
-          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart Operator access'}</h1>
-          <span>{isAdminEntry ? 'Authorized fleet administration.' : 'Sign in to begin course service.'}</span>
+          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : isInventoryEntry ? 'Inventory staff access' : 'Cart Operator access'}</h1>
+          <span>{isAdminEntry ? 'Authorized fleet administration.' : isInventoryEntry ? 'Sign in to manage assigned course inventory.' : 'Sign in to begin course service.'}</span>
         </section>
         <div className="auth-entry">
-          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}>
+          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : isInventoryEntry ? 'Inventory staff sign in' : 'Cart Operator sign in'}>
             <div className="auth-panel-heading">
               <span>AUTHORIZED ACCESS</span>
-              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart Operator sign in'}</h2>
+              <h2>{isAdminEntry ? 'Admin sign in' : isInventoryEntry ? 'Inventory staff sign in' : 'Cart Operator sign in'}</h2>
             </div>
             <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
@@ -182,6 +206,13 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
               </button>
             </form>
 
+            {isInventoryEntry && <div className="inventory-password-setup">
+              <button type="button" onClick={handlePasswordSetup} disabled={setupPending}>
+                {setupPending ? 'Sending…' : 'Set or reset password'}
+              </button>
+              {setupMessage && <p role="status">{setupMessage}</p>}
+            </div>}
+
             <div className="login-divider">or</div>
 
             <button className="google-secondary-button" onClick={onGoogleSignIn}>
@@ -198,9 +229,11 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
               </p>
             )}
           </section>
-          <a className="mode-entry-link" href={isAdminEntry ? '/' : '/admin'}>
-            {isAdminEntry ? 'Cart Operator Login' : 'Admin Login'}
-          </a>
+          <nav className="mode-entry-links" aria-label="Other Fairway Refresh sign-in options">
+            {isAdminEntry ? <a className="mode-entry-link" href="/">Cart Operator Login</a> : isInventoryEntry
+              ? <a className="mode-entry-link" href="/">Cart Operator Login</a>
+              : <><a className="mode-entry-link" href="/admin">Admin Login</a><a className="mode-entry-link" href="/inventory">Inventory Staff Login</a></>}
+          </nav>
         </div>
       </div>
       <footer className="auth-footer"><span>Fairway Refresh</span><span>Course service operations</span></footer>
@@ -549,6 +582,10 @@ function App() {
   const [operatorConfig, setOperatorConfig] = useState(null);
   const [operatorError, setOperatorError] = useState('');
   const [operatorState, setOperatorState] = useState('not_requested');
+  const [inventoryCourses, setInventoryCourses] = useState([]);
+  const [inventoryState, setInventoryState] = useState('not_requested');
+  const [inventoryError, setInventoryError] = useState('');
+  const [canManageInventory, setCanManageInventory] = useState(false);
   const [focusedRequestId] = useState(() => {
     const match = window.location.pathname.match(/^\/requests\/([^/]+)$/);
     return match ? decodeURIComponent(match[1]) : null;
@@ -641,6 +678,43 @@ function App() {
   }, [entryMode, user]);
 
   useEffect(() => {
+    if (!user || ![APP_MODE.OPERATOR, APP_MODE.INVENTORY].includes(entryMode)) {
+      setInventoryCourses([]);
+      setInventoryState('not_requested');
+      setInventoryError('');
+      setCanManageInventory(false);
+      return undefined;
+    }
+    let active = true;
+    if (entryMode === APP_MODE.INVENTORY) {
+      setInventoryState('checking');
+      setInventoryError('');
+    }
+    inventoryRequest(user, adminApiBaseUrl, '/api/v1/inventory/bootstrap')
+      .then((result) => {
+        if (!active) return;
+        const assignedCourses = result.courses || [];
+        if (entryMode === APP_MODE.INVENTORY) {
+          setInventoryCourses(assignedCourses);
+          setInventoryState(assignedCourses.length ? 'authorized' : 'denied');
+          setInventoryError(assignedCourses.length ? '' : 'Inventory course access is required for this account.');
+        } else {
+          setCanManageInventory(assignedCourses.length > 0);
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (entryMode === APP_MODE.INVENTORY) {
+          setInventoryError(error.message);
+          setInventoryState('denied');
+        } else {
+          setCanManageInventory(false);
+        }
+      });
+    return () => { active = false; };
+  }, [adminApiBaseUrl, entryMode, user]);
+
+  useEffect(() => {
     if (!user || !operatorConfig) {
       setRequests([]);
       setLoadState('loading');
@@ -713,6 +787,10 @@ function App() {
     }
   }
 
+  async function handlePasswordSetup(email) {
+    await sendPasswordResetEmail(auth, email);
+  }
+
   const activeRequests = useMemo(() => {
     return requests
       .filter((request) => ['new', 'confirmed'].includes(request.status))
@@ -729,7 +807,15 @@ function App() {
     claimsReady,
     isAdmin,
     operatorState,
+    inventoryState,
   });
+
+  if (entry === 'public_menu') {
+    const match = window.location.pathname.match(/^\/cartmenus\/([^/]+)\/?$/);
+    let slug = '';
+    try { slug = match ? decodeURIComponent(match[1]) : ''; } catch { slug = ''; }
+    return <Suspense fallback={<EntryStatus title="Today’s Cart Menu" message="Loading menu…" />}><PublicMenuApp apiBaseUrl={adminApiBaseUrl} slug={slug} /></Suspense>;
+  }
 
   if (!user) {
     return (
@@ -738,6 +824,7 @@ function App() {
         mode={entryMode}
         onGoogleSignIn={handleGoogleSignIn}
         onEmailSignIn={handleEmailSignIn}
+        onPasswordSetup={handlePasswordSetup}
       />
     );
   }
@@ -751,7 +838,7 @@ function App() {
     return (
       <EntryStatus
         title="Access denied"
-        message={adminEntry ? 'Administrator access is required.' : (operatorError || 'Operator course access is required.')}
+        message={adminEntry ? 'Administrator access is required.' : entryMode === APP_MODE.INVENTORY ? inventoryError : (operatorError || 'Operator course access is required.')}
         showAdminLink={!adminEntry && claimsReady && isAdmin}
       />
     );
@@ -759,6 +846,10 @@ function App() {
 
   if (entry === 'admin') {
     return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onSignOut={() => signOut(auth)} />;
+  }
+
+  if (entry === 'inventory') {
+    return <Suspense fallback={<EntryStatus title="Inventory Management" message="Loading course inventory…" />}><InventoryApp user={user} apiBaseUrl={adminApiBaseUrl} courses={inventoryCourses} onSignOut={() => signOut(auth)} /></Suspense>;
   }
 
   return (
@@ -771,7 +862,9 @@ function App() {
       loadError={loadError}
       focusedRequestId={focusedRequestId}
       isAdmin={isAdmin}
+      canManageInventory={canManageInventory}
       onOpenAdmin={() => window.location.assign('/admin')}
+      onOpenInventory={() => window.location.assign('/inventory')}
       onSignOut={() => signOut(auth)}
       onRequestAction={(request, action) => updateRequestStatus(request.id, action)}
     />

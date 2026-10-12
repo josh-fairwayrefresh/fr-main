@@ -37,7 +37,7 @@ const receiverPrefix = environment === 'production'
   : 'fairway-button-receiver-sandbox';
 const adminPrefix = environment === 'production'
   ? `fairway-admin-${PRODUCTION_PROJECT_NUMBER}`
-  : 'fairway-button-receiver-sandbox';
+  : 'fairway-admin-sandbox';
 if (apiUrl.protocol !== 'https:' || !apiUrl.hostname.startsWith(receiverPrefix) || !apiUrl.hostname.endsWith('.run.app')) {
   throw new Error('API URL does not match the configured Fairway environment');
 }

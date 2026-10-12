@@ -13,6 +13,8 @@ test('Admin-only account enters Admin without operator bootstrap', () => {
   assert.deepEqual(authorizationRequirements(mode), {
     adminClaim: true,
     operatorBootstrap: false,
+    inventoryMembership: false,
+    publicReadOnly: false,
   });
   assert.equal(resolveEntry({
     mode,
@@ -98,4 +100,49 @@ test('Logged-out operator deep link retains its request destination', () => {
     destinationForLocation(location),
     '/requests/request-123?course=COURSE-0001'
   );
+});
+
+test('Inventory entry requires course membership but not Admin or Operator access', () => {
+  const mode = modeForPath('/inventory');
+  assert.equal(mode, APP_MODE.INVENTORY);
+  assert.deepEqual(authorizationRequirements(mode), {
+    adminClaim: false,
+    operatorBootstrap: false,
+    inventoryMembership: true,
+    publicReadOnly: false,
+  });
+  assert.equal(resolveEntry({
+    mode,
+    authenticated: true,
+    claimsReady: false,
+    isAdmin: false,
+    operatorState: 'not_requested',
+    inventoryState: 'authorized',
+  }), 'inventory');
+  assert.equal(resolveEntry({
+    mode,
+    authenticated: true,
+    claimsReady: true,
+    isAdmin: false,
+    operatorState: 'not_requested',
+    inventoryState: 'denied',
+  }), 'denied');
+});
+
+test('Public cart menu entry is available without authentication', () => {
+  const mode = modeForPath('/cartmenus/monarchbay_tony_lema_course');
+  assert.equal(mode, APP_MODE.PUBLIC_MENU);
+  assert.deepEqual(authorizationRequirements(mode), {
+    adminClaim: false,
+    operatorBootstrap: false,
+    inventoryMembership: false,
+    publicReadOnly: true,
+  });
+  assert.equal(resolveEntry({
+    mode,
+    authenticated: false,
+    claimsReady: false,
+    isAdmin: false,
+    operatorState: 'not_requested',
+  }), 'public_menu');
 });

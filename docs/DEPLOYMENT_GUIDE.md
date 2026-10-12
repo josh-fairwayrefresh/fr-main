@@ -274,10 +274,131 @@ version. The read-only public route resolves only the slug and published pointer
 it does not query the editable catalog or require staff authorization. Snapshot
 payloads are bounded below the Firestore document-size limit.
 
-The API/data contract is source-defined and locally tested. Membership records,
-slug configuration, Catalog UI, public menu UI, CSV import, assets, and first
-publication are not deployed or populated by Increment 1. Pilot-specific
-provisioning and import are separate later increments.
+The API/data contract is source-defined and locally tested. Increment 2 now adds
+the Inventory and public-menu React routes for local validation; neither the
+backend source nor these routes have been deployed. Membership records, slug
+configuration, CSV import, and first publication are not populated. Pilot
+account provisioning and import remain separate operations.
+
+#### Increment 2 Local UI and Public Route
+
+- `/inventory` uses the existing Inventory bootstrap/course APIs. Firebase
+  authentication is followed by course-membership authorization; it does not
+  require `admin:true` or Operator bootstrap. The existing Operator application
+  shows an Inventory entry only when Inventory membership is present.
+- Inventory edits call the existing course-scoped API and refresh the server
+  response after accepted mutations. The three state columns support drag and
+  drop plus a tap-based state selector, product create/edit/archive, category
+  and subcategory creation, draft preview, and explicit publication. A
+  horizontal All Products/top-level category filter applies across all three
+  columns; inventory products are not nested under category groups. The optional
+  price editor accepts dollars and writes USD minor units to the existing API.
+  Automatic 15-second/focus refresh keeps other staff edits visible while open
+  forms preserve local dirty fields.
+- `/cartmenus/{presentationSlug}` is an anonymous, read-only React route. It
+  requests only `/api/v1/public/menus/{apiSlug}` and renders the published
+  snapshot. Course-specific presentation settings, including canonical
+  Customer/Course IDs, course timezone, API slug mapping, and approved static
+  logos, are in
+  `fairway_webapp/cart_operator_dashboard/src/lib/courseMenuConfig.js`;
+  Customer/Course Register schemas are unchanged. The pilot mapping is
+  `monarchbay_tony_lema_course` to API slug `monarch-bay`.
+- The public menu displays only the snapshot's `published_at`, formatted in the
+  configured Course timezone. It does not use page-load time or inventory-edit
+  time.
+- The intended Google Sites page remains
+  `https://www.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`. Embed
+  the app route from the existing `app.fairwayrefresh.com` application origin;
+  that origin is already in the production Admin API CORS allowlist. The
+  browser request originates in the app iframe, not the parent Google Sites
+  document, so no broader API CORS allowance is added.
+- Firebase Hosting's existing catch-all rewrite serves the React route. The
+  repository config defines no frame-deny header, and the local Vite response
+  had no `X-Frame-Options` or `Content-Security-Policy` header. Production
+  response headers, actual Google Sites embedding, iframe height/scrolling, and
+  mobile/tablet sizing inside Google Sites remain unverified. Before release,
+  validate the deployed route in the canonical Sites page at mobile and tablet
+  widths, including scroll behavior and the production frame response headers.
+
+authentication is now established, but pilot Auth identities, the Monarch Bay
+Earlier UI interaction tests used a mocked Firebase identity and in-memory API
+responses; those remain separate from the real sandbox Firestore evidence below.
+They are not represented as proof of deployed browser authentication or Google
+Sites integration. ADC authentication is established and the sandbox records,
+pilot identities, memberships, and catalog have since been created as recorded
+in the following validated integration section.
+
+#### Sandbox Inventory Integration — 2026-10-11
+
+Real sandbox setup and validation used ADC for server-side Firestore/Auth
+administration. No production resource or receiver configuration was changed.
+
+- `fairway-admin-sandbox` revision `fairway-admin-sandbox-00001-9xs` is deployed
+  in `fairway-refresh-sandbox-260930` / `us-central1` using the existing
+  `fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com`
+  identity and Admin handler mode. Its API URL is
+  `https://fairway-admin-sandbox-269424081919.us-central1.run.app`. Exact-origin
+  CORS preflight from sandbox Hosting returned `204`; unauthenticated Inventory
+  bootstrap returned `401`; the configured but unpublished public slug returned
+  `404`.
+- The accepted sandbox receiver remains `fairway-button-receiver-sandbox-00002-vh7`
+  at 100% traffic and
+  `https://fairway-button-receiver-sandbox-nrnjihmmxq-uc.a.run.app`.
+- No Monarch Bay records existed. The existing synthetic `CUST-0001` / `COURSE-0001`
+  and empty `CUST-0002` (“Next One GC”) were preserved. The canonical allocators
+  created `customers/CUST-0003` (“Monarch Bay GC”) and nested `COURSE-0002`
+  (“Tony Lema Course”) with the production-verified `America/Los_Angeles`
+  timezone and Sunday-Saturday 00:00-23:59 service schedule.
+- Firebase Auth identities `monarch_fnb@fairwayrefresh.com` and
+  `monarch_cart@fairwayrefresh.com` were created without passwords or custom
+  claims. Both have enabled Inventory membership for only CUST-0003 / COURSE-0002;
+  neither has global Admin privileges. The existing sandbox Admin was used for
+  membership/import audit attribution. Use the deployed Inventory sign-in
+  screen’s password-reset email flow for secure first sign-in; no password or
+  reset link is stored in this repository or report.
+- The approved CSV at `docs/catalogs/monarch-bay-inventory-import.csv` was
+  dry-run against the actual Course: zero active/archived products existed and
+  57 additions were planned. Import created exactly 57 products: Craft Beers 25,
+  Cocktails 5, Shots 7, Craft Cocktails 1, Canned Cocktails 9, Non-Alcoholic 7,
+  Food 3. All are On Cart with null brand/description/price and unique stable
+  product IDs. A repeat-import dry run found zero additions and 57 identity
+  matches. No other Course was changed.
+- Actual Firestore authorization reads allow both memberships and deny an
+  unassigned UID. Two simultaneous `updateProduct` transactions from the pilot
+  UIDs both committed, advancing the revision by two; the temporary test values
+  were restored. Draft preview returns the 57 On Cart items; the anonymous public
+  read still returns `menu_not_found`. `published_version` remains zero.
+- The initial catalog was not published, as required for CPO hands-on first
+  publication. Real commit-failure rollback was not induced because doing so
+  requires a prior successful publication and would violate that boundary. The
+  backend in-memory atomic-failure test remains separate evidence, not a claim
+  of real Firestore rollback validation.
+- Sandbox frontend build succeeds with separate receiver/Admin URLs. Firebase
+  CLI reauthentication completed using the CPO's existing authorized Google
+  identity. Hosting was deployed with `firebase.sandbox.json`, explicitly
+  targeting site `fairway-refresh-sandbox-260930`; both SPA routes return HTTP
+  200. The deployed URLs are:
+
+- Inventory: `https://fairway-refresh-sandbox-260930.web.app/inventory`
+- Public menu: `https://fairway-refresh-sandbox-260930.web.app/cartmenus/monarchbay_tony_lema_course`
+
+The deployed Inventory API returns 401 without Firebase authentication; the
+public API returns 404 until the first explicit publication. Use each approved
+account's “Set or reset password” action on the Inventory sign-in page. The
+reset email is delivered directly to that account; no password or reset link is
+stored in this repository or report. After setup, sign in with
+`monarch_fnb@fairwayrefresh.com` or `monarch_cart@fairwayrefresh.com`.
+
+The refinement was deployed to sandbox Hosting after the initial Increment 2
+release. Post-release HTTP smoke checks returned `200` for `/inventory` and
+`/cartmenus/monarchbay_tony_lema_course`, `401` for unauthenticated Inventory
+bootstrap, and `404` for the public API before first publication. Production
+and the sandbox receiver were not changed. The public menu remains unpublished
+until the CPO signs in and explicitly publishes from Inventory.
+
+No Google Sites, DNS, production Hosting, production Cloud Run, production
+Firestore, or IAM changes were made. Actual embedding inside Google Sites and
+CPO hands-on acceptance remain outstanding.
 
 ### Backend Release Register — Device Firmware Compatibility
 

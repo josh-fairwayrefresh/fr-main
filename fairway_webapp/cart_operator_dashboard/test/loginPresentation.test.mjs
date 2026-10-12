@@ -15,7 +15,11 @@ test('logged-out entry uses the responsive application surface and preserves sig
   assert.doesNotMatch(loginSource, /phone-shell|login-shell/);
   assert.match(loginSource, /onSubmit=\{handleEmailSubmit\}/);
   assert.match(loginSource, /onClick=\{onGoogleSignIn\}/);
-  assert.match(loginSource, /href=\{isAdminEntry \? '\/' : '\/admin'\}/);
+  assert.match(mainSource, /sendPasswordResetEmail\(auth, email\)/);
+  assert.match(loginSource, /Set or reset password/);
+  assert.match(loginSource, /isInventoryEntry = mode === APP_MODE\.INVENTORY/);
+  assert.match(loginSource, /href="\/inventory">Inventory Staff Login/);
+  assert.match(loginSource, /href="\/admin">Admin Login/);
   assert.match(styles, /\.auth-layout/);
   assert.match(styles, /@media \(max-width: 850px\)/);
   assert.match(styles, /@media \(max-width: 560px\)/);
