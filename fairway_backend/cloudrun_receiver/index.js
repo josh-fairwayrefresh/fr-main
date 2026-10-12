@@ -65,10 +65,12 @@ async function verifyFirebaseIdToken(token) {
   const { getAuth } = require('firebase-admin/auth');
 
   if (getApps().length === 0) {
-    initializeApp();
+    initializeApp({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT,
+    });
   }
 
-  return getAuth().verifyIdToken(token, true);
+  return getAuth().verifyIdToken(token);
 }
 
 function completeCommandId(requestId) {
@@ -280,7 +282,7 @@ function createFairwayHandlers(db, {
 
       return identity;
     } catch (error) {
-      console.warn('Rejected operator request with invalid Firebase ID token');
+      console.warn('Rejected operator request with invalid Firebase ID token:', error.message || error);
       res.status(401).send('Unauthorized\n');
       return null;
     }
@@ -319,7 +321,11 @@ function createFairwayHandlers(db, {
     if (firebaseAuth) return firebaseAuth;
     const { getApps, initializeApp } = require('firebase-admin/app');
     const { getAuth } = require('firebase-admin/auth');
-    if (getApps().length === 0) initializeApp();
+    if (getApps().length === 0) {
+      initializeApp({
+        projectId: process.env.GOOGLE_CLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT,
+      });
+    }
     return getAuth();
   }
 
