@@ -8,6 +8,7 @@ const {
   normalizeAccessRecord,
   normalizeLegacyAccessForMigration,
   resolveAuthorizedCourses,
+  validateAccessRecord,
 } = require('../lib/user_access');
 
 async function seedCourse(db, customerId, courseId, customerName, courseName) {
@@ -110,6 +111,36 @@ test('explicit restrictions reject courses belonging to a different Customer', a
     course_ids: ['COURSE-0002'],
   });
   assert.equal(await getUserAccess(db, 'customer-user'), null);
+});
+
+test('access validation shares fail-closed schema and Customer/Course checks', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', 'Customer One', 'Course One');
+  const customerCoursesCache = new Map();
+
+  assert.deepEqual(await validateAccessRecord(db, {
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
+    course_ids: ['COURSE-0001'],
+  }, customerCoursesCache), {
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
+    course_ids: ['COURSE-0001'],
+  });
+  assert.equal(await validateAccessRecord(db, {
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
+    course_ids: ['COURSE-9999'],
+  }, customerCoursesCache), null);
+  assert.equal(await validateAccessRecord(db, {
+    schema_version: 1,
+    admin: true,
+    customer_id: null,
+    course_ids: [],
+  }, customerCoursesCache), null);
 });
 
 test('Admin access is global while malformed, legacy, and unknown access is denied', async () => {

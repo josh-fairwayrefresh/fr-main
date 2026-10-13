@@ -92,11 +92,20 @@ async function getUserAccess(db, uid) {
   const snapshot = await db.collection(USER_ACCESS_COLLECTION).doc(uid).get();
   if (!snapshot.exists) return null;
 
-  const access = normalizeAccessRecord(snapshot.data());
+  return validateAccessRecord(db, snapshot.data());
+}
+
+async function validateAccessRecord(db, value, customerCoursesCache = new Map()) {
+  const access = normalizeAccessRecord(value);
   if (!access) return null;
   if (access.admin) return access;
 
-  const courses = await listCustomerCourses(db, access.customer_id);
+  let coursesPromise = customerCoursesCache.get(access.customer_id);
+  if (!coursesPromise) {
+    coursesPromise = listCustomerCourses(db, access.customer_id);
+    customerCoursesCache.set(access.customer_id, coursesPromise);
+  }
+  const courses = await coursesPromise;
   if (!courses) return null;
   if (access.course_ids.some((courseId) => (
     !courses.some((course) => course.course_id === courseId)
@@ -123,4 +132,5 @@ module.exports = {
   normalizeAccessRecord,
   normalizeLegacyAccessForMigration,
   resolveAuthorizedCourses,
+  validateAccessRecord,
 };

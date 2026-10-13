@@ -114,7 +114,12 @@ function createAdminApi(db) {
   };
 }
 
-function createAdminUserApi(db, authUsers = [], protectedSystemAdminUids = []) {
+function createAdminUserApi(
+  db,
+  authUsers = [],
+  protectedSystemAdminUids = [],
+  authOverrides = {}
+) {
   const firebaseAuth = {
     getUser: async (uid) => {
       const user = authUsers.find((item) => item.uid === uid);
@@ -126,6 +131,7 @@ function createAdminUserApi(db, authUsers = [], protectedSystemAdminUids = []) {
       return user;
     },
     listUsers: async () => ({ users: authUsers, pageToken: undefined }),
+    ...authOverrides,
   };
   const { fairwayAdmin } = createFairwayHandlers(db, {
     firebaseAuth,
@@ -744,23 +750,155 @@ test('CORS advertises GET, POST, PUT, and PATCH for admin browser clients', asyn
   assert.match(res.headers['Access-Control-Allow-Methods'], /PATCH/);
 });
 
-test('Admin User Management lists Firebase identities with authoritative access records', async () => {
+test('Admin User Management reconciles provisioned, unprovisioned, malformed, and orphaned records read-only', async () => {
   const db = new FakeFirestore();
   await seedHierarchy(db);
   await db.collection('user_access').doc('staff-uid').set({
     schema_version: 2, admin: true, customer_id: null, course_ids: [],
   });
+  await db.collection('user_access').doc('customer-uid').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: [],
+  });
+  await db.collection('user_access').doc('malformed-uid').set({
+    schema_version: 1, admin: true, customer_id: null, course_ids: [],
+  });
+  await db.collection('user_access').doc('invalid-course-uid').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: ['COURSE-9999'],
+  });
+  await db.collection('user_access').doc('orphan-uid').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: [],
+  });
+  await db.collection('user_access').doc('orphan-malformed-uid').set({
+    schema_version: 2, admin: true, customer_id: 'CUST-0001', course_ids: [],
+  });
+  const before = [...db._docs.entries()];
   const request = createAdminUserApi(db, [
     { uid: 'staff-uid', email: 'admin@example.test', displayName: 'Admin', disabled: false },
+    { uid: 'customer-uid', email: 'customer@example.test', disabled: false },
+    { uid: 'malformed-uid', email: 'malformed@example.test', disabled: false },
+    { uid: 'invalid-course-uid', email: 'invalid@example.test', disabled: false },
     { uid: 'new-uid', email: 'new@example.test', displayName: '', disabled: true },
   ]);
 
   const response = await request({ method: 'GET', path: '/api/v1/admin/users' });
   assert.strictEqual(response.statusCode, 200);
-  assert.deepStrictEqual(response.body.users.map((user) => user.uid), ['staff-uid', 'new-uid']);
-  assert.strictEqual(response.body.users[0].authorization.admin, true);
-  assert.strictEqual(response.body.users[1].authorization, null);
-  assert.strictEqual(response.body.users[1].disabled, true);
+  assert.strictEqual(response.body.complete, true);
+  assert.strictEqual(response.body.next_page_token, null);
+  const users = new Map(response.body.users.map((user) => [user.uid, user]));
+  assert.strictEqual(users.get('staff-uid').status, 'PROVISIONED');
+  assert.strictEqual(users.get('staff-uid').authorization.admin, true);
+  assert.strictEqual(users.get('customer-uid').status, 'PROVISIONED');
+  assert.deepStrictEqual(users.get('customer-uid').authorization.course_ids, []);
+  assert.strictEqual(users.get('malformed-uid').status, 'CONFIGURATION ERROR');
+  assert.strictEqual(users.get('malformed-uid').access_record_valid, false);
+  assert.strictEqual(users.get('invalid-course-uid').status, 'CONFIGURATION ERROR');
+  assert.strictEqual(users.get('new-uid').status, 'NOT PROVISIONED');
+  assert.strictEqual(users.get('new-uid').authorization, null);
+  assert.strictEqual(users.get('new-uid').disabled, true);
+  assert.strictEqual(users.get('orphan-uid').status, 'ORPHANED RECORD');
+  assert.strictEqual(users.get('orphan-uid').authorization.customer_id, 'CUST-0001');
+  assert.strictEqual(users.get('orphan-malformed-uid').status, 'ORPHANED RECORD');
+  assert.strictEqual(users.get('orphan-malformed-uid').access_record_valid, false);
+  assert.deepStrictEqual([...db._docs.entries()], before);
+});
+
+test('Admin User Management enumerates every Firebase Auth page before returning success', async () => {
+  const db = new FakeFirestore();
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const authUsers = Array.from({ length: 2001 }, (_, index) => ({
+    uid: index === 0 ? 'staff-uid' : `user-${index}`,
+    email: `user-${index}@example.test`,
+  }));
+  const pageTokens = [];
+  const request = createAdminUserApi(db, authUsers, [], {
+    listUsers: async (maxResults, pageToken) => {
+      pageTokens.push(pageToken || null);
+      const offset = pageToken ? Number(pageToken) : 0;
+      const users = authUsers.slice(offset, offset + maxResults);
+      const nextOffset = offset + users.length;
+      return {
+        users,
+        pageToken: nextOffset < authUsers.length ? String(nextOffset) : undefined,
+      };
+    },
+  });
+
+  const response = await request({ method: 'GET', path: '/api/v1/admin/users' });
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.complete, true);
+  assert.strictEqual(response.body.users.length, authUsers.length);
+  assert.strictEqual(new Set(response.body.users.map((user) => user.uid)).size, authUsers.length);
+  assert.deepStrictEqual(pageTokens, [null, '1000', '2000']);
+});
+
+test('Admin User Management returns an explicit failure instead of a partial directory', async () => {
+  const db = new FakeFirestore();
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const before = [...db._docs.entries()];
+  const request = createAdminUserApi(db, [
+    { uid: 'staff-uid', email: 'admin@example.test' },
+    { uid: 'partial-uid', email: 'partial@example.test' },
+  ], [], {
+    listUsers: async (maxResults, pageToken) => {
+      if (!pageToken) return {
+        users: [{ uid: 'staff-uid', email: 'admin@example.test' }],
+        pageToken: 'next-page',
+      };
+      throw new Error('simulated Auth page failure');
+    },
+  });
+
+  const response = await request({ method: 'GET', path: '/api/v1/admin/users' });
+  assert.strictEqual(response.statusCode, 503);
+  assert.strictEqual(response.body.error, 'user_directory_unavailable');
+  assert.strictEqual(response.body.complete, undefined);
+  assert.deepStrictEqual([...db._docs.entries()], before);
+});
+
+test('Admin User Management rejects directories beyond entry and response-size limits', async () => {
+  const oversizedUsersDb = new FakeFirestore();
+  await oversizedUsersDb.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const oversizedUsers = createAdminUserApi(oversizedUsersDb, [], [], {
+    listUsers: async (maxResults, pageToken) => {
+      const offset = pageToken ? Number(pageToken) : 0;
+      const count = Math.min(maxResults, 10001 - offset);
+      return {
+        users: Array.from({ length: count }, (_, index) => ({
+          uid: offset + index === 0 ? 'staff-uid' : `user-${offset + index}`,
+        })),
+        pageToken: offset + count < 10001 ? String(offset + count) : undefined,
+      };
+    },
+  });
+  const entryLimitResponse = await oversizedUsers({
+    method: 'GET',
+    path: '/api/v1/admin/users',
+  });
+  assert.strictEqual(entryLimitResponse.statusCode, 503);
+  assert.strictEqual(entryLimitResponse.body.error, 'user_directory_too_large');
+  assert.strictEqual(entryLimitResponse.body.complete, undefined);
+
+  const oversizedResponseDb = new FakeFirestore();
+  await oversizedResponseDb.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const oversizedResponse = createAdminUserApi(oversizedResponseDb, [
+    { uid: 'staff-uid', email: 'admin@example.test' },
+    { uid: 'large-user', displayName: 'x'.repeat(8 * 1024 * 1024) },
+  ]);
+  const responseLimit = await oversizedResponse({
+    method: 'GET',
+    path: '/api/v1/admin/users',
+  });
+  assert.strictEqual(responseLimit.statusCode, 503);
+  assert.strictEqual(responseLimit.body.error, 'user_directory_too_large');
+  assert.strictEqual(responseLimit.body.complete, undefined);
 });
 
 test('Admin User Management writes strict course-scoped access with empty meaning all courses for that Customer', async () => {

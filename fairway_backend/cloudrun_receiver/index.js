@@ -43,11 +43,14 @@ const {
   getUserAccess,
   listCustomerCourses,
   normalizeAccessRecord,
+  validateAccessRecord,
 } = require('./lib/user_access');
 
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
 const COMPLETE_COMMAND_TYPE = 'complete';
+const MAX_ADMIN_DIRECTORY_ENTRIES = 10000;
+const MAX_ADMIN_DIRECTORY_RESPONSE_BYTES = 8 * 1024 * 1024;
 const PROTECTED_SYSTEM_ADMIN_UIDS = Object.freeze({
   'fairway-refresh-sandbox-260930': Object.freeze([
     'zY75qapxaIYe0Z35Ss8lOQwdUq72',
@@ -57,6 +60,15 @@ const PROTECTED_SYSTEM_ADMIN_UIDS = Object.freeze({
     'ALri7tjCy1XsXz0TcYQ6oyQs9of2',
   ]),
 });
+
+class AdminDirectoryError extends Error {
+  constructor(code, message, status = 503) {
+    super(message);
+    this.name = 'AdminDirectoryError';
+    this.code = code;
+    this.status = status;
+  }
+}
 
 function resolveProtectedSystemAdminUids(projectId, configuration = PROTECTED_SYSTEM_ADMIN_UIDS) {
   const isProduction = projectId === PRODUCTION_PROJECT_ID;
@@ -373,23 +385,151 @@ function createFairwayHandlers(db, {
   }
 
   async function listAdminUsers(req, res) {
-    const pageToken = req.query?.page_token || undefined;
-    const page = await authClient().listUsers(1000, pageToken);
-    const accessSnapshot = await db.collection('user_access').get();
-    const records = new Map(accessSnapshot.docs.map((doc) => [
-      doc.id,
-      normalizeAccessRecord(doc.data()),
-    ]));
-    return res.status(200).json({
-      users: page.users.map((user) => ({
-        uid: user.uid,
-        email: user.email || null,
-        display_name: user.displayName || null,
-        disabled: user.disabled === true,
-        authorization: records.get(user.uid) || null,
-      })),
-      next_page_token: page.pageToken || null,
-    });
+    try {
+      const authUsers = [];
+      const authUids = new Set();
+      const pageTokens = new Set();
+      let pageToken;
+      const auth = authClient();
+
+      do {
+        // eslint-disable-next-line no-await-in-loop
+        const page = await auth.listUsers(1000, pageToken);
+        if (!page || !Array.isArray(page.users) ||
+            (page.pageToken !== undefined && page.pageToken !== null &&
+              typeof page.pageToken !== 'string')) {
+          throw new AdminDirectoryError(
+            'user_directory_unavailable',
+            'The complete user directory could not be retrieved. Retry.'
+          );
+        }
+        for (const user of page.users) {
+          if (!user || typeof user.uid !== 'string' || !user.uid || authUids.has(user.uid)) {
+            throw new AdminDirectoryError(
+              'user_directory_unavailable',
+              'The complete user directory could not be retrieved. Retry.'
+            );
+          }
+          authUids.add(user.uid);
+          authUsers.push(user);
+          if (authUsers.length > MAX_ADMIN_DIRECTORY_ENTRIES) {
+            throw new AdminDirectoryError(
+              'user_directory_too_large',
+              'The complete user directory exceeds the supported size; no partial list was returned.'
+            );
+          }
+        }
+
+        pageToken = page.pageToken || undefined;
+        if (pageToken) {
+          if (pageTokens.has(pageToken)) {
+            throw new AdminDirectoryError(
+              'user_directory_unavailable',
+              'The complete user directory could not be retrieved. Retry.'
+            );
+          }
+          pageTokens.add(pageToken);
+        }
+      } while (pageToken);
+
+      const accessSnapshot = await db.collection('user_access')
+        .limit(MAX_ADMIN_DIRECTORY_ENTRIES + 1)
+        .get();
+      if (accessSnapshot.size > MAX_ADMIN_DIRECTORY_ENTRIES) {
+        throw new AdminDirectoryError(
+          'user_directory_too_large',
+          'The complete user directory exceeds the supported size; no partial list was returned.'
+        );
+      }
+
+      const records = new Map(accessSnapshot.docs.map((doc) => [doc.id, doc]));
+      const orphanRecords = accessSnapshot.docs.filter((doc) => !authUids.has(doc.id));
+      if (authUsers.length + orphanRecords.length > MAX_ADMIN_DIRECTORY_ENTRIES) {
+        throw new AdminDirectoryError(
+          'user_directory_too_large',
+          'The complete user directory exceeds the supported size; no partial list was returned.'
+        );
+      }
+
+      const customerCoursesCache = new Map();
+      const users = [];
+      for (const user of authUsers) {
+        const accessRecord = records.get(user.uid);
+        if (!accessRecord) {
+          users.push({
+            uid: user.uid,
+            email: user.email || null,
+            display_name: user.displayName || null,
+            disabled: user.disabled === true,
+            status: 'NOT PROVISIONED',
+            access_record_present: false,
+            access_record_valid: null,
+            authorization: null,
+          });
+          continue;
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        const authorization = await validateAccessRecord(
+          db,
+          accessRecord.data(),
+          customerCoursesCache
+        );
+        users.push({
+          uid: user.uid,
+          email: user.email || null,
+          display_name: user.displayName || null,
+          disabled: user.disabled === true,
+          status: authorization ? 'PROVISIONED' : 'CONFIGURATION ERROR',
+          access_record_present: true,
+          access_record_valid: Boolean(authorization),
+          authorization,
+        });
+      }
+
+      for (const accessRecord of orphanRecords) {
+        // eslint-disable-next-line no-await-in-loop
+        const authorization = await validateAccessRecord(
+          db,
+          accessRecord.data(),
+          customerCoursesCache
+        );
+        users.push({
+          uid: accessRecord.id,
+          email: null,
+          display_name: null,
+          disabled: null,
+          status: 'ORPHANED RECORD',
+          access_record_present: true,
+          access_record_valid: Boolean(authorization),
+          authorization,
+        });
+      }
+
+      const response = {
+        complete: true,
+        users,
+        next_page_token: null,
+      };
+      if (Buffer.byteLength(JSON.stringify(response), 'utf8') >
+          MAX_ADMIN_DIRECTORY_RESPONSE_BYTES) {
+        throw new AdminDirectoryError(
+          'user_directory_too_large',
+          'The complete user directory exceeds the supported response size; no partial list was returned.'
+        );
+      }
+      return res.status(200).json(response);
+    } catch (error) {
+      if (error instanceof AdminDirectoryError) throw error;
+      console.error(
+        'Admin user directory reconciliation failed:',
+        error.code || error.message || 'unclassified error'
+      );
+      throw new AdminDirectoryError(
+        'user_directory_unavailable',
+        'The complete user directory could not be retrieved. Retry.'
+      );
+    }
   }
 
   async function updateAdminUserAccess(req, res, actingAdmin, uid) {
@@ -709,6 +849,12 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof AdminDirectoryError) {
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
+      });
+    }
     if (error instanceof inventory.InventoryError) {
       return res.status(error.status).json({
         error: error.code,

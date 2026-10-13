@@ -8,25 +8,33 @@ through sprint closeout for status traceability; they are removed when they no
 longer serve current sprint tracking and do not remain indefinitely as future
 backlog items.
 
-## Current: Pilot 1.1 User Authorization and User Management
+## Completed: Pilot 1.1 User Authorization, Inventory Integration, and User Management
 
-**Status: Production Deployed & Technically Validated (2026-10-12).** The
-canonical source contract is one authoritative `user_access/{uid}` schema-v2
+**Status: CPO-accepted in production (2026-10-13).** The canonical
+authorization contract remains one authoritative `user_access/{uid}` schema-v2
 record with a global `admin` boolean or a Customer assignment and Course
 restrictions. An empty customer `course_ids` list means all Courses belonging
 to that Customer; missing, malformed, and unversioned records deny access. Cart
 and Inventory share the Firebase Auth session and entitlement; Admin remains
-internal-only. Admin User Management assigns access to existing Auth users
+internal-only. Admin User Management manages access for existing Auth users
 without creating accounts or handling passwords.
 
-Production deployment to `savvy-kit-496703-r5` completed on 2026-10-12:
-- Cloud Run Admin revision `fairway-admin-00014-8cv` (100% traffic, PUT CORS allowed)
-- Cloud Run Receiver revision `fairway-button-receiver-00025-mln` (100% traffic)
-- Firebase Hosting version `2f795b8a3e7b0430b9ac11af3582e0e9f9d506b23a95f9b1d09a92626e1c69aa` (`assets/index-CK0CNlkc.js`)
-- Firestore Rules (schema-v2 enforced) and 3 composite indexes READY
-- Existing Firebase Auth users `admin@fairwayrefresh.com`, `josh@fairwayrefresh.com`, and `curry@fairwayrefresh.com` configured as global Admins with schema-v2 (`admin: true, customer_id: null, course_ids: []`)
-- Release tag: `pilot-1.1-with-inventory-management`
-- Firmware baseline unchanged: `6a19f83` (FRB-0003 Prototype 3.3).
+Production closeout:
+- Admin revision `fairway-admin-00016-fs9` and Hosting version
+  `a630f4c391d769a9` serve the accepted User Management reconciliation
+  increment; production directory retrieval returned `complete: true`.
+- The CPO confirmed existing permissions, Customer/Course assignments, and
+  course-user access. No pilot-blocking User Management work remains.
+- A deleted Auth identity can leave a visible `ORPHANED RECORD`; administrator-
+  controlled cleanup is deferred until after the Monarch Bay pilot as
+  nonblocking maintenance.
+- The receiver, schema-v2 Firestore rules/indexes, and firmware baseline
+  (`6a19f83`, FRB-0003 Prototype 3.3) remain unchanged by the reconciliation
+  deployment. The earlier Pilot 1.1 Inventory release remains
+  `pilot-1.1-with-inventory-management`.
+- Detailed deployment, API, and validation evidence is owned by
+  `docs/DEPLOYMENT_GUIDE.md`; observable behavior is owned by
+  `docs/UX_SPECIFICATION.md`.
 
 ## Completed: Embarrassingly Small Runtime — Stable Pilot Baseline 1.0
 
@@ -223,6 +231,15 @@ queue focus, Complete/Cancel, Course-owned schedule and Suspend/Resume controls,
 and normalized day/week/month operator metrics/history. Deployment and
 observable behavior are owned by `docs/DEPLOYMENT_GUIDE.md` and
 `docs/UX_SPECIFICATION.md`; it is complete and is not a future backlog item.
+
+### Post-Pilot — Orphaned User Access Record Cleanup
+
+**Status:** Deferred until after the Monarch Bay pilot. **Priority:** Nonblocking
+maintenance. Deleting a Firebase Authentication user leaves its Firestore
+`user_access/{uid}` record visible; Admin User Management correctly identifies
+it as `ORPHANED RECORD`. The future objective is an administrator-controlled,
+auditable reconciliation or removal method that cannot affect valid users or
+existing authorization.
 
 | Priority | Feature | Notes |
 |----------|---------|-------|

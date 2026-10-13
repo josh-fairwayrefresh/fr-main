@@ -4,6 +4,27 @@
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Production Deployment: Firebase Authentication User Directory Reconciliation (2026-10-13)
+
+- **Target and Source at Deployment**: Production project and Hosting site `savvy-kit-496703-r5`; deployed from `main` at `e388e9a6dcc855136693aec2f39c39eb32bb12a1` with the nine authorized implementation/documentation changes.
+- **Admin Backend**: `fairway-admin-00016-fs9` is Ready at 100% traffic for `fairway-admin` in `us-central1`. Image digest: `sha256:1f1cc7d1f55d373ee796786de34dd0323b746c8007e1c18617f2458a4a20a407`. The production project IDs, Admin mode, allowed origins, service account, ingress, invoker setting, scale limit, and timeout were retained. The receiver was not redeployed.
+- **Hosting**: Live release `projects/savvy-kit-496703-r5/sites/savvy-kit-496703-r5/channels/live/releases/1791882385471000`; finalized version `projects/savvy-kit-496703-r5/sites/savvy-kit-496703-r5/versions/a630f4c391d769a9`, released `2026-10-13T09:06:25.471Z`. The custom domain and Firebase Hosting origin serve `assets/index-B3rmwrpN.js` (SHA-256 `5aa666a9d0a7847812ca3e7187b2a7a94751566c3bf2a5891fb115559e9c79b5`) and `assets/index-DIsJ6e8N.css` (SHA-256 `f596d3f8f1532e4528f7dd616ecc31313a779f2255e794efcfdcef3f7339cbc9`), byte-identical to the local production build. The compiled Firebase project and Receiver/Admin URLs are production values; sandbox project and Admin API values are absent.
+- **Preflight**: Backend test suite passed; frontend tests passed 58/58; production configuration validation and build passed. The build emitted only the existing large-chunk advisory.
+- **Runtime Validation**: `/`, `/admin`, and `/inventory` return HTTP 200 from both production origins. Unauthenticated `GET /api/v1/admin/users` returns HTTP 401; production-origin CORS preflight returns HTTP 204. In an existing authenticated global-Admin browser session, refreshing User Management returned HTTP 200 with `complete: true`, `next_page_token: null`, and four users: three `PROVISIONED`, one `NOT PROVISIONED`. The UI displayed all four Authentication accounts, including the unprovisioned account. No `CONFIGURATION ERROR` or `ORPHANED RECORD` entries were present in this directory. No access Save action was used.
+- **CPO Acceptance (2026-10-13)**: The CPO accepted production User Management reconciliation and confirmed existing permissions, Customer/Course assignments, and the course-user workflow. The production directory retrieval is operational. The CPO also confirmed that deleting an Authentication user leaves its access record visible as `ORPHANED RECORD`; cleanup is explicitly deferred until after the Monarch Bay pilot. No additional pilot-blocking User Management work remains.
+- **Data and Scope**: The authenticated directory GET was read-only; no Auth identity or Firestore access record was intentionally created, changed, or deleted during deployment or closeout. Firestore rules/indexes, the receiver, and firmware were not changed.
+
+### Sandbox Deployment: Firebase Authentication User Directory Reconciliation (2026-10-13)
+
+- **Target**: Firebase project and Hosting site `fairway-refresh-sandbox-260930`; production project `savvy-kit-496703-r5` was not targeted.
+- **Source**: `main` at `e388e9a6dcc855136693aec2f39c39eb32bb12a1` with the nine authorized, uncommitted implementation files. No commit or push was made.
+- **Admin Backend**: `fairway-admin-sandbox-00012-zr2` is Ready and serves 100% of `fairway-admin-sandbox` traffic in `us-central1`. Image digest: `sha256:c2978a2777de0c2ab142510c048ced12db6b653b009e072f0ab2a5b4cc60b580`. The existing sandbox runtime service account, Admin mode, project IDs, allowed origin, ingress, invoker setting, scale limit, and timeout were retained.
+- **Hosting**: Live release `projects/fairway-refresh-sandbox-260930/sites/fairway-refresh-sandbox-260930/channels/live/releases/1791881709368000`; finalized version `projects/fairway-refresh-sandbox-260930/sites/fairway-refresh-sandbox-260930/versions/d2f9f8000f8ef0e7`, released `2026-10-13T08:55:09.368Z`. It serves `assets/index-g6Pbl5DF.js` (SHA-256 `7716e66f635a8b3df5cb73fba1b5b7d74bb7c94cecc09b58efe76e7cd47970a3`) and `assets/index-DIsJ6e8N.css` (SHA-256 `f596d3f8f1532e4528f7dd616ecc31313a779f2255e794efcfdcef3f7339cbc9`), byte-identical to the sandbox build. The configured Firebase project and Receiver/Admin API URLs in the bundle are sandbox values. Production project identifiers are present only in the existing environment-validation guard; production Receiver/Admin API URLs are absent.
+- **Automated Preflight**: Backend test suite passed; frontend tests passed 58/58; sandbox configuration validation and build passed. The build emitted only the existing large-chunk advisory. `git diff --check` passed.
+- **Unauthenticated Runtime Checks**: `/`, `/admin`, and `/inventory` return HTTP 200. The Admin page renders the standard sign-in screen. The directory endpoint returns HTTP 401 without an identity, and its CORS preflight from the sandbox Hosting origin returns HTTP 204 with the expected origin and methods.
+- **Authenticated Validation Boundary**: No authenticated global-Admin browser session was available. Therefore live directory completeness, observed reconciliation states, non-admin denial, and before/after Auth or `user_access` data comparison are not claimed as verified. These behaviors are covered by the backend and frontend automated tests; the CPO must perform the authenticated browser acceptance below. No Auth identity or Firestore record was intentionally changed, and no receiver, rules, indexes, or production service was deployed.
+- **CPO Browser Acceptance**: Sign in at `https://fairway-refresh-sandbox-260930.web.app/admin` using an existing authorized sandbox global Admin. Open and refresh User Management; verify the complete list and displayed statuses/access summaries. Verify any existing Auth-only, malformed-access, and orphaned-record states where present; do not create exceptional records for the test. Then verify explicit access editing only if separately intended. No password or credential was requested or handled during deployment validation.
+
 ### Production Deployment: Pilot 1.1 Frontend and Cart Identity Correction (2026-10-13)
 
 - **Project and Hosting Site**: Firebase project and Hosting site `savvy-kit-496703-r5`.
@@ -1671,6 +1692,38 @@ WP5 admin routes (implemented, test-verified, and deployed to the isolated sandb
 - `POST /api/v1/admin/devices/{deviceId}/{service|commission}`
 
 The Admin UI calls these backend routes with the current Firebase ID token. It does not read or write fleet collections directly, and the repository Firestore rules continue to deny browser access to those collections. Admin responses redact credential verifier digests; new-device provisioning returns the plaintext credential only in the one successful creation response.
+
+#### Admin User Management Directory Contract
+
+- `GET /api/v1/admin/users` is restricted by the existing global-Admin
+  authorization guard. The Admin backend enumerates Firebase Authentication
+  pages with the Firebase Admin SDK and reconciles them by UID against
+  `user_access/{uid}`. Browser code does not enumerate Authentication users or
+  read the access collection directly.
+- The complete response retains the `users` property and includes
+  `complete: true` and `next_page_token: null`. Each row reports `PROVISIONED`,
+  `NOT PROVISIONED`, `CONFIGURATION ERROR`, or `ORPHANED RECORD`, along with
+  validated schema-v2 authorization metadata when available. `access_record_present`
+  and `access_record_valid` distinguish missing, valid, and invalid records;
+  an orphan with invalid access remains classified as orphaned and has
+  `access_record_valid: false`.
+- Directory reconciliation performs reads only. It never creates, updates,
+  repairs, or deletes Auth identities or `user_access` records. Authentication
+  pages, the merged entry count, and the serialized response are bounded at
+  10,000 entries and 8 MiB. If enumeration fails or a bound is exceeded, the
+  endpoint returns HTTP 503 with an explicit error and no partial directory.
+- `PUT /api/v1/admin/users/{uid}/access` remains the explicit access-write
+  operation. It requires an existing Firebase Authentication UID and retains
+  schema-v2, Customer/Course, protected-System-Administrator, and
+  last-administrator validation. It does not create an Authentication account.
+- The complete-directory behavior is deployed to WP5 sandbox Admin revision
+  `fairway-admin-sandbox-00012-zr2` and production Admin revision
+  `fairway-admin-00016-fs9`; automated coverage passed. Production authenticated
+  retrieval returned `complete: true` with four entries (three provisioned and
+  one not provisioned). The CPO accepted the production behavior and the
+  Customer/Course user workflow on 2026-10-13. Orphan-record cleanup is deferred
+  until after the Monarch Bay pilot; no pilot-blocking User Management work
+  remains.
 
 The command routes use the existing per-device `X-Fairway-Device-Key` authentication. COMPLETE transactionally creates one deterministic per-device command correlated to the originating request; poll returns only the exact active, pending, unexpired command, and acknowledgement transactionally rechecks backend-owned expiry while preserving idempotent replay of an already-acknowledged command. The demand-window query requires the repository-controlled composite index in `fairway_webapp/cart_operator_dashboard/firestore.indexes.json`. The backend, dashboard, and index were deployed and validated during Stage B2; FRB-0002 acknowledged an exact correlated COMPLETE and ended its local demand window early.
 

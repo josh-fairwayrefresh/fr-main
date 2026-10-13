@@ -98,6 +98,21 @@ deployment status are owned by `docs/DEPLOYMENT_GUIDE.md` and
 - The authoritative settings are stored in `user_access/{uid}` as schema
   version 2: `admin`, `customer_id`, and `course_ids`. Technical validation and
   onboarding details are owned by `docs/DEPLOYMENT_GUIDE.md`.
+- Whenever a global administrator opens or refreshes User Management, the
+  Admin UI retrieves the complete Firebase Authentication directory from the
+  Admin backend and reconciles it read-only with `user_access/{uid}` by UID.
+  Each row is identified as **PROVISIONED**, **NOT PROVISIONED**,
+  **CONFIGURATION ERROR**, or **ORPHANED RECORD**. An Authentication user
+  without valid access remains unprivileged; an orphaned access record is
+  shown but is not automatically repaired or deleted.
+- Only an explicit administrator **Save** action may provision or change
+  access for an existing Authentication user. A successful Save refreshes the
+  unified directory. If complete retrieval fails, User Management shows an
+  error and retry action instead of presenting a partial list as synchronized.
+- The CPO accepted production User Management reconciliation and the
+  Customer/Course user-access workflow on 2026-10-13. Deleting an
+  Authentication identity may leave its Firestore access record visible as
+  **ORPHANED RECORD**; cleanup is deferred until after the Monarch Bay pilot.
 - Course assignment is the shared entitlement for Cart Operations and
    Inventory. Inventory has no separate membership or user class. An assigned
    user can view, add, edit, move, archive, preview, and publish products for
