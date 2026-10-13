@@ -25,8 +25,8 @@ test('Assigned customer users have an Inventory link into the shared authenticat
 });
 
 test('course matching in OperatorApp matches on customer_id and course_id', () => {
-  assert.match(source, /item\.customer_id === selectedCourse\?\.customer_id/);
-  assert.match(source, /item\.course_id === selectedCourse\?\.course_id/);
+  assert.match(source, /mergeDashboardCourse\(selectedCourse, dashboard\?\.courses\)/);
+  assert.match(source, /\{courseDisplayLabel\(course\)\}/);
 });
 
 test('Cart request initialization executes the native Map factory used by its listener', () => {

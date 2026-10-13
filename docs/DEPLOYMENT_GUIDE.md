@@ -4,6 +4,19 @@
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Production Deployment: Pilot 1.1 Frontend and Cart Identity Correction (2026-10-13)
+
+- **Project and Hosting Site**: Firebase project and Hosting site `savvy-kit-496703-r5`.
+- **Source and Configuration**: Production was built from the CPO-accepted integration `fc24a65ab309500dc9b4d80ae285d957ab32041f` plus the frontend-only Cart identity correction in the authorized worktree based on `de8381af6b10f397fbfad53fd69e5b2732bd2753`; no backend source or authorization contract changed. `firebase.json` explicitly targets production, and `firebase.sandbox.json` separately targets `fairway-refresh-sandbox-260930`.
+- **Hosting History**: The original pre-Pilot version `b0e4564f1de48554` contains the known Map-constructor Cart defect. Initial Pilot 1.1 promotion finalized version `bb3bcf402a24e501` (release `sites/savvy-kit-496703-r5/channels/live/releases/1791877277092000`) and served `assets/index-DJRR5VMX.js` (SHA-256 `0cf7980709eb477aaceb56c3e84e7306a21403cedcceba6253c8ecfba1cc98eb`); its first acceptance check found the dashboard-refresh customer-label defect.
+- **Current Hosting Release**: Release `sites/savvy-kit-496703-r5/channels/live/releases/1791879406956000`; finalized version `bc271173b93745dc`, released `2026-10-13T08:16:46.956Z`.
+- **Current Frontend Artifact**: `assets/index-DTrz6HSa.js`, local and deployed SHA-256 `7b7477e944877ecb7ffe97f74f41f840b12ebbea9584ad7cd317c092842ac271`. The fresh production build validated project `savvy-kit-496703-r5` and the production Receiver/Admin API endpoints; the artifact contains no sandbox Firebase or API endpoint values.
+- **Automated Validation**: Frontend tests passed 54/54; production configuration validation and build passed. The existing MapIcon/native Map/Set regression test passed.
+- **CPO-Confirmed Sandbox Acceptance**: The CPO confirmed the corrected Monarch Bay customer/course identity before and after browser refresh, Cart request-queue operation, Inventory and Admin operation, and customer-scoped Cart/Inventory access with Admin and out-of-scope course denial. The accepted sandbox build was `assets/index-KSHg7kba.js` (SHA-256 `789bf1d4a0e8b2ab1c7145ac5cf69e4329965bd22fc094f89021d8a35d970c4c`); its Hosting live-channel release was observed at `2026-10-13 01:03:15`.
+- **Production Verification**: Both `https://savvy-kit-496703-r5.web.app/` and `https://app.fairwayrefresh.com/` serve the exact current artifact. `/`, `/admin`, and `/inventory` return HTTP 200 on both origins. An existing authenticated global Admin session loaded Cart on both origins; the header displayed `Monarch Bay GC · Tony Lema Course` after reload, and the existing one-request queue rendered. Inventory displayed 57 products and Admin loaded its Fleet Overview/User Management navigation. Browser checks after reload recorded no JavaScript runtime exceptions or console errors; the Map constructor defect did not recur.
+- **Production-Specific Acceptance Limitations**: The available production identity was a global Admin. Customer-scoped production access and cross-customer denial were not independently retested; those permission outcomes are CPO-confirmed in sandbox, not claimed as production checks. A previously open Hosting-origin tab initially displayed the old `undefined` label; reloading fetched the current asset and corrected the display. The original tab's loaded asset was not captured, so the cause of that stale view is unconfirmed. To perform customer-scoped production acceptance, sign in at `https://app.fairwayrefresh.com/` with an existing authorized customer-scoped operator account; no production user or access record was created or changed.
+- **Backend and Data**: Receiver `fairway-button-receiver-00026-kg5` and Admin `fairway-admin-00015-l2g` remained Ready at 100% traffic after Hosting deployment. No backend, rules, indexes, Auth, Firestore, DNS, or custom-domain changes were made. The original Hosting promotion preceded the authorized release commit; this entry records that historical sequencing without implying the final correction remains uncommitted.
+
 ### Baseline: FAIRWAY REFRESH — STABLE PILOT 1.1 (CPO-Accepted Sandbox, 2026-10-12)
 
 - **Product Acceptance**: The CPO accepted the integrated sandbox behavior: global Admin access to User Management, Cart, and Inventory; authorized customer access to Cart and Inventory; denial of Admin and other-customer/course access to non-Admins; shared-session navigation and course context; and corrected application initialization.
@@ -13,8 +26,8 @@ The Alignment Register is the canonical record mapping release milestones across
 - **Sandbox Backend Deployment**: Receiver `fairway-button-receiver-sandbox-00016-8wn` and Admin `fairway-admin-sandbox-00011-jd6` remained the accepted sandbox services. These deployed revisions and the source baseline are recorded separately; no backend deployment was part of the release-candidate Hosting promotion.
 - **Web Application Source and Artifact**: Integration source commit `fc24a65ab309500dc9b4d80ae285d957ab32041f`; CPO-accepted sandbox asset `assets/index-ulUPzeaM.js`, SHA-256 `527946650c2bdbce4b8452a78e4a326987e3a8cbea2974e5c8ad4067db5d6656`. The CPO-confirmed runtime acceptance and executable initialization regression are recorded above. Automated validation: backend 96 checks, frontend 50 tests, sandbox frontend build passed.
 - **Integration Contracts**: Firmware continues to submit its existing authenticated button-event contract to the receiver. The backend remains authoritative for request persistence and access decisions; Cart request identity uses the `(customer_id, course_id)` pair. Admin, Cart, and Inventory use the shared Firebase Authentication session and schema-v2 access contract. Inventory remains a Cart feature, not an additional application entry point or authorization model.
-- **Production Status**: **NOT DEPLOYED — PRODUCTION PREFLIGHT BLOCKED.** The integration source has not been deployed to production. Existing production service revisions are not asserted to implement this source baseline. Readiness remains blocked pending verification of active backend contracts, reconciliation of schema-v1/schema-v2 deployment documentation, verification of protected-administrator enforcement and production security rules, and an established safe Hosting rollback procedure. These are production-release blockers, not evidence of a defect in the CPO-accepted sandbox baseline.
-- This Stable Pilot 1.1 product-baseline entry records the CPO-accepted sandbox integration; it does not rewrite or imply a new production deployment in the earlier service-specific release records below.
+- **Production Status at this entry's 2026-10-12 snapshot**: Production preflight was blocked at that time. This historical status is superseded by the 2026-10-13 production deployment entry above; it is not current deployment state.
+- This Stable Pilot 1.1 product-baseline entry records the CPO-accepted sandbox integration. The production deployment entry above records the later Hosting release and currently active backend revisions.
 
 ### Release: Pilot 1.1 — User Management & Inventory Integration (2026-10-12)
 
@@ -90,9 +103,11 @@ The Alignment Register is the canonical record mapping release milestones across
   Inventory routes retained the same session. After sign-out, all three
   routes completed unauthenticated initialization and displayed their
   expected login presentation without remaining at “Checking session…”.
-- Customer-user isolation and a live protected-UID demotion attempt remain
-  unverified. No Auth identity or `user_access` record was changed; CPO
-  authenticated acceptance remains outstanding.
+- At the time of this 2026-10-12 snapshot, customer-user isolation and a live
+  protected-UID demotion attempt remained unverified. On 2026-10-13 the CPO
+  subsequently confirmed customer-scoped Cart/Inventory access, Admin denial,
+  and course-scope enforcement in sandbox; see the current Pilot 1.1 production
+  alignment entry above. No Auth identity or `user_access` record was changed.
 
 ### CPO-Confirmed Sandbox Acceptance and Release Candidate (2026-10-12)
 
@@ -247,8 +262,8 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Current Admin Revision | `fairway-admin-00014-8cv` (100% traffic as of 2026-10-12; schema-v2 authorization, PUT in CORS allowlist) |
-| Current Receiver Revision | `fairway-button-receiver-00025-mln` (100% traffic as of 2026-10-12; schema-v2 authorization) |
+| Current Admin Revision | `fairway-admin-00015-l2g` (100% traffic as of 2026-10-13; schema-v2 authorization and protected-System-Administrator safeguard) |
+| Current Receiver Revision | `fairway-button-receiver-00026-kg5` (100% traffic as of 2026-10-13; schema-v2 authorization and additive dashboard `customer_id`) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user`, `roles/firebaseauth.admin` |
@@ -262,9 +277,9 @@ explicit supported `FAIRWAY_SERVICE_MODE`, and both project variables equal to
 origin allowlist (Firebase Hosting and `app.fairwayrefresh.com`); receiver mode
 rejects any Admin browser origin. The Admin target exposes only
 `/api/v1/admin/*`, and the receiver returns `404` for that surface.
-**Deployed production authorization state (2026-10-12):** Admin revision
-`fairway-admin-00014-8cv` and receiver revision
-`fairway-button-receiver-00025-mln` serve 100% of traffic. Admin and Cart
+**Current deployed production authorization state (2026-10-13):** Admin revision
+`fairway-admin-00015-l2g` and receiver revision
+`fairway-button-receiver-00026-kg5` serve 100% of traffic. Admin and Cart
 authorization use the shared Firestore user-access record; legacy
 `admin:true` claims and separate Operator/Inventory collections are not
 runtime authorization sources. The old Admin-claim and separate-assignment
@@ -382,10 +397,12 @@ acceptance confirmed Admin authentication, User Management, customer-user
 authorization, customer-user denial from Admin, and course assignment updates
 and persistence. Sandbox has no Web Push notifier/VAPID deployment, so
 delivery-time notification filtering is test-verified only. The accepted
-implementation is integrated and pushed to `origin/main`. Production remains on
-its prior authorization and notifier deployment until separately authorized;
-Pilot 1.1 production release tagging will follow production deployment and
-baseline reconciliation.
+implementation is integrated and pushed to `origin/main`. At the time of this
+2026-10-12 snapshot, production remained on its prior authorization deployment;
+the 2026-10-13 production deployment entry above records the later schema-v2
+backend state and frontend release. No production release tag was created as
+part of that deployment; the source, test, configuration, and release-record
+commit and push were separately authorized after final production verification.
 
 #### Historical Schema-v1 Authorization Rollout — 2026-10-12 (Superseded)
 
@@ -447,10 +464,11 @@ steps; email prefixes are not a runtime authorization rule.
 
 #### Historical Authorization and Notification Source Snapshot — 2026-10-12
 
-This records the earlier schema-v1 implementation and deployment evidence. It
-is superseded for current source and sandbox state by the Pilot 1.1 section
-above; the production deployment and notifier status below remain historical
-production evidence, not a claim that schema-v2 has been deployed there.
+This records the earlier schema-v1 implementation and deployment evidence as
+it stood on 2026-10-12. Production subsequently moved to schema-v2 with the
+Pilot 1.1 backend deployment; see the current production deployment entry and
+production fleet state above. This snapshot remains historical and must not be
+used as the current production authorization contract.
 
 The accepted source now gives enabled `fairway_staff` global Cart and
 Inventory access by resolving Courses from the canonical Customer/Course
@@ -1552,7 +1570,7 @@ Current Backend Deployment Facts:
 - Documented deployed service name: fairway-button-receiver
 - Documented deployed URL: https://fairway-button-receiver-936892386735.us-central1.run.app
 - Button-event ingestion currently enforces `X-Fairway-Device-Key` authentication, verified per-device against each claimed device's own stored SHA-256 verifier (see `docs/DEVICE_PROVISIONING_GUIDE.md`, "Credential Architecture"); this is not a single fleet-wide shared key. The obsolete fleet-wide `FAIRWAY_DEVICE_KEY` Cloud Run environment variable has been removed following WP3 per-device credential validation.
-- The deployed backend requires a Firebase bearer ID token on operator mutations, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The active Cart Operator workflow has no CONFIRM interaction; COMPLETE, Cancel, Suspend/Resume, and dashboard-summary calls require the current server-side user-access entitlement. Production's deployed authorization uses the schema-v1 `user_access` staff/customer class; the sandbox uses schema-v2 `admin` and Customer/Course settings. Firebase custom claims do not grant Admin access. The Admin API returns HTTP 403 before protected reads or writes for authenticated non-admins.
+- The deployed backend requires a Firebase bearer ID token on operator mutations, verifies it with Firebase Admin, and records the verified UID as `operator_id`. The active Cart Operator workflow has no CONFIRM interaction; COMPLETE, Cancel, Suspend/Resume, and dashboard-summary calls require the current server-side user-access entitlement. Production and sandbox use schema-v2 `user_access` authorization with `admin` and Customer/Course settings. Firebase custom claims do not grant Admin access. The Admin API returns HTTP 403 before protected reads or writes for authenticated non-admins.
 - Backend request parsing currently accepts compatibility aliases/defaults (`device_id` or `device`, `event_type` or `event`, with defaults when absent) beyond the canonical payload contract; formal acceptance or removal of this behavior remains unresolved.
 - Supported request routes:
   - POST /
@@ -1690,7 +1708,10 @@ Repository-Derived and Historical Web Deployment Facts:
 - Production build command: npm run build:production
 - Sandbox build command: npm run build:sandbox (package.json)
 - Sandbox local dev command: npm run dev:sandbox (package.json)
-- Firebase Hosting config present in firebase.json with SPA rewrite to /index.html
+- Production Hosting config: `firebase.json`, with explicit site
+  `savvy-kit-496703-r5`, `public: dist`, and SPA rewrite to `/index.html`.
+- Sandbox Hosting config: `firebase.sandbox.json`, with explicit site
+  `fairway-refresh-sandbox-260930` and the same `dist` SPA content.
 - Primary production application origin: `https://app.fairwayrefresh.com`
 - Firebase Hosting origin: `https://savvy-kit-496703-r5.web.app`
 - First-class entry routes:
@@ -1703,15 +1724,22 @@ Repository-Derived and Historical Web Deployment Facts:
   uses the authoritative schema-v2 `user_access/{uid}` record; Admin entry
   requires `admin: true`, while customer routes require global Admin access or
   a valid Customer/Course assignment.
-- Validated WP5-S1 sandbox deployment command:
-  - npx firebase-tools deploy --only hosting --project fairway-refresh-sandbox-260930 --non-interactive
-- Validated production deployment command:
-  - npx firebase-tools deploy --only hosting --project savvy-kit-496703-r5
+- Sandbox Hosting deployment (run from `fairway_webapp/cart_operator_dashboard/`):
+  - `npx firebase-tools deploy --config firebase.sandbox.json --only hosting --project fairway-refresh-sandbox-260930 --non-interactive`
+- Production Hosting deployment (run from `fairway_webapp/cart_operator_dashboard/`):
+  - `npx firebase-tools deploy --config firebase.json --only hosting --project savvy-kit-496703-r5 --non-interactive`
+- Always pass the explicit config, project, and `--only hosting`. The production
+  config pins the production site; the sandbox config pins the sandbox site.
+  The production command deploys only `dist` Hosting content and does not
+  deploy the Firestore rules/indexes also declared in `firebase.json`, Functions,
+  or other Firebase resources.
 
 Deployment process status:
 
 Repository-controlled artifacts define web build behavior and the production
-Hosting deployment command above was validated on 2026-10-01.
+Hosting deployment commands above were validated on 2026-10-13. The final
+production release and verification evidence are recorded in the Pilot 1.1
+alignment entry above; sandbox Hosting remains separately targeted.
 
 Deployment Verification:
 
@@ -1869,7 +1897,7 @@ investigation was:
 
 | Surface | Pre-release target | Recorded immutable identity |
 | --- | --- | --- |
-| Firebase Hosting live site `savvy-kit-496703-r5` | Version `b0e4564f1de48554` | Retained/finalized at investigation; confirm its current availability and content in release history before use. |
+| Firebase Hosting live site `savvy-kit-496703-r5` | Version `b0e4564f1de48554` | Confirmed retained in release history after the 2026-10-13 promotion; serves the known-defective pre-release frontend and is an emergency previous-state target only. |
 | Cloud Run receiver, `us-central1` | `fairway-button-receiver-00025-mln` | Image digest `sha256:4d51a3835e6293a0f524ac45761926f1d23b4a76baebd33fb9e160ac8b2aa75a`. |
 | Cloud Run Admin, `us-central1` | `fairway-admin-00014-8cv` | Image digest `sha256:0841f3bc7cf5e86a131138653d6b710279c05a169c2bdec0e604ff2fbaca4051`. |
 

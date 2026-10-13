@@ -15,6 +15,39 @@ export function selectedCourseFromLocation(courses, search = '') {
   return courses[0] || null;
 }
 
+function usableDisplayName(value) {
+  if (typeof value !== 'string') return null;
+  const name = value.trim();
+  return name && !['undefined', 'null'].includes(name.toLowerCase()) ? name : null;
+}
+
+export function mergeDashboardCourse(authorizedCourse, dashboardCourses) {
+  if (!authorizedCourse) return null;
+
+  const dashboardCourse = Array.isArray(dashboardCourses)
+    ? dashboardCourses.find((course) => (
+      course?.customer_id === authorizedCourse.customer_id &&
+      course?.course_id === authorizedCourse.course_id
+    ))
+    : null;
+  if (!dashboardCourse) return authorizedCourse;
+
+  return {
+    ...dashboardCourse,
+    customer_id: authorizedCourse.customer_id,
+    course_id: authorizedCourse.course_id,
+    customer_name: usableDisplayName(authorizedCourse.customer_name)
+      || usableDisplayName(dashboardCourse.customer_name),
+    course_name: usableDisplayName(dashboardCourse.course_name)
+      || usableDisplayName(authorizedCourse.course_name),
+  };
+}
+
+export function courseDisplayLabel(course) {
+  if (!course) return 'No authorized Course';
+  return `${usableDisplayName(course.customer_name) || 'Customer name unavailable'} · ${usableDisplayName(course.course_name) || 'Course name unavailable'}`;
+}
+
 export function courseContextUrl(pathname, course) {
   if (!course) return pathname;
   const params = new URLSearchParams({

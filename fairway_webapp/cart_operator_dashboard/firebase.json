@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "savvy-kit-496703-r5",
     "public": "dist",
     "ignore": [
       "firebase.json",

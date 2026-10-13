@@ -223,6 +223,10 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
     navigation returns to Cart Operations and preserves the authenticated
     session. All entry paths use the same Firebase Authentication session and
     preserve the intended route through sign-in.
+- The Cart header identifies the selected authorized Customer and Course by
+   readable names. Dashboard refresh preserves that identity; if a display
+   name is unavailable, the UI shows an explicit unavailable label rather
+   than `null` or `undefined`.
 - The application is a full-surface, landscape-iPad-first responsive workspace.
 - The active queue is oldest first. The oldest request receives the strongest
    visual focus while all remaining active requests stay visible in order.
