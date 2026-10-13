@@ -1,7 +1,7 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 require('./notifier');
-const { resolveRuntimeEnvironment } = require('./lib/environment');
+const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
 const {
@@ -57,6 +57,37 @@ const PROTECTED_SYSTEM_ADMIN_UIDS = Object.freeze({
     'ALri7tjCy1XsXz0TcYQ6oyQs9of2',
   ]),
 });
+
+function resolveProtectedSystemAdminUids(projectId, configuration = PROTECTED_SYSTEM_ADMIN_UIDS) {
+  const isProduction = projectId === PRODUCTION_PROJECT_ID;
+  const invalidConfiguration = () => {
+    throw new Error('Protected System Administrator configuration is invalid');
+  };
+
+  if (typeof projectId !== 'string' || !projectId) {
+    return invalidConfiguration();
+  }
+  if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration)) {
+    if (isProduction) return invalidConfiguration();
+    return [];
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(configuration, projectId)) {
+    if (isProduction) return invalidConfiguration();
+    return [];
+  }
+
+  const protectedUids = configuration[projectId];
+  if (!Array.isArray(protectedUids)
+      || protectedUids.length === 0
+      || protectedUids.some((uid) => typeof uid !== 'string' || !uid.trim() || uid.trim() !== uid)
+      || new Set(protectedUids).size !== protectedUids.length) {
+    return invalidConfiguration();
+  }
+
+  return protectedUids;
+}
+
 const KNOWN_STALE_DEVICE_FIELDS = Object.freeze({
   'FRB-0002': new Set(['hardware_revision', 'firmware_generation']),
 });
@@ -123,9 +154,9 @@ function createFairwayHandlers(db, {
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
-  protectedSystemAdminUids = PROTECTED_SYSTEM_ADMIN_UIDS[
+  protectedSystemAdminUids = resolveProtectedSystemAdminUids(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
-  ] || [],
+  ),
 } = {}) {
   /* Persists a golfer request using the validated demand-window suppression. */
   async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
@@ -1528,4 +1559,4 @@ if (runtimeEnvironment.serviceMode === 'admin') {
   functions.http('fairwayButtonReceiver', handlers.fairwayButtonReceiver);
 }
 
-module.exports = { createFairwayHandlers };
+module.exports = { createFairwayHandlers, resolveProtectedSystemAdminUids };

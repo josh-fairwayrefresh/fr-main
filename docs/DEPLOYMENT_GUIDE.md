@@ -1858,8 +1858,145 @@ request or visible notification. The original request remained actionable.
 
 ## Rollback Procedure
 
-No verified rollback workflow is currently documented in repository-controlled deployment artifacts or in the extracted historical Working State evidence used for this document.
-Rollback procedure remains undefined in canonical deployment documentation at this time.
+### Pilot 1.1 controlled recovery
+
+**Status: reviewed procedure; not exercised.** No production rollback was
+performed to prepare this procedure. It is not evidence that the Pilot 1.1
+release or any rollback target has been operationally validated.
+
+The recorded production pre-release state for the Pilot 1.1 readiness
+investigation was:
+
+| Surface | Pre-release target | Recorded immutable identity |
+| --- | --- | --- |
+| Firebase Hosting live site `savvy-kit-496703-r5` | Version `b0e4564f1de48554` | Retained/finalized at investigation; confirm its current availability and content in release history before use. |
+| Cloud Run receiver, `us-central1` | `fairway-button-receiver-00025-mln` | Image digest `sha256:4d51a3835e6293a0f524ac45761926f1d23b4a76baebd33fb9e160ac8b2aa75a`. |
+| Cloud Run Admin, `us-central1` | `fairway-admin-00014-8cv` | Image digest `sha256:0841f3bc7cf5e86a131138653d6b710279c05a169c2bdec0e604ff2fbaca4051`. |
+
+These are investigation-time identities, not a guarantee that the targets
+remain available or safe. In particular, the pre-release Admin revision
+predates the protected-System-Administrator demotion guard. **Do not direct
+production Admin traffic back to `fairway-admin-00014-8cv` after deploying the
+guard.** A safe Admin rollback target must first be identified and verified to
+preserve server-side protected-Admin enforcement and the active authorization
+contract. If no such revision is available, stop and escalate; do not trade
+away the safeguard to complete a rollback.
+
+#### Pre-release verification gate
+
+Before each release, the release owner must capture the then-current Hosting
+version, Cloud Run traffic allocations, revision IDs and image digests, active
+security-rule state, and the release's authorization/data compatibility
+assumptions. Store this release-specific record with the approved change
+evidence. Do not rely on a revision name alone.
+
+Immediately before any recovery:
+
+1. Obtain incident-command and production-change authorization. Confirm the
+   project is `savvy-kit-496703-r5`, the intended Hosting site is the default
+   site for that project, and the Cloud Run region is `us-central1`. Use a
+   second operator to review each target and command.
+2. Read current service traffic without displaying environment values:
+
+   ```sh
+   gcloud run services describe fairway-button-receiver \
+     --project=savvy-kit-496703-r5 --region=us-central1 \
+     --format='yaml(status.traffic)'
+   gcloud run services describe fairway-admin \
+     --project=savvy-kit-496703-r5 --region=us-central1 \
+     --format='yaml(status.traffic)'
+   ```
+
+3. Confirm each proposed Cloud Run revision still exists, is ready, and has
+   the recorded image digest. The format intentionally excludes environment
+   variables:
+
+   ```sh
+   gcloud run revisions describe fairway-button-receiver-00025-mln \
+     --project=savvy-kit-496703-r5 --region=us-central1 \
+     --format='value(metadata.name,status.conditions[0].status,spec.containers[0].image)'
+   gcloud run revisions describe fairway-admin-00014-8cv \
+     --project=savvy-kit-496703-r5 --region=us-central1 \
+     --format='value(metadata.name,status.conditions[0].status,spec.containers[0].image)'
+   ```
+
+   Compare the reported image digests with the approved release record.
+   Do not print or export secret environment configuration.
+4. In Firebase Console, open **Hosting & Serverless → Hosting** for project
+   `savvy-kit-496703-r5`. Confirm the live site, release history entry, version
+   ID, and retained content for the intended Hosting target. Do not assume a
+   version remains restorable just because its ID is recorded here.
+5. Verify that the target frontend and backend combination is compatible with
+   the current Firestore rules and authorization/data state. In particular,
+   establish that any records created or changed since release are readable
+   and safely handled by the proposed target code. The presence of retained
+   legacy fields alone does not prove this compatibility.
+
+If any identity, readiness, digest, traffic, or compatibility check differs
+from the approved record, stop and escalate before changing traffic.
+
+#### Recovery sequence
+
+Hosting and Cloud Run traffic changes are separate operations, not an atomic
+transaction. Use the release-specific, reviewed order to minimize the interval
+in which clients and services are mismatched. The usual frontend recovery is
+to restore the pre-release Hosting version first, then move only those Cloud
+Run services for which a compatible, security-preserving target has been
+verified. Keep the Admin service on a revision that enforces protected
+System-Administrator safeguards; the pre-release Admin revision listed above
+is not such a target.
+
+For Hosting, use Firebase Console **Release history → Roll back** on the
+verified retained pre-release release and confirm that the new live release
+points to the expected version ID. Firebase documents this operation in
+[Manage Hosting releases and versions](https://firebase.google.com/docs/hosting/manage-hosting-resources).
+The documented `firebase hosting:clone` command clones a source channel; it
+does not select an arbitrary historical version by version ID, so do not use
+it as a substitute for verifying and rolling back the exact release.
+
+For a Cloud Run service with an approved target, route 100% of traffic to that
+revision (example for the receiver target above):
+
+```sh
+gcloud run services update-traffic fairway-button-receiver \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=fairway-button-receiver-00025-mln=100
+```
+
+Use the same command form for another service only after substituting a
+separately approved, ready revision. Do not run the corresponding command for
+`fairway-admin-00014-8cv` unless a later independent review establishes that
+it preserves the protected-Admin guard and all current authorization
+contracts. Confirm the resulting service traffic and active revision with
+`gcloud run services describe` before proceeding.
+
+After restoration, run the release-approved health checks for `/`, `/admin`,
+Cart deep links, receiver readiness, and the Admin/Cart authorization
+bootstrap/API contracts using designated test identities. Confirm that
+unauthenticated requests remain denied, an unauthorized course remains denied,
+protected Admin demotion is rejected, and permitted Cart operations remain
+available. Inventory UI availability may intentionally revert with the
+pre-release frontend; inventory documents and other business data must remain
+untouched and must be verified through an authorized compatible client before
+resuming operations.
+
+#### Data, rules, and stop conditions
+
+Hosting rollback and Cloud Run traffic changes do not roll back Firestore
+documents or security rules. Do not restore, delete, migrate, or weaken
+Firestore data/rules as part of this procedure. Keep the active rules in place
+unless a separate reviewed and authorized recovery explicitly requires a
+rules change. If the chosen code cannot operate safely with current records
+and rules, stop; escalate for a coordinated, separately authorized recovery
+plan.
+
+Stop and escalate if the retained Hosting content is unavailable, a Cloud Run
+revision is missing/not ready or has a different digest, the Admin target
+cannot preserve protected-Admin enforcement, current data/rules compatibility
+is unproven, service health fails after a change, or the rollback would require
+an unapproved data, security-rule, account, or infrastructure change. Do not
+continue by selecting a merely older revision or by changing production state
+outside the approved recovery plan.
 
 ---
 

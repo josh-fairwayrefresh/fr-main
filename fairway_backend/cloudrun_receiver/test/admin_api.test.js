@@ -2,7 +2,10 @@
 
 const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
-const { createFairwayHandlers } = require('../index');
+const {
+  createFairwayHandlers,
+  resolveProtectedSystemAdminUids,
+} = require('../index');
 const { resolveRuntimeEnvironment, resolveSandboxEnvironment } = require('../lib/environment');
 
 let passed = 0;
@@ -141,6 +144,73 @@ function createAdminUserApi(db, authUsers = [], protectedSystemAdminUids = []) {
     return res;
   };
 }
+
+const PRODUCTION_PROJECT_ID = 'savvy-kit-496703-r5';
+
+test('protected Admin configuration resolves the production project mapping', () => {
+  const configuration = {
+    [PRODUCTION_PROJECT_ID]: ['synthetic-protected-admin-uid'],
+  };
+  assert.deepStrictEqual(
+    resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, configuration),
+    ['synthetic-protected-admin-uid']
+  );
+  assert.ok(resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID).length > 0);
+});
+
+test('protected Admin configuration fails closed when the production project mapping is missing', () => {
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, {}),
+    /Protected System Administrator configuration is invalid/
+  );
+});
+
+test('protected Admin configuration fails closed when the production mapping is empty', () => {
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, {
+      [PRODUCTION_PROJECT_ID]: [],
+    }),
+    /Protected System Administrator configuration is invalid/
+  );
+});
+
+test('protected Admin configuration fails closed when malformed or keyed to another project', () => {
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, {
+      'savvy-kit-496703-r5-typo': ['synthetic-protected-admin-uid'],
+    }),
+    /Protected System Administrator configuration is invalid/
+  );
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, {
+      [PRODUCTION_PROJECT_ID]: ['synthetic-protected-admin-uid', ''],
+    }),
+    /Protected System Administrator configuration is invalid/
+  );
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, {
+      [PRODUCTION_PROJECT_ID]: [' synthetic-protected-admin-uid '],
+    }),
+    /Protected System Administrator configuration is invalid/
+  );
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, {
+      [PRODUCTION_PROJECT_ID]: ['synthetic-protected-admin-uid', 'synthetic-protected-admin-uid'],
+    }),
+    /Protected System Administrator configuration is invalid/
+  );
+  assert.throws(
+    () => resolveProtectedSystemAdminUids(PRODUCTION_PROJECT_ID, null),
+    /Protected System Administrator configuration is invalid/
+  );
+});
+
+test('an unmapped synthetic sandbox project remains usable by isolated test handlers', () => {
+  assert.deepStrictEqual(
+    resolveProtectedSystemAdminUids('fairway-refresh-sandbox-test', {}),
+    []
+  );
+});
 
 async function seedHierarchy(db) {
   await db.collection('customers').doc('CUST-0001').set({
