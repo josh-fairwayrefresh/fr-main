@@ -4,6 +4,18 @@
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Baseline: FAIRWAY REFRESH — STABLE PILOT 1.1 (CPO-Accepted Sandbox, 2026-10-12)
+
+- **Product Acceptance**: The CPO accepted the integrated sandbox behavior: global Admin access to User Management, Cart, and Inventory; authorized customer access to Cart and Inventory; denial of Admin and other-customer/course access to non-Admins; shared-session navigation and course context; and corrected application initialization.
+- **Integration Source Commit**: `fc24a65ab309500dc9b4d80ae285d957ab32041f` on `main`.
+- **Firmware Baseline (unchanged)**: Embarrassingly Small Runtime `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; NCS 3.1.1, Nordic toolchain `561dce9adf`, board `circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. The FRB-0003 / Prototype 3.3 build and validation evidence is owned by `docs/FIRMWARE_SPECIFICATION.md`; Pilot 1.1 introduces no firmware change or new firmware validation.
+- **Backend Source Baseline**: The integration source at `fc24a65ab309500dc9b4d80ae285d957ab32041f` implements schema-v2 `user_access/{uid}` as the runtime authorization authority; global Admin and customer/course-scoped Cart and Inventory access; fail-closed handling of missing or malformed access; project-specific protected System Administrator UIDs; and the Cart dashboard `customer_id` response needed for compound Customer/Course identity.
+- **Sandbox Backend Deployment**: Receiver `fairway-button-receiver-sandbox-00016-8wn` and Admin `fairway-admin-sandbox-00011-jd6` remained the accepted sandbox services. These deployed revisions and the source baseline are recorded separately; no backend deployment was part of the release-candidate Hosting promotion.
+- **Web Application Source and Artifact**: Integration source commit `fc24a65ab309500dc9b4d80ae285d957ab32041f`; CPO-accepted sandbox asset `assets/index-ulUPzeaM.js`, SHA-256 `527946650c2bdbce4b8452a78e4a326987e3a8cbea2974e5c8ad4067db5d6656`. The CPO-confirmed runtime acceptance and executable initialization regression are recorded above. Automated validation: backend 96 checks, frontend 50 tests, sandbox frontend build passed.
+- **Integration Contracts**: Firmware continues to submit its existing authenticated button-event contract to the receiver. The backend remains authoritative for request persistence and access decisions; Cart request identity uses the `(customer_id, course_id)` pair. Admin, Cart, and Inventory use the shared Firebase Authentication session and schema-v2 access contract. Inventory remains a Cart feature, not an additional application entry point or authorization model.
+- **Production Status**: **NOT DEPLOYED — PRODUCTION PREFLIGHT BLOCKED.** The integration source has not been deployed to production. Existing production service revisions are not asserted to implement this source baseline. Readiness remains blocked pending verification of active backend contracts, reconciliation of schema-v1/schema-v2 deployment documentation, verification of protected-administrator enforcement and production security rules, and an established safe Hosting rollback procedure. These are production-release blockers, not evidence of a defect in the CPO-accepted sandbox baseline.
+- This Stable Pilot 1.1 product-baseline entry records the CPO-accepted sandbox integration; it does not rewrite or imply a new production deployment in the earlier service-specific release records below.
+
 ### Release: Pilot 1.1 — User Management & Inventory Integration (2026-10-12)
 
 - **Release Designation**: `pilot-1.1-with-inventory-management`
