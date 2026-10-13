@@ -8,7 +8,7 @@ import {
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
-import { CheckCircle, Grid2X2, History, Settings, Map, Circle, ShieldCheck } from 'lucide-react';
+import { CheckCircle, Grid2X2, History, Settings, Map as MapIcon, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
 import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
 import AdminApp from './admin/AdminApp';
@@ -16,6 +16,7 @@ import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
 import OperatorDesignReview from './operator-design/OperatorDesignReview';
 import { APP_MODE, modeForPath, resolveEntry, shouldRedirectFreshSignInToCartOperations } from './lib/appEntry.mjs';
+import { createCourseRequestState } from './lib/courseRequestState.mjs';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
 import { operatorRequest } from './lib/operator';
 import './styles.css';
@@ -402,7 +403,7 @@ function AppFrame({ children, activeTab, onTabChange, user, isAdmin, onOpenAdmin
           </button>
 
           <button className="nav-button" onClick={() => onTabChange('courses')}>
-            <Map size={16} />
+            <MapIcon size={16} />
             Courses
           </button>
 
@@ -713,8 +714,7 @@ function App() {
     }
 
     let active = true;
-    const requestsByCourse = new Map();
-    const loadedCourses = new Set();
+    const { requestsByCourse, loadedCourses } = createCourseRequestState();
     setLoadState('loading');
     setLoadError('');
 

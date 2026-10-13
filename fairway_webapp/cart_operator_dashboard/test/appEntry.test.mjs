@@ -64,6 +64,23 @@ test('Internal Admin and customer course assignment remain separate access check
   }), 'operator');
 });
 
+test('Cart authorization resolves independently while shared Admin status is still loading', () => {
+  assert.equal(resolveEntry({
+    mode: APP_MODE.OPERATOR,
+    authenticated: true,
+    claimsReady: false,
+    isAdmin: false,
+    operatorState: 'authorized',
+  }), 'operator');
+  assert.equal(resolveEntry({
+    mode: APP_MODE.ADMIN,
+    authenticated: true,
+    claimsReady: true,
+    isAdmin: true,
+    operatorState: 'not_requested',
+  }), 'admin');
+});
+
 test('Authenticated account with neither role is denied in both modes', () => {
   assert.equal(resolveEntry({
     mode: APP_MODE.ADMIN,

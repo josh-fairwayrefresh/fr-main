@@ -111,7 +111,7 @@ function createAdminApi(db) {
   };
 }
 
-function createAdminUserApi(db, authUsers = []) {
+function createAdminUserApi(db, authUsers = [], protectedSystemAdminUids = []) {
   const firebaseAuth = {
     getUser: async (uid) => {
       const user = authUsers.find((item) => item.uid === uid);
@@ -126,6 +126,7 @@ function createAdminUserApi(db, authUsers = []) {
   };
   const { fairwayAdmin } = createFairwayHandlers(db, {
     firebaseAuth,
+    protectedSystemAdminUids,
     verifyOperatorToken: async (token) => ({ uid: token === 'admin-token' ? 'staff-uid' : 'customer-uid' }),
   });
 
@@ -724,6 +725,51 @@ test('Admin User Management writes strict course-scoped access with empty meanin
   });
   assert.strictEqual(invalid.statusCode, 400);
   assert.strictEqual(invalid.body.error, 'course_not_in_customer');
+});
+
+test('Admin User Management cannot demote a protected system Admin', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  await db.collection('user_access').doc('protected-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const request = createAdminUserApi(db, [
+    { uid: 'staff-uid', email: 'admin@example.test', disabled: false },
+    { uid: 'protected-uid', email: 'protected@example.test', disabled: false },
+  ], ['protected-uid']);
+
+  const response = await request({
+    method: 'PUT',
+    path: '/api/v1/admin/users/protected-uid/access',
+    body: { admin: false, customer_id: 'CUST-0001', course_ids: [] },
+  });
+  assert.strictEqual(response.statusCode, 403);
+  assert.strictEqual(response.body.error, 'protected_system_admin');
+  assert.strictEqual((await db.collection('user_access').doc('protected-uid').get()).data().admin, true);
+});
+
+test('Admin User Management can preserve global access for a protected system Admin', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  await db.collection('user_access').doc('staff-uid').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const request = createAdminUserApi(db, [
+    { uid: 'staff-uid', email: 'admin@example.test', disabled: false },
+    { uid: 'protected-uid', email: 'protected@example.test', disabled: false },
+  ], ['protected-uid']);
+
+  const response = await request({
+    method: 'PUT',
+    path: '/api/v1/admin/users/protected-uid/access',
+    body: { admin: true, customer_id: null, course_ids: [] },
+  });
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.authorization.admin, true);
+  assert.strictEqual((await db.collection('user_access').doc('protected-uid').get()).data().admin, true);
 });
 
 test('Admin User Management denies customer users and protects the last active Admin', async () => {

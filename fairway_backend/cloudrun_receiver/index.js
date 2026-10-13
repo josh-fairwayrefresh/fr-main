@@ -48,6 +48,15 @@ const {
 const DEVICE_KEY_HEADER = 'x-fairway-device-key';
 const OPERATOR_AUTH_HEADER = 'authorization';
 const COMPLETE_COMMAND_TYPE = 'complete';
+const PROTECTED_SYSTEM_ADMIN_UIDS = Object.freeze({
+  'fairway-refresh-sandbox-260930': Object.freeze([
+    'zY75qapxaIYe0Z35Ss8lOQwdUq72',
+  ]),
+  'savvy-kit-496703-r5': Object.freeze([
+    '8ChxN9ikI3Zi4H4Tq4cS1dJSAQH3',
+    'ALri7tjCy1XsXz0TcYQ6oyQs9of2',
+  ]),
+});
 const KNOWN_STALE_DEVICE_FIELDS = Object.freeze({
   'FRB-0002': new Set(['hardware_revision', 'firmware_generation']),
 });
@@ -114,6 +123,9 @@ function createFairwayHandlers(db, {
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
+  protectedSystemAdminUids = PROTECTED_SYSTEM_ADMIN_UIDS[
+    process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
+  ] || [],
 } = {}) {
   /* Persists a golfer request using the validated demand-window suppression. */
   async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
@@ -388,6 +400,10 @@ function createFairwayHandlers(db, {
       return res.status(400).json({ error: 'admin_scope_must_be_global' });
     }
 
+    if (!body.admin && protectedSystemAdminUids.includes(uid)) {
+      return res.status(403).json({ error: 'protected_system_admin' });
+    }
+
     const legacyCourses = body.admin
       ? []
       : courseIds.length
@@ -526,6 +542,7 @@ function createFairwayHandlers(db, {
       .collection('service_events').orderBy('recorded_at', 'desc').limit(500).get();
     const events = eventsSnap.docs.map((event) => event.data());
     return {
+      customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,

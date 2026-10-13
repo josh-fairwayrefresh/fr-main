@@ -27,6 +27,85 @@ The Alignment Register is the canonical record mapping release milestones across
   - Google Sites embedding verification for public cart menu remains open.
   - Monarch Bay customer staff accounts (`monarch_fnb@fairwayrefresh.com`, `monarch_cart@fairwayrefresh.com`) will be configured via Admin User Management.
 
+### Sandbox Integration Validation (2026-10-12)
+
+- **Source**: `cb3d255ecaa7b7cb54d215e30bc4f0ac37278580` plus the six preserved
+  uncommitted worktree changes; no commit was created.
+- **Sandbox Cloud Run**: receiver `fairway-button-receiver-sandbox-00016-8wn`
+  and Admin `fairway-admin-sandbox-00011-jd6`, each serving 100% of traffic
+  from `fairway-refresh-sandbox-260930`.
+- **Sandbox Hosting**: `https://fairway-refresh-sandbox-260930.web.app`;
+  deployed assets `index-r8ZjWkb8.js` and `index-tMy6U3Ia.css` match the
+  sandbox production-mode build.
+- **Predeployment checks**: 92 backend tests and 49 frontend tests passed.
+  Production and sandbox frontend builds passed with the existing large-chunk
+  advisory. The four existing sandbox `user_access` records are schema-v2 and
+  valid. The configured protected sandbox UID matched the enabled
+  `admin@fairwayrefresh.com` Auth identity and its global schema-v2 access
+  record. No Auth identity or Firestore record was changed.
+- **HTTP checks**: `/`, `/admin`, and `/inventory` returned `200`.
+  Unauthenticated receiver operator bootstrap, Admin Inventory bootstrap,
+  access bootstrap, and User Management returned `401`.
+- **Authenticated acceptance**: not verified. The available browser had no
+  authenticated session. The standard Cart login rendered, but the browser
+  reported `TypeError: wN is not a constructor` at
+  `assets/index-r8ZjWkb8.js:33:33917` and remained at “Checking session…”.
+  Admin, Cart Operations, Inventory, customer-scope, and protected-demotion
+  browser scenarios remain unverified; CPO acceptance is outstanding.
+- No production deployment, sandbox account change, authorization-data write,
+  migration, commit, or push was performed.
+
+### Frontend Initialization Failure Correction (2026-10-12)
+
+- **Cause**: `main.jsx` imported the `lucide-react` icon as `Map` and also
+  constructed `new Map()` for Cart request aggregation. The imported React
+  icon shadowed the native constructor; the deployed bundle attempted
+  `new wN()` on that non-constructor. No source maps were available in the
+  build, so the deployed bundle was matched byte-for-byte to the local
+  artifact and inspected at the reported stack location.
+- **Correction**: renamed the icon import to `MapIcon`; the request
+  aggregation continues to use the native `Map`. A focused regression test
+  protects the distinction.
+- **Sandbox Hosting**: frontend-only deployment succeeded to
+  `fairway-refresh-sandbox-260930.web.app`, serving
+  `assets/index-whmuq-yY.js` and `assets/index-tMy6U3Ia.css`. Backend services
+  were not redeployed for this correction.
+- **Validation**: frontend tests passed **50/50** and `npm run build:sandbox`
+  passed with the existing large-chunk advisory. Browser checks loaded the
+  new bundle on `/`, `/admin`, and `/inventory` with no page errors. An
+  authenticated global Admin session loaded User Management, Cart Operations,
+  and the Tony Lema Inventory containing 57 On Cart products; the Cart and
+  Inventory routes retained the same session. After sign-out, all three
+  routes completed unauthenticated initialization and displayed their
+  expected login presentation without remaining at “Checking session…”.
+- Customer-user isolation and a live protected-UID demotion attempt remain
+  unverified. No Auth identity or `user_access` record was changed; CPO
+  authenticated acceptance remains outstanding.
+
+### CPO-Confirmed Sandbox Acceptance and Release Candidate (2026-10-12)
+
+- The CPO confirmed successful sandbox operation of global Admin access to
+  User Management, Cart, and Inventory; customer-scoped Cart and Inventory
+  access; denial of Admin and another customer's course to non-Admins; shared
+  session/course-context navigation; and frontend initialization without the
+  constructor exception.
+- The accepted deployed Hosting asset remains
+  `assets/index-whmuq-yY.js` at
+  `https://fairway-refresh-sandbox-260930.web.app`; it includes the accepted
+  `MapIcon` initialization correction. The locally tested release candidate
+  additionally extracts Cart request-state initialization into
+  `src/lib/courseRequestState.mjs` with an executable regression test. That
+  release-candidate source was not deployed and is not claimed to be
+  byte-identical to the accepted artifact.
+- The release-candidate validation passed 96 backend checks, 50 frontend
+  tests, and the sandbox frontend build. No deployment was performed for this
+  commit.
+- The CPO has not approved a privileged System Administrator revocation
+  procedure. Any exceptional revocation requires a separately approved,
+  controlled procedure recorded through the appropriate owner documentation.
+  This release candidate authorizes no privileged Firestore modification;
+  existing UID protection remains in force, and no revocation was performed.
+
 ---
 
 ## Purpose
@@ -217,6 +296,20 @@ Admin uses **User Management** to assign Admin access or select a Customer and
 Courses. Until a valid version-2 record is saved, the account is denied.
 Disabling an Auth account and revoking tokens are enforced independently of
 the access record.
+
+Normal Admin User Management writes cannot set `admin: false` for the
+project-specific protected system-administrator UIDs. The receiver source
+maps the verified production UIDs for `admin@fairwayrefresh.com` and
+`josh@fairwayrefresh.com`, and the verified sandbox UID for
+`admin@fairwayrefresh.com`; the sandbox has no `josh@fairwayrefresh.com` Auth
+identity. At the time this note was recorded, this source change had not yet
+been deployed; see the later Sandbox Integration Validation entry above.
+The missing record fails closed. Do not use email matching or normal User
+Management as a revocation bypass. The CPO has not approved direct privileged
+Firestore modification as an operational revocation procedure. Any
+exceptional revocation requires a separately approved, controlled procedure;
+this release candidate does not authorize or perform such an operation, and
+existing protected-UID enforcement remains in force.
 
 Runtime services and Firestore Rules accept only schema version 2. The
 one-time, sandbox-restricted `migrate_authorization_v2.js` script reads

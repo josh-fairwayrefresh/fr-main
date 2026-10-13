@@ -699,6 +699,8 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
   assert.strictEqual(response.body.summaries.daily.completed_transactions, 1);
   assert.strictEqual(response.body.summaries.daily.average_completion_minutes, 10);
   assert.deepStrictEqual(response.body.history.map((request) => request.request_id), ['completed-assigned']);
+  assert.strictEqual(response.body.courses[0].customer_id, 'CUST-0001');
+  assert.strictEqual(response.body.courses[0].course_id, 'COURSE-0001');
 });
 
 test('operator assignment fixture uses the schema-v2 Customer and Course contract', async () => {
@@ -759,7 +761,8 @@ test('operator bootstrap and push subscription are restricted to assigned Course
 
 test('Fairway Refresh Staff receive Cart access to courses across customers', async () => {
   const db = new FakeFirestore();
-  await db.collection('user_access').doc('operator-123').set({
+  const globalAdminUid = 'operator-123';
+  await db.collection('user_access').doc(globalAdminUid).set({
     schema_version: 2,
     admin: true,
     customer_id: null,
@@ -772,21 +775,34 @@ test('Fairway Refresh Staff receive Cart access to courses across customers', as
   await db.collection('customers').doc('CUST-0002').collection('courses')
     .doc('COURSE-0002').set({ course_name: 'Other Course' });
   const { fairwayButtonReceiver } = createFairwayHandlers(db, {
-    verifyOperatorToken: operatorVerifier(),
+    verifyOperatorToken: operatorVerifier('valid-token', globalAdminUid),
     vapidPublicKey: 'public-vapid-key',
     vapidKeyVersion: 'v1',
   });
+  const authorizationHeaders = { authorization: 'Bearer valid-token' };
 
   const response = createResponse();
   await fairwayButtonReceiver(createRequest({
     method: 'GET',
     path: '/api/v1/operator/bootstrap',
-    headers: { authorization: 'Bearer valid-token' },
+    headers: authorizationHeaders,
   }), response);
 
   assert.strictEqual(response.statusCode, 200);
   assert.deepStrictEqual(
     response.body.courses.map((course) => [course.customer_id, course.course_id]),
+    [['CUST-0001', 'COURSE-0001'], ['CUST-0002', 'COURSE-0002']]
+  );
+
+  const adminDashboard = createResponse();
+  await fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/dashboard',
+    headers: authorizationHeaders,
+  }), adminDashboard);
+  assert.strictEqual(adminDashboard.statusCode, 200);
+  assert.deepStrictEqual(
+    adminDashboard.body.courses.map((course) => [course.customer_id, course.course_id]),
     [['CUST-0001', 'COURSE-0001'], ['CUST-0002', 'COURSE-0002']]
   );
 });
