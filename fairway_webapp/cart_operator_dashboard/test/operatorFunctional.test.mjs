@@ -6,6 +6,7 @@ import { createCourseRequestState } from '../src/lib/courseRequestState.mjs';
 
 const source = await readFile(new URL('../src/OperatorApp.jsx', import.meta.url), 'utf8');
 const entrySource = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8');
+const operatorStyles = await readFile(new URL('../src/operator.css', import.meta.url), 'utf8');
 
 test('functional Option C operator surface keeps the approved workflow contract', () => {
   assert.match(source, /OLDEST ACTIVE REQUEST/);
@@ -27,6 +28,19 @@ test('Assigned customer users have an Inventory link into the shared authenticat
 test('course matching in OperatorApp matches on customer_id and course_id', () => {
   assert.match(source, /mergeDashboardCourse\(selectedCourse, dashboard\?\.courses\)/);
   assert.match(source, /\{courseDisplayLabel\(course\)\}/);
+});
+
+test('mobile operator header preserves navigation, course selection, and labeled service actions', () => {
+  assert.match(source, /<nav aria-label="Cart Operator navigation">/);
+  assert.match(source, /aria-label="Select course"/);
+  assert.match(source, /aria-label=\{`\$\{serviceActionLabel\} for \$\{course\?\.course_name/);
+  assert.match(source, /<span>\{serviceActionLabel\}<\/span>/);
+  assert.match(operatorStyles, /@media \(max-width: 1180px\)/);
+  assert.match(operatorStyles, /\.op-course-context \{ display: grid;/);
+  assert.match(operatorStyles, /\.op-service-controls \{ display: flex; flex-wrap: wrap;/);
+  assert.match(operatorStyles, /\.op-notifications \{ position: static;/);
+  assert.match(operatorStyles, /\.op-icon \{ width: 44px; height: 44px;/);
+  assert.match(operatorStyles, /\.op-priority \{ grid-template-columns: 1fr; \}/);
 });
 
 test('Cart request initialization executes the native Map factory used by its listener', () => {
