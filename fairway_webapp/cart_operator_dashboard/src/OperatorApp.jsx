@@ -174,5 +174,34 @@ export default function OperatorApp({
     }
   }
 
-  return <main className="operator-app"><header className="op-header"><Brand /><nav><button className={tab === 'requests' ? 'active' : ''} type="button" onClick={() => setTab('requests')}>Requests</button><button className={tab === 'history' ? 'active' : ''} type="button" onClick={() => setTab('history')}>History</button></nav><a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>{operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); setDashboard(null); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}<span className="op-current-course">{courseDisplayLabel(course)}</span><ServiceStatus course={course} /><button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course}>{course?.service_state?.suspended ? <Play size={17} /> : <Pause size={17} />}<span>{course?.service_state?.suspended ? 'Resume Service' : 'Suspend Service'}</span></button>{isAdmin && <button className="op-icon" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}<button className="op-icon" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button></header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  const serviceAction = course?.service_state?.suspended ? 'resume' : 'suspend';
+  const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
+
+  return <main className="operator-app"><header className="op-header">
+    <div className="op-header-main">
+      <Brand />
+      <nav aria-label="Cart Operator navigation">
+        <button className={tab === 'requests' ? 'active' : ''} type="button" aria-pressed={tab === 'requests'} onClick={() => setTab('requests')}>Requests</button>
+        <button className={tab === 'history' ? 'active' : ''} type="button" aria-pressed={tab === 'history'} onClick={() => setTab('history')}>History</button>
+      </nav>
+      <div className="op-header-account">
+        {isAdmin && <button className="op-icon" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
+        <button className="op-icon" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+      </div>
+    </div>
+    <div className="op-header-context">
+      <div className="op-course-context">
+        <span className="op-current-course">{courseDisplayLabel(course)}</span>
+        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); setDashboard(null); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+      </div>
+      <div className="op-service-controls">
+        <ServiceStatus course={course} />
+        <button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
+          {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
+          <span>{serviceActionLabel}</span>
+        </button>
+        <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
+      </div>
+    </div>
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }
