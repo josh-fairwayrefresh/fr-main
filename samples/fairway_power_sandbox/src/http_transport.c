@@ -2,13 +2,15 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <sys/time.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
-#include <zephyr/posix/fcntl.h>
 
 #include "golfer_txn.h"
 #include "thread_priorities.h"
@@ -17,8 +19,8 @@ LOG_MODULE_REGISTER(http_transport);
 
 #define TRANSPORT_DNS_READINESS_TIMEOUT_MS        3000
 #define TRANSPORT_YIELD_DNS_READINESS_TIMEOUT_MS  2000
-#define TRANSPORT_YIELD_CONNECT_POLL_MS           3000
-#define TRANSPORT_YIELD_IO_POLL_MS                2000
+#define TRANSPORT_YIELD_CONNECT_TIMEOUT_MS        3000
+#define TRANSPORT_YIELD_IO_TIMEOUT_MS             2000
 #define DNS_CACHE_MAX_AGE_MS                      300000
 
 /* Owned deliberately rather than inherited from CONFIG_MAIN_STACK_SIZE
@@ -157,57 +159,194 @@ static int dns_get_address_bounded(struct sockaddr_storage *out, int64_t bound_m
 	return -ETIMEDOUT;
 }
 
-/* Bounded poll-based stage wait: never blocks longer than remaining_ms,
- * regardless of NCS socket-timeout-option semantics.
+/* nRF Modem Library documents SO_SNDTIMEO as bounding connect(), send(),
+ * and sendto(). In particular, connect() on a TLS socket completes the TLS
+ * handshake before returning. Keep the connect blocking so the modem owns
+ * the handshake lifecycle, while bounding it to the transaction deadline.
  */
-static int socket_stage_deadline(int fd, short events, int64_t remaining_ms)
+static int socket_set_timeout(int fd, int option, int64_t deadline_ms)
 {
+	int64_t remaining_ms = deadline_ms - k_uptime_get();
+	struct timeval timeout;
+
 	if (remaining_ms <= 0) {
 		return -ETIMEDOUT;
 	}
 
-	struct zsock_pollfd pfd = { .fd = fd, .events = events };
-	int ret = zsock_poll(&pfd, 1, (int)remaining_ms);
-
-	if (ret <= 0) {
-		return -ETIMEDOUT;
-	}
-	if (pfd.revents & (ZSOCK_POLLERR | ZSOCK_POLLHUP)) {
-		return -ECONNRESET;
+	timeout.tv_sec = remaining_ms / 1000;
+	timeout.tv_usec = (remaining_ms % 1000) * 1000;
+	if (zsock_setsockopt(fd, SOL_SOCKET, option, &timeout, sizeof(timeout)) < 0) {
+		return -errno;
 	}
 	return 0;
 }
 
-/* NCS 3.1.1 does not document SO_SNDTIMEO/SO_RCVTIMEO as bounding
- * zsock_connect() on this offloaded socket stack (only send/recv, per
- * POSIX convention); a nonblocking connect plus zsock_poll()'s own
- * timeout parameter is the only verified way to enforce a hard connect
- * deadline.
- */
 static int socket_connect_bounded(int fd, const struct sockaddr *addr, socklen_t len,
-				   int64_t remaining_ms)
+				  int64_t deadline_ms, bool yieldable)
 {
-	int flags = zsock_fcntl(fd, F_GETFL, 0);
-	int ret;
+	int64_t connect_deadline = deadline_ms;
 
-	zsock_fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-
-	ret = zsock_connect(fd, addr, len);
-	if (ret == 0) {
-		return 0;
+	if (yieldable) {
+		connect_deadline = MIN(deadline_ms,
+				       k_uptime_get() + TRANSPORT_YIELD_CONNECT_TIMEOUT_MS);
 	}
-	if (errno != EINPROGRESS) {
+	int ret = socket_set_timeout(fd, SO_SNDTIMEO, connect_deadline);
+
+	if (ret != 0) {
+		return ret;
+	}
+	if (zsock_connect(fd, addr, len) < 0) {
 		return -errno;
 	}
-	if (socket_stage_deadline(fd, ZSOCK_POLLOUT, remaining_ms) != 0) {
-		return -ETIMEDOUT;
+	return 0;
+}
+
+static int socket_send_all(int fd, const char *data, size_t length,
+			   int64_t deadline_ms, bool yieldable)
+{
+	size_t sent = 0;
+
+	while (sent < length) {
+		int64_t io_deadline = deadline_ms;
+
+		if (yieldable) {
+			if (golfer_txn_is_pending()) {
+				return -ECANCELED;
+			}
+			io_deadline = MIN(deadline_ms,
+					  k_uptime_get() + TRANSPORT_YIELD_IO_TIMEOUT_MS);
+		}
+		int ret = socket_set_timeout(fd, SO_SNDTIMEO, io_deadline);
+
+		if (ret != 0) {
+			return ret;
+		}
+
+		ret = zsock_send(fd, data + sent, length - sent, 0);
+		if (yieldable && golfer_txn_is_pending()) {
+			return -ECANCELED;
+		}
+		if (ret < 0) {
+			return -errno;
+		}
+		if (ret == 0) {
+			return -EPIPE;
+		}
+		sent += ret;
+	}
+	return 0;
+}
+
+enum http_response_body_state {
+	HTTP_RESPONSE_HEADERS_INCOMPLETE = -1,
+	HTTP_RESPONSE_CLOSE_DELIMITED,
+	HTTP_RESPONSE_CONTENT_INCOMPLETE,
+	HTTP_RESPONSE_CONTENT_COMPLETE,
+};
+
+static enum http_response_body_state http_response_get_body_state(const char *data,
+								   size_t length)
+{
+	const char *header_end = strstr(data, "\r\n\r\n");
+	const char *line;
+
+	if (header_end == NULL) {
+		return HTTP_RESPONSE_HEADERS_INCOMPLETE;
 	}
 
-	int so_error = 0;
-	socklen_t elen = sizeof(so_error);
+	line = strstr(data, "\r\n");
+	if (line == NULL || line >= header_end) {
+		return HTTP_RESPONSE_HEADERS_INCOMPLETE;
+	}
+	line += 2;
+	while (line < header_end) {
+		const char *line_end = strstr(line, "\r\n");
 
-	zsock_getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &elen);
-	return so_error ? -so_error : 0;
+		if (line_end == NULL || line_end > header_end) {
+			line_end = header_end;
+		}
+		if ((size_t)(line_end - line) >= sizeof("Content-Length:") - 1 &&
+		    strncasecmp(line, "Content-Length:",
+				sizeof("Content-Length:") - 1) == 0) {
+			const char *value = line + sizeof("Content-Length:") - 1;
+			char *end;
+			unsigned long content_length;
+
+			while (value < line_end && (*value == ' ' || *value == '\t')) {
+				value++;
+			}
+			if (value == line_end || *value < '0' || *value > '9') {
+				return HTTP_RESPONSE_HEADERS_INCOMPLETE;
+			}
+			errno = 0;
+			content_length = strtoul(value, &end, 10);
+			if (errno == ERANGE) {
+				return HTTP_RESPONSE_HEADERS_INCOMPLETE;
+			}
+			while (end < line_end && (*end == ' ' || *end == '\t')) {
+				end++;
+			}
+			if (end != line_end) {
+				return HTTP_RESPONSE_HEADERS_INCOMPLETE;
+			}
+			return length - (size_t)(header_end + 4 - data) >= content_length
+				       ? HTTP_RESPONSE_CONTENT_COMPLETE
+				       : HTTP_RESPONSE_CONTENT_INCOMPLETE;
+		}
+		line = line_end + 2;
+	}
+	return HTTP_RESPONSE_CLOSE_DELIMITED;
+}
+
+static int socket_receive_response(int fd, char *buffer, size_t capacity,
+				   size_t *received, int64_t deadline_ms, bool yieldable)
+{
+	*received = 0;
+	buffer[0] = '\0';
+
+	while (*received < capacity - 1) {
+		int64_t io_deadline = deadline_ms;
+
+		if (yieldable) {
+			if (golfer_txn_is_pending()) {
+				return -ECANCELED;
+			}
+			io_deadline = MIN(deadline_ms,
+					  k_uptime_get() + TRANSPORT_YIELD_IO_TIMEOUT_MS);
+		}
+		int ret = socket_set_timeout(fd, SO_RCVTIMEO, io_deadline);
+
+		if (ret != 0) {
+			return ret;
+		}
+
+		ret = zsock_recv(fd, buffer + *received, capacity - 1 - *received, 0);
+		if (yieldable && golfer_txn_is_pending()) {
+			return -ECANCELED;
+		}
+		if (ret < 0) {
+			return -errno;
+		}
+		if (ret == 0) {
+			enum http_response_body_state body_state;
+
+			if (*received == 0) {
+				return -ECONNRESET;
+			}
+			body_state = http_response_get_body_state(buffer, *received);
+			return (body_state == HTTP_RESPONSE_HEADERS_INCOMPLETE ||
+				body_state == HTTP_RESPONSE_CONTENT_INCOMPLETE)
+				       ? -EPROTO
+				       : 0;
+		}
+		*received += ret;
+		buffer[*received] = '\0';
+		if (http_response_get_body_state(buffer, *received) ==
+		    HTTP_RESPONSE_CONTENT_COMPLETE) {
+			return 0;
+		}
+	}
+	return -EMSGSIZE;
 }
 
 int http_transport_send(const char *request, int request_len,
@@ -221,6 +360,7 @@ int http_transport_send(const char *request, int request_len,
 	socklen_t addr_len;
 
 	static char recv_buf[4096];
+	size_t recv_len;
 
 	int verify = TLS_PEER_VERIFY_REQUIRED;
 	sec_tag_t sec_tag_list[] = { FAIRWAY_TLS_SEC_TAG };
@@ -282,13 +422,27 @@ int http_transport_send(const char *request, int request_len,
 		goto out;
 	}
 
-	remaining_ms = attempt_deadline_ms - k_uptime_get();
-	LOG_INF("Connecting to %s:443", FAIRWAY_HOST);
+	if (addr.ss_family == AF_INET) {
+		char address_text[INET_ADDRSTRLEN];
+		const struct sockaddr_in *ipv4 = (const struct sockaddr_in *)&addr;
+
+		if (zsock_inet_ntop(AF_INET, &ipv4->sin_addr, address_text,
+				    sizeof(address_text)) != NULL) {
+			LOG_INF("Connecting to %s (%s):443", FAIRWAY_HOST, address_text);
+		} else {
+			LOG_INF("Connecting to %s:443", FAIRWAY_HOST);
+		}
+	} else {
+		LOG_INF("Connecting to %s:443", FAIRWAY_HOST);
+	}
 	ret = socket_connect_bounded(fd, (struct sockaddr *)&addr, addr_len,
-		yieldable ? MIN(remaining_ms, (int64_t)TRANSPORT_YIELD_CONNECT_POLL_MS)
-			  : remaining_ms);
+				    attempt_deadline_ms, yieldable);
+	if (yieldable && golfer_txn_is_pending()) {
+		ret = -ECANCELED;
+		goto out;
+	}
 	if (ret != 0) {
-		LOG_ERR("HTTPS connect failed: %d", ret);
+		LOG_ERR("HTTPS TLS connect/handshake failed: %d", ret);
 		if (ret == -ECONNREFUSED || ret == -ETIMEDOUT) {
 			dns_cache_invalidate();
 		}
@@ -302,43 +456,27 @@ int http_transport_send(const char *request, int request_len,
 		goto out;
 	}
 
-	remaining_ms = attempt_deadline_ms - k_uptime_get();
-	ret = socket_stage_deadline(fd, ZSOCK_POLLOUT,
-		yieldable ? MIN(remaining_ms, (int64_t)TRANSPORT_YIELD_IO_POLL_MS) : remaining_ms);
+	ret = socket_send_all(fd, request, request_len, attempt_deadline_ms, yieldable);
 	if (ret != 0) {
+		LOG_ERR("HTTPS request send failed: %d", ret);
 		goto out;
 	}
 
-	ret = zsock_send(fd, request, request_len, 0);
-	if (ret < 0) {
-		ret = -errno;
-		LOG_ERR("HTTPS zsock_send failed: errno %d", errno);
-		goto out;
-	}
-
-	LOG_INF("HTTPS request sent: %d bytes", ret);
+	LOG_INF("HTTPS request sent: %d bytes", request_len);
 
 	if (yieldable && golfer_txn_is_pending()) {
 		ret = -ECANCELED;
 		goto out;
 	}
 
-	remaining_ms = attempt_deadline_ms - k_uptime_get();
-	ret = socket_stage_deadline(fd, ZSOCK_POLLIN,
-		yieldable ? MIN(remaining_ms, (int64_t)TRANSPORT_YIELD_IO_POLL_MS) : remaining_ms);
+	ret = socket_receive_response(fd, recv_buf, sizeof(recv_buf),
+				     &recv_len, attempt_deadline_ms, yieldable);
 	if (ret != 0) {
+		LOG_ERR("HTTPS response receive failed: %d", ret);
 		goto out;
 	}
 
-	ret = zsock_recv(fd, recv_buf, sizeof(recv_buf) - 1, 0);
-	if (ret < 0) {
-		ret = -errno;
-		LOG_ERR("HTTPS zsock_recv failed: errno %d", errno);
-		goto out;
-	}
-
-	recv_buf[ret] = '\0';
-	LOG_INF("HTTPS response received: %d bytes", ret);
+	LOG_INF("HTTPS response received: %u bytes", (unsigned int)recv_len);
 	LOG_INF("HTTPS response preview: %.80s", recv_buf);
 
 	if (yieldable && golfer_txn_is_pending()) {
@@ -366,7 +504,7 @@ int http_transport_send(const char *request, int request_len,
 		if (body != NULL) {
 			body += 4;
 			response->body = body;
-			response->body_len = (size_t)ret - (size_t)(body - recv_buf);
+			response->body_len = recv_len - (size_t)(body - recv_buf);
 		}
 	}
 

@@ -345,3 +345,48 @@ This section owns firmware implementation backlog only. Product-level planning i
 Engineering rationale
 --------------------
 - Firmware design should prioritize reliable LTE communication and maximum battery lifetime. Modem activity, retries, peripheral usage, and user feedback should all be evaluated for their power impact, with preference given to predictable field behavior under worst-case operating conditions.
+
+## Temporary HTTPS recovery baseline: `1.1_tempfix`
+
+This local firmware release baseline applies the reviewed changes in
+`http_transport.c`, `modem_service.c`, and
+`certs/google-run-ca-chain-cstr.pem` to accepted Pilot 1.1 commit
+`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. It is not a new product
+architecture or a fleet-wide deployment approval.
+
+- The recovery uses blocking modem-offloaded TLS `connect()` with
+  `SO_SNDTIMEO` bounded by the existing absolute transaction deadline,
+  deadline-bounded send/receive operations, partial-write completion, and
+  complete response accumulation. Peer-certificate and hostname verification
+  remain required; the existing hostname/SNI and security-tag model,
+  authenticated request format, transaction worker, and five-minute demand
+  window are unchanged.
+- The configured trust anchor is the GlobalSign Root CA (SHA-256
+  `EB:D4:10:40:E4:BB:3E:C7:42:C9:E3:81:D3:1E:F2:A4:1A:48:B6:68:5C:96:E7:CE:F3:C1:DF:6C:D4:33:1C:99`).
+  It validated the observed Google receiver chain during the authorized
+  recovery tests. This supports the trust-path correction for the tested
+  chain; it does not establish the exact event that triggered the October 15
+  delivery outage.
+- Existing provisioning handles absent credentials, matching credentials,
+  positive mismatch, and the known `-E2BIG` compare-limit case separately.
+  Other comparison, delete, and write errors are surfaced; no unverified TLS
+  fallback is used. The trust anchor expires in January 2028, so chain
+  changes and trust-material rotation require review before then.
+- The FRB-0004 NCS 3.1.1 build used the
+  `circuitdojo_feather_nrf9151@1/nrf9151/ns` board, `prj_a.conf`, and the
+  existing local FRB-0004 provisioning header. The verified image SHA-256 is
+  `4a45dcc6500c9a0fb64d62394268c185bb7bde42cab3077947297f97ac161fe0`.
+  The image and all per-device credentials are local build inputs, not shared
+  release files. Every other device requires its own existing identity and
+  unique credential in a fresh device-specific build; never reuse the FRB-0004
+  image.
+- Device/build evidence records an authenticated FRB-0004 HTTPS POST, HTTP 200,
+  and Firestore persistence. The CPO separately confirms Cart Operator
+  visibility/actionability and successful repeated-button-request validation.
+- A later automatic COMPLETE poll timed out during TLS connect with
+  `-116` (`ETIMEDOUT`). The COMPLETE poll uses the shared transaction worker,
+  yields at bounded transport checkpoints, and does not create a button
+  request. Golfer work is selected first and retains its existing 15-second
+  transaction budget. The timeout remains an intermittent reliability risk;
+  it is not proof of a button-request failure. Continue to monitor it during
+  any separately authorized staged rollout.

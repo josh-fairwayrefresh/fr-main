@@ -1,5 +1,6 @@
 #include "modem_service.h"
 
+#include <errno.h>
 #include <string.h>
 
 #include <zephyr/kernel.h>
@@ -157,7 +158,14 @@ static int provision_fairway_ca_certificate(void)
 			return 0;
 		}
 
-		LOG_INF("CA certificate mismatch; replacing certificate");
+		if (mismatch == -E2BIG) {
+			LOG_WRN("Stored CA certificate exceeds modem compare limit; replacing configured chain");
+		} else if (mismatch > 0) {
+			LOG_INF("CA certificate mismatch; replacing certificate");
+		} else {
+			LOG_ERR("CA certificate comparison failed: %d", mismatch);
+			return mismatch;
+		}
 
 		ret = modem_key_mgmt_delete(FAIRWAY_TLS_SEC_TAG,
 					    MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN);
