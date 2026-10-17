@@ -8,8 +8,9 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
+#include <fairway_device_key.h>
+
 #include "http_transport.h"
-#include "secrets/fairway_device_key.h"
 
 struct complete_command_json {
 	const char *command_id;

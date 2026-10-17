@@ -1,5 +1,245 @@
 # Deployment Guide
 
+## Current Pilot 1.1 Operating State
+
+The CPO confirms FRB-0001 through FRB-0006 are fully commissioned and in
+operation. Pilot 1.1 is an integrated product milestone; the accepted firmware
+source remains `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+
+The Cart Operator responsive-layout release is live in production as recorded
+below. Its deployment/build checks passed, but the authenticated physical
+phone/Safari usability check and CPO mobile acceptance were not performed in
+that release record. Do not treat the release as proof of completed mobile
+acceptance; see `docs/feature_backlog.md`.
+
+Deployment and release entries below are retained as audit history. Historical
+entries describe the state at the time of each release and do not supersede
+current owner documents.
+
+## Increment 3C Readiness — FRB-0003 (synthetic validation; firmware not deployed)
+
+The Increment 3B firmware-image discrepancy is resolved. The original two
+synthetic FRB-9801 image hashes and firmware-source archive hash still match
+their recorded manifests. A third pristine synthetic build was independently
+verified; all three images have identical signed payloads, matching image
+SHA-256 and public-key-hash TLVs, and cryptographically valid MCUboot
+ECDSA-P256 signatures. The 70-byte/five-region difference between builds 01
+and 02 is within the MCUboot signature TLV at the end of the unsigned
+application ELF. DER-encoded signature lengths are 70, 71, and 70 bytes for
+builds 01, 02, and 03. This is expected ECDSA signing nondeterminism and does
+not change executable code, TF-M content, device identity, or credential
+selection. Exact checksums and source/build details remain in the protected
+Increment 3B/3C manifests. Diagnostic build 03 is synthetic FRB-9801,
+530,004 bytes, SHA-256
+`44f114e6bfe567d1e5edfb8fc6fce5592a7d182167bdb6b342398f6297e66017`.
+
+**Signing-security blocker:** all three synthetic images were signed with
+MCUboot's NCS-distributed `root-ec-p256.pem` debug key. MCUboot documents this
+widely distributed key as insecure and not for production. Signature
+verification with that key does not establish production trust; none of these
+images may be flashed or promoted. No approved production signing key or
+matching bootloader trust anchor was established, and this investigation did
+not establish which key signed the currently deployed Pilot 1.1 firmware.
+Resolve and verify the production signing configuration before any real
+FRB-0003 build.
+
+The CPO confirms that FRB-0003 has one removable Hologram SIM as its only
+active cellular identity, permits its temporary removal for maintenance, and
+approves an offline credential transition using the existing single-active-
+credential contract. The maintenance exception is documented in
+`docs/HARDWARE_ASSEMBLY_GUIDE.md`; the normal installed-SIM startup checklist
+is unchanged. No production service, credential, Firestore record, firmware,
+or physical device was changed in Increment 3C.
+
+| Readiness stage | Increment 3C status | Required gate |
+|---|---|---|
+| Admin backend deployment | Completed 2026-10-17; the reviewed candidate is ready and receives 100% traffic. Source, test-count reconciliation, deployment, and post-deployment evidence are recorded below. | Lead Architect review of this evidence. Any production credential lifecycle operation still requires separate CPO authorization. |
+| FRB-0003 credential preparation/activation | Not performed or authorized; no production verifier or device registry record was accessed or changed. | Separate CPO authorization; confirm FRB-0003 identity/eligibility and preserve existing registry fields; activate only after a verified flash. |
+| FRB-0003 firmware build | No real credential or real-device image was built. | Approve/configure the production signer and bootloader trust anchor; then use the authorized device input and independently verify identity, credential match, provenance, image integrity, and signature. |
+| Physical flashing | Not authorized or performed. | Separate physical-operation authorization; remove the SIM only under the documented FRB-0003 maintenance exception; flash only the verified artifact. |
+| End-to-end validation | Not performed. | Separate validation authorization; verify boot, LTE, authenticated request, request attribution, Cart Operator actionability, and correlated COMPLETE; record evidence. |
+
+### FRB-0003 Recovery Stage 1 — Admin deployment (2026-10-17)
+
+**Source identity:** the isolated candidate is the accepted Admin baseline
+`a07e9080473a92631a00d499482d37f35a5ca481` plus the eight-file
+credential-lifecycle delta declared in
+`backend-increment3b-source.manifest.json`. The candidate archive SHA-256 is
+`3081b5d5bfdcfd2936be3d1da546d0cbd3e411bc66f7fa80df00faae6bff2537`.
+It was deployed from the isolated release candidate, not the dirty `main`
+checkout. Cloud Build `34afe3b0-5512-4fdc-b77e-4915453fab63` succeeded using
+Node.js 22.23.3.
+
+**Test-count reconciliation:** a clean lockfile install and the complete
+candidate backend suite passed **118/118** tests. Re-running the accepted
+baseline produced **106** tests; the candidate adds 12 tests (one Admin API
+test and 11 lifecycle tests). The earlier 103 `PASS:` lines count only output
+with that prefix, not all test cases. The prior 105/105 baseline count was not
+reproduced. The synthetic Firestore Emulator suite passed **8/8**, including
+transaction contention and retries. The local install used Node.js 24.15.0
+and emitted an engine-range warning for locked `cloudevents@8.0.3` (maximum
+Node.js 22); the deployed Cloud Build runtime, Node.js 22.23.3, satisfies that
+range.
+
+**Production deployment:** `fairway-admin-00017-dvk` is Ready and receives
+100% of `fairway-admin` traffic in `us-central1`. Its image digest is
+`sha256:36a2146248fc485cf55906db09f9a161db5bf0a27ca4090a615cbcd296a8e5e8`.
+The existing service account, timeout, maximum scale, CPU, memory, concurrency,
+and environment-variable names were preserved. No production IAM, Firestore
+rules/indexes, receiver, firmware, or device configuration was changed.
+The receiver remains `fairway-button-receiver-00026-kg5` at 100% traffic.
+
+**Post-deployment verification:** unauthenticated GET requests to the
+FRB-0003 lifecycle-status route and existing `/api/v1/admin/users` route
+returned HTTP 401. Build and revision logs had no ERROR/FATAL entries; the
+credential-shaped log matches were limited to Cloud Build source-object
+identifiers and image digests. No authenticated production Admin request was
+made, so authorized lifecycle-status behavior and authenticated existing
+Admin behavior were not independently exercised in production; existing
+behavior is covered by the passing backend regression suite.
+
+No production credential lifecycle operation was invoked. No credential,
+verifier, device registry record, receiver, firmware, or physical device was
+changed. This deployment makes the Admin capability available; it does not
+authorize FRB-0003 credential preparation, activation, firmware build, or
+physical recovery. FRB-0003 credential recovery has not occurred, and no
+physical recovery has been demonstrated. Its removable Hologram SIM remains
+its only active cellular identity; temporary removal for offline maintenance
+is authorized by the CPO as documented in
+`docs/HARDWARE_ASSEMBLY_GUIDE.md`. The production-signing key and matching
+bootloader trust anchor remain an independent unresolved blocker for a real
+FRB-0003 image.
+
+The full recovery order and failure handling are owned by
+`docs/DEVICE_PROVISIONING_GUIDE.md`. Byte-for-byte equality is not required
+when the signed payload and key provenance are established and each exact
+artifact passes integrity and signature verification. A matching source
+fingerprint alone is insufficient.
+
+## Increment 3B Release Readiness — FRB-0003 (2026-10-16; not deployed)
+
+**Disposition:** release candidates and procedures are prepared for independent
+review only. No production service, credential, Firestore record, firmware, or
+physical device was changed. The CPO has approved a short FRB-0003
+authentication interruption in principle; that does not authorize deployment
+or physical recovery.
+
+This section preserves the Increment 3B findings as historical evidence.
+Increment 3C above supersedes its firmware-discrepancy and SIM-isolation
+uncertainties; neither section authorizes deployment or physical recovery.
+
+### Verified production backend baseline
+
+Read-only Cloud Run metadata showed:
+
+| Service | Active revision | Traffic | Image digest | Created |
+|---|---|---:|---|---|
+| Admin (`fairway-admin`, `us-central1`) | `fairway-admin-00016-fs9` | 100% | `sha256:1f1cc7d1f55d373ee796786de34dd0323b746c8007e1c18617f2458a4a20a407` | `2026-10-13T09:04:06.695225Z` |
+| Receiver (`fairway-button-receiver`, `us-central1`) | `fairway-button-receiver-00026-kg5` | 100% | `sha256:556427bdc2cc428072caa73b6376211d9184049829901c11bfe9eb82b556867f` | `2026-10-13T06:57:39.670699Z` |
+
+The Admin runtime identity is
+`fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`, with the
+existing `roles/datastore.user` and `roles/firebaseauth.admin` grants. The
+receiver uses the project compute service account with its existing
+`roles/datastore.user` and `roles/run.builder` grants. Inspection exposed only
+environment-variable names, not values. No lifecycle routes are deployed.
+Existing Admin mode, allowed origins, service identities, ingress, invoker,
+scale limits, and timeout are retained by the candidate. The Admin lifecycle
+uses the existing server Firestore client and authorization; no new
+environment variables, IAM grants, Firestore rules, indexes, or infrastructure
+are indicated.
+
+### Deployed-source provenance correction
+
+The 2026-10-13 deployment used repository `main` at
+`e388e9a6dcc855136693aec2f39c39eb32bb12a1`. A byte-for-byte comparison of the
+deployed source archives against Git found that the 37 comparable Admin files
+match the accepted `a07e9080473a92631a00d499482d37f35a5ca481` source, while the
+37 comparable receiver files match `e388e9a6dcc855136693aec2f39c39eb32bb12a1`.
+Neither deployed archive contains the credential-lifecycle routes. Thus the
+repository revision used for that deployment must not be read as evidence that
+the Admin lifecycle implementation was deployed.
+
+### Candidate provenance and validation
+
+At the time of this Increment 3B entry, the backend candidate was based on
+accepted repository commit `a07e9080473a92631a00d499482d37f35a5ca481`; its
+complete 8-file delta was recorded in the protected source manifest. The
+candidate `npm test` run emitted 103 `PASS:` lines and no failures, and the
+isolated Firestore Emulator suite passed 8/8, including the three
+competing-transaction cases with observed callback overlap and retries. The
+test-count discrepancy was still unresolved at that point. The 2026-10-17
+Stage 1 release verification reconciled it: the accepted baseline rerun
+contained 106 tests, the candidate passed 118/118, and 103 counted only
+`PASS:`-prefixed output; the earlier 105/105 count was not reproduced. See the
+Stage 1 record above for deployment and production-validation limits. Emulator
+evidence does not establish production IAM or authenticated production
+behavior.
+
+The firmware candidate starts at accepted Pilot 1.1 firmware source
+`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` and includes only the
+device-specific provisioning integration; the temporary HTTPS trust-resilience
+changes are excluded. Provisioning/artifact tests passed 30/30. Two protected
+synthetic `FRB-9801` builds passed artifact verification, but their merged
+images differ by 70 bytes across five address regions and by two bytes in
+length despite matching source fingerprints. At the time of Increment 3B the
+cause was unresolved; Increment 3C above identifies the differences as
+expected MCUboot ECDSA-P256 signature-TLV nondeterminism. No real-device
+credential or FRB-0003 firmware was built.
+
+At the time of Increment 3B, physical recovery was blocked by the unresolved
+SIM-removal and pre-power-checklist questions described above. The CPO's
+subsequent Increment 3C confirmation and authorized maintenance exception
+supersede that blocker; current procedure and remaining readiness gates are
+recorded in the Increment 3C section above.
+
+Normalized source snapshots and exact manifests are retained in the private
+Increment 3B session artifacts, not in this repository:
+
+| Candidate | Source archive SHA-256 |
+|---|---|
+| Backend | `3081b5d5bfdcfd2936be3d1da546d0cbd3e411bc66f7fa80df00faae6bff2537` |
+| Firmware | `d298d5518c711af752e327f22c7e4e60422c45c541a71c664ecae84ec8be3051` |
+
+The manifests list exact changed files, build/tool inputs, synthetic artifact
+checksums, test results, and release limitations. The firmware archive was
+built with NCS 3.1.1, toolchain bundle `561dce9adf`, West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`.
+
+### Admin-only deployment and recovery gates
+
+After independent review and separate CPO authorization, the candidate
+deployment command structure is:
+
+```sh
+gcloud run deploy fairway-admin --project=savvy-kit-496703-r5 \
+  --region=us-central1 \
+  --source=<reviewed-backend-candidate>/fairway_backend/cloudrun_receiver \
+  --function=fairwayAdmin --quiet
+```
+
+Deploy the Admin service only; do not redeploy the receiver or Hosting. Before
+deployment, recheck the active revision, runtime identity, configuration,
+traffic allocation, and candidate test results. After deployment, confirm the
+new revision is Ready at 100% traffic with the existing identity/configuration.
+After separate authorization, use an authenticated global-Admin, redacted
+read-only FRB-0003 operation-status request to verify route availability.
+Unauthenticated/non-Admin requests must fail closed. Do not prepare, activate,
+or cancel a production credential as a deployment smoke test. Verify that the
+receiver revision is unchanged and observe only naturally occurring,
+aggregate authentication/request health; do not induce device traffic or read
+unrelated device records. Deployment itself must not change active credentials.
+
+Before any rotation is pending, code rollback may restore the previous Admin
+revision. If a rotation is pending, resolve or cancel it while lifecycle routes
+are still available before rolling back; cancellation is a production write
+and needs separate authorization. After activation, Admin code rollback does
+not restore the old verifier. Keep the lifecycle routes available through
+activation and device validation; any post-activation recovery requires a
+separately authorized replacement rotation and firmware cutover. The complete
+FRB-0003 sequence and failure handling are owned by
+`docs/DEVICE_PROVISIONING_GUIDE.md`.
+
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
@@ -1478,31 +1718,37 @@ The verification must show that `west` resolves from the Nordic-installed enviro
 
 The current local evidence above used NCS v3.1.1 with Nordic toolchain bundle `561dce9adf` and West 1.4.0. A future SDK Manager installation or update may use a different bundle identifier; that does not change the requirement to use the matching Nordic-installed toolchain environment.
 
-With the environment verified, build directly against the installed NCS v3.1.1 SDK directory (`<ncs-install-dir>`), passing `<workspace>/nfed` as an explicit board root:
+With the environment verified, build from the canonical checkout using the device-specific provisioning workflow. Select a fresh output directory outside both the checkout and local secrets directory; the command refuses to reuse an existing path. Replace `FRB-XXXX` with the intended permanent Device ID and choose a unique output-directory name:
 
 ```sh
-cd <ncs-install-dir>
-west build \
-  --build-dir <new-build-dir> \
-  <workspace>/nfed/samples/fairway_power_sandbox \
-  --pristine \
-  --board circuitdojo_feather_nrf9151@1/nrf9151/ns \
-  -- -DBOARD_ROOT=<workspace>/nfed \
-     -DEXTRA_CONF_FILE=prj_a.conf \
-     -DDEBUG_THREAD_INFO=On \
-     -DCONFIG_DEBUG_THREAD_INFO=y \
-     -Dfairway_power_sandbox_DEBUG_THREAD_INFO=On \
-     -Dmcuboot_DEBUG_THREAD_INFO=Off
+DEVICE_ID=FRB-XXXX
+SECRETS_DIR=<workspace>/nfed/samples/fairway_power_sandbox/src/secrets
+OUTPUT_DIR="$HOME/fairway-builds/fairway-${DEVICE_ID}-validation-01"
+
+python3 <workspace>/nfed/scripts/build_device_firmware.py \
+  --device-id "$DEVICE_ID" \
+  --secrets-dir "$SECRETS_DIR" \
+  --output-dir "$OUTPUT_DIR" \
+  --ncs-install-dir "$NCS_INSTALL_DIR"
+
+python3 <workspace>/nfed/scripts/verify_device_artifact.py \
+  --device-id "$DEVICE_ID" \
+  --artifact "$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex" \
+  --manifest "$OUTPUT_DIR/fairway-${DEVICE_ID}-manifest.json" \
+  --secrets-dir "$SECRETS_DIR"
 ```
 
-`-DBOARD_ROOT` is required so the installed NCS v3.1.1 workspace (whose own manifest does not include `nfed`) can resolve the Circuit Dojo `feather_nrf9151` board and Fairway's `sysbuild.cmake`-propagated MCUboot board root.
+The builder invokes West against the installed NCS v3.1.1 SDK and preserves the established board target, explicit `BOARD_ROOT`, `prj_a.conf`, debug-thread build options, and sysbuild/MCUboot board-root propagation. It requires an exact target-named input `FRB-XXXX-fairway_device_key.h`; it never silently falls back to a generic header. A retained legacy generic input may be selected only by explicitly adding `--input-file "$SECRETS_DIR/fairway_device_key.h"` to both commands; the tool validates its ID and rejects competing target-named input.
 
-Routine development, diagnostic, and validation builds shall use a disposable/reusable `<new-build-dir>` rather than creating a persistent, uniquely named top-level build directory for each investigation; reuse or `--pristine` the disposable location as appropriate between materially different builds. A generated build directory is not an evidence-retention mechanism: if a build produces an artifact that must be retained as canonical validation evidence, preserve that artifact and its provenance/hash in the existing artifact/provenance record (see the Firmware Generation Registry in `docs/FIRMWARE_SPECIFICATION.md`) rather than retaining the generated build tree itself.
+The builder checks input identity, uniqueness, credential format, permissions, and symlink/path constraints before build; then verifies the credential and Device ID in the actual merged Intel HEX image. It writes a manifest containing the source revision/state, firmware-source SHA-256, build command, toolchain/configuration, and artifact hash/size, without recording the credential or its digest. The verifier rereads the selected protected input and independently checks artifact bytes and embedded identity/credential. This comparison does not establish a production backend-verifier match.
 
-The build must exit successfully and produce `<new-build-dir>/merged.hex`.
-Record the artifact path, byte size, SHA-256, board target, configuration, and source commit in the build provenance record before flashing.
+The output directory is created with mode `0700`, and its files are restricted to owner access. During the build it contains credential-bearing generated headers and intermediates; after successful artifact verification the builder removes that intermediate build tree and retains only the merged image, manifest, and checksum. Handle the complete retained output as secret material, keep it outside `nfed`, and do not commit or broadly distribute it. A failed build may leave a protected partial tree; use a new output path for a retry. Existing output directories are rejected, so a known-good image cannot be silently overwritten. Do not flash or activate a pending backend credential as part of this local build procedure.
 
-Before flashing, verify the selected artifact against that provenance record. Do not substitute an artifact from another build directory.
+The firmware application includes the generated selected header ahead of other include paths. CMake also requires an explicit target Device ID and target-named or explicitly selected generic input, checks for duplicate/invalid definitions and rejects symlinks. Use the builder rather than invoking `west build` directly so permission, provenance, output-protection, and artifact checks are not bypassed.
+
+The device-specific builder uses a fresh, private build directory for each run and removes it only after artifact verification succeeds. Retain the final protected artifact and its provenance/hash in the existing Firmware Generation Registry only when required as canonical validation evidence; do not retain or reuse a build tree as an evidence record.
+
+The builder produces `$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex` and its manifest/checksum. Treat the manifest as the build provenance record and retain it with the exact artifact. Before any separately authorized flash, rerun the verifier command above against that exact output path; do not substitute an artifact from another build directory.
 
 The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tracked Fairway board root to the MCUboot child image. This is required for the custom `circuitdojo_feather_nrf9151` board to resolve consistently during the sysbuild build.
 

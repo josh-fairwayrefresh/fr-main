@@ -10,8 +10,9 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
+#include <fairway_device_key.h>
+
 #include "http_transport.h"
-#include "secrets/fairway_device_key.h"
 
 LOG_MODULE_REGISTER(golfer_protocol);
 

@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
+const { deriveCredentialVerifier } = require('../lib/fleet/credentials');
 const {
   createFairwayHandlers,
   resolveProtectedSystemAdminUids,
@@ -313,6 +314,11 @@ const ADMIN_ROUTES = [
   { method: 'PATCH', path: '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001/inventory-menu', body: { public_menu_slug: 'monarch-bay' } },
   { method: 'POST', path: '/api/v1/admin/devices', body: { location: null } },
   { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/credential-recovery' },
+  { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/credential-rotations', body: { reason: 'test rotation' } },
+  { method: 'GET', path: '/api/v1/admin/devices/FRB-0001/credential-rotations' },
+  { method: 'GET', path: '/api/v1/admin/devices/FRB-0001/credential-rotations/123e4567-e89b-12d3-a456-426614174000' },
+  { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/credential-rotations/123e4567-e89b-12d3-a456-426614174000/activate', body: { confirmed: true } },
+  { method: 'POST', path: '/api/v1/admin/devices/FRB-0001/credential-rotations/123e4567-e89b-12d3-a456-426614174000/cancel', body: { confirmed: true } },
   { method: 'PATCH', path: '/api/v1/admin/devices/FRB-0001/assignment', body: { location: null } },
   { method: 'PATCH', path: '/api/v1/admin/devices/FRB-0001/state', body: { state: 'maintenance' } },
   { method: 'PATCH', path: '/api/v1/admin/devices/FRB-0001/metadata', body: { comments: 'note' } },
@@ -360,6 +366,56 @@ test('Firestore user class, not an Admin token claim, is the Admin authorization
     method: 'GET', path: '/api/v1/admin/fleet', token: 'customer-admin-token',
   });
   assert.strictEqual(customerWithLegacyAdminClaim.statusCode, 403);
+});
+
+test('credential rotation routes require Admin access and redact status and fleet responses', async () => {
+  const db = new FakeFirestore();
+  await db.collection('devices').doc('FRB-0091').set({
+    state: 'deployed',
+    credential: deriveCredentialVerifier('admin-api-test-active-credential'),
+    credential_generation: 0,
+  });
+  const request = createAdminApi(db);
+  const prepared = await request({
+    method: 'POST',
+    path: '/api/v1/admin/devices/FRB-0091/credential-rotations',
+    body: { reason: 'Authorized test rotation' },
+  });
+  assert.strictEqual(prepared.statusCode, 201);
+  assert.strictEqual(prepared.headers['Cache-Control'], 'no-store');
+  assert.strictEqual(prepared.body.device_id, 'FRB-0091');
+  assert.strictEqual(prepared.body.state, 'prepared');
+  assert.strictEqual(typeof prepared.body.one_time_credential, 'string');
+
+  const pendingStatus = await request({
+    method: 'GET',
+    path: '/api/v1/admin/devices/FRB-0091/credential-rotations',
+  });
+  assert.strictEqual(pendingStatus.statusCode, 200);
+  assert.strictEqual(pendingStatus.body.operation_id, prepared.body.operation_id);
+  assert.strictEqual(pendingStatus.body.plaintext_credential, undefined);
+
+  const status = await request({
+    method: 'GET',
+    path: `/api/v1/admin/devices/FRB-0091/credential-rotations/${prepared.body.operation_id}`,
+  });
+  assert.strictEqual(status.statusCode, 200);
+  assert.strictEqual(status.headers['Cache-Control'], 'no-store');
+  assert.strictEqual(status.body.can_activate, true);
+  assert.strictEqual(JSON.stringify(status.body).includes(prepared.body.one_time_credential), false);
+
+  const fleet = await request({ method: 'GET', path: '/api/v1/admin/fleet' });
+  assert.strictEqual(fleet.statusCode, 200);
+  assert.strictEqual(JSON.stringify(fleet.body).includes(prepared.body.one_time_credential), false);
+
+  const cancelled = await request({
+    method: 'POST',
+    path: `/api/v1/admin/devices/FRB-0091/credential-rotations/${prepared.body.operation_id}/cancel`,
+    body: { confirmed: true },
+  });
+  assert.strictEqual(cancelled.statusCode, 200);
+  assert.strictEqual(cancelled.body.state, 'cancelled');
+  assert.strictEqual(cancelled.headers['Cache-Control'], 'no-store');
 });
 
 test('customer and Course routes allocate backend IDs, validate configuration, and synchronize Device display copies', async () => {

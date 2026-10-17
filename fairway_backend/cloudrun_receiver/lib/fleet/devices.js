@@ -16,6 +16,14 @@ const { generateDeviceCredential, verifyDeviceCredential } = require('./credenti
 
 const DEVICES_COLLECTION = 'devices';
 
+function nextCredentialGeneration(device) {
+  const current = device.credential_generation ?? 0;
+  if (!Number.isSafeInteger(current) || current < 0 || current === Number.MAX_SAFE_INTEGER) {
+    throw new Error('Invalid device credential generation');
+  }
+  return current + 1;
+}
+
 /*
  * Device schema. The canonical permanent identity is the Firestore document
  * ID itself (devices/{FRB-XXXX}); it is not duplicated as a `device_id`
@@ -57,6 +65,9 @@ const DEVICES_COLLECTION = 'devices';
  *                          issued/replaced (see replaceDeviceCredential());
  *                          only the non-reversible verifier is ever stored,
  *                          never the plaintext secret
+ *   credential_generation   non-secret integer advanced on credential
+ *                          issuance/replacement for transactional rotation
+ *                          preconditions; legacy missing values mean zero
  *   gps                     placeholder for a future GPS extension; null
  *   created_at / updated_at  standard metadata
  */
@@ -134,6 +145,7 @@ async function createDevice(db, {
     commissioning: null,
     service: null,
     credential: null,
+    credential_generation: 0,
     gps: null,
     created_at: now,
     updated_at: now,
@@ -396,25 +408,27 @@ async function getDeviceForRequestIngestion(db, deviceId) {
 }
 
 /*
- * Issues a new credential for an existing device, replacing any previous one
- * for the SAME permanent device_id. Used both for a device's initial
- * credential (immediately after createDevice) and for later replacement; the
- * FRB identity itself is never changed. Returns the plaintext secret exactly
- * once; only the verifier is persisted to Firestore. No credential history
- * or routine rotation is implemented.
+ * Issues a credential for the SAME permanent device_id and advances its
+ * credential generation transactionally. Provisioning uses this after
+ * creating a new Device. Active rotation must use credential_lifecycle.js;
+ * this low-level primitive must not be exposed directly as an Admin route.
+ * Returns the plaintext secret exactly once; only the verifier is persisted.
  */
 async function replaceDeviceCredential(db, deviceId) {
   const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
-  const deviceSnap = await deviceRef.get();
-  if (!deviceSnap.exists) {
-    throw new Error(`Unknown device_id: ${deviceId}`);
-  }
-
   const { secret, verifier } = generateDeviceCredential();
+  const updatedAt = new Date();
 
-  await deviceRef.update({
-    credential: verifier,
-    updated_at: new Date(),
+  await db.runTransaction(async (transaction) => {
+    const deviceSnap = await transaction.get(deviceRef);
+    if (!deviceSnap.exists) {
+      throw new Error(`Unknown device_id: ${deviceId}`);
+    }
+    transaction.update(deviceRef, {
+      credential: verifier,
+      credential_generation: nextCredentialGeneration(deviceSnap.data()),
+      updated_at: updatedAt,
+    });
   });
 
   return { device_id: deviceId, secret };
@@ -435,6 +449,7 @@ async function issueDeviceCredentialIfMissing(db, deviceId) {
 
     transaction.update(deviceRef, {
       credential: verifier,
+      credential_generation: nextCredentialGeneration(deviceSnap.data()),
       updated_at: new Date(),
     });
   });

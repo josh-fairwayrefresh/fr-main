@@ -23,6 +23,14 @@ const {
   ProvisioningError,
 } = require('./lib/fleet/provisioning');
 const {
+  CredentialLifecycleError,
+  prepareCredentialRotation,
+  activateCredentialRotation,
+  cancelCredentialRotation,
+  getCredentialRotationStatus,
+  getPendingCredentialRotationStatus,
+} = require('./lib/fleet/credential_lifecycle');
+const {
   isDeviceCommunicationAllowed,
   isValidEventType,
   EVENT_TYPES,
@@ -849,6 +857,12 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof CredentialLifecycleError) {
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
+      });
+    }
     if (error instanceof AdminDirectoryError) {
       return res.status(error.status).json({
         error: error.code,
@@ -1177,6 +1191,59 @@ function createFairwayHandlers(db, {
       const credentialRecoveryMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/credential-recovery$/);
       if (req.method === 'POST' && credentialRecoveryMatch) {
         return await recoverAdminDeviceCredential(res, credentialRecoveryMatch[1]);
+      }
+
+      const credentialRotationsMatch = path.match(
+        /^\/api\/v1\/admin\/devices\/([^/]+)\/credential-rotations(?:\/([^/]+)(?:\/(activate|cancel))?)?$/
+      );
+      if (credentialRotationsMatch) {
+        const [, deviceId, operationId, action] = credentialRotationsMatch;
+        if (req.method === 'POST' && !operationId) {
+          requireBodyFields(req.body, ['reason']);
+          const result = await prepareCredentialRotation(db, {
+            deviceId,
+            adminUid: admin.uid,
+            reason: req.body.reason,
+          });
+          const { plaintext_credential: oneTimeCredential, ...rotation } = result;
+          return res.status(201).json({
+            ...rotation,
+            one_time_credential: oneTimeCredential,
+          });
+        }
+        if (req.method === 'GET' && !operationId) {
+          return res.status(200).json(await getPendingCredentialRotationStatus(db, deviceId));
+        }
+        if (req.method === 'GET' && operationId && !action) {
+          return res.status(200).json(await getCredentialRotationStatus(db, {
+            deviceId,
+            operationId,
+          }));
+        }
+        if (req.method === 'POST' && operationId && action === 'activate') {
+          requireBodyFields(req.body, ['confirmed']);
+          return res.status(200).json(await activateCredentialRotation(db, {
+            deviceId,
+            operationId,
+            adminUid: admin.uid,
+            confirmed: req.body.confirmed,
+          }));
+        }
+        if (req.method === 'POST' && operationId && action === 'cancel') {
+          requireBodyFields(req.body, ['confirmed']);
+          if (req.body.confirmed !== true) {
+            throw new CredentialLifecycleError(
+              'cancellation_confirmation_required',
+              'Explicit cancellation confirmation is required.',
+              400
+            );
+          }
+          return res.status(200).json(await cancelCredentialRotation(db, {
+            deviceId,
+            operationId,
+            adminUid: admin.uid,
+          }));
+        }
       }
 
       return res.status(404).send('Not Found\n');
