@@ -13,6 +13,7 @@ import {
   replaceCourseContext,
   selectedCourseFromLocation,
 } from './lib/courseContext.mjs';
+import { requestLocationLabel } from './lib/requestLocation.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -61,7 +62,7 @@ function EmptyQueue({ serviceActive }) {
 function RequestFocus({ request, queueLength, onAction, pending }) {
   const [error, setError] = useState('');
   async function act(action) {
-    if (action === 'cancel' && !window.confirm(`Cancel the request for Hole ${request.hole ?? 'Unknown'}?`)) return;
+    if (action === 'cancel' && !window.confirm(`Cancel the request for ${requestLocationLabel(request)}?`)) return;
     setError('');
     try {
       await onAction(request, action);
@@ -71,7 +72,7 @@ function RequestFocus({ request, queueLength, onAction, pending }) {
   }
   return <article id={`request-${request.id}`} className="op-priority">
     <div className="op-time"><Clock3 size={20} /><span>Waiting</span><strong>{requestAge(request.received_at)}</strong></div>
-    <div className="op-place"><span>OLDEST ACTIVE REQUEST</span><h2>Hole {request.hole ?? 'Unknown'}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
+    <div className="op-place"><span>OLDEST ACTIVE REQUEST</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
     <div className="op-actions"><button className="op-complete" type="button" disabled={pending} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={pending} onClick={() => act('cancel')}>Cancel request</button></div>
     <footer><CheckCircle2 size={18} /><span>{queueLength > 1 ? 'On completion, the next oldest request moves into focus.' : 'Completing this request clears the active queue.'}</span>{error && <strong role="alert">{error}</strong>}</footer>
   </article>;
@@ -83,7 +84,7 @@ function Performance({ summary }) {
 
 function RecentHistory({ history, onOpen }) {
   const completed = history.filter((item) => item.status === 'completed').slice(0, 2);
-  return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>Hole {item.hole ?? 'Unknown'}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
+  return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>{requestLocationLabel(item)}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
 }
 
 function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, summary, history, onOpenHistory, serviceActive }) {
@@ -96,7 +97,7 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
     {loadState === 'ready' && !next && <EmptyQueue serviceActive={serviceActive} />}
     {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending === next.id} />}
-    {requests.length > 1 && <section className="op-up-next"><div><span>UP NEXT</span><strong>{requests.length - 1} more {requests.length === 2 ? 'request' : 'requests'}</strong></div>{requests.slice(1).map((request, index) => <article key={request.id}><span>{index + 2}</span><div><strong>Hole {request.hole ?? 'Unknown'}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} /></article>)}</section>}
+    {requests.length > 1 && <section className="op-up-next"><div><span>UP NEXT</span><strong>{requests.length - 1} more {requests.length === 2 ? 'request' : 'requests'}</strong></div>{requests.slice(1).map((request, index) => <article key={request.id}><span>{index + 2}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} /></article>)}</section>}
   </section><aside className="op-summary"><Performance summary={summary} /><RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
 
@@ -104,7 +105,7 @@ function HistoryView({ dashboard }) {
   const [period, setPeriod] = useState('daily');
   const summary = dashboard?.summaries?.[period] || {};
   const history = dashboard?.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Transactions</span><strong>{summary.completed_transactions ?? 0}</strong></div><div><Clock3 size={18} /><span>Active cart hours</span><strong>{summary.active_cart_hours ?? 0}</strong></div><div><CheckCircle2 size={18} /><span>Transactions per hour</span><strong>{summary.transactions_per_cart_hour ?? 0}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${summary.average_completion_minutes} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>Hole {item.hole ?? 'Unknown'}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Transactions</span><strong>{summary.completed_transactions ?? 0}</strong></div><div><Clock3 size={18} /><span>Active cart hours</span><strong>{summary.active_cart_hours ?? 0}</strong></div><div><CheckCircle2 size={18} /><span>Transactions per hour</span><strong>{summary.transactions_per_cart_hour ?? 0}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${summary.average_completion_minutes} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
 }
 
 export default function OperatorApp({
@@ -147,7 +148,7 @@ export default function OperatorApp({
     try {
       await onRequestAction(request, action);
       if (action === 'complete') {
-        setCelebration(`Hole ${request.hole ?? 'Unknown'} complete`);
+        setCelebration(`${requestLocationLabel(request)} complete`);
         window.setTimeout(() => setCelebration(''), 1800);
       }
       await refreshDashboard();
