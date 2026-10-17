@@ -1,24 +1,24 @@
-# UX Specification — Fairway Refresh
+# UX Specification — Fairway Refresh Pilot 1.1
 
-Purpose
--------
-- Describe the implemented and CPO-validated Monarch Bay Pilot externally
-   observable golfer and Cart Operator behavior, and preserve the superseded
-   interim behavior as historical provenance.
+## Purpose and scope
 
-Scope
------
-- This document defines only observable product behavior (what a golfer or Cart
-   Operator sees and does).
-- It intentionally excludes implementation details such as GPIOs, timing constants, transistor driver circuits, interrupt names, PWM values, firmware function names, or backend transport/persistence mechanisms.
-- The behavior below was physically validated on FRB-0002, including Stage B2 early window termination after an exactly correlated operator COMPLETE. On 2026-10-09 the CPO also confirmed normal button/LED operation and requests appearing in the cart UI on FRB-0003 / Prototype 3.3 with the accepted Embarrassingly Small Runtime. This does not add FRB-0003 COMPLETE or repeat-window validation; exact provenance and scope are owned by `docs/FIRMWARE_SPECIFICATION.md`. Repeat-press transport/persistence remains deferred; see `docs/feature_backlog.md`.
+This document defines current externally observable golfer, Cart Operator,
+Inventory, and public-menu behavior. It excludes implementation details such as
+GPIOs, timing constants, firmware modules, and backend transport mechanisms.
+The CPO confirms FRB-0001 through FRB-0005 passed physical end-to-end testing.
+FRB-0006's firmware replacement and credential activation are complete.
+Subsequent field testing demonstrated a successful button request and COMPLETE
+rearm, but intermittent LTE/HTTPS failures leave sustained reliability
+acceptance pending.
+Deployment evidence and environment-specific acceptance limits are owned by
+`docs/DEPLOYMENT_GUIDE.md`.
 
 Purpose of the button marker UX
 -------------------------------
 - Provide a simple, immediate way for a golfer in the field to create a service request.
 - Give clear, unambiguous feedback to the golfer that a request was received, transmitted, and processed.
 
-## Final Monarch Bay Pilot Golfer UX (Implemented and Validated Locally)
+## Golfer Button and Indicator Behavior
 
 Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **red** (TRY AGAIN). Indicator hardware identity and wiring are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` and are not duplicated here.
 
@@ -36,7 +36,7 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - When Fairway successfully accepts the service request, orange ends.
 - Green performs a blink-blink indication, followed by approximately 5 seconds of solid green.
 - Success means the accepted golfer service request is represented in the Fairway operator workflow/dashboard.
-- Successful acceptance starts the stable baseline's five-minute demand window, measured from the initial physical button press. Course-configurable duration was abandoned and is not an accepted product setting; no 60-second setting is accepted by this baseline.
+- Successful acceptance starts the fixed five-minute demand window, measured from the initial physical button press.
 
 ### 4. Failed request
 - If the transaction reaches terminal failure within the 15-second budget, orange ends.
@@ -46,7 +46,7 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 - There is no long retry lockout.
 
 ## Five-Minute Golfer Demand Window
-The accepted product behavior uses a fixed five-minute duration. A Course-configurable duration was explored but abandoned; it is not an approved product setting or Admin workflow. See `docs/feature_backlog.md` for the disposition and archive reference.
+The accepted product behavior uses a fixed five-minute duration.
 
 For the Monarch Bay Pilot, the five-minute duration from the initial physical press is the operational proxy for presses attributable to the same golfer group at that marker. This is a pilot product assumption, not a claim that every group occupies every tee box for exactly five minutes; per-hole and par-specific windows are not introduced.
 
@@ -81,9 +81,8 @@ Request A may still be active when Request B is created; that is valid. The oper
 
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 
-Product Brief v1.2 defines this capability. The current implementation and
-deployment status are owned by `docs/DEPLOYMENT_GUIDE.md` and
-`docs/feature_backlog.md`.
+The current implementation and deployment status are owned by
+`docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
 - There are exactly two application entry points: Cart UI and Admin UI.
   Inventory is a feature within Cart UI. Both use the existing Firebase Auth
@@ -218,15 +217,15 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    actionable through the normal operator workflow.
 - A press suppressed by the marker's active demand window does not
    produce another request or notification.
-- Physical production acceptance on 2026-10-01 used FRB-0002 at Hole 2. The CPO
-   observed exactly one notification for one authoritative request, successful
-   deep-link focus, and no notification for the in-window duplicate press.
+- Physical production acceptance on 2026-10-01 confirmed one notification for
+   one authoritative request, successful deep-link focus, and no notification
+   for an in-window duplicate press.
 - Per-user/per-Course preference controls and delivery-time authorization
    filtering are implemented in source and covered by automated regression
    tests; their environment deployment status is owned by
    `docs/DEPLOYMENT_GUIDE.md`.
 
-## Cart Operator Application (Implemented and Accepted in Production)
+## Cart Operator Application (Current production behavior)
 
 - The logged-out Operator, Inventory, and Admin entries use the full
    responsive browser/PWA surface without a simulated phone or device bezel.
@@ -242,11 +241,16 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    readable names. Dashboard refresh preserves that identity; if a display
    name is unavailable, the UI shows an explicit unavailable label rather
    than `null` or `undefined`.
-- The application is a full-surface, landscape-iPad-first responsive workspace.
+- The application is a full-surface, landscape-iPad-first responsive workspace. The responsive phone-layout release is live; authenticated physical-phone/Safari usability and CPO mobile acceptance remain pending as recorded in `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 - The active queue is oldest first. The oldest request receives the strongest
    visual focus while all remaining active requests stay visible in order.
+- Each request displays its configured location: numbered locations use the
+   `Hole N` label, and custom locations use the configured text unchanged.
+   Older requests without a display label fall back to their valid numbered
+   hole; requests without valid location data use `Location unknown`.
 - The queue summary shows the active-request count without repeating the oldest
-   request's hole above its card; the focused card is the single location display.
+   request's location above its card; the focused card is the single location
+   display.
 - COMPLETE is the primary request action. It closes the request, preserves the
    existing request-correlated marker command behavior, and shows a brief,
    nonblocking confirmation before the next oldest request moves into focus.
@@ -272,52 +276,16 @@ full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
-## Superseded Single-Indicator Behavior (Historical)
+## Responsive Cart Operator acceptance boundary
 
-The pre-Prototype-3.2 firmware used one indicator: three brief transmitting
-blinks, three rapid success blinks, and a long solid failure indication. This
-is retained only as historical provenance and is not current firmware or
-current golfer guidance.
+The current Cart Operator product preserves the accepted tablet/desktop queue,
+request actions, service controls, authorization, and navigation behavior. The
+production responsive-layout deployment passed automated/build and unauthenticated
+route checks. Authenticated use and CPO acceptance on physical phone-sized
+screens remain pending; the deployment record is authoritative for the exact
+verification performed.
 
-Historical interim interaction sequence
-----------------------------------------
-1. Button pressed
-   - During request processing, the device performs three brief blinks
-     before the first backend transmission attempt.
+## Design principle
 
-2. Request initiated
-   - The device begins the first backend transmission attempt after the initial three-blink acceptance indication. Internal retry attempts are not shown.
-
-3. Request acknowledged
-   - The LED performs three rapid blinks to indicate the backend acknowledged the request and stored it.
-
-4. Request failed
-   - The LED holds a long solid illumination to indicate the request failed.
-
-Historical LED meanings
------------------------
-- Initial three brief blinks: button press accepted and request processing begun.
-- Three rapid blinks: success — the request has been acknowledged by the backend.
-- Long solid illumination: failure — the request did not complete successfully.
-
-Historical expected user behavior
----------------------------------
-- Press the physical marker button once to create a request.
-- Observe the LED sequence; only one press is needed for a single request when the device is idle.
-- If the LED indicates success (three rapid blinks), no further action is required.
-- If the LED indicates failure, press the button one additional time. If the second attempt also fails, continue playing. If another button marker is encountered before the cart arrives, another request may be attempted.
-- The golfer should allow the device to complete its feedback sequence before pressing again to avoid duplicate requests.
-
-Notes
------
-- Current timing constants and backend implementation status are intentionally
-   omitted from this user-behavior document; implementation is owned by
-   `docs/FIRMWARE_SPECIFICATION.md`, `docs/feature_backlog.md`, and source.
-- This spec assumes the indicators are visible to the user in normal operating conditions.
-- Indicator hardware identity and wiring are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
-- Firmware implementation details and constraints are owned by `docs/FIRMWARE_SPECIFICATION.md`.
-
-Design principle
-----------------
-The final user experience should favor confidence and simplicity over exposing
-technical details.
+The user experience should favor confidence, legibility, and simple actions
+without exposing technical details.

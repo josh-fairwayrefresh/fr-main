@@ -1,77 +1,73 @@
-# Engineering Documentation Index
+# Fairway Refresh Engineering Documentation
 
-This is the first document every engineer or AI coding agent should read before modifying the Fairway Refresh repository.
+Read this index first, then follow the owner-document hierarchy below. Current
+source is authoritative for implementation; each owner document is authoritative
+for its engineering domain. CPO-confirmed physical and production evidence is
+valid validation evidence. Surface material conflicts instead of resolving
+them by assumption.
 
-## Purpose
-This document is the starting point for engineering work in Fairway Refresh. It explains what the engineering documentation is for, how the documentation is organized, and how to use it.
+## Current Milestone
 
-## Engineering Principles
-- Source code is authoritative for implementation.
-- One engineering document owns each topic.
-- Upstream documentation is referenced, not duplicated.
-- Historical documents preserve context but are never updated.
-- Keep documentation short, practical, and example-driven.
-- Repository recovery architecture is owned by `docs/ENGINEERING_GUIDE.md`.
-- Current prototype evidence, current pilot-build architecture, and physical-layout TBD status are tracked separately and never conflated.
+Fairway Refresh is operating at the CPO-accepted **Pilot 1.1** milestone.
+Pilot 1.1 is an integrated product milestone, not a new firmware generation.
+The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
+credential activation, and physical end-to-end testing. FRB-0006's authorized
+firmware recovery and credential replacement completed on 2026-10-17.
+Subsequent field testing demonstrated a successful button request and COMPLETE
+rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained
+reliability acceptance is pending.
+The accepted firmware source remains
+`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; exact configuration and evidence
+are owned by the firmware and deployment documents. No per-device course or
+marker-location assignments are recorded in engineering SoTs.
 
-## Documentation Hierarchy
-- **Index**: this document and other top-level navigation pages.
-- **Authoritative engineering docs**: product level behavior, runbooks, and operational guidance.
-- **Subsystem documents**: firmware, backend, hardware, and integration guides.
-- **Implementation HOWTOs**: sample build/run instructions and component-level guides.
-- **Upstream references**: vendor, RTOS, and SDK documentation linked as references.
-- **Archive**: obsolete or historical material kept for context only.
+## Documentation Hierarchy and Ownership
 
-## Canonical Document Ownership
-- `docs/README.md` — documentation navigation and policy.
-- `docs/ENGINEERING_GUIDE.md` — system-level overview, cross-document summary, and canonical Fairway Refresh Fidelity Mandate.
-- `docs/Continuous_improvement_Kaizen_1.0.md` — canonical owner of continuous-improvement and development-decision practice: product-first engineering discipline, prioritization/value-of-work, evidence and diagnostic-value discipline, reconsideration of canonical decisions, CPO-time protection, and retrospective practice.
-- `docs/HARDWARE_BOM.md` — installed hardware components and part numbers.
-- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — physical assembly, wiring, maintenance power procedure, and the complete Circuit Dojo nRF9151 Feather physical header/pin reference.
-- `docs/FIRMWARE_SPECIFICATION.md` — current firmware implementation, constraints, and firmware backlog.
-- `docs/UX_SPECIFICATION.md` — externally observable user behavior.
-- `docs/DEPLOYMENT_GUIDE.md` — deployment and operational configuration ownership.
-- `docs/DEVICE_PROVISIONING_GUIDE.md` — device provisioning lifecycle and registry requirements ownership.
-- `docs/feature_backlog.md` — canonical engineering feature backlog.
+- `docs/README.md` — navigation, hierarchy, and current milestone.
+- `docs/ENGINEERING_GUIDE.md` — system overview, cross-document summary, and
+  canonical Fairway Refresh Fidelity Mandate.
+- `docs/Continuous_improvement_Kaizen_1.0.md` — product-first engineering
+  discipline, prioritization, evidence, CPO-time protection, and retrospective
+  practice.
+- `docs/FIRMWARE_SPECIFICATION.md` — current firmware implementation,
+  constraints, and firmware-related deferred work.
+- `docs/HARDWARE_BOM.md` — current installed hardware components and part
+  numbers.
+- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — current physical wiring, service-power
+  isolation, and Circuit Dojo nRF9151 Feather header/pin reference.
+- `docs/DEVICE_PROVISIONING_GUIDE.md` — device identity, credentials, registry,
+  and commissioning lifecycle.
+- `docs/UX_SPECIFICATION.md` — current externally observable golfer and
+  operator behavior.
+- `docs/DEPLOYMENT_GUIDE.md` — deployment configuration, production alignment,
+  and retained release/deployment audit records.
+- `docs/feature_backlog.md` — open, deferred engineering work only.
+- `docs/archive.md` — superseded milestones, abandoned work, and lessons;
+  historical and non-authoritative.
+- `docs/decisions/` — accepted engineering decision records.
+- `docs/vendor/` — noncanonical vendor/reference evidence.
 
-Owner documents hold the detailed truth for their domain. Other documents should summarize and link rather than duplicate implementation or assembly details.
+Owner documents hold detailed truth. Other documents summarize and link rather
+than duplicating implementation or assembly detail. The archive preserves
+context only; it does not override current requirements or procedures.
 
 ## Engineering Workflow
-1. Read `docs/README.md`.
-2. Read `docs/ENGINEERING_GUIDE.md`.
-3. Read the subsystem document relevant to the work.
-4. Inspect and verify the current implementation before changing it.
-5. Make the approved code or configuration change.
-6. Update the authoritative documentation that owns the changed topic.
 
-## Major Engineering Documents
-Current:
+1. Read this index and `docs/ENGINEERING_GUIDE.md`.
+2. Read the owner document relevant to the proposed work.
+3. Inspect current implementation and verify the relevant evidence.
+4. Resolve material conflicts with the CPO/Lead Architect before proceeding.
+5. Perform only explicitly authorized work.
+6. Update the owner document for any changed behavior, design, or procedure.
+7. Validate the result and report what changed, what passed, and what remains
+   unresolved or unverified.
 
-- `docs/README.md` — documentation index and usage principles.
-- `docs/ENGINEERING_GUIDE.md` — primary engineering handbook; currently a draft, and the canonical owner of the Fairway Refresh Fidelity Mandate.
-- `docs/Continuous_improvement_Kaizen_1.0.md` — canonical owner of continuous-improvement and development-decision practice, complementary to the Fidelity Mandate.
-- `docs/HARDWARE_BOM.md` — installed prototype hardware components and part numbers.
-- `docs/HARDWARE_ASSEMBLY_GUIDE.md` — assembly and wiring guide for Prototype 1.0, including the complete Circuit Dojo nRF9151 Feather physical header/pin reference.
-- `docs/decisions/` — accepted engineering decision records.
-- `docs/FIRMWARE_SPECIFICATION.md` — implementation-level firmware behavior and design rationale.
-- `docs/UX_SPECIFICATION.md` — externally-observable user interaction and LED behavior.
-- `docs/DEPLOYMENT_GUIDE.md` — deployment and operational guide.
-- `docs/DEVICE_PROVISIONING_GUIDE.md` — device provisioning lifecycle and registry requirements guide.
-- `docs/feature_backlog.md` — canonical engineering feature backlog.
-- `docs/vendor/` — local external/vendor reference-evidence library; noncanonical material that does not change the existing owner-document hierarchy.
+## Engineering Principles
 
-Current-state notes:
-- **Fairway Refresh Stable Pilot Baseline 1.0** names the accepted existing system: `6a19f83` firmware, the `8686eeb` receiver tree verified against production `00022-wxk`, and CPO-confirmed Prototype 3.3 / FRB-0003 operation. The CPO accepts current production Admin/Hosting unchanged despite an unverified source match and a legacy Health-history reader; removal/refinement is deferred, not a current baseline blocker.
-- Prototype 3.3 is the current CPO-confirmed pilot hardware/operational milestone on FRB-0003, using the accepted Embarrassingly Small Runtime firmware generation (`6a19f83`, NCS 3.1.1). Exact firmware provenance and validation scope are owned by `docs/FIRMWARE_SPECIFICATION.md`; hardware ownership remains with the BOM and assembly guide.
-- Prototype 1.2 remains the earlier validated Device Reliability Integration milestone and LP 1.2 remains the accepted dormant-power/NCS baseline; neither is the latest golfer-facing firmware generation.
-- Prototype 3.3 uses Voltaic V25, V50, or V75 packs as interchangeable field supplies with the same regulated-output function and different capacity. FRB-0003's CPO-confirmed operation was with a V75 through J1/3 VBUS; V25/V50 equivalence is a CPO-designated configuration, not separately recorded physical validation. Button/LED and cart UI request operation are confirmed. Battery-health acquisition/reporting is abandoned; PPK2 consumption, pack autonomy, endurance, and five-device fleet validation remain outstanding.
-
-Planned during documentation migration:
-
-- Current working-state reference
-- Hardware troubleshooting guide
-- Firmware build and flash guide
-- Lessons learned
-
-## Stability
-This page is intentionally implementation-agnostic. It should remain stable when files move or repository structure changes. The overall purpose, principles, hierarchy, workflow, and navigation model remain the same.
+- Preserve the accepted product architecture and behavior unless a change is
+  explicitly approved.
+- Prefer small, evidence-led changes over speculative redesign.
+- Keep historical context in `docs/archive.md` or retained deployment audit
+  entries, not in current operating guidance.
+- Never put secrets or unneeded per-device location assignments in engineering
+  documentation.

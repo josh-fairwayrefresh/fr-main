@@ -52,7 +52,7 @@ The board device tree and current source define the pins consumed by the impleme
 
 ## Pilot 1.1 validation status
 
-The CPO confirms FRB-0001 through FRB-0006 are fully commissioned and in operation. Device-specific build, flash, and runtime evidence remains in the deployment audit record. No per-device secrets or course/marker assignments are recorded here.
+The CPO confirms FRB-0001 through FRB-0005 passed firmware provisioning and physical end-to-end testing. FRB-0006's authorized firmware replacement and credential activation completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Device-specific build, flash, and runtime evidence remains in the deployment audit record. No per-device secrets or course/marker assignments are recorded here.
 
 ## Device-specific provisioning implementation — Increments 2, 3B, and 3C
 

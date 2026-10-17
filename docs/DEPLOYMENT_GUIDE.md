@@ -2,9 +2,14 @@
 
 ## Current Pilot 1.1 Operating State
 
-The CPO confirms FRB-0001 through FRB-0006 are fully commissioned and in
-operation. Pilot 1.1 is an integrated product milestone; the accepted firmware
-source remains `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
+credential activation, and physical end-to-end testing. FRB-0006's authorized
+firmware recovery and credential replacement completed on 2026-10-17.
+Subsequent field testing demonstrated a successful button request and COMPLETE
+rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained
+reliability acceptance is pending.
+Pilot 1.1 is an integrated product milestone; the accepted firmware source remains
+`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
 
 The Cart Operator responsive-layout release is live in production as recorded
 below. Its deployment/build checks passed, but the authenticated physical
@@ -16,7 +21,311 @@ Deployment and release entries below are retained as audit history. Historical
 entries describe the state at the time of each release and do not supersede
 current owner documents.
 
-## Increment 3C Readiness — FRB-0003 (synthetic validation; firmware not deployed)
+## Read-only Production Alignment Check — 2026-10-17
+
+Cloud Run serves receiver revision `fairway-button-receiver-00026-kg5` and
+Admin revision `fairway-admin-00017-dvk`, each at 100% traffic. Their image
+digests are respectively
+`sha256:556427bdc2cc428072caa73b6376211d9184049829901c11bfe9eb82b556867f`
+and
+`sha256:36a2146248fc485cf55906db09f9a161db5bf0a27ca4090a615cbcd296a8e5e8`.
+The production Admin source archive matched the tracked backend source at the
+time of inspection. The receiver's 2026-10-13 source archive differs from
+current tracked source in five files limited to Admin user-access and
+credential-lifecycle code/tests (`index.js`, `lib/user_access.js`,
+`lib/fleet/devices.js`, `test/admin_api.test.js`, and
+`test/user_access.test.js`). The later code is served by the separate Admin
+target; inspection found no button-request or COMPLETE-poll/ack contract change
+in those differences. This is a service-specific release-age difference, not
+authorization to redeploy the receiver.
+
+The public Cart Operator HTML referenced JavaScript asset
+`index-B_OqSsPI.js`; its SHA-256
+`53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f` matched
+the asset from a clean production build of baseline commit
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38`. The validated custom-location
+correction in this worktree was not part of that build and was not deployed.
+The Firebase Hosting management API returned 403, so an immutable Hosting
+version ID could not be verified. No production deployment was performed.
+
+Read-only Firestore inspection confirmed all six device records remained in
+state `deployed`; no record was changed. Existing `firmware_generation`
+metadata does not consistently identify the recovered images (FRB-0001 and
+FRB-0002 retain older labels, while FRB-0003 through FRB-0006 have no value).
+Per-device recovery evidence and the accepted firmware baseline, not this
+legacy metadata, establish firmware provenance.
+
+## FRB-0003 Recovery Execution — 2026-10-17
+
+The CPO-authorized FRB-0003 recovery used the complete device-specific
+MCUboot + TF-M + application image from accepted provisioning commit
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` and accepted Pilot 1.1 firmware
+baseline `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. The local build used NCS
+3.1.1, toolchain bundle `561dce9adf`, West 1.4.0, board target
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. Build and image
+verification used the committed device-specific builder with an owner-only
+FRB-0003 input. The replacement was prepared through the deployed Admin
+lifecycle; its plaintext was neither printed nor committed.
+
+The independent artifact verifier confirmed device identity, protected
+credential-input match, manifest, and checksum; MCUboot signature verification
+passed against the configured NCS-distributed `root-ec-p256.pem` debug key.
+The protected merged HEX was 522,444 bytes with SHA-256
+`2596e7daa35877a63bf4c7571c31385b086369b22416f75a644c81ca545fe93f`.
+Because this was a CPO-authorized complete replacement, `probe-rs` performed
+chip erase, programmed the full merged image, and verified read-back. Fresh
+post-reset UART output confirmed `STATE_IDLE`, the ready/idle message, modem
+initialization, certificate handling, and LTE connection startup.
+
+Credential operation `272fc891-91d4-47d3-9571-c5d175ea1a5c` was then confirmed
+`activated` by redacted Admin status. The registry state remains `deployed`.
+The CPO later confirmed the same Hologram SIM was reinstalled and FRB-0003
+passed physical button, LED, cellular, and Cart Operator request-delivery
+testing using its replacement credential.
+The existing receiver and other devices were unchanged.
+The credential-bearing artifact remains protected locally and is not approved
+for reuse or distribution. No deployment, commit, or push occurred.
+
+This one-time use of the NCS debug signing key and full merged image does not
+resolve the production-signing security concern or authorize future real
+device images. Production signing and trust-anchor approval remain separate
+engineering work.
+
+## FRB-0001 Recovery Execution — 2026-10-17
+
+The CPO-authorized FRB-0001 recovery used the complete device-specific
+MCUboot + TF-M + application image from accepted provisioning commit
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` and accepted Pilot 1.1 firmware
+baseline `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. The local build used NCS
+3.1.1, toolchain bundle `561dce9adf`, West 1.4.0, board target
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. Independent
+artifact verification confirmed the FRB-0001 identity, protected input match,
+manifest, and checksum. MCUboot's signed application cryptographically
+verified with the configured NCS-distributed `root-ec-p256.pem` debug key.
+The protected merged HEX was 522,444 bytes with SHA-256
+`1706c474d590f76dbaa8edd95ed21282236039ed251eff3793214166ee1b0408`.
+
+With the CPO confirming the SIM removed and all external power disconnected,
+`probe-rs` performed chip erase, programmed the complete merged image, and
+verified read-back. After normal reset, fresh UART output confirmed
+`STATE_IDLE` and the ready/idle message. Credential operation
+`aaba226b-57b8-4096-9f44-d582a02f8cb7` was confirmed `activated` by redacted
+Admin status; the device's Admin state remained `deployed`, and its SIM
+association and assignment were preserved. The temporary plaintext input was
+removed. The CPO may reinstall the same SIM after powering down and
+disconnecting USB and all other power, then restore approved field power.
+The CPO subsequently confirmed physical button, LED, cellular, and Cart
+Operator request-delivery validation. No other device, receiver, or backend
+infrastructure was changed. No deployment, commit, or push occurred.
+
+This one-time use of the NCS debug signing key and full merged image does not
+resolve production-signing security or authorize future real-device images.
+The protected credential-bearing artifact remains local and is not approved
+for reuse or distribution.
+
+## FRB-0002 Recovery Execution — 2026-10-17
+
+The CPO-authorized FRB-0002 recovery used a fresh complete device-specific
+MCUboot + TF-M + application image from accepted provisioning commit
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` and accepted Pilot 1.1 firmware
+baseline `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. The build used NCS 3.1.1,
+toolchain bundle `561dce9adf`, West 1.4.0, board target
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. The cancelled
+initial credential and its image were not reused. Independent device/input,
+manifest, and SHA-256 verification passed; the signed application passed
+MCUboot cryptographic verification with the configured NCS-distributed
+`root-ec-p256.pem` debug key. The new protected merged HEX was 522,444 bytes
+with SHA-256
+`0714de9f54b05717691bfdb6285e3e9d7f675976c99fd573b55d984f8392c00d`.
+
+The CPO confirmed the SIM removed and external power disconnected. When
+`probe-rs` reported the Nordic core locked and required erase-all, the
+CPO explicitly authorized that complete erase scope. The exact-probe
+`probe-rs download` with `--chip-erase --allow-erase-all --verify` completed
+successfully and read-back verification passed. After normal reset, fresh UART
+output confirmed NCS 3.1.1, `STATE_IDLE`, the ready/idle message, modem
+initialization, CA certificate provisioning, and LTE connection startup;
+fresh LTE registration was not established in the captured output.
+
+New credential operation `d3b6eef5-bcae-4441-863e-b9406e1dab56` was confirmed
+`activated` through redacted Admin status. FRB-0002's Admin state remains
+`deployed`; its SIM association and course assignment remain intact. The
+temporary plaintext input was removed. The CPO later confirmed FRB-0002 passed
+physical button, LED, cellular, and Cart Operator request-delivery testing
+using its replacement credential. No other device or backend infrastructure
+was changed. No deployment, commit, or push occurred. The protected
+credential-bearing image remains local and is not approved for reuse or
+distribution.
+
+This one-time use of the NCS debug signing key and full merged image does not
+resolve production-signing security or authorize future real-device images.
+
+## FRB-0006 Recovery Execution — 2026-10-17
+
+The CPO identified the connected physical board as FRB-0006 and confirmed the
+SIM removed and external field power disconnected. The sole connected CMSIS-DAP
+probe was `2e8a:000c-0:E66550A14773AB35`; SWD inspection identified the Nordic
+Cortex-M33 target. Production Admin confirmed FRB-0006 has a valid active
+credential and no pending rotation before this recovery, with state `deployed`
+and the existing SIM association and assignment intact. The original Admin
+configuration was preserved. Prior current-state text claiming all six
+devices were physically commissioned was unsupported and is corrected in the
+current summaries; this recovery does not claim FRB-0006 physical
+commissioning.
+
+A fresh MCUboot + TF-M + application image was built from accepted provisioning
+commit `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` and Pilot 1.1 firmware
+baseline `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`, using NCS 3.1.1, toolchain
+bundle `561dce9adf`, West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. The independent
+artifact verifier confirmed FRB-0006 identity, the protected credential-input
+match, manifest, and checksum. MCUboot cryptographic verification passed
+against the configured NCS development `root-ec-p256.pem` key. The protected
+merged HEX is 522,444 bytes with SHA-256
+`e9036b887220eb1d6bfbe7c3c5343a9e5fc45fb9865f3f86a7c808fd91531afb`.
+
+`probe-rs download` used `--chip-erase --allow-erase-all --verify` with the
+identified probe and completed successfully, including read-back verification.
+After reset, fresh serial output confirmed NCS 3.1.1, `STATE_IDLE`, modem
+initialization, Cloud Run certificate readiness, and LTE connection startup.
+LTE registration was not required or validated because the SIM remained
+removed.
+
+New credential operation `5e3c0718-58ea-4dde-8143-cbbef359e60d` was confirmed
+`activated` only after programming, read-back verification, and boot
+verification. Post-activation Admin reads confirmed state `deployed`, the
+existing SIM association and assignment unchanged, and operation status
+`activated`. The local FRB-0006 provisioning input was replaced with the
+activated credential; the temporary credential-transfer input and loopback
+receiver were removed/stopped. The CPO may power down the device, disconnect
+USB and all other power, reinstall the same SIM, then restore approved field
+power for physical button, LED, cellular, and Cart Operator request-delivery
+testing.
+No other device or backend infrastructure was changed. No deployment, commit,
+or push occurred. The protected credential-bearing firmware artifacts remain
+local and are not approved for reuse or distribution.
+
+## FRB-0006 Intermittent Communications Evidence — 2026-10-17
+
+After the recovery record above, the CPO reported intermittent LTE registration
+and HTTPS failures, including immediate-red button outcomes. The captured
+serial trace showed registration status `90` (UICC failure), then `2`
+(searching), then `5` (registered roaming). A subsequent button transaction
+received HTTP 200; later COMPLETE polls logged TLS connect/handshake timeout
+`-116`. No signal-quality value was captured, and no serial trace ties a
+particular immediate-red indication to a specific request error.
+
+Without intervening firmware or configuration changes, the CPO later observed
+another successful button request followed by a COMPLETE command that returned
+the device to ready. Read-only Cloud Run logs corroborate a stored request at
+`2026-10-17T08:17:43Z` and a later request `2flYDQaeAylst5YbciOQ` whose
+COMPLETE poll was matched at `08:25:16Z` and acknowledged at `08:25:19Z`.
+These records establish that request ingestion and COMPLETE correlation,
+delivery, and acknowledgement succeeded at least once; they do not establish
+sustained reliability or identify the cause of individual failures.
+
+The button request, COMPLETE poll, and acknowledgement use the same
+modem-offloaded HTTPS transport. The source creates and closes a TLS socket per
+operation. The application requests PSM when field power is active; the
+interaction-awake policy keeps the application CPU awake but does not itself
+withdraw modem PSM. These are plausible shared device/network failure
+conditions, not confirmed causes. The NCS LTE API documents automatic network
+reconnection, and the observed status recovery is consistent with that, but
+the logs do not establish the recovery mechanism. No firmware, backend,
+credential, or production configuration change is justified from this evidence.
+Keep FRB-0006 under supervised validation; require a longer representative
+run with timestamp-correlated registration, signal, TLS-stage, HTTP, and LED
+state logs before considering reliability acceptance.
+
+## FRB-0005 Recovery Execution — 2026-10-16
+
+The CPO identified the connected physical board as FRB-0005 and confirmed the
+SIM removed and external field power disconnected. The sole connected CMSIS-DAP
+probe was `2e8a:000c-0:E66550A147969135`; SWD inspection identified the Nordic
+Cortex-M33 target, and the probe serial matches prior FRB-0005 identification
+evidence. Production Admin confirmed an active credential, no pending rotation,
+state `deployed`, the existing SIM association and assignment intact. No Admin
+state or assignment was changed.
+Earlier deployment/commissioning references do not establish physical
+end-to-end validation for FRB-0005; none is claimed by this recovery record.
+
+A fresh MCUboot + TF-M + application image was built from accepted provisioning
+commit `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` and Pilot 1.1 firmware
+baseline `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`, using NCS 3.1.1, toolchain
+bundle `561dce9adf`, West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. Independent
+verification confirmed the FRB-0005 identity, protected credential-input
+match, manifest, and checksum. MCUboot cryptographic verification passed
+against the configured NCS development `root-ec-p256.pem` key. The protected
+merged HEX is 522,444 bytes with SHA-256
+`dec9a1f4bb9b46c9af92582975db366db86682a855903b93784fbdb41ee3fbaf`.
+
+`probe-rs download` used `--chip-erase --allow-erase-all --verify` with the
+identified probe and completed successfully. After normal reset, serial output
+confirmed NCS 3.1.1, `STATE_IDLE`, modem initialization, certificate
+provisioning/readiness, and LTE connection startup. LTE registration was not
+validated because the SIM remained removed.
+
+New credential operation `ba4ee44e-7b49-451c-88d1-91f8cb74bf90` was confirmed
+`activated` only after programming, read-back verification, and boot
+verification. Admin still reports state `deployed`; the existing SIM
+association and course/location assignment remain unchanged. The temporary
+plaintext input and loopback transfer service were removed/stopped. The CPO may
+power down the device, disconnect USB and all other power, reinstall the same
+SIM, then restore approved field power for physical button, LED, cellular, and
+Cart Operator request-delivery testing. No other device or backend
+infrastructure was changed. No deployment, commit, or push occurred. The
+protected credential-bearing firmware artifact remains local and is not
+approved for reuse or distribution.
+
+## FRB-0004 Recovery Execution — 2026-10-16
+
+The CPO authorized FRB-0004's complete development-device recovery and confirmed
+the SIM removed and all external power disconnected. The sole attached
+CMSIS-DAP probe was `2e8a:000c-0:E66550A1472AB633`; SWD inspection identified
+the Nordic Cortex-M33 target. This probe serial matches prior FRB-0004
+identification evidence. Production Admin confirmed the permanent Device ID,
+an active credential, no pending rotation, state `deployed`, the existing SIM
+association and course/location assignment remain intact.
+The registry identity-source and firmware/hardware-revision fields were
+unavailable or marked stale; no state or assignment change was made.
+
+A fresh MCUboot + TF-M + application image was built from accepted provisioning
+commit `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` and Pilot 1.1 firmware
+baseline `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`, using NCS 3.1.1, toolchain
+bundle `561dce9adf`, West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. Independent
+verification confirmed the FRB-0004 identity, protected credential-input
+match, manifest, and checksum. MCUboot cryptographic verification passed
+against the configured NCS development `root-ec-p256.pem` key. The protected
+merged HEX is 522,448 bytes with SHA-256
+`ff439f88f17f52cfced832d970c8710fe818cf9cbd71cbe8ebf74e13a49c1da2`.
+
+`probe-rs download` used `--chip-erase --allow-erase-all --verify` with the
+identified probe and completed successfully. After normal reset, serial output
+confirmed NCS 3.1.1, `STATE_IDLE`, modem initialization, certificate readiness,
+and LTE connection startup. The modem reported LTE registration status `90`;
+this value is not interpreted as registration success, and the SIM was removed
+during this check.
+
+New credential operation `a0305705-dcda-467e-bbca-989f6ccf688a` was confirmed
+`activated` only after programming, read-back verification, and boot
+verification. Admin still reports state `deployed`; the original SIM
+association and course/location assignment remain unchanged. The one-time
+plaintext input and temporary loopback transfer service were removed/stopped.
+The CPO may power the device down, disconnect USB and all other power, reinstall
+the same SIM, then restore approved field power for physical button, LED,
+cellular, and Cart Operator request-delivery testing. No other device or
+backend infrastructure was changed. No deployment, commit, or push occurred.
+The protected credential-bearing firmware artifact remains local and is not
+approved for reuse or distribution.
+
+## Increment 3C Readiness — FRB-0003 (historical; synthetic validation before recovery)
+
+This readiness assessment records the state before the CPO-authorized
+2026-10-17 recovery above. Its “not deployed,” authorization-gate, and
+bootloader-preservation conclusions are historical for FRB-0003 and do not
+supersede the completed recovery record.
 
 The Increment 3B firmware-image discrepancy is resolved. The original two
 synthetic FRB-9801 image hashes and firmware-source archive hash still match
@@ -42,6 +351,31 @@ matching bootloader trust anchor was established, and this investigation did
 not establish which key signed the currently deployed Pilot 1.1 firmware.
 Resolve and verify the production signing configuration before any real
 FRB-0003 build.
+
+**Committed-builder follow-up (synthetic only):** the committed provisioning
+builder at `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` completed a fresh
+FRB-9801 build with NCS 3.1.1, toolchain bundle `561dce9adf`, West 1.4.0,
+the accepted board target, and `prj_a.conf`. Its protected artifact was
+522,444 bytes with SHA-256
+`0185d1fa044acf67ee49dd95e3355c189e9d891b7a0a11845d732ffd61f840ae`;
+the independent artifact verifier confirmed the synthetic identity,
+credential-input match, manifest, and checksum. The 30-test provisioning
+suite passed. The build worktree was marked dirty, so this is validation
+evidence, not a release artifact. The build again selected the insecure NCS
+debug key and emitted nonfatal Kconfig assignment warnings; neither result
+establishes production signing compatibility.
+
+**Installed-bootloader preservation blocker:** the builder emits a full
+sysbuild `merged.hex`, not an application-only artifact. Address inspection
+of the synthetic merged image confirmed MCUboot data beginning at
+`0x00000000` and the signed system image beginning at `0x00010000`. The
+documented `probe-rs download ... <merged.hex>` command therefore programs
+the included bootloader as well as the signed system image; it is not a
+preserve-the-installed-bootloader update. FRB-0003's installed trust anchor
+is still unknown. Do not use this full merged artifact for FRB-0003 under the
+current recovery scope. A separately validated application-only artifact
+path is required to preserve the installed bootloader; if that cannot be
+established, a bootloader replacement requires separate CPO authorization.
 
 The CPO confirms that FRB-0003 has one removable Hologram SIM as its only
 active cellular identity, permits its temporary removal for maintenance, and
@@ -256,6 +590,7 @@ The Alignment Register is the canonical record mapping release milestones across
 
 - **Target and Source at Deployment**: Production project and Hosting site `savvy-kit-496703-r5`; deployed from `main` at `e388e9a6dcc855136693aec2f39c39eb32bb12a1` with the nine authorized implementation/documentation changes.
 - **Admin Backend**: `fairway-admin-00016-fs9` is Ready at 100% traffic for `fairway-admin` in `us-central1`. Image digest: `sha256:1f1cc7d1f55d373ee796786de34dd0323b746c8007e1c18617f2458a4a20a407`. The production project IDs, Admin mode, allowed origins, service account, ingress, invoker setting, scale limit, and timeout were retained. The receiver was not redeployed.
+- **Cloud Run Source Provenance**: The deployed Admin archive is byte-identical across 37 comparable files to accepted commit `a07e9080473a92631a00d499482d37f35a5ca481`; the receiver archive is byte-identical across 37 comparable files to repository commit `e388e9a6dcc855136693aec2f39c39eb32bb12a1`. Neither archive contains the credential-lifecycle routes. The repository revision recorded above is not proof that the Admin lifecycle source was deployed.
 - **Hosting**: Live release `projects/savvy-kit-496703-r5/sites/savvy-kit-496703-r5/channels/live/releases/1791882385471000`; finalized version `projects/savvy-kit-496703-r5/sites/savvy-kit-496703-r5/versions/a630f4c391d769a9`, released `2026-10-13T09:06:25.471Z`. The custom domain and Firebase Hosting origin serve `assets/index-B3rmwrpN.js` (SHA-256 `5aa666a9d0a7847812ca3e7187b2a7a94751566c3bf2a5891fb115559e9c79b5`) and `assets/index-DIsJ6e8N.css` (SHA-256 `f596d3f8f1532e4528f7dd616ecc31313a779f2255e794efcfdcef3f7339cbc9`), byte-identical to the local production build. The compiled Firebase project and Receiver/Admin URLs are production values; sandbox project and Admin API values are absent.
 - **Preflight**: Backend test suite passed; frontend tests passed 58/58; production configuration validation and build passed. The build emitted only the existing large-chunk advisory.
 - **Runtime Validation**: `/`, `/admin`, and `/inventory` return HTTP 200 from both production origins. Unauthenticated `GET /api/v1/admin/users` returns HTTP 401; production-origin CORS preflight returns HTTP 204. In an existing authenticated global-Admin browser session, refreshing User Management returned HTTP 200 with `complete: true`, `next_page_token: null`, and four users: three `PROVISIONED`, one `NOT PROVISIONED`. The UI displayed all four Authentication accounts, including the unprovisioned account. No `CONFIGURATION ERROR` or `ORPHANED RECORD` entries were present in this directory. No access Save action was used.
@@ -1762,6 +2097,12 @@ After separate CPO authorization to flash, program the verified Intel HEX artifa
 probe-rs download --chip nRF9151_xxAA --binary-format hex <merged.hex>
 ```
 
+This whole-image command programs every address range present in the merged
+HEX, including its MCUboot bootloader. It is not approved for FRB-0003 while
+preserving the installed bootloader; use only a separately validated
+application-only artifact for that path. Replacing FRB-0003's bootloader
+requires separate CPO authorization.
+
 Successful programming is indicated by probe-rs completing erase and programming and reporting completion. After successful programming, a normal reset may be issued:
 
 ```sh
@@ -2181,7 +2522,7 @@ approved backend acceptance criteria without claiming unperformed operator UI
 validation.
 
 The first production Cart Operator Web Push workflow was physically accepted on
-2026-10-01 with FRB-0002 at Hole 2. One authoritative request
+2026-10-01, one authoritative request
 `clBCgv0UGm9jsBL1DIy6` was persisted at `07:32:36.169Z`; its one active iPhone
 subscription dispatch was accepted on attempt 1 at `07:32:36.692Z`, 0.523
 seconds later. The CPO observed exactly one visible notification, and tapping it

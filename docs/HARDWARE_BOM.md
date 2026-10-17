@@ -1,205 +1,34 @@
-# Hardware Bill of Materials — Fairway Refresh
+# Hardware Bill of Materials — Fairway Refresh Pilot 1.1
 
-This document records the hardware installed in the Fairway Refresh prototype across physical hardware generations.
+This document owns current hardware component identity. Physical connections and service-power precautions are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
-## Prototype 3.3 — Current Pilot Hardware (FRB-0003)
+## Current pilot hardware
 
-The CPO designated the **Voltaic V25, V50, and V75** regulated USB-A power packs
-as interchangeable Prototype 3.3 field supplies: they provide the same nominal
-5 V regulated-output function and differ in capacity. FRB-0003's 2026-10-09 validation
-used a V75; V25/V50 were not separately reported as physically tested. Each
-pack replaces the earlier LiPo/5580/6106 field-power chain. Its regulated output
-feeds the Perma-Proto +5 V/GND rails, which connect directly to Feather J1/3
-VBUS and J2/4 GND; J4 and J1/1 VBAT are unused. Wiring and voltage qualification
-are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+The current field-power architecture uses a regulated Voltaic V25, V50, or V75 USB output as designated by the CPO, feeding the Feather's VBUS domain. The VXX pack variants are designated interchangeable in regulated-output function and differ in capacity. This designation is not a measured autonomy or across-pack electrical qualification.
 
-The Feather, cellular antenna/SIM, Perma-Proto, PV8 button, and three-indicator
-component identities remain as recorded in the 3.2 BOM below; its LiPo, 5580,
-4714, and 6106 are not part of the current 3.3 field-power path. Battery-health
-checks and reporting are abandoned. Measured runtime/autonomy for each pack,
-upstream pack charging details, and batch-wide physical layout are not
-established by this validation record. Functional
-success does not establish endurance, power consumption, VXX pack autonomy, or
-five-device fleet validation.
+| Component | Manufacturer / identifier | Current use |
+|---|---|---|
+| Cellular MCU | Circuit Dojo `PASSY-NRF9151-FEATHER` | nRF9151 Feather with onboard nPM1300 |
+| Field power | Voltaic V25 / V50 / V75 | Regulated USB output to the VBUS field-power rail; follow the assembly guide |
+| Antenna | Circuit Dojo `FLEX-LTE-GPS-UFL` | LTE/GPS combo antenna |
+| SIM | Hologram SIM | Cellular service; individual ICCID belongs in the device registry, not this BOM |
+| Project board | Adafruit 571 | Perma-Proto half-sized distribution and driver board |
+| Headers | Adafruit 2940 and 3009 | Feather female and male breakaway headers |
+| Wiring | Adafruit 288 | 22 AWG stranded silicone wire |
+| Pushbutton | E-Switch PV8FWY0SS | Non-illuminated momentary button; leads 1 and 4 are the CPO continuity-tested switch contacts |
+| Orange indicator | Dialight 656-3352-303F | 5 VDC, SENDING |
+| Green indicator | Dialight 656-3202-303F | 5 VDC, REQUEST RECEIVED |
+| Red indicator | Dialight 656-3102-303F | 5 VDC, TRY AGAIN |
+| Indicator drivers | ALLECIN 2N3904, TO-92, qty 3 | One NPN transistor per indicator; procured-batch lead order is in the assembly guide |
+| Base drive resistors | 2.2 kΩ, qty 3 | Feather GPIO to transistor base |
+| Base pull-down resistors | 100 kΩ, qty 3 | Transistor base to common GND |
+| Indicator terminal block | DIANN 12-position, 2.54 mm pitch | Positions 1–6 terminate the three indicator pairs |
+| Cable gland | CPO-supplied IP67/68-rated | Enclosure cable penetration |
 
-## Prototype 1.1 — Solar Power Integration (Reference-Device Generation)
+## Current validation boundary
 
-Prototype 1.1 replaced the Prototype 1.0 AA primary-battery field-power architecture with a CPO-installed and functionally validated solar / LiPo / Adafruit 6106 field-power architecture on the reference device. No firmware changed as part of that hardware milestone; LP 1.2 was the validated firmware generation at the time. Current firmware-generation truth is recorded in `docs/FIRMWARE_SPECIFICATION.md`.
+FRB-0003 field-power validation used a V75 and observed approximately 5.3–5.4 V at Feather J1/3 VBUS under load. This is within the nPM1300 VBUS 4.0–5.5 V operating range but leaves limited margin to the upper bound; transient behavior and V25/V50 loaded voltage were not established by that measurement. Functional fleet commissioning does not establish PPK2 consumption or pack autonomy. See `docs/archive.md` for the bounded historical validation notes.
 
-## Monarch Bay Pilot --- Historical Approved v3.2 Hardware Architecture
+## Not part of the current field-power path
 
-This records the CPO-approved hardware architecture and Bill of Materials for
-the Monarch Bay Pilot build ("Prototype Bill of Materials (v3.2 Pilot Ready)",
-approved 2026-09-29). "Final" applies to the Monarch Bay Pilot configuration
-specifically; it does not freeze Fairway Refresh hardware for all future
-builds. This supersedes the prior direct `5580 GND → J2/4` wiring and the
-PV4 + 220 Ω LED-resistor circuit as the new-build hardware at that milestone.
-Its power path is superseded by Prototype 3.3; shared button/indicator parts remain applicable. It was the engineering basis for the Monarch Bay Pilot build batch and
-is not a statement that the current reference device is already wired in
-this exact arrangement; that device's own history remains recorded
-separately below.
-
-FRB-0002 has now been assembled in this Monarch Bay Pilot configuration and
-functionally validated with the PV8 button, all three indicator channels, and
-an end-to-end LTE/HTTPS request. This establishes one validated pilot-build
-instance; it does not redefine the separate FRB-0001 reference-device history
-or establish batch-wide manufacturing validation.
-
-### Historical 3.2 Power / Battery-Health Path
-
-- LiPo → Adafruit 5580 / MAX17048 → Adafruit 4714 → Adafruit 6106 BATT
-- 5580 VIN → J2/2 3V3
-- 5580 GND → Perma-Proto common GND rail (supersedes the prior direct J2/4 wiring for this pilot)
-- 5580 SCL → J1/11 / P0.01 / I2C2 SCL
-- 5580 SDA → J1/12 / P0.02 / I2C2 SDA
-- INT unused
-- QStart unused
-- 5580 rear `LED` solder jumper CUT for pilot to disable the green power LED; the separate center `VIO` jumper is left unchanged
-- VDD = VCC retained
-- external polyfuse omitted
-- 1000 uF capacitor omitted
-- PV4 220 Ω LED resistor circuit retired from this build; see Pushbutton/Indicators below
-- Battery-voltage/SOC acquisition was part of the historical Device Health work; battery-health acquisition and reporting are abandoned and are not current product behavior.
-
-At the 3.2 milestone, the Adafruit 6106 regulated output and GND established the
-Perma-Proto +5 V and GND rails as the system power-distribution buses, which
-in turn feed the Feather (via Adafruit 261 into onboard J4 VBAT/GND) and the
-indicator circuits below. Full connection-by-connection wiring is owned by
-`docs/HARDWARE_ASSEMBLY_GUIDE.md` ("Monarch Bay Pilot --- Final Wiring
-Record") and is not duplicated here.
-
-### Pushbutton and Indicators (Final, Supersedes Provisional Status)
-
-The pushbutton and three-indicator system previously recorded as provisional
-(see "Historical: Provisional Button / Indicator Proposal" below) is now the
-accepted final Monarch Bay Pilot hardware. The PV4 illuminated pushbutton is
-retired from this build; wiring is owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
-
-### Historical 3.2 Feather J4 VBAT Power Feed
-
-The official Circuit Dojo PCB source assigns J4 pad 1 and J1/1 to `VBAT`, J4 pad 2 and J2/4 to `GND`. The Adafruit 261 J4 feed was used by the earlier 3.2 design; it is not the current Prototype 3.3 field-power connection, which uses J1/3 VBUS.
-
-### Locked BOM basis for pilot builds
-
-| Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
-|---|---|---|---|---|
-| Cellular MCU | Circuit Dojo | PASSY-NRF9151-FEATHER | Circuit Dojo | Circuit Dojo nRF9151 Feather development board. |
-| Solar panel | Adafruit | 5366 | Adafruit | Solar charging input for the 6106. |
-| Solar extension/interconnect | Voltaic | Not specified | Voltaic | 3.5 x 1.1 mm solar extension cable. |
-| LiPo battery | Adafruit | 328 | Adafruit | Protected 3.7 V / 2500 mAh LiPo. |
-| Solar/USB/DC charger with 5 V boost | Adafruit | 6106 | Adafruit | BQ25185 charger/power-path with TPS61023 5 V boost output; establishes the Perma-Proto +5 V/GND distribution rails. |
-| Antenna | Circuit Dojo | FLEX-LTE-GPS-UFL | Circuit Dojo | Must be LTE+GPS combo for 9151. |
-| Hologram SIM | Hologram | Hologram SIM Card | Hologram | Installed for LTE service. |
-| LiPo fuel gauge (historical 3.2) | Adafruit | 5580 / MAX17048 | Adafruit | Used in the superseded LiPo/6106 design. Battery-health acquisition/reporting is abandoned; not part of Prototype 3.3 operation. |
-| Barrel-to-screw-terminal adapter | Adafruit | 368 | Adafruit | 5.5 x 2.1 mm female barrel to screw-terminal adapter; solar input path. |
-| Panel connector adapter | Adafruit | 4287 | Adafruit | 3.5 x 1.1 mm to 5.5 x 2.1 mm adapter; solar input path. |
-| Cable gland | Voltaic | Appropriate IP67/68 gland | Voltaic | Enclosure cable penetration. |
-| Feather JST power pigtail (historical 3.2) | Adafruit | 261 | Adafruit | Used for the superseded onboard J4 VBAT/GND feed; Prototype 3.3 instead connects the regulated +5 V rail to J1/3 VBUS. |
-| 5580 -> 6106 battery jumper (historical 3.2) | Adafruit | 4714 | Adafruit | Used only in the superseded battery-health power path. |
-| Wiring | Adafruit | 288 | Adafruit | 22 AWG Stranded Silicone Wire. |
-| Project Board | Adafruit | 571 | Adafruit | Perma-Proto Half-Sized PCB. |
-| Feather female headers | Adafruit | 2940 | Adafruit | Short female headers for the board build. |
-| Feather male breakaway headers | Adafruit | 3009 | Adafruit | Short male breakaway headers. |
-| Battery mounting | Not specified | Not specified | CPO-supplied | Closed-cell foam + soft hook-and-loop battery mounting. |
-| Pushbutton (final) | E-Switch | PV8FWY0SS | DigiKey/E-Switch | Non-illuminated momentary pushbutton. CPO physically continuity-tested the procured unit: leads 1 and 4 open released, closed when pressed. Retires the PV4 illuminated pushbutton for this build. |
-| Indicator, orange (final) | Dialight | 656-3352-303F | Dialight | 5 VDC. Golfer meaning: SENDING. |
-| Indicator, green (final) | Dialight | 656-3202-303F | Dialight | 5 VDC. Golfer meaning: REQUEST RECEIVED. |
-| Indicator, red (final) | Dialight | 656-3102-303F | Dialight | 5 VDC. Golfer meaning: TRY AGAIN. |
-| Indicator driver transistor | ALLECIN | 2N3904 | ALLECIN | NPN, TO-92. Qty 3 (one per indicator). E/B/C lead order CPO bench-verified; see `docs/HARDWARE_ASSEMBLY_GUIDE.md` ("2N3904 Lead Identification"). |
-| Base drive resistor | Not specified | 2.2 kΩ, 1/2 W, 5% | Not specified | Qty 3. Feather GPIO to each transistor base. |
-| Base pull-down resistor | Not specified | 100 kΩ, 1/4 W, ±1% | Not specified | Qty 3. Each transistor base to common GND. |
-| Indicator terminal block | DIANN | 12-position, 2.54 mm / 0.1 in pitch, 26-18 AWG | Not specified | Six of twelve positions used for the three indicators; see `docs/HARDWARE_ASSEMBLY_GUIDE.md`. |
-
-The table preserves the approved 3.2 BOM basis; the current 3.3 field-power component is specified above. Inventory quantities, procurement status, and cost are intentionally not duplicated in canonical engineering truth unless a BOM owner requires those fields.
-
-**Removed from the final architecture:** the Adafruit 1131 battery/board disconnect (present historically on the reference device, see below) is not part of the Monarch Bay Pilot final BOM and must not be treated as an active pilot component.
-
-### Retained historical field-power evidence
-
-The earlier reference-device configuration remains a separate historical evidence record and is not redefined as the current Prototype 3.3 architecture. That device was functionally validated with solar / LiPo / Adafruit 6106 field power; its physical placement and mounting details remain as recorded.
-
-### Historical Reference-Device Battery-Health Installation
-
-The 5580 / MAX17048 was physically installed on the earlier reference device, and its I2C path and battery-voltage acquisition were historically validated. Device Health and all battery-health checks/reporting are abandoned; this record does not describe current Prototype 3.3 behavior. The historical wiring evidence remains in `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
-
-### Retained from Prototype 1.0 (CPO-confirmed installed and functioning)
-
-| Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
-|---|---|---|---|---|
-| Cellular MCU | Circuit Dojo | PASSY-NRF9151-FEATHER | Circuit Dojo | Circuit Dojo nRF9151 Feather development board. |
-| Pushbutton | E-Switch | PV4F2B0SS-311 | DigiKey | Silver contacts, Red Ring, 2.8V LED. |
-| Antenna | Circuit Dojo | FLEX-LTE-GPS-UFL | Circuit Dojo | Must be LTE+GPS combo for 9151. |
-| Resistor | Yageo | CFR-25JR-52-220RCT-ND | DigiKey | 220 Ω, 1/4W Carbon Film; LED series resistor. |
-| Harness (2-pin) | Adafruit | 261 | Adafruit | JST-PH 2.0mm 2-pin Male/Female set. |
-| Project Board | Adafruit | 571 | Adafruit | Perma-Proto Half-Sized PCB. |
-| Wiring | Adafruit | 288 | Adafruit | 22AWG Stranded Silicone Wire. |
-| Female Headers | Adafruit | 2222 |  | (12/16 pin) 2 Sets |
-| Hologram SIM Card | Hologram | Hologram SIM Card | Hologram | Installed for LTE service. |
-
-### Newly installed for Prototype 1.1 (CPO-supplied, functionally validated field-power subsystem)
-
-| Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
-|---|---|---|---|---|
-| Solar panel | Adafruit | 5366 | Adafruit | 2.37 W max, Vmp 7.28 V, 330 mA, 3.5 x 1.1 mm panel connector. |
-| Solar extension/interconnect | Voltaic | Not specified | Voltaic | 3.5 x 1.1 mm solar extension cable. |
-| Panel connector adapter | Adafruit | 4287 | Adafruit | 3.5 x 1.1 mm to 5.5 x 2.1 mm adapter. |
-| Barrel-to-screw-terminal adapter | Adafruit | 368 | Adafruit | 5.5 x 2.1 mm female barrel to screw-terminal adapter. |
-| Solar/USB/DC charger with 5 V boost | Adafruit | 6106 | Adafruit | BQ25185 charger/power-path with TPS61023 5 V boost output; CPO measured regulated output at approximately 5.2–5.3 V unloaded. |
-| LiPo battery | Adafruit | 328 | Adafruit | Protected 3.7 V / 2500 mAh LiPo. |
-| Battery/board disconnect | Adafruit | 1131 | Adafruit | 2-pin JST-PH board-to-board disconnect. |
-| Cable penetration | Not specified | Not specified | CPO-supplied | IP67/68-rated enclosure cable penetration. |
-| Battery mounting provisions | Not specified | Not specified | CPO-supplied | Secures LiPo within enclosure. |
-
-### Retired from the active field-power path (historical Prototype 1.0 provenance only)
-
-- 2xAA battery holder (Keystone 2462) and Energizer Ultimate Lithium AA primary batteries — physically removed by the CPO before Prototype 1.1 installation; no longer part of the current field-power path.
-
-### Retained Historical Power-Conditioning Components in the Prototype 1.1 Reference Device
-
-- The historical Prototype 1.0 polyfuse (Littelfuse RUEF075HF-ND) and 1000 µF capacitor (Panasonic EEU-FR1A102) were present during the original successful Prototype 1.1 solar/LiPo/LTE validation. This is CPO-confirmed physical-device evidence.
-- The 1000 µF capacitor was subsequently electrically disconnected for CPO-performed functional validation. The Prototype 1.1 reference device successfully completed normal Fairway cellular transactions without it. The CPO accepted this functional result as sufficient to omit the capacitor from the five-new-board architecture; it is not detailed electrical transient characterization.
-- No additional external polyfuse or 1000 µF capacitor is required for the five new boards.
-
-### Historical alternatives retained only as history
-
-- TMUX1101
-- MAX4544
-- switched-SAADC/divider approaches
-
-These are historical alternatives and are not current alternatives for the approved pilot-build architecture.
-
-## Historical: Provisional Button / Indicator Proposal (Superseded)
-
-This section previously recorded a CPO-approved provisional future hardware
-direction, not yet accepted, with the PV8 ordering part number unconfirmed.
-That proposal has now been accepted as final for the Monarch Bay Pilot — see
-"Monarch Bay Pilot --- Final Hardware Architecture" above for the accepted
-part numbers, wiring, and golfer-facing meanings. This section is retained
-only to preserve the provenance of the original proposal; it is not current
-BOM guidance.
-
-## Prototype 1.0 (Historical, First Build, Pre-Pilot)
-
-This section preserves the original Prototype 1.0 hardware record for historical provenance. It no longer reflects the current field-power architecture.
-
-Prototype assembled using the Circuit Dojo nRF9151 Feather with integrated nPM1300 PMIC.
-
-| Component | Manufacturer | Manufacturer Part # | Supplier | Notes |
-|---|---|---|---|---|
-| Cellular MCU | Circuit Dojo | PASSY-NRF9151-FEATHER | Circuit Dojo | Circuit Dojo nRF9151 Feather development board. |
-| Pushbutton | E-Switch | PV4F2B0SS-311 | DigiKey | Silver contacts, Red Ring, 2.8V LED. |
-| Antenna | Circuit Dojo | FLEX-LTE-GPS-UFL | Circuit Dojo | Must be LTE+GPS combo for 9151. |
-| Polyfuse | Littelfuse | RUEF075HF-ND | DigiKey | Surface mount (fits Perma-Proto pads). |
-| Capacitor | Panasonic | EEU-FR1A102 | DigiKey | 1000µF, 10V, Low ESR (for pulse). |
-| Resistor | Yageo | CFR-25JR-52-220RCT-ND | DigiKey | 220 Ω, 1/4W Carbon Film. |
-| Battery Holder | Keystone | 2462 | Mouser | 2xAA with 6" wire leads. |
-| Harness (2-pin) | Adafruit | 261 | Adafruit | JST-PH 2.0mm 2-pin Male/Female set. |
-| Project Board | Adafruit | 571 | Adafruit | Perma-Proto Half-Sized PCB. |
-| Wiring | Adafruit | 288 | Adafruit | 22AWG Stranded Silicone Wire. |
-| Female Headers | Adafruit | 2222 |  | (12/16 pin) 2 Sets |
-| Hologram SIM Card | Hologram | Hologram SIM Card | Hologram | Installed for LTE service. |
-| Primary Batteries | Energizer | Ultimate Lithium AA Batteries |  |  |
-
-## SIM Identity and Provisioning Note
-
-Device-specific SIM identity and provisioning records are maintained in accordance with `docs/DEVICE_PROVISIONING_GUIDE.md`.
+The earlier AA, solar/LiPo/Adafruit 6106, Adafruit 5580/MAX17048 battery-health, and J4/VBAT designs are superseded. Battery-health acquisition and reporting are abandoned. Historical parts and lessons are summarized in `docs/archive.md`; do not use those parts or wiring as current build guidance.
