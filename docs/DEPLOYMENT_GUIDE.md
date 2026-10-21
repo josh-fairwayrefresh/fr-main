@@ -8,8 +8,12 @@ firmware recovery and credential replacement completed on 2026-10-17.
 Subsequent field testing demonstrated a successful button request and COMPLETE
 rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained
 reliability acceptance is pending.
-Pilot 1.1 is an integrated product milestone; the accepted firmware source remains
-`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+The CPO confirms products are now fielded; no individual deployment assignment
+is inferred from registry `deployed` status or commissioning alone.
+Pilot 1.1 is an integrated product milestone. Its original firmware milestone
+source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; incorporated
+`1.1_tempfix` and per-device recovery build provenance are distinguished in
+[the firmware owner](FIRMWARE_SPECIFICATION.md#purpose-and-current-baseline).
 
 The Cart Operator responsive-layout release is live in production as recorded
 below. Its deployment/build checks passed, but the authenticated physical
@@ -19,7 +23,48 @@ acceptance; see `docs/feature_backlog.md`.
 
 Deployment and release entries below are retained as audit history. Historical
 entries describe the state at the time of each release and do not supersede
-current owner documents.
+current owner documents. Dated records, including statements written as
+"current," "pending," or imperative instructions, apply to their recorded
+stage only; they cannot grant present operational authorization. Completed
+recoveries and one-time exceptions must not be repeated from this history.
+
+## Latest-known alignment — not a live-status claim
+
+This October 21 documentation reconciliation reuses established evidence only;
+it performs no new production/device inspection. Resolve apparently competing
+revisions by service and evidence date, not by selecting an older "stable"
+label or assuming accepted source was deployed.
+
+| Surface | Latest established evidence / remaining limit |
+| --- | --- |
+| Accepted repository baseline | `11feb67696e69e504592908a8ffafcdcb7271bd0`, the October 21 documentation merge; the opening-weekend service/reporting targets remain unimplemented. |
+| Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
+| Hosting | October 17 inspection: `index-B_OqSsPI.js`, predating the accepted custom-location correction. That correction is source-validated, not shown deployed. Exact Hosting version was unavailable (403). |
+| Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
+| Firmware / commissioning | Per-device recovery manifests and execution records establish artifacts, not inconsistent registry `firmware_generation` labels. FRB-0001 through FRB-0005 physical validation complete; FRB-0006 reliability acceptance pending. One-time debug-key recoveries do not resolve production signing. |
+| Field power | V25/V50/V75 VBUS architecture supersedes external 6106/5580/LiPo. Current field-idle consumption and autonomy are not measured; solar sufficiency is an operating assumption. |
+| Cleanup | October 20 permanent deletion and October 21 CPO acceptance complete; official pilot history from the protected cutoff retained. No rerun. |
+
+## Field-safe release readiness
+
+Apply [Engineering Guide readiness and DoD](ENGINEERING_GUIDE.md#field-safe-readiness-validation-and-release)
+and [Kaizen ownership](Continuous_improvement_Kaizen_1.0.md); this section owns
+release execution, not a second approval process. Each authorized release
+identifies the exact reviewed source commit, configuration and environment,
+artifact identities/digests, service/Hosting targets, and deployed contract
+versions. Do not equate an accepted source commit with runtime deployment.
+
+Before rollout, validate affected modular contracts in approved sandbox
+resources, including deployed firmware, older/cached clients, concurrent or
+retried operations, failure isolation, authorization, and data compatibility.
+Document any unavailable delivery/device coverage as a release gap.
+Choose release-specific rollout order, observation window/signals, success
+criteria, and stop conditions, plus an available compatible recovery target.
+Include credentials, signing/trust anchors, and irreversible data transitions
+in recovery reasoning; reverting code alone may not restore compatibility.
+Stop on mismatched identity, failed acceptance/safety checks, unexpected
+mutations, or incompatible recovery. Publication/merge does not authorize
+deployment, credentials, device operations, or production-data changes.
 
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
@@ -32,7 +77,7 @@ descendants were enumerated independently of parent existence.
 
 Selection was valid `received_at` strictly before
 `2026-10-17T16:39:35.270Z`, with no tenant or status filter and explicit
-protection of request `bUgIybnJz0Xv7YMdz2Pm`. That Hole 12 request marks
+protection of request `bUgIybnJz0Xv7YMdz2Pm`. That historical FRB-0003 / Hole 12 request marks
 October 17 at 9:39:35.270 a.m. PDT (`America/Los_Angeles`); it and all
 at-or-after-cutoff requests were retained regardless of incomplete historical
 operator on/off evidence.
@@ -482,8 +527,8 @@ No production credential lifecycle operation was invoked. No credential,
 verifier, device registry record, receiver, firmware, or physical device was
 changed. This deployment makes the Admin capability available; it does not
 authorize FRB-0003 credential preparation, activation, firmware build, or
-physical recovery. FRB-0003 credential recovery has not occurred, and no
-physical recovery has been demonstrated. Its removable Hologram SIM remains
+physical recovery. At this historical stage, FRB-0003 credential recovery had
+not occurred and no physical recovery had been demonstrated. Its removable Hologram SIM was
 its only active cellular identity; temporary removal for offline maintenance
 is authorized by the CPO as documented in
 `docs/HARDWARE_ASSEMBLY_GUIDE.md`. The production-signing key and matching
@@ -837,8 +882,8 @@ WP3 deployment validation on 2026-09-18 established that Cloud Run revision
 `fairway-button-receiver-00009-c5j` was healthy and receiving 100% of service
 traffic. That revision identifies the historical validation event only.
 Deployment procedures normally target the durable service name; the separate
-Stable Pilot Baseline 1.0 record below identifies the exact known-good
-production receiver revision and source provenance retained for rollback.
+Stable Pilot Baseline 1.0 record below identifies a historical known-good
+receiver revision and source provenance, not a currently qualified rollback.
 Revision identification is a production traffic safeguard, not a restriction
 on source changes, builds, tests, or authorized Git commits.
 
@@ -2161,16 +2206,20 @@ Debug-access recovery for this procedure (including the non-destructive service-
 
 After separate CPO authorization for runtime/manual testing, perform only the validation appropriate to the approved operating mode.
 
-For the validated field/measurement path:
+For the functional field path (application idle/dormant state below does not
+mean measured low-power current):
 
-1. Disconnect Feather USB before connecting the installed generation's approved field supply; Prototype 3.3 uses a V25/V50/V75 pack through the Perma-Proto rail directly to J1/3 VBUS. PPK2 consumption characterization remains deferred and must isolate other supplies. Follow `docs/HARDWARE_ASSEMBLY_GUIDE.md`; do not treat the historical VBAT measurement boundary as a 3.3 result.
+1. Disconnect Feather USB before connecting the installed generation's approved field supply; Prototype 3.3 uses a V25/V50/V75 pack through the distribution rail directly to J1/3 VBUS. PPK2 consumption characterization remains deferred and must isolate other supplies. Follow `docs/HARDWARE_ASSEMBLY_GUIDE.md`; do not treat the historical VBAT measurement boundary as a 3.3 result.
 2. Cold-boot the approved production image.
 3. Confirm expected startup and dormant behavior described by `docs/FIRMWARE_SPECIFICATION.md` and `docs/UX_SPECIFICATION.md`.
 4. Press the Fairway button once.
 5. Confirm the expected request and LED sequence.
 6. Confirm the device returns to its expected dormant state.
 
-The accepted production field dormant-current result and its implementation context are owned by `docs/FIRMWARE_SPECIFICATION.md`.
+No current VXX/VBUS field dormant-current or autonomy result is established.
+The retained legacy VBUS awake policy and measurement boundary are owned by
+`docs/FIRMWARE_SPECIFICATION.md`; historical VBAT results do not establish
+low-power field operation.
 
 ### USB/VBUS Service-Mode Debug-Lock Prevention and Exceptional Recovery
 
@@ -2390,7 +2439,7 @@ includes service health, expected authentication/authorization responses, and
 request persistence behavior where applicable. WP3 validated per-device
 authentication and creation of exactly one correctly attributed FRB-0001
 request through a physical button press. It did not independently visually
-validate the operator webapp or its confirm/complete flow.
+validate the operator webapp or its request-action flow.
 
 ---
 
@@ -2559,8 +2608,12 @@ validation. When that scope is authorized, the sequence is:
 2. Device sends request to Cloud Run endpoint.
 3. Backend stores request document in Firestore.
 4. Operator dashboard receives live request update.
-5. Confirm action succeeds and updates status.
-6. Complete action succeeds and updates status/removes active item.
+5. COMPLETE succeeds and updates status/removes the active item, with the
+   correlated device acknowledgement where applicable. No operator CONFIRM
+   action is part of the accepted UI.
+6. Cancel remains available with its guard and closes only the request,
+   without sending a device command; exercise it only on a separately
+   authorized test request.
 
 A full-system or pilot operational validation is complete only after all six
 steps succeed. A bounded backend deployment can be validated against its own
@@ -2582,7 +2635,9 @@ request or visible notification. The original request remained actionable.
 
 ### Pilot 1.1 controlled recovery
 
-**Status: reviewed procedure; not exercised.** No production rollback was
+**Historical release-specific procedure; not exercised, not a current blanket
+rollback instruction.** Revalidate targets and compatibility for each newly
+authorized release. No production rollback was
 performed to prepare this procedure. It is not evidence that the Pilot 1.1
 release or any rollback target has been operationally validated.
 

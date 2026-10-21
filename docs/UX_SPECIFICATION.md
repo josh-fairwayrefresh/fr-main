@@ -2,8 +2,9 @@
 
 ## Purpose and scope
 
-This document defines current externally observable golfer, Cart Operator,
-Inventory, and public-menu behavior. It excludes implementation details such as
+This document distinguishes current externally observable golfer, Cart Operator,
+Inventory, and public-menu behavior from explicitly labeled approved future
+targets. It excludes implementation details such as
 GPIOs, timing constants, firmware modules, and backend transport mechanisms.
 The CPO confirms FRB-0001 through FRB-0005 passed physical end-to-end testing.
 FRB-0006's firmware replacement and credential activation are complete.
@@ -197,7 +198,7 @@ The current implementation and deployment status are owned by
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
-## Cart Operator Push Notifications (Implemented and Physically Validated)
+## Cart Operator Push Notifications (Source behavior and dated physical validation)
 
 - The Cart Operator installs Fairway from Safari as an iPhone Home Screen web
    application, signs in with an approved Fairway account, and independently
@@ -206,12 +207,15 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    Customer/Course pair. It is separate from browser/device notification
    permission; disabling one Course does not disable Cart access or another
    Course's preference.
-- One newly accepted golfer request produces one visible notification for each
+- Accepted source sends one visible notification per newly accepted request for each
    active subscription whose user still has Course access and has enabled that
    Course's preference. The notification identifies the request location.
-- Revoking a user's Course access or disabling their saved preference prevents
-   subsequent delivery even if the device's push subscription remains stored.
-  Push delivery failures are asynchronous and do not block Cart Operations.
+- In current accepted source, revoking a user's Course access or disabling their
+   saved preference prevents subsequent delivery even if the push subscription
+   remains stored. The last-inspected production notifier does not yet enforce
+   those delivery-time checks; sandbox has no delivery deployment. Do not infer
+   production revocation/preference enforcement from source tests.
+   Push delivery failures are asynchronous and do not block Cart Operations.
 - Tapping the notification opens or focuses the authenticated Fairway
    application at the originating request and course. The request remains
    actionable through the normal operator workflow.
@@ -225,7 +229,13 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    tests; their environment deployment status is owned by
    `docs/DEPLOYMENT_GUIDE.md`.
 
-## Cart Operator Application (Current production behavior)
+## Cart Operator Application (Accepted source behavior; deployment limits)
+
+The October 1 acceptance below is dated evidence, not proof that every later
+source change is deployed. In particular, configured custom-location display
+was validated in source but was absent from the last-inspected Hosting artifact.
+See the [latest-known deployment alignment](DEPLOYMENT_GUIDE.md#latest-known-alignment--not-a-live-status-claim)
+and [open defects](feature_backlog.md#material-readiness-items).
 
 - The logged-out Operator, Inventory, and Admin entries use the full
    responsive browser/PWA surface without a simulated phone or device bezel.
@@ -242,8 +252,10 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    name is unavailable, the UI shows an explicit unavailable label rather
    than `null` or `undefined`.
 - The application is a full-surface, landscape-iPad-first responsive workspace. The responsive phone-layout release is live; authenticated physical-phone/Safari usability and CPO mobile acceptance remain pending as recorded in `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
-- The active queue is oldest first. The oldest request receives the strongest
-   visual focus while all remaining active requests stay visible in order.
+- The intended active queue is oldest first, with the oldest request receiving
+   strongest focus. Current retrieval first takes the latest 100 requests
+   before active filtering, so older open requests can be omitted. Complete
+   visibility is a known defect, not established behavior at all volumes.
 - Each request displays its configured location: numbered locations use the
    `Hole N` label, and custom locations use the configured text unchanged.
    Older requests without a display label fall back to their valid numbered
@@ -263,8 +275,11 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
    actionable while suspended. A
    valid marker press rejected during suspension shows the normal red failure
    response and creates no operator request.
-- History provides day, week, and month summaries plus completed/cancelled
-   outcomes. Cart-hour metrics use scheduled service time minus scheduled-time
+- Current Day/Week/Month summary selectors use rolling 24-hour/7-day/30-day
+   periods, not local calendar periods. The history tally is the same last
+   100 completed/cancelled requests, independent of the selected period;
+   dashboard reads cap requests at 5,000 and service events at 500.
+   Cart-hour metrics use scheduled service time minus scheduled-time
    overlap with operator suspensions; off-hours do not count as active cart time.
    The operator-facing transaction-rate label is "Transactions per hour."
 - Existing Firebase Authentication, Course assignment authorization, Web Push,
@@ -275,6 +290,52 @@ promoted to production on 2026-10-01. Production acceptance established the
 full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
+
+## Approved opening-weekend targets — NOT YET IMPLEMENTED
+
+These CPO-approved targets supersede legacy schedule/reporting behavior as
+future requirements, not as a claim of current implementation or deployment.
+The rejected implementation was discarded; no temporary compatibility workflow
+or reconstructed historical service sessions are accepted.
+
+- Resume turns service on; Suspend turns service off. State persists until an
+  authorized operator explicitly changes it. Midnight, a scheduled opening,
+  reload, restart, or elapsed time cannot resume service. Remove obsolete
+  schedule-based control, configuration, and UI coherently; retain course
+  timezone. Keep existing requests actionable while off.
+- Use the [single backend service capability](ENGINEERING_GUIDE.md#approved-servicereporting-architecture--not-yet-implemented).
+  Controls and existing-request actions remain usable if reporting fails.
+  Preserve course authorization, notification behavior, request handling,
+  and deployed-device request/COMPLETE contracts.
+- Active Cart Hours, Cart Hours, and Operating Hours mean elapsed time between
+  authoritative Resume/Suspend transitions, not scheduled hours. Allocate
+  ongoing and cross-midnight intervals to local days using actual elapsed
+  instants; handle duplicate/retried actions, concurrent operators, and DST.
+  Do not invent historical sessions or represent uncertain hours as measured.
+- History uses course-local calendar Day, Monday-through-Sunday Week, and
+  calendar Month, with historical navigation and complete retrieval. Filter
+  the entire `Outcome | Request | Received | Duration` Service History tally
+  by `received_at` within the selected course-local calendar period,
+  regardless of current status; include open, completed, and cancelled
+  requests. A request received Monday and completed Tuesday remains in
+  Monday's History tally with its updated outcome.
+- Replace "Transactions" with "Completed Requests"; exclude cancelled
+  requests. Fairway completions are not total cart sales, orders, or
+  transactions. Attribute Completed Requests to completion time: that Monday
+  request completed Tuesday counts toward Tuesday's Completed Requests. A
+  request accepted while service was active still qualifies when completed
+  after suspension; do not require completion itself to fall inside an on
+  interval.
+- Preserve official pilot request history/counts as-is, beginning at protected
+  request `bUgIybnJz0Xv7YMdz2Pm` at `2026-10-17T16:39:35.270Z`.
+  Incomplete historical operator evidence must not exclude retained pilot
+  requests or reduce their factual counts. The completed test-data deletion
+  is recorded in [the Deployment Guide](DEPLOYMENT_GUIDE.md#pilot-test-data-cleanup-execution--2026-10-20);
+  it is not authorization for further cleanup.
+- Rates and unknown/partial service-coverage semantics remain genuine CPO
+  decisions in [the backlog](feature_backlog.md#reporting-decisions).
+  Do not silently choose a denominator, fabricate historical hours, or
+  reinterpret acceptance-time qualification for uncertain legacy intervals.
 
 ## Responsive Cart Operator acceptance boundary
 
