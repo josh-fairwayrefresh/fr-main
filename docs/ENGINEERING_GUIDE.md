@@ -86,3 +86,30 @@ Each physical marker has a permanent device identity and unique credential. The 
 ## Change and Validation Discipline
 
 Follow the Fidelity Mandate above and the engineering workflow in `docs/README.md`. Inspect current source and the owning SoT before changing behavior. Preserve accepted tablet/desktop and device behavior unless an explicitly authorized change requires otherwise. Keep changes within scope, update the owner document, and validate both the changed behavior and adjacent accepted behavior. Stop for CPO/Lead Architect direction when evidence or authority is insufficient.
+
+### Isolated development and remote review
+
+The canonical GitHub repository is `josh-fairwayrefresh/fr-main`. Begin new
+material work on a scoped branch from accepted `main` in an isolated workspace,
+with clear sprint/feature goals, scope, readiness, and acceptance criteria.
+Use the existing readiness, roles, and authorization rules in
+[Kaizen](Continuous_improvement_Kaizen_1.0.md), not a competing approval process.
+Development and testing use approved sandbox resources: a Git branch alone
+does not isolate production data, credentials, infrastructure, or devices.
+
+Within explicit authorization, develop, validate, commit, and push the branch;
+expose in-progress work and evidence in a draft PR targeting `main`. Each
+handoff identifies the repository, branch, full remote review commit SHA,
+PR URL, validation evidence, and known gaps. The Lead Architect independently
+examines actual remote changes and evidence at that commit. Address feedback
+on the branch and identify subsequent commits for review.
+
+Only validated, architecturally reviewed, CPO-accepted, explicitly
+merge-authorized increments enter `main`. Publication is not acceptance and
+does not authorize deployment, flashing, or production-data operations.
+Spikes remain on their branches; separately accepted results may be
+incorporated through this workflow. Give abandoned work a concise disposition
+and preserve its branch as archived history; clean up disposable workspaces
+and artifacts only within authorization. Main retains accepted product work,
+necessary tests, canonical documentation, and concise operational records,
+not disposable development artifacts.
