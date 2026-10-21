@@ -36,8 +36,9 @@ Production release and deployment records remain in `DEPLOYMENT_GUIDE.md`.
 ## Pilot 1.1 closeout notes
 
 - The CPO accepted Pilot 1.1 as the integrated product milestone; it did not
-  create a new firmware generation. The firmware source remains
-  `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+  create a new firmware generation. Its original firmware milestone source was
+  `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; current source lineage and
+  recovered artifact provenance are owned by `FIRMWARE_SPECIFICATION.md`.
 - An earlier archive draft claimed that all six pilot devices were fully
   commissioned. That aggregate claim was unsupported and has been removed;
   current device status is owned by `DEVICE_PROVISIONING_GUIDE.md`.
@@ -54,6 +55,11 @@ Production release and deployment records remain in `DEPLOYMENT_GUIDE.md`.
   every registration rejection.
 - Fleet commissioning confirms functional operation, not endurance,
   VXX-pack autonomy, or PPK2 power characterization.
+- The unaccepted opening-weekend service/reporting implementation was rejected
+  and restored out of the working baseline. It is not current architecture or
+  a compatibility path. Its approved product targets are recorded separately
+  in `UX_SPECIFICATION.md`; future implementation must follow current readiness
+  and review discipline rather than revive the rejected design.
 
 ## Current owner documents
 

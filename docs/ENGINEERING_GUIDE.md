@@ -67,11 +67,11 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ## Current Pilot Baseline
 
-- Accepted firmware source: `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+- Firmware milestone base: `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. The incorporated `1.1_tempfix` and device-specific artifact provenance are owned by [the firmware specification](FIRMWARE_SPECIFICATION.md#purpose-and-current-baseline); this base is not an exact installed-image identity.
 - Nordic NCS: 3.1.1; board: `circuitdojo_feather_nrf9151@1/nrf9151/ns`; application configuration: `prj_a.conf`.
 - Firmware architecture: MCUboot + TF-M + non-secure application on the Circuit Dojo nRF9151 Feather.
 - Current field-power design: regulated Voltaic V25/V50/V75 output to the Feather VBUS input, with the three-indicator button circuit. Current wiring and qualification boundaries are owned by the hardware documents.
-- The CPO confirms FRB-0001 through FRB-0005 passed firmware programming, credential activation, and physical end-to-end testing. FRB-0006's authorized firmware recovery and credential replacement completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending.
+- The CPO confirms products are in the field and FRB-0001 through FRB-0005 passed firmware programming, credential activation, and physical end-to-end testing. FRB-0006's authorized firmware recovery and credential replacement completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Registry eligibility is not physical deployment proof; do not infer individual assignments from this summary.
 - The responsive Cart Operator release is live. The production deployment record does not establish authenticated physical-phone/Safari acceptance; that acceptance remains pending.
 
 ## Current System Boundaries
@@ -113,3 +113,42 @@ and preserve its branch as archived history; clean up disposable workspaces
 and artifacts only within authorization. Main retains accepted product work,
 necessary tests, canonical documentation, and concise operational records,
 not disposable development artifacts.
+
+### Field-safe readiness, validation, and release
+
+Apply [Kaizen's existing Definition of Ready and role ownership](Continuous_improvement_Kaizen_1.0.md)
+to each coherent increment: establish its product goal, scope, architectural
+contracts and owners, dependencies, acceptance criteria, and material unknowns.
+VSC owns ordinary design, decomposition, and verification within that scope;
+these criteria do not create routine-step approval gates.
+
+For a fielded product, make modularity and failure isolation testable. Identify
+affected firmware, API, data, authorization, notification, and cached-client
+contracts. Validate affected contracts in approved sandbox resources, including
+old/new client-server combinations, concurrent/retried operations, partial
+failures, and recovery. A module's passing tests alone do not establish an
+end-to-end compatible increment. Report unavailable sandbox capabilities and
+residual risks explicitly; do not substitute production experimentation.
+
+The increment Definition of Done includes proportionate acceptance/regression
+validation, exact source/configuration/artifact/environment traceability,
+independent architectural review at the published commit, updated owner
+documentation, residual risks, and CPO acceptance. Merge and operational
+authorization remain separate. Release-specific rollout, observation, stop
+conditions, and compatible recovery are owned by
+[the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
+
+### Approved service/reporting architecture — not yet implemented
+
+The [opening-weekend targets](UX_SPECIFICATION.md#approved-opening-weekend-targets--not-yet-implemented)
+require one backend-owned course-service capability for current state,
+authoritative transitions/accounting, and request eligibility. State and audit
+must stay consistent under concurrency, retries, response loss, and failures;
+frontends operate explicit authorized interfaces rather than duplicate owners.
+Reporting is a read-only consumer: its failure cannot block service controls
+or actions on existing requests. Keep shared request/authentication,
+notification, and correlated COMPLETE contracts compatible with fielded
+devices; removal of schedule control must not change independent firmware
+power/lifecycle behavior. No source implementation or production cutover is
+established by this target. See [the backlog](feature_backlog.md) for blockers
+and genuinely unresolved rate/coverage decisions.

@@ -4,7 +4,14 @@
 
 This document owns device identity, authentication, registry lifecycle, and commissioning requirements. Firmware build/flash procedures are owned by `docs/DEPLOYMENT_GUIDE.md`; current firmware behavior is owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
-The CPO confirms FRB-0001 through FRB-0005 passed firmware programming, credential activation, and physical end-to-end testing. FRB-0006's authorized firmware recovery and credential replacement completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Admin `deployed` is a software eligibility state, not confirmation of physical golf-course deployment; the CPO says all devices remain development devices until physical deployment is explicitly confirmed. The production device registry is the authority for individual assignments and state.
+The CPO confirms products are now in the field. FRB-0001 through FRB-0005 passed firmware programming, credential activation, and physical end-to-end testing. FRB-0006's authorized firmware recovery and credential replacement completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Admin `deployed` is a software eligibility state, not independent confirmation of physical deployment. The production device registry remains the authority for individual assignments and state; no individual deployment assignments are inferred here.
+
+The dated recovery summaries below preserve execution provenance, not standing
+authorization. Their one-time erase-all, debug-key, and offline-SIM exceptions
+are closed. Pending-stage statements in the historical execution details are
+superseded by this fleet summary and the commissioning section; do not rerun
+those procedures. Future releases require their own compatible artifact,
+signing, recovery, and operational authorization.
 
 ## Current FRB-0001 recovery status — 2026-10-17
 
@@ -15,8 +22,8 @@ ready for button wake. Credential rotation operation
 `aaba226b-57b8-4096-9f44-d582a02f8cb7` is `activated`. The Admin device state
 remains `deployed`; its SIM association and assignment remain intact. The CPO
 confirmed the SIM was removed and all external power disconnected before
-programming. Reinstall the same SIM only after powering down and disconnecting
-USB and all other power, then restore the approved field-power configuration.
+programming. SIM reinstallation and approved field-power restoration were
+subsequently completed for physical validation.
 The CPO subsequently confirmed FRB-0001 passed physical button, LED, cellular,
 and Cart Operator request-delivery validation.
 
@@ -56,8 +63,8 @@ LTE status update `90` was observed but is not interpreted here as successful
 registration; the SIM remained removed. Credential rotation operation
 `a0305705-dcda-467e-bbca-989f6ccf688a` is `activated`. The Admin device state
 remains `deployed`; its existing SIM association and course/location assignment
-remain intact. The CPO may reinstall the same SIM after powering down and
-disconnecting USB and all other power, then restore approved field power.
+remain intact. SIM reinstallation and approved field-power restoration were
+subsequently completed for physical validation.
 The CPO subsequently confirmed on 2026-10-17 that FRB-0004 passed physical
 button, LED, cellular, and Cart Operator request-delivery testing.
 
@@ -71,8 +78,8 @@ SIM remained removed, so LTE registration and physical end-to-end behavior
 were not validated. Credential rotation operation
 `ba4ee44e-7b49-451c-88d1-91f8cb74bf90` is `activated`. The Admin device state
 remains `deployed`; its existing SIM association and assignment remain intact.
-The CPO may reinstall the same SIM after powering down and disconnecting USB
-and all other power, then restore approved field power. The CPO subsequently
+SIM reinstallation and approved field-power restoration were subsequently
+completed. The CPO subsequently
 confirmed on 2026-10-17 that FRB-0005 passed physical button, LED, cellular,
 and Cart Operator request-delivery testing.
 
@@ -85,9 +92,8 @@ modem initialization, certificate readiness, and LTE connection startup. The
 SIM remained removed, so LTE registration and physical end-to-end behavior
 were not validated. Credential rotation operation
 `5e3c0718-58ea-4dde-8143-cbbef359e60d` is `activated`. The Admin device state,
-SIM association, and assignment remain unchanged. The CPO may reinstall the
-same SIM after powering down and disconnecting USB and all other power, then
-restore approved field power. The later field results are recorded in
+SIM association, and assignment remain unchanged. SIM reinstallation and
+field-power restoration preceded the later field results recorded in
 `docs/DEPLOYMENT_GUIDE.md`: a successful request and COMPLETE rearm were
 observed, but intermittent LTE/HTTPS failures mean sustained reliability
 acceptance remains pending.
@@ -214,20 +220,24 @@ verification, the accepted source baseline rerun contained 106 tests and the
 candidate passed 118/118; the earlier 105 count was not reproduced. The
 previously reported 103 `PASS:` lines counted only one output format. The
 emulator results close the local Firestore transaction-contention validation
-gap only. The Admin capability is now deployed, but FRB-0003 physical cutover
-and production credential operations remain separate authorization gates.
+gap only. The Admin deployment and subsequent authorized FRB-0003 cutover are
+complete; the earlier separate gates were satisfied for that operation only.
 
 ### FRB-0003 Controlled Cutover — Increment 3C procedure
 
 The following was the pre-execution readiness record and controlled-cutover
 procedure. Its statements that recovery had not occurred are historical and
-are superseded by the 2026-10-17 execution evidence below. The CPO-confirmed
-Hologram SIM removal and single-active-credential contract remain applicable.
+are superseded by the 2026-10-17 execution evidence below. The single-active-
+credential contract remains applicable; Hologram SIM removal was a completed
+one-time exception, not standing permission.
 
-The numbered sequence records the approved order of operations; consult the
-current status at the top of this document before acting. FRB-0003's
-preparation, full firmware replacement, and activation are complete. Do not
-repeat them; cellular and end-to-end validation remain outstanding.
+The numbered sequence preserves pre-execution readiness and its original
+restrictions, not current executable instructions. Subsequent separate
+authorization allowed a complete replacement, including MCUboot, with the
+NCS debug key. FRB-0003 preparation, replacement, activation, and CPO-confirmed
+physical end-to-end validation are complete. Do not repeat them. Production
+signing and compatibility remain future-release concerns, not unfinished
+FRB-0003 recovery.
 
 1. For backend readiness, independently review and separately authorize the
    Admin-only lifecycle deployment. Confirm the deployed Admin revision and
@@ -318,6 +328,9 @@ that earlier increment only.
 
 ### FRB-0003 Recovery Execution — 2026-10-17
 
+Historical stage snapshot: the "remaining commissioning" below was later
+completed, as established by the current fleet/commissioning summary.
+
 - **Identity and authorization:** The CPO confirmed the connected physical
   unit was FRB-0003. The sole connected probe identified an nRF9151 target
   over SWD. The CPO-authorized Admin state `deployed` was preserved; the
@@ -356,6 +369,9 @@ that earlier increment only.
 
 ### FRB-0001 Recovery Execution — 2026-10-17
 
+Historical stage snapshot: subsequent CPO-confirmed physical validation
+supersedes the pending SIM/commissioning statements below.
+
 - **Identity and authorization:** The CPO confirmed FRB-0001 was connected
   and confirmed its SIM removed and all external power disconnected before
   programming. The sole connected CMSIS-DAP probe was accessible over SWD to
@@ -393,6 +409,9 @@ that earlier increment only.
   full replacement does not resolve the separate production-signing concern.
 
 ### FRB-0002 Recovery Execution — 2026-10-17
+
+Historical stage snapshot: subsequent CPO-confirmed physical validation
+supersedes the pending SIM/commissioning statements below.
 
 - **Identity and authorization:** The CPO confirmed FRB-0002 was connected
   by USB with SIM removed and external power disconnected. The sole connected

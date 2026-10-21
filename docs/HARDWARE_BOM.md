@@ -12,7 +12,11 @@ The current field-power architecture uses a regulated Voltaic V25, V50, or V75 U
 | Field power | Voltaic V25 / V50 / V75 | Regulated USB output to the VBUS field-power rail; follow the assembly guide |
 | Antenna | Circuit Dojo `FLEX-LTE-GPS-UFL` | LTE/GPS combo antenna |
 | SIM | Hologram SIM | Cellular service; individual ICCID belongs in the device registry, not this BOM |
-| Project board | Adafruit 571 | Perma-Proto half-sized distribution and driver board |
+| Project board | ElectroCookie project board(s) | CPO-supplied Prototype 3.3 identity; exact variant/quantity unverified, superseding the Adafruit 571 Perma-Proto parts-list designation |
+| Solar panel | Adafruit 5366 | CPO-designated panel; manufacturer reference Voltaic P126 in the retained vendor PDF |
+| Pack extensions | Voltaic extension cables | Exact lengths/variants unverified |
+| Enclosure | Yetlebox | Exact model/dimensions unverified |
+| Power termination | USB screw-terminal adapter; WAGO connectors | Exact models/quantities unverified; not a new wiring instruction |
 | Headers | Adafruit 2940 and 3009 | Feather female and male breakaway headers |
 | Wiring | Adafruit 288 | 22 AWG stranded silicone wire |
 | Pushbutton | E-Switch PV8FWY0SS | Non-illuminated momentary button; leads 1 and 4 are the CPO continuity-tested switch contacts |
@@ -26,6 +30,23 @@ The current field-power architecture uses a regulated Voltaic V25, V50, or V75 U
 | Cable gland | CPO-supplied IP67/68-rated | Enclosure cable penetration |
 
 ## Current validation boundary
+
+### Prototype 3.3 parts-list reconciliation — 2026-10-21
+
+The supplied Prototype 3.3 BOM PDF was not available in the checked repository
+and workspace locations. This reconciliation uses the CPO's explicit facts,
+not inferred quantities, pin assignments, or installed-device wiring. V25 is
+the named pack; the previously designated V25/V50/V75 variants remain.
+Existing button/indicator/driver components and established reference identities
+are retained. The [retained panel reference](vendor/voltaic/5366_Voltaic+Systems+P126+R1E.pdf)
+is not evidence of pack-specific charging wiring.
+
+The supplied note "MAX17048 #5580 -> 6106 BATT" describes the superseded
+architecture and is obsolete for Prototype 3.3. It is not a wiring instruction.
+Solar charging sufficiency is the present operating assumption, not a
+demonstrated energy balance or autonomy claim. Current VBUS power policy is
+retained legacy design; idle-power correction, measurement, and solar/autonomy
+qualification remain [backlog work](feature_backlog.md#power-and-autonomy).
 
 FRB-0003 field-power validation used a V75 and observed approximately 5.3–5.4 V at Feather J1/3 VBUS under load. This is within the nPM1300 VBUS 4.0–5.5 V operating range but leaves limited margin to the upper bound; transient behavior and V25/V50 loaded voltage were not established by that measurement. Functional fleet commissioning does not establish PPK2 consumption or pack autonomy. See `docs/archive.md` for the bounded historical validation notes.
 

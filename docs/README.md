@@ -8,7 +8,7 @@ them by assumption.
 
 ## Current Milestone
 
-Fairway Refresh is operating at the CPO-accepted **Pilot 1.1** milestone.
+Fairway Refresh is a fielded product operating at the CPO-accepted **Pilot 1.1** milestone.
 Pilot 1.1 is an integrated product milestone, not a new firmware generation.
 The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
 credential activation, and physical end-to-end testing. FRB-0006's authorized
@@ -16,10 +16,24 @@ firmware recovery and credential replacement completed on 2026-10-17.
 Subsequent field testing demonstrated a successful button request and COMPLETE
 rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained
 reliability acceptance is pending.
-The accepted firmware source remains
-`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; exact configuration and evidence
-are owned by the firmware and deployment documents. No per-device course or
-marker-location assignments are recorded in engineering SoTs.
+The firmware milestone base is
+`6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; the incorporated HTTPS recovery
+correction, device-specific provisioning source, and exact artifact provenance
+are distinguished in the firmware and deployment documents. Do not treat the
+milestone base alone as an installed-image identity. No current per-device
+course or marker-location assignments are recorded in engineering SoTs.
+
+## Reading status correctly
+
+Current accepted source describes implementation, not proof of deployment.
+Use the Deployment Guide's latest-known alignment summary for dated runtime
+evidence; older release records are historical, not competing current states
+or standing authorizations. Approved opening-weekend targets in the UX owner
+document are **not yet implemented**. Unknown measurements, incomplete
+acceptance, and unresolved product decisions remain explicit in the backlog.
+The October 20 test-data cleanup and October 21 CPO acceptance are complete;
+the concise deployment record is authoritative for that operation, with
+detailed evidence retained only on its historical branch. No rerun is implied.
 
 ## Documentation Hierarchy and Ownership
 

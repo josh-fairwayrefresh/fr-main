@@ -4,7 +4,7 @@
 
 This document describes the accepted firmware implementation. Pilot 1.1 is an integrated product milestone, not a firmware generation.
 
-- Accepted source commit: `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+- Original firmware milestone base: `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; not an exact identity for all installed images.
 - Nordic NCS: 3.1.1.
 - Board: `circuitdojo_feather_nrf9151@1/nrf9151/ns`.
 - Configuration: `prj_a.conf`.
@@ -12,6 +12,15 @@ This document describes the accepted firmware implementation. Pilot 1.1 is an in
 - Device identity and unique credential are supplied through a local, gitignored per-device provisioning header. Never commit or document plaintext credentials.
 
 The firmware build, flashing, and deployment procedure is owned by `docs/DEPLOYMENT_GUIDE.md`. Device provisioning and commissioning evidence is owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+The incorporated HTTPS recovery correction is
+`b05a1814155fc607dfd7b2a0095a0fc6892c6699` (`1.1_tempfix`), an ancestor of
+accepted main. Recorded FRB-0001 through FRB-0005 recovery images used
+device-specific builder source
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38`, which includes that correction.
+Use per-device manifests and dated provisioning/deployment evidence for exact
+artifact, build, credential-input verification, and signing identities; do not
+infer an installed image from a branch name or original milestone alone.
 
 ## Runtime behavior
 
@@ -44,6 +53,18 @@ The board device tree and current source define the pins consumed by the impleme
 
 ## Explicit non-features and limits
 
+### Field-power policy and measurement boundary
+
+Current field power enters VBUS, so the retained legacy VBUS service-awake
+policy in `power_policy.c` also applies during field operation: it keeps the
+CPU runnable and disables requested modem PSM while VBUS is present. It is
+not a demonstrated low-power field idle policy. Historical VBAT dormant
+results do not establish V25/V50/V75 idle consumption. Idle-power correction,
+field-current measurement, and autonomy/solar energy balance remain open;
+solar sufficiency is an operating assumption, not measured validation.
+
+### Other runtime limits
+
 - The current application does not include Health or battery-health reporting.
 - The golfer demand window is fixed at five minutes.
 - Repeat-press transport and persistence are not implemented.
@@ -55,6 +76,14 @@ The board device tree and current source define the pins consumed by the impleme
 The CPO confirms FRB-0001 through FRB-0005 passed firmware provisioning and physical end-to-end testing. FRB-0006's authorized firmware replacement and credential activation completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Device-specific build, flash, and runtime evidence remains in the deployment audit record. No per-device secrets or course/marker assignments are recorded here.
 
 ## Device-specific provisioning implementation — Increments 2, 3B, and 3C
+
+**Historical pre-recovery validation.** Statements below about excluding
+temporary HTTPS changes and blocking a real FRB-0003 image describe this
+stage only. The subsequent integrated correction and completed per-device
+recoveries are recorded above and in the provisioning/deployment owners.
+Those recoveries used separately authorized full replacements with the NCS
+debug signing key. They do not resolve production signing/trust-anchor
+security or authorize reuse of one-time exceptions for future releases.
 
 The validated provisioning implementation starts at accepted Pilot 1.1 source
 `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` and applies only the validated
@@ -95,14 +124,17 @@ widely-distributed key as insecure and not for production. These signatures
 prove internal image consistency only; they do not qualify the images for
 production or flashing. No production signing key or bootloader trust-anchor
 selection has been approved or verified, and the deployed Pilot 1.1 signing
-configuration was not established by this investigation. A real FRB-0003
-artifact remains blocked until an approved production signing key is
-configured and its corresponding bootloader trust anchor and artifact
-signature are verified. No real-device credential or physical device was used.
+configuration was not established by this investigation. At that stage, a real
+FRB-0003 artifact was blocked pending an approved production signing key,
+matching bootloader trust anchor, and signature verification. The subsequent
+one-time recovery exception is recorded separately; it did not close the
+future-release signing concern. No real-device credential or physical device
+was used in this synthetic investigation.
 
-## Temporary HTTPS recovery baseline: `1.1_tempfix`
+## Incorporated HTTPS recovery baseline: `1.1_tempfix`
 
-This local firmware release baseline applies the reviewed changes in
+This originally local recovery baseline, now incorporated into accepted source
+and the recorded recovery builds above, applies the reviewed changes in
 `http_transport.c`, `modem_service.c`, and
 `certs/google-run-ca-chain-cstr.pem` to accepted Pilot 1.1 commit
 `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. It is not a new product

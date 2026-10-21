@@ -6,7 +6,13 @@ This document owns current physical wiring, service-power isolation, and the Cir
 
 ## Current field power and service isolation
 
-The CPO-designated Voltaic V25/V50/V75 regulated USB output feeds the Perma-Proto +5 V rail and Feather J1/3 VBUS. Pack negative connects to the common GND rail and Feather J2/4 GND. The Feather J4 battery connector and J1/1 VBAT are unused for this field-power path.
+The CPO-designated Voltaic V25/V50/V75 regulated USB output feeds the distribution +5 V rail and Feather J1/3 VBUS. Pack negative connects to the common GND rail and Feather J2/4 GND. The Feather J4 battery connector and J1/1 VBAT are unused for this field-power path.
+
+The [current BOM reconciliation](HARDWARE_BOM.md#prototype-33-parts-list-reconciliation--2026-10-21)
+designates ElectroCookie boards and a USB screw-terminal adapter/WAGO
+connectors. Older "Perma-Proto" labels describe recorded distribution, not a
+requirement to purchase Adafruit 571. The parts list alone does not establish
+new trace connections, wire sizing, quantities, or electrical qualification.
 
 **The VXX pack and USB service cable are mutually exclusive power sources.** Disconnect VXX field power before connecting Feather USB for development or service; disconnect USB before reconnecting field power. Never drive the shared VBUS domain from both sources simultaneously.
 
@@ -93,6 +99,11 @@ Before energizing an assembly, confirm:
 Power and firmware behavior checks are owned by `docs/DEPLOYMENT_GUIDE.md`, `docs/FIRMWARE_SPECIFICATION.md`, and `docs/UX_SPECIFICATION.md`. Functional operation is not evidence of endurance or pack autonomy.
 
 ## FRB-0003 SIM-removal maintenance exception
+
+**Completed one-time historical exception, not standing authorization.**
+The following preserves the authorized recovery sequence and safety limits;
+do not repeat it. Current commissioning status is owned by the Device
+Provisioning Guide. Future maintenance needs its own coherent authorization.
 
 The normal pre-power inspection above still requires the LTE/GPS antenna and
 SIM to be installed. For the CPO-authorized FRB-0003 credential-recovery
