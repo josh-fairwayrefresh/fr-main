@@ -56,8 +56,11 @@ records rather than every external system.
 The CPO relayed completed Lead Architect review of immutable evidence commit
 `af5bd53304a8d42c7859c282891ec1b99ac642d6`: no material source/evidence
 discrepancy requiring another production operation; published hashes matched
-and independent isolated synthetic tests passed. **CPO acceptance remains
-pending**, tracked in [the backlog](feature_backlog.md).
+and independent isolated synthetic tests passed. On October 21, 2026, the CPO
+accepted the completed pilot cleanup and canonical workflow clarification,
+confirmed completed Lead Architect review of documentation commit
+`f7810df96f6394cf551c486da98ee2303222adea`, and explicitly authorized
+documentation finalization and normal merge of PR #2 only.
 The [detailed evidence and provenance](https://github.com/josh-fairwayrefresh/fr-main/tree/af5bd53304a8d42c7859c282891ec1b99ac642d6/docs/evidence/2026-10-20-pilot-cleanup)
 and one-time scripts remain branch-only historical review artifacts in
 [draft PR #1](https://github.com/josh-fairwayrefresh/fr-main/pull/1), not
