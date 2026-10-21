@@ -21,6 +21,49 @@ Deployment and release entries below are retained as audit history. Historical
 entries describe the state at the time of each release and do not supersede
 current owner documents.
 
+## Pilot Test-Data Cleanup Execution — 2026-10-20
+
+Under explicit CPO authorization, the one-time cleanup in production project
+`savvy-kit-496703-r5`, Firestore database `(default)`, permanently deleted
+498 pre-pilot requests (312 modern-tenant and 186 legacy), 307 correlated
+COMPLETE commands, and 728 notification-dispatch subscription descendants,
+without request-content archival. No dispatch parent documents existed;
+descendants were enumerated independently of parent existence.
+
+Selection was valid `received_at` strictly before
+`2026-10-17T16:39:35.270Z`, with no tenant or status filter and explicit
+protection of request `bUgIybnJz0Xv7YMdz2Pm`. That Hole 12 request marks
+October 17 at 9:39:35.270 a.m. PDT (`America/Los_Angeles`); it and all
+at-or-after-cutoff requests were retained regardless of incomplete historical
+operator on/off evidence.
+
+Preflight snapshot `2026-10-20T20:59:41.016Z` matched the approved inventory.
+Synthetic guards passed; expired demand windows, notifier delivery horizon,
+queue/worker evidence, and version checks were verified before 498 atomic
+request-specific transactions. Final repeated verification at
+`2026-10-20T21:07:43.256Z` found zero candidates or matching dependencies
+remaining, 46 retained requests, 35 retained commands, and 230 retained
+dispatch descendants. All 311 retained request/dependency versions and 509
+inventoried protected operational versions were unchanged.
+
+The accepted reporting handler returned HTTP 200 with 46 history rows and
+the cutoff included, using real read-only data with locally stubbed token
+verification and actual access/course authorization. This was not
+authenticated-browser acceptance; synthetic tests were not concurrency
+stress tests, and protected-version checks covered inventoried Firestore
+records rather than every external system.
+
+The CPO relayed completed Lead Architect review of immutable evidence commit
+`af5bd53304a8d42c7859c282891ec1b99ac642d6`: no material source/evidence
+discrepancy requiring another production operation; published hashes matched
+and independent isolated synthetic tests passed. **CPO acceptance remains
+pending**, tracked in [the backlog](feature_backlog.md).
+The [detailed evidence and provenance](https://github.com/josh-fairwayrefresh/fr-main/tree/af5bd53304a8d42c7859c282891ec1b99ac642d6/docs/evidence/2026-10-20-pilot-cleanup)
+and one-time scripts remain branch-only historical review artifacts in
+[draft PR #1](https://github.com/josh-fairwayrefresh/fr-main/pull/1), not
+material intended for main or reusable production tooling. This record does
+not authorize rerun, deployment, device operations, or infrastructure changes.
+
 ## Read-only Production Alignment Check — 2026-10-17
 
 Cloud Run serves receiver revision `fairway-button-receiver-00026-kg5` and
