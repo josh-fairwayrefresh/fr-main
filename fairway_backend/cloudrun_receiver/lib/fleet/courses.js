@@ -3,7 +3,6 @@
 const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
 const { CUSTOMERS_COLLECTION } = require('./customers');
-const { isValidServiceSchedule } = require('../course_service');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
@@ -29,9 +28,9 @@ function isValidIanaTimezone(timezone) {
  *
  *   course_name                course name
  *   timezone                   IANA timezone name (e.g. "America/Los_Angeles")
- *   service_schedule           { days: [0-6], start: "HH:MM", end: "HH:MM" }
- *                              recurring Course-local beverage-service window
- *   service_suspension         temporary operator suspension or null
+ *   service_schema_version     authoritative service-control schema version
+ *   service_status             "off" until an authorized operator resumes
+ *   service_generation         monotonically increasing service-operation generation
  *   comments                   administrator free-text notes
  *   created_at / updated_at    standard metadata
  */
@@ -52,7 +51,6 @@ async function createCourse(db, {
   courseName,
   timezone,
   comments = null,
-  serviceSchedule,
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
@@ -62,9 +60,6 @@ async function createCourse(db, {
   }
   if (!isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
-  }
-  if (!isValidServiceSchedule(serviceSchedule)) {
-    throw new Error('Service schedule requires selected days and a valid start/end window');
   }
   if (comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
@@ -81,8 +76,11 @@ async function createCourse(db, {
   const courseDoc = {
     course_name: courseName,
     timezone,
-    service_schedule: serviceSchedule,
-    service_suspension: null,
+    service_schema_version: 2,
+    service_status: 'off',
+    service_generation: 0,
+    service_coverage_started_at: now,
+    active_service_interval_id: null,
     comments,
     created_at: now,
     updated_at: now,
@@ -112,7 +110,6 @@ async function getCourseForCustomer(db, customerId, courseId) {
 async function updateCourse(db, customerId, courseId, {
   courseName,
   timezone,
-  serviceSchedule,
   comments,
 } = {}) {
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
@@ -131,9 +128,6 @@ async function updateCourse(db, customerId, courseId, {
   if (timezone !== undefined && !isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
   }
-  if (serviceSchedule !== undefined && !isValidServiceSchedule(serviceSchedule)) {
-    throw new Error('Service schedule requires selected days and a valid start/end window');
-  }
   if (comments !== undefined && comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
@@ -145,9 +139,6 @@ async function updateCourse(db, customerId, courseId, {
   }
   if (timezone !== undefined) {
     update.timezone = timezone;
-  }
-  if (serviceSchedule !== undefined) {
-    update.service_schedule = serviceSchedule;
   }
   if (comments !== undefined) {
     update.comments = comments;

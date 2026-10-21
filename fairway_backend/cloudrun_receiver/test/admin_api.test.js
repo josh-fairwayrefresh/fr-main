@@ -77,8 +77,9 @@ function createRequest({ body = {}, headers = {}, method = 'GET', path } = {}) {
   };
 }
 
-function createAdminApi(db) {
+function createAdminApi(db, serviceControlV2Active = false) {
   const { fairwayAdmin } = createFairwayHandlers(db, {
+    serviceControlV2Active,
     verifyOperatorToken: async (token) => {
       const uid = token === 'admin-token' || token === 'staff-token'
         ? 'staff-uid'
@@ -232,6 +233,30 @@ async function seedHierarchy(db) {
     comments: null,
   });
 }
+
+test('Admin Course cutover requires the activation gate and is explicit/idempotent', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  const path = '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001/service-cutover';
+  const disabled = await createAdminApi(db)({ method: 'POST', path, body: {} });
+  assert.equal(disabled.statusCode, 503);
+  assert.equal((await db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001').get()).data().service_schema_version, undefined);
+
+  const request = createAdminApi(db, true);
+  const cutover = await request({ method: 'POST', path, body: {} });
+  assert.equal(cutover.statusCode, 200, JSON.stringify(cutover.body));
+  assert.equal(cutover.body.already_initialized, false);
+  assert.equal(cutover.body.service_state.status, 'ready');
+  const courseRef = db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001');
+  const migrated = (await courseRef.get()).data();
+  assert.equal(migrated.service_schema_version, 2);
+  assert.equal(migrated.service_schedule, undefined);
+  const repeated = await request({ method: 'POST', path, body: {} });
+  assert.equal(repeated.statusCode, 200);
+  assert.equal(repeated.body.already_initialized, true);
+});
 
 test('sandbox backend environment validation fails closed', () => {
   assert.throws(() => resolveSandboxEnvironment({}), /FAIRWAY_ENV/);
@@ -443,7 +468,7 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema Course',
       timezone: 'America/Los_Angeles',
-      service_schedule: SERVICE_SCHEDULE,
+      comments: null,
     },
   });
   assert.strictEqual(course.statusCode, 201);
@@ -463,7 +488,7 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
   });
   assert.strictEqual(customerUpdate.statusCode, 200);
 
-  const courseUpdate = await request({
+  const staleCourseUpdate = await request({
     method: 'PATCH',
     path: `/api/v1/admin/customers/${customer.body.customer_id}/courses/${course.body.course_id}`,
     body: {
@@ -472,6 +497,12 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
       service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
       comments: 'winter schedule',
     },
+  });
+  assert.strictEqual(staleCourseUpdate.statusCode, 409);
+  const courseUpdate = await request({
+    method: 'PATCH',
+    path: `/api/v1/admin/customers/${customer.body.customer_id}/courses/${course.body.course_id}`,
+    body: { course_name: 'Tony Lema', timezone: 'UTC', comments: 'updated' },
   });
   assert.strictEqual(courseUpdate.statusCode, 200);
 

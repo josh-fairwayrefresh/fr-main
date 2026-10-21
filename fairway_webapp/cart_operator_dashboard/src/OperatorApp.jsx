@@ -51,7 +51,13 @@ function Brand() {
 
 function ServiceStatus({ course }) {
   const state = course?.service_state;
-  const label = state?.suspended ? 'Service Suspended' : state?.active ? 'Service Active' : 'Outside Service Hours';
+  const label = state?.status === 'cutover_required'
+    ? 'Service update required'
+    : state?.status === 'inconsistent'
+      ? 'Service state unavailable'
+      : state?.active
+        ? 'Service Active'
+        : 'Service Suspended';
   return <div className={`op-status ${state?.active ? 'active' : ''}`}><i />{label}</div>;
 }
 
@@ -59,8 +65,28 @@ function EmptyQueue({ serviceActive }) {
   return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New golfer requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
 }
 
-function RequestFocus({ request, queueLength, onAction, pending }) {
+function receivedOnPriorLocalDay(request, timezone) {
+  const receivedAt = asDate(request.received_at);
+  if (!receivedAt || !timezone) return true;
+  const dateFor = (date) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  };
+  return dateFor(receivedAt) < dateFor(new Date());
+}
+
+function newOperationId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function RequestFocus({ request, queueLength, onAction, pending, timezone }) {
   const [error, setError] = useState('');
+  const priorDay = receivedOnPriorLocalDay(request, timezone);
   async function act(action) {
     if (action === 'cancel' && !window.confirm(`Cancel the request for ${requestLocationLabel(request)}?`)) return;
     setError('');
@@ -73,13 +99,18 @@ function RequestFocus({ request, queueLength, onAction, pending }) {
   return <article id={`request-${request.id}`} className="op-priority">
     <div className="op-time"><Clock3 size={20} /><span>Waiting</span><strong>{requestAge(request.received_at)}</strong></div>
     <div className="op-place"><span>OLDEST ACTIVE REQUEST</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
-    <div className="op-actions"><button className="op-complete" type="button" disabled={pending} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={pending} onClick={() => act('cancel')}>Cancel request</button></div>
+    <div className="op-actions"><button className="op-complete" type="button" disabled={pending || priorDay} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={pending} onClick={() => act('cancel')}>Cancel request</button></div>
+    {priorDay && <p className="op-request-warning" role="status">Received on a prior course-local day. Cancel this request; it cannot be completed.</p>}
     <footer><CheckCircle2 size={18} /><span>{queueLength > 1 ? 'On completion, the next oldest request moves into focus.' : 'Completing this request clears the active queue.'}</span>{error && <strong role="alert">{error}</strong>}</footer>
   </article>;
 }
 
+function displayMetric(value, digits = 1) {
+  return typeof value === 'number' ? value.toFixed(digits) : value ?? 'Unknown';
+}
+
 function Performance({ summary }) {
-  return <section className="op-performance"><span>CURRENT PERFORMANCE</span><div><strong>{summary?.completed_transactions ?? 0}</strong><small>Transactions</small></div><div><strong>{summary?.transactions_per_cart_hour ?? 0}</strong><small>Transactions per hour</small></div><div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests / cart hour</small></div></section>;
+  return <section className="op-performance"><span>CURRENT PERFORMANCE</span><div><strong>{summary?.completed_transactions ?? 'Unknown'}</strong><small>Completed Requests</small></div><div><strong>{displayMetric(summary?.active_cart_hours, 2)}</strong><small>Active Cart Hours</small></div><div><strong>{displayMetric(summary?.transactions_per_cart_hour)}</strong><small>Completed Requests per Active Cart Hour</small></div></section>;
 }
 
 function RecentHistory({ history, onOpen }) {
@@ -87,7 +118,7 @@ function RecentHistory({ history, onOpen }) {
   return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>{requestLocationLabel(item)}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
 }
 
-function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, summary, history, onOpenHistory, serviceActive }) {
+function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, summary, history, onOpenHistory, serviceActive, timezone }) {
   useEffect(() => {
     if (focusedRequestId) document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
   }, [focusedRequestId, requests]);
@@ -96,7 +127,7 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
     {loadState === 'loading' && <div className="op-message">Loading requests...</div>}
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
     {loadState === 'ready' && !next && <EmptyQueue serviceActive={serviceActive} />}
-    {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending === next.id} />}
+    {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending === next.id} timezone={timezone} />}
     {requests.length > 1 && <section className="op-up-next"><div><span>UP NEXT</span><strong>{requests.length - 1} more {requests.length === 2 ? 'request' : 'requests'}</strong></div>{requests.slice(1).map((request, index) => <article key={request.id}><span>{index + 2}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} /></article>)}</section>}
   </section><aside className="op-summary"><Performance summary={summary} /><RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
@@ -105,7 +136,7 @@ function HistoryView({ dashboard }) {
   const [period, setPeriod] = useState('daily');
   const summary = dashboard?.summaries?.[period] || {};
   const history = dashboard?.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Transactions</span><strong>{summary.completed_transactions ?? 0}</strong></div><div><Clock3 size={18} /><span>Active cart hours</span><strong>{summary.active_cart_hours ?? 0}</strong></div><div><CheckCircle2 size={18} /><span>Transactions per hour</span><strong>{summary.transactions_per_cart_hour ?? 0}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${summary.average_completion_minutes} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Completed Requests</span><strong>{summary.completed_transactions ?? 'Unknown'}</strong></div><div><Clock3 size={18} /><span>Active Cart Hours · {summary.hours_coverage || 'unknown'} coverage</span><strong>{displayMetric(summary.active_cart_hours, 2)}</strong></div><div><CheckCircle2 size={18} /><span>Completed Requests per Active Cart Hour</span><strong>{displayMetric(summary.transactions_per_cart_hour)}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${displayMetric(summary.average_completion_minutes)} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}<p className="op-muted">History is attributed by request received time; recent list may be capped.</p></section></section>;
 }
 
 export default function OperatorApp({
@@ -115,12 +146,16 @@ export default function OperatorApp({
   const [tab, setTab] = useState('requests');
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState('');
+  const [serviceSnapshot, setServiceSnapshot] = useState(null);
+  const [serviceStateError, setServiceStateError] = useState('');
   const [selectedCourseKey, setSelectedCourseKey] = useState(() => {
     const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
     return selected ? courseKey(selected) : '';
   });
   const [pending, setPending] = useState('');
   const [celebration, setCelebration] = useState('');
+  const [serviceError, setServiceError] = useState('');
+  const [serviceRetry, setServiceRetry] = useState(null);
 
   async function refreshDashboard(selectedCourse = course) {
     setDashboard(null);
@@ -135,10 +170,39 @@ export default function OperatorApp({
     }
   }
 
+  async function refreshServiceState(selectedCourse = course) {
+    setServiceSnapshot(null);
+    if (!selectedCourse) {
+      setServiceStateError('Select a course to load service state.');
+      return;
+    }
+    const query = `?customer_id=${encodeURIComponent(selectedCourse.customer_id)}&course_id=${encodeURIComponent(selectedCourse.course_id)}`;
+    try {
+      setServiceSnapshot(await operatorRequest(
+        user,
+        apiBaseUrl,
+        `/api/v1/operator/service-state${query}`
+      ));
+      setServiceStateError('');
+    } catch (reason) {
+      setServiceStateError(reason.message);
+    }
+  }
+
   const selectedCourse = operatorConfig.courses.find((item) => courseKey(item) === selectedCourseKey)
     || selectedCourseFromLocation(operatorConfig.courses, window.location.search);
-  const course = mergeDashboardCourse(selectedCourse, dashboard?.courses);
-  useEffect(() => { refreshDashboard(course); }, [user, apiBaseUrl, course?.customer_id, course?.course_id]);
+  const dashboardCourse = mergeDashboardCourse(selectedCourse, dashboard?.courses);
+  const serviceSnapshotMatches = serviceSnapshot?.customer_id === dashboardCourse?.customer_id
+    && serviceSnapshot?.course_id === dashboardCourse?.course_id;
+  const course = {
+    ...dashboardCourse,
+    ...(serviceSnapshotMatches ? serviceSnapshot : {}),
+    service_state: serviceSnapshotMatches ? serviceSnapshot.service_state : null,
+  };
+  useEffect(() => {
+    refreshDashboard(course);
+    refreshServiceState(course);
+  }, [user, apiBaseUrl, course?.customer_id, course?.course_id]);
   const selectedRequests = requests.filter((request) => (
     !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
   ));
@@ -159,23 +223,44 @@ export default function OperatorApp({
 
   async function toggleService() {
     if (!course) return;
-    const action = course.service_state?.suspended ? 'resume' : 'suspend';
+    if (!serviceRetry && course.service_state?.status !== 'ready') {
+      setServiceError('Service cutover is required. Refresh the app and contact the administrator.');
+      return;
+    }
+    const action = serviceRetry?.action || (course.service_state.active ? 'suspend' : 'resume');
     const prompt = action === 'suspend'
-      ? `Suspend new beverage requests for ${course.course_name} until the next scheduled service start? Existing requests remain actionable.`
+      ? `Suspend new beverage requests for ${course.course_name}? Existing requests remain actionable.`
       : `Resume beverage requests for ${course.course_name}?`;
-    if (!window.confirm(prompt)) return;
+    if (!serviceRetry && !window.confirm(prompt)) return;
+    const operation = serviceRetry || {
+      action,
+      body: {
+        customer_id: course.customer_id,
+        course_id: course.course_id,
+        operation_id: newOperationId(),
+        expected_generation: course.service_state.generation,
+      },
+    };
+    setServiceRetry(operation);
     setPending('service');
+    setServiceError('');
     try {
-      await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${action}`, {
-        method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id },
+      await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${operation.action}`, {
+        method: 'POST',
+        body: operation.body,
       });
-      await refreshDashboard();
+      setServiceRetry(null);
+      await Promise.all([refreshDashboard(), refreshServiceState()]);
+    } catch (reason) {
+      setServiceError(reason.message);
+      if ([400, 409, 426].includes(reason.status)) setServiceRetry(null);
+      await Promise.all([refreshDashboard(), refreshServiceState()]);
     } finally {
       setPending('');
     }
   }
 
-  const serviceAction = course?.service_state?.suspended ? 'resume' : 'suspend';
+  const serviceAction = serviceRetry?.action || (course?.service_state?.active ? 'suspend' : 'resume');
   const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
 
   return <main className="operator-app"><header className="op-header">
@@ -197,12 +282,12 @@ export default function OperatorApp({
       </div>
       <div className="op-service-controls">
         <ServiceStatus course={course} />
-        <button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
+        <button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course || (!serviceRetry && course.service_state?.status !== 'ready')} aria-label={`${serviceRetry ? 'Retry ' : ''}${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
-          <span>{serviceActionLabel}</span>
+          <span>{serviceRetry ? `Retry ${serviceActionLabel}` : serviceActionLabel}</span>
         </button>
         <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}{serviceStateError && <p role="alert">Service state unavailable: {serviceStateError}</p>}{serviceError && <p role="alert">{serviceError} Refresh the app from its HTTPS address if it is installed.</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} timezone={course?.timezone} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

@@ -66,6 +66,115 @@ Stop on mismatched identity, failed acceptance/safety checks, unexpected
 mutations, or incompatible recovery. Publication/merge does not authorize
 deployment, credentials, device operations, or production-data changes.
 
+## Operator Service Control Rollout and Recovery
+
+This procedure is for a separately authorized future release. The feature
+branch contains source changes and a synthetic local Firestore-emulator test;
+no remote sandbox release, production inspection, activation, or Course
+cutover has been performed. Do not execute this procedure under the current
+implementation authorization.
+
+### Ordered release and per-Course cutover
+
+1. Complete independent Lead Architect review and CPO acceptance of one exact
+   source SHA. Validate the matching backend/frontend artifacts, request and
+   notification contracts, authorization, stale clients, and compatible
+   recovery target in an authorized isolated sandbox. Record artifact/config
+   identities and stop conditions. Remote sandbox validation has not yet
+   occurred for this source increment.
+2. Deploy the compatible backend revision with
+   `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE=false`. This keeps legacy schedule
+   eligibility for uncutover Courses and keeps the explicit Admin cutover
+   route closed. New service mutations are temporarily unavailable at this
+   stage; existing COMPLETE/Cancel and the deployed-device request contract
+   remain available. Confirm the revision and configuration before proceeding.
+3. Fence and drain every old receiver/Admin backend instance and direct
+   service-control write path. Verify no old revision can accept requests,
+   mutate legacy service state, or submit schedule changes. Do not open the
+   cutover gate until this evidence is complete; a branch, traffic percentage,
+   or deployment command alone is not fencing evidence.
+4. Publish the matching frontend with the gate still closed. Communicate the
+   required refresh path to operators. Hosting revalidation headers are part
+   of the source; operators should reload the HTTPS application or close and
+   reopen the installed PWA. No operator should be instructed to clear
+   unrelated browser data.
+5. Enable `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE=true` on the fenced compatible
+   backend. The gate enables explicit cutover and v2 controls. Old clients
+   without operation IDs/generations receive an update-required response for
+   service mutations; cached Admin schedule writes receive an explicit
+   schedule-removed response. Neither is silently treated as success.
+6. Cut over each existing Course through the authorized Admin
+   `POST /api/v1/admin/customers/{customer_id}/courses/{course_id}/service-cutover`
+   interface. The transaction samples its effective legacy on/off state and
+   atomically writes the schema-v2 state, coverage start, migration evidence,
+   and—only for an active Course—a clearly labeled migration-baseline
+   interval. It removes legacy schedule/suspension fields. Reads and requests
+   do not perform migration. Before an individual Course is cut over, the
+   fenced new backend retains its legacy schedule as read-only request
+   eligibility; that eligibility transaction shares the Course read with
+   cutover, so the request is either accepted against the pre-cutover state
+   or evaluated against the committed v2 state. Once cut over, schedule
+   eligibility is no longer consulted. Newly created Courses start off.
+7. Reconcile the Course inventory against successful cutover receipts/results,
+   inspect service state/generation and migration evidence, and verify
+   interval/report coverage. Resolve any inconsistent Course explicitly;
+   do not invent a Resume, historical interval, or prior service hours.
+   Confirm operators can see the service state, refresh the app, and perform
+   authorized Resume/Suspend. Keep existing requests available; same-local-
+   day work remains completable/cancellable while off, but prior-day open
+   work must be cancelled and cannot be completed.
+8. Observe request acceptance, transition errors/generation conflicts,
+   audit/interval consistency, report coverage, and failure isolation for the
+   approved observation window. Stop on unexplained state/audit mismatch,
+   rejected active-course requests, cross-Course access, misleading metric
+   coverage, incompatible clients, or failed COMPLETE/Cancel behavior.
+
+### Compatible recovery
+
+- **Before the gate or before any Course cutover:** Disable the gate or restore
+  the verified pre-cutover backend only after confirming no Course has
+  migrated and no v2 transition committed. Existing schedules remain intact.
+  Re-enable old schedule controls only through the explicitly approved
+  compatible revision; do not claim interval accounting for that period.
+- **After any Course cutover or v2 transition:** Do not restore a backend that
+  reads only schedules, delete v2 records, recreate schedules, or replay
+  operations with new IDs. Keep Course state, intervals, events, and receipts
+  authoritative. Restore a reviewed backend revision that understands the
+  v2 schema, retain the activation gate, and reconcile by Course ID and
+  generation. Retry the same operation ID when its receipt may have committed;
+  conflicting reuse is rejected. If the compatible revision cannot safely
+  serve the affected state, stop and escalate for a forward recovery plan.
+- Backend request controls and existing-request actions must remain usable
+  when dashboard/report reads fail. Required audit/interval write failures
+  abort service transitions. Reporting coverage is read-only and must never
+  be used to reconstruct state or hide an incomplete rate.
+- The Admin backend currently has an explicit cutover endpoint, not a
+  Course-cutover UI. Before rollout, identify and validate the authenticated
+  Admin client/tooling that will invoke it and retain per-Course results; never
+  substitute direct database writes or an unreviewed script. Adding an Admin UI
+  is not part of this increment.
+
+The local emulator suite uses a distinct synthetic Firestore demo project and
+unique test records (no database-wide cleanup). The approved invocation is:
+
+```sh
+cd <workspace>/nfed/fairway_backend/cloudrun_receiver
+export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+npx --yes firebase-tools@15.34.0 emulators:exec \
+  --project demo-fairway-credential-lifecycle \
+  --config firebase.emulator.json \
+  --only firestore \
+  'FAIRWAY_ENV=sandbox FAIRWAY_GCP_PROJECT=fairway-refresh-sandbox-test GOOGLE_CLOUD_PROJECT=fairway-refresh-sandbox-test FIRESTORE_EMULATOR_HOST=127.0.0.1:8787 node test/service_control_emulator.js'
+```
+
+The harness additionally requires Firebase CLI's `GCLOUD_PROJECT` and
+`FIREBASE_CONFIG` to identify the exact demo emulator project, checks the
+loopback host and synthetic sandbox backend configuration, rejects
+credential-bearing environment variables, and deletes only its uniquely
+named test documents. It validates the actual Firestore transaction boundary,
+not production IAM, cloud networking, deployment, or field operation.
+
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
 Under explicit CPO authorization, the one-time cleanup in production project

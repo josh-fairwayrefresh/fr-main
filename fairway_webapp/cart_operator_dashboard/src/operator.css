@@ -130,6 +130,12 @@
   .op-suspend { min-height: 44px; }
   .op-notifications { position: static; width: auto; margin: 12px 20px; }
 }
+
+.op-request-warning {
+  margin: 0.75rem 0 0;
+  color: #9a3412;
+  font-weight: 600;
+}
 @media (max-width: 900px) {
   .op-header-context { grid-template-columns: minmax(0, 1fr); }
   .op-layout { grid-template-columns: 1fr; }

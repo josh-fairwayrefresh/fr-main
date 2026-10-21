@@ -10,7 +10,10 @@ export async function operatorRequest(user, apiBaseUrl, path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error((await response.text()).trim() || `Request failed with status ${response.status}`);
+    const message = (await response.text()).trim() || `Request failed with status ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }

@@ -1,5 +1,7 @@
 'use strict';
 
+const { FieldValue } = require('firebase-admin/firestore');
+
 /*
  * Minimal in-memory Firestore test double for the fairway_backend fleet
  * modules. Supports only the operations the fleet modules actually use
@@ -105,9 +107,25 @@ class FakeQuery {
 }
 
 let autoIdCounter = 0;
+const deleteFieldTransform = FieldValue.delete();
+const serverTimestampTransform = FieldValue.serverTimestamp();
 function nextAutoId() {
   autoIdCounter += 1;
   return `auto-${autoIdCounter}`;
+}
+
+function applyFields(current, data) {
+  const result = { ...current };
+  for (const [field, value] of Object.entries(data)) {
+    if (value?.constructor === deleteFieldTransform.constructor) {
+      delete result[field];
+    } else if (value?.constructor === serverTimestampTransform.constructor) {
+      result[field] = new Date();
+    } else {
+      result[field] = value;
+    }
+  }
+  return result;
 }
 
 class FakeDocRef {
@@ -129,9 +147,9 @@ class FakeDocRef {
     const opts = options || {};
     if (opts.merge) {
       const current = this.db._docs.get(this.path) || {};
-      this.db._docs.set(this.path, { ...current, ...data });
+      this.db._docs.set(this.path, applyFields(current, data));
     } else {
-      this.db._docs.set(this.path, { ...data });
+      this.db._docs.set(this.path, applyFields({}, data));
     }
   }
 
@@ -140,7 +158,7 @@ class FakeDocRef {
       throw new Error(`No document to update at ${this.path}`);
     }
     const current = this.db._docs.get(this.path);
-    this.db._docs.set(this.path, { ...current, ...data });
+    this.db._docs.set(this.path, applyFields(current, data));
   }
 }
 
@@ -211,6 +229,7 @@ class FakeTransaction {
     if (this.operations.length > 0) {
       throw new Error('Fake transaction read after write');
     }
+    if (ref instanceof FakeQuery) return ref.get();
     return ref.get();
   }
 
@@ -238,11 +257,11 @@ class FakeTransaction {
         if (!nextDocs.has(operation.ref.path)) {
           throw new Error(`No document to update at ${operation.ref.path}`);
         }
-        nextDocs.set(operation.ref.path, { ...nextDocs.get(operation.ref.path), ...operation.data });
+        nextDocs.set(operation.ref.path, applyFields(nextDocs.get(operation.ref.path), operation.data));
       } else if (operation.options.merge) {
-        nextDocs.set(operation.ref.path, { ...(nextDocs.get(operation.ref.path) || {}), ...operation.data });
+        nextDocs.set(operation.ref.path, applyFields(nextDocs.get(operation.ref.path) || {}, operation.data));
       } else {
-        nextDocs.set(operation.ref.path, { ...operation.data });
+        nextDocs.set(operation.ref.path, applyFields({}, operation.data));
       }
     }
     this.db._docs = nextDocs;

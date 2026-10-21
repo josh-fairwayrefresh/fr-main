@@ -290,52 +290,73 @@ promoted to production on 2026-10-01. Production acceptance established the
 full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
+The schedule-based behavior above describes the last established production
+release; it is not the behavior of the separate Operator Service Control
+source increment described below. No deployment or Course cutover for that
+increment is claimed here.
 
-## Approved opening-weekend targets — NOT YET IMPLEMENTED
+## Approved Operator Service Control and Intervals — source implemented, rollout pending
 
-These CPO-approved targets supersede legacy schedule/reporting behavior as
-future requirements, not as a claim of current implementation or deployment.
-The rejected implementation was discarded; no temporary compatibility workflow
-or reconstructed historical service sessions are accepted.
+The CPO-approved requirements below are implemented in the current feature
+branch source and local tests. They supersede schedule-based service control
+for Courses after their explicit cutover. This source status is not a claim of
+production deployment, remote sandbox validation, or CPO acceptance.
 
 - Resume turns service on; Suspend turns service off. State persists until an
   authorized operator explicitly changes it. Midnight, a scheduled opening,
-  reload, restart, or elapsed time cannot resume service. Remove obsolete
-  schedule-based control, configuration, and UI coherently; retain course
-  timezone. Keep existing requests actionable while off.
-- Use the [single backend service capability](ENGINEERING_GUIDE.md#approved-servicereporting-architecture--not-yet-implemented).
-  Controls and existing-request actions remain usable if reporting fails.
-  Preserve course authorization, notification behavior, request handling,
-  and deployed-device request/COMPLETE contracts.
+  reload, restart, or elapsed time cannot resume service after cutover.
+  Existing Courses retain their effective legacy on/off state at the atomic
+  cutover instant; an active baseline is migration evidence, not an operator
+  Resume. New Courses start off. No earlier intervals or service hours are
+  reconstructed.
+- One backend-owned capability governs service state, transitions, interval
+  accounting, and request eligibility. State, transition event, interval, and
+  operation receipt commit atomically. Reporting is a read-only consumer;
+  reporting failure cannot block controls or existing-request actions, while
+  failure to persist required transition evidence aborts the transition.
+  The operator reads service state through a separate authorized state
+  interface, independent of dashboard reporting reads.
+  Preserve Course authorization, notification behavior, request deduplication,
+  and deployed-device request/COMPLETE wire contracts.
+- The rollout activation gate does not migrate Courses on reads, requests, or
+  process startup. While a Course awaits explicit cutover, its legacy schedule
+  remains read-only for request eligibility. That compatibility path is
+  transactionally serialized with per-Course cutover and is removed from
+  operation for each Course when the migration commits. Production cutover
+  requires verified fencing and draining of all old backend revisions and
+  paths first.
+- Existing open requests remain actionable while service is off. Same-course-
+  local-day requests may be completed or cancelled after Suspend. An open
+  request received on an earlier course-local calendar day must be manually
+  cancelled; it is not automatically closed at midnight, and backend COMPLETE
+  is rejected even if a stale client still displays the action. Cancelled
+  requests count as zero Completed Requests. Preserve already-recorded pilot
+  request history without retrospective rewriting.
 - Active Cart Hours, Cart Hours, and Operating Hours mean elapsed time between
   authoritative Resume/Suspend transitions, not scheduled hours. Allocate
-  ongoing and cross-midnight intervals to local days using actual elapsed
-  instants; handle duplicate/retried actions, concurrent operators, and DST.
-  Do not invent historical sessions or represent uncertain hours as measured.
-- History uses course-local calendar Day, Monday-through-Sunday Week, and
-  calendar Month, with historical navigation and complete retrieval. Filter
-  the entire `Outcome | Request | Received | Duration` Service History tally
-  by `received_at` within the selected course-local calendar period,
-  regardless of current status; include open, completed, and cancelled
-  requests. A request received Monday and completed Tuesday remains in
-  Monday's History tally with its updated outcome.
-- Replace "Transactions" with "Completed Requests"; exclude cancelled
-  requests. Fairway completions are not total cart sales, orders, or
-  transactions. Attribute Completed Requests to completion time: that Monday
-  request completed Tuesday counts toward Tuesday's Completed Requests. A
-  request accepted while service was active still qualifies when completed
-  after suspension; do not require completion itself to fall inside an on
-  interval.
-- Preserve official pilot request history/counts as-is, beginning at protected
-  request `bUgIybnJz0Xv7YMdz2Pm` at `2026-10-17T16:39:35.270Z`.
-  Incomplete historical operator evidence must not exclude retained pilot
-  requests or reduce their factual counts. The completed test-data deletion
-  is recorded in [the Deployment Guide](DEPLOYMENT_GUIDE.md#pilot-test-data-cleanup-execution--2026-10-20);
-  it is not authorization for further cleanup.
-- Rates and unknown/partial service-coverage semantics remain genuine CPO
-  decisions in [the backlog](feature_backlog.md#reporting-decisions).
-  Do not silently choose a denominator, fabricate historical hours, or
-  reinterpret acceptance-time qualification for uncertain legacy intervals.
+  ongoing and cross-midnight intervals using actual elapsed instants and
+  course-local Day, Monday-start Week, and calendar Month boundaries; handle
+  daylight-saving changes. No historical hours are fabricated.
+- Completed Requests per Active Cart Hour is total completions divided by
+  actual active hours within the same selected course-local Day, Week, or
+  Month. Week/Month use period totals, not averages of daily rates. Count
+  completion by `completed_at`; retain the existing Service History
+  received-time attribution and ordering. Cancelled requests are excluded.
+  A request received Monday and completed Tuesday remains in Monday's
+  received-time History and counts as a Tuesday completion. A request accepted
+  while service was active may be completed after Suspend and still counts at
+  completion time.
+- Compute rates from unrounded values and round only for display. Known
+  positive hours with zero completions produce rate 0. Zero, unknown, partial,
+  or otherwise incomplete hours produce “Rate unavailable”; Completed Requests
+  counts remain visible. A 5,000-request retrieval cap or a completed
+  request without a valid completion time is surfaced as incomplete coverage
+  rather than a complete-looking rate.
+- Broader calendar navigation, complete historical retrieval, and full Service
+  History/Performance & Outcomes redesign remain outside this increment.
+  Preserve official pilot requests/counts; the completed test-data cleanup is
+  recorded in [the Deployment Guide](DEPLOYMENT_GUIDE.md#pilot-test-data-cleanup-execution--2026-10-20)
+  and does not authorize further cleanup.
 
 ## Responsive Cart Operator acceptance boundary
 

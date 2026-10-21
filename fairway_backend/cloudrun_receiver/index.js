@@ -3,12 +3,23 @@ const { Firestore, FieldValue } = require('@google-cloud/firestore');
 require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
-const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
 const {
-  activeServiceMinutes,
-  nextScheduledStart,
+  createCourse,
+  getCourseForCustomer,
+  updateCourse,
+  coursesCollection,
+  isValidIanaTimezone,
+} = require('./lib/fleet/courses');
+const {
   resolveCourseServiceState,
 } = require('./lib/course_service');
+const {
+  ServiceControlError,
+  cutoverCourse,
+  serviceState,
+  transitionCourseService,
+} = require('./lib/service_control');
+const { localDate, summarizeOperatorDashboard } = require('./lib/service_reporting');
 const {
   authenticateDeviceCredential,
   updateDeviceAssignment,
@@ -174,39 +185,17 @@ function createFairwayHandlers(db, {
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
+  serviceControlV2Active = process.env.FAIRWAY_SERVICE_CONTROL_V2_ACTIVE === 'true',
   protectedSystemAdminUids = resolveProtectedSystemAdminUids(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
   ),
 } = {}) {
   /* Persists a golfer request using the validated demand-window suppression. */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
-    const existingOpenRequests = await db.collection('requests')
-      .where('device_id', '==', deviceId)
-      .where('status', 'in', ['new', 'confirmed'])
-      .where('demand_window_expires_at', '>', now)
-      .limit(1)
-      .get();
-
-    if (!existingOpenRequests.empty) {
-      const existingRequest = existingOpenRequests.docs[0];
-
-      console.log('Suppressed duplicate button request because its demand window remains active:', {
-        device_id: deviceId,
-        existing_request_id: existingRequest.id,
-      });
-
-      return res.status(200).json({
-        status: 'accepted',
-        event_type: EVENT_TYPES.BUTTON_PRESS,
-        request_id: existingRequest.id,
-        duplicate: true,
-      });
-    }
-
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, requestTime) {
     const courseLocalDateHour = course
-      ? resolveCourseLocalDateHour(now, course.timezone)
+      ? resolveCourseLocalDateHour(requestTime, course.timezone)
       : null;
-
+    const requestRef = db.collection('requests').doc();
     const requestDoc = {
       customer_id: device.customer_id || null,
       course_id: device.course_id || 'unknown_course',
@@ -223,17 +212,77 @@ function createFairwayHandlers(db, {
       operator_id: null,
       repeat_press_count: 0,
       last_repeat_press_at: null,
-      demand_window_expires_at: new Date(now.getTime() + DEMAND_WINDOW_MS),
+      demand_window_expires_at: new Date(requestTime.getTime() + DEMAND_WINDOW_MS),
       device_state_at_request: device.state,
       course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
       course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
       raw_payload: body
     };
+    const requests = db.collection('requests');
+    const dedupeQuery = requests
+      .where('device_id', '==', deviceId)
+      .where('status', 'in', ['new', 'confirmed'])
+      .where('demand_window_expires_at', '>', requestTime)
+      .limit(1);
+    let acceptedRequestId = requestRef.id;
+    let duplicate = false;
+    if (course && (serviceControlV2Active || course.service_schema_version === 2)) {
+      const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
+      const eligibility = await db.runTransaction(async (transaction) => {
+        const [courseSnap, existing] = await Promise.all([
+          transaction.get(courseRef),
+          transaction.get(dedupeQuery),
+        ]);
+        if (!courseSnap.exists) return { unavailable: true };
+        const current = courseSnap.data();
+        if (!existing.empty) return { requestId: existing.docs[0].id, duplicate: true };
+        const versioned = current.service_schema_version === 2;
+        const eligible = versioned
+          ? ['on', 'off'].includes(current.service_status) && current.service_status === 'on'
+          : serviceControlV2Active && resolveCourseServiceState(current, requestTime).active;
+        if (!eligible) return { unavailable: true };
+        transaction.set(requestRef, {
+          ...requestDoc,
+          received_at: FieldValue.serverTimestamp(),
+          service_acceptance_generation: versioned ? current.service_generation : null,
+          service_accepted_while_on: true,
+          service_acceptance_source: versioned ? 'service_control_v2' : 'legacy_schedule_pre_cutover',
+        });
+        return { requestId: requestRef.id, duplicate: false };
+      });
+      if (eligibility.unavailable) {
+        return res.status(503).json({
+          status: 'service_unavailable',
+          event_type: EVENT_TYPES.BUTTON_PRESS,
+        });
+      }
+      acceptedRequestId = eligibility.requestId;
+      duplicate = eligibility.duplicate;
+    } else {
+      const existingOpenRequests = await dedupeQuery.get();
+      if (!existingOpenRequests.empty) {
+        acceptedRequestId = existingOpenRequests.docs[0].id;
+        duplicate = true;
+      } else {
+        await requestRef.set({ ...requestDoc, received_at: FieldValue.serverTimestamp() });
+      }
+    }
 
-    const docRef = await db.collection('requests').add(requestDoc);
+    if (duplicate) {
+      console.log('Suppressed duplicate button request because its demand window remains active:', {
+        device_id: deviceId,
+        existing_request_id: acceptedRequestId,
+      });
+      return res.status(200).json({
+        status: 'accepted',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+        request_id: acceptedRequestId,
+        duplicate: true,
+      });
+    }
 
     console.log('Fairway button request stored:', {
-      request_id: docRef.id,
+      request_id: acceptedRequestId,
       device_id: deviceId,
       event_type: eventType
     });
@@ -241,7 +290,7 @@ function createFairwayHandlers(db, {
     return res.status(200).json({
       status: 'accepted',
       event_type: EVENT_TYPES.BUTTON_PRESS,
-      request_id: docRef.id,
+      request_id: acceptedRequestId,
     });
   }
 
@@ -312,7 +361,11 @@ function createFairwayHandlers(db, {
       return res.status(400).send('Unknown event\n');
     }
 
-    if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, requestTime).active) {
+    const versionedService = hierarchy.course?.service_schema_version === 2;
+    const available = versionedService
+      ? hierarchy.course.service_status === 'on'
+      : !hierarchy.course || resolveCourseServiceState(hierarchy.course, requestTime).active;
+    if (hierarchy.course && !available) {
       console.log('Rejected golfer request because Course service is unavailable:', {
         device_id: deviceId,
         course_id: device.course_id,
@@ -717,26 +770,43 @@ function createFairwayHandlers(db, {
   }
 
   async function courseServiceReadModel(course, requestTime) {
-    const eventsSnap = await coursesCollection(db, course.customer_id).doc(course.course_id)
-      .collection('service_events').orderBy('recorded_at', 'desc').limit(500).get();
-    const events = eventsSnap.docs.map((event) => event.data());
+    const current = serviceState(course);
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
-      service_schedule: course.service_schedule,
-      service_state: resolveCourseServiceState(course, requestTime),
-      service_events: events,
+      service_state: current,
+      service_coverage_started_at: course.service_coverage_started_at || null,
     };
   }
 
   function operatorCourseServiceModel(course) {
-    const { service_events: _serviceEvents, ...model } = course;
-    return model;
+    return course;
+  }
+
+  async function getOperatorServiceState(req, res) {
+    res.set('Cache-Control', 'no-store');
+    const operator = await authorizeOperator(req, res);
+    if (!operator) return res;
+    const customerId = req.query?.customer_id;
+    const courseId = req.query?.course_id;
+    if (typeof customerId !== 'string' || typeof courseId !== 'string') {
+      return res.status(400).json({ error: 'invalid_course_context' });
+    }
+    const course = await authorizedCourse(operator, courseId, customerId);
+    if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
+    return res.status(200).json({
+      customer_id: course.customer_id,
+      course_id: course.course_id,
+      course_name: course.course_name,
+      timezone: course.timezone,
+      service_state: serviceState(course),
+    });
   }
 
   async function getOperatorDashboard(req, res) {
+    res.set('Cache-Control', 'no-store');
     const operator = await authorizeOperator(req, res);
     if (!operator) return res;
     const requestTime = now();
@@ -766,52 +836,32 @@ function createFairwayHandlers(db, {
         .limit(5000)
         .get()
     )));
-    const requests = requestSnapshots.flatMap((snapshot) => (
-      snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
-    ));
-    const periods = [
-      ['daily', 24 * 60],
-      ['weekly', 7 * 24 * 60],
-      ['monthly', 30 * 24 * 60],
-    ];
-    const summaries = Object.fromEntries(periods.map(([period, durationMinutes]) => {
-      const start = new Date(requestTime.getTime() - durationMinutes * 60000);
-      const periodRequests = requests.filter((request) => {
-        const receivedAt = toDate(request.received_at);
-        return receivedAt && receivedAt >= start && receivedAt <= requestTime;
-      });
-      const completed = periodRequests.filter((request) => request.status === 'completed');
-      const cancelled = periodRequests.filter((request) => request.status === 'cancelled');
-      const activeMinutes = courses.reduce((total, course) => {
-        const service = serviceCourses.find((item) => item.course_id === course.course_id);
-        return total + activeServiceMinutes(course, service.service_events, start, requestTime);
-      }, 0);
-      const activeHours = activeMinutes / 60;
-      const completionMinutes = completed.map((request) => {
-        const receivedAt = toDate(request.received_at);
-        const completedAt = toDate(request.completed_at);
-        return receivedAt && completedAt ? (completedAt - receivedAt) / 60000 : null;
-      }).filter((value) => value !== null);
-      return [period, {
-        requests: periodRequests.length,
-        completed_transactions: completed.length,
-        cancelled_requests: cancelled.length,
-        active_cart_hours: Number(activeHours.toFixed(2)),
-        transactions_per_cart_hour: activeHours > 0 ? Number((completed.length / activeHours).toFixed(1)) : 0,
-        requests_per_hour: activeHours > 0 ? Number((periodRequests.length / activeHours).toFixed(1)) : 0,
-        average_completion_minutes: completionMinutes.length > 0
-          ? Number((completionMinutes.reduce((sum, value) => sum + value, 0) / completionMinutes.length).toFixed(1))
-          : null,
-      }];
+    const requestsByCourse = new Map(courses.map((course, index) => [
+      course.course_id,
+      requestSnapshots[index].docs.map((document) => ({
+        request_id: document.id,
+        ...document.data(),
+        course_id: course.course_id,
+      })),
+    ]));
+    const intervalSnapshots = await Promise.all(courses.map((course) => {
+      if (course.service_schema_version !== 2) return Promise.resolve(null);
+      return coursesCollection(db, course.customer_id).doc(course.course_id)
+        .collection('service_intervals').get();
     }));
-    const history = requests
-      .filter((request) => ['completed', 'cancelled'].includes(request.status))
-      .sort((left, right) => toDate(right.received_at) - toDate(left.received_at))
-      .slice(0, 100);
+    const intervalsByCourse = new Map(courses.map((course, index) => [
+      course.course_id,
+      intervalSnapshots[index]?.docs.map((document) => ({
+        interval_id: document.id,
+        ...document.data(),
+      })) || [],
+    ]));
+    const report = summarizeOperatorDashboard(courses, requestsByCourse, intervalsByCourse, requestTime);
     return res.status(200).json({
       courses: serviceCourses.map(operatorCourseServiceModel),
-      summaries,
-      history,
+      summaries: report.summaries,
+      history: report.history,
+      history_coverage: report.history_coverage,
     });
   }
 
@@ -821,28 +871,25 @@ function createFairwayHandlers(db, {
     const courseId = req.body?.course_id;
     const course = await authorizedCourse(operator, courseId, req.body?.customer_id);
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
-    const requestTime = now();
-    const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
-    if (action === 'suspend') {
-      const until = nextScheduledStart(course, requestTime);
-      if (!until) return res.status(409).send('Course service schedule is not configured\n');
-      await courseRef.update({
-        service_suspension: { suspended_at: requestTime, until, suspended_by: operator.identity.uid },
-        updated_at: requestTime,
-      });
-      await courseRef.collection('service_events').add({
-        type: 'suspended', recorded_at: requestTime, operator_id: operator.identity.uid, until,
-      });
-    } else {
-      await courseRef.update({ service_suspension: null, updated_at: requestTime });
-      await courseRef.collection('service_events').add({
-        type: 'resumed', recorded_at: requestTime, operator_id: operator.identity.uid,
+    if (!serviceControlV2Active) {
+      return res.status(503).json({ error: 'service_control_not_activated' });
+    }
+    if (!req.body?.operation_id || !Number.isInteger(req.body.expected_generation)) {
+      return res.status(426).json({
+        error: 'operator_update_required',
+        message: 'Update or refresh Cart Operator before changing service.',
       });
     }
-    const updated = await getCourseForCustomer(db, course.customer_id, course.course_id);
-    return res.status(200).json(operatorCourseServiceModel(
-      await courseServiceReadModel(updated, requestTime)
-    ));
+    const result = await transitionCourseService(db, {
+      customerId: course.customer_id,
+      courseId: course.course_id,
+      actorId: operator.identity.uid,
+      action,
+      operationId: req.body?.operation_id,
+      expectedGeneration: req.body?.expected_generation,
+      fieldValue: FieldValue,
+    });
+    return res.status(200).json(result);
   }
 
   function requireBodyFields(body, allowedFields) {
@@ -857,6 +904,9 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof ServiceControlError) {
+      return res.status(error.status).json({ error: error.code, message: error.message });
+    }
     if (error instanceof CredentialLifecycleError) {
       return res.status(error.status).json({
         error: error.code,
@@ -959,11 +1009,11 @@ function createFairwayHandlers(db, {
           course_id: courseSnap.id,
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
-          service_schedule: courseSource.service_schedule ?? null,
-          service_suspension: courseSource.service_suspension ?? null,
+          service_schema_version: courseSource.service_schema_version ?? null,
+          service_status: courseSource.service_status ?? null,
           comments: courseSource.comments ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'comments']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -1012,26 +1062,51 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'service_schedule')) {
+      return res.status(409).json({
+        error: 'service_schedule_removed',
+        message: 'Refresh Admin before creating a Course. New Courses start with service off.',
+      });
+    }
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'service_schedule')) {
+      return res.status(409).json({
+        error: 'service_schedule_removed',
+        message: 'Recurring service schedules are no longer supported. Refresh Admin and update only Course details.',
+      });
+    }
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments']);
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(200).json(course);
+  }
+
+  async function cutoverAdminCourse(req, res, customerId, courseId) {
+    if (Object.keys(req.body || {}).length !== 0) {
+      return res.status(400).json({ error: 'invalid_cutover_request' });
+    }
+    const course = await getCourseForCustomer(db, customerId, courseId);
+    if (!course) return res.status(404).json({ error: 'course_not_found' });
+    return res.status(200).json(await cutoverCourse(db, {
+      customerId,
+      courseId,
+      fieldValue: FieldValue,
+      now,
+      enabled: serviceControlV2Active,
+    }));
   }
 
   async function provisionAdminDevice(req, res) {
@@ -1156,6 +1231,10 @@ function createFairwayHandlers(db, {
       const coursesMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses$/);
       if (req.method === 'POST' && coursesMatch) {
         return await createAdminCourse(req, res, coursesMatch[1]);
+      }
+      const cutoverMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)\/service-cutover$/);
+      if (req.method === 'POST' && cutoverMatch) {
+        return await cutoverAdminCourse(req, res, cutoverMatch[1], cutoverMatch[2]);
       }
       const courseMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)$/);
       if (req.method === 'PATCH' && courseMatch) {
@@ -1308,97 +1387,92 @@ function createFairwayHandlers(db, {
 
     const requestRef = db.collection('requests').doc(requestId);
 
-    if (action === COMPLETE_COMMAND_TYPE) {
-      const result = await db.runTransaction(async (transaction) => {
-        const requestSnap = await transaction.get(requestRef);
-
-        if (!requestSnap.exists) {
-          return { notFound: true };
+    const result = await db.runTransaction(async (transaction) => {
+      const requestSnap = await transaction.get(requestRef);
+      if (!requestSnap.exists) return { notFound: true };
+      const requestData = requestSnap.data();
+      const assignment = operator.assignment.courses.find((course) => (
+        course.customer_id === requestData.customer_id &&
+        course.course_id === requestData.course_id
+      ));
+      if (!assignment) return { forbidden: true };
+      const courseRef = coursesCollection(db, assignment.customer_id).doc(assignment.course_id);
+      const courseSnap = await transaction.get(courseRef);
+      if (!courseSnap.exists || !isValidIanaTimezone(courseSnap.data().timezone)) {
+        return { invalid: true };
+      }
+      const course = courseSnap.data();
+      const currentStatus = requestData.status;
+      if (action === 'confirm' && !['new', 'confirmed'].includes(currentStatus)) return { conflict: true };
+      if (action === 'complete' && currentStatus === 'cancelled') return { conflict: true };
+      if (action === 'cancel' && currentStatus === 'completed') return { conflict: true };
+      if (action === 'complete' && ['new', 'confirmed'].includes(currentStatus)) {
+        const receivedAt = toDate(requestData.received_at);
+        if (!receivedAt || localDate(receivedAt, course.timezone) < localDate(now(), course.timezone)) {
+          return { priorDay: true };
         }
-
-        const requestData = requestSnap.data();
-        if (!operator.assignment.courses.some((course) => (
-          course.customer_id === requestData.customer_id &&
-          course.course_id === requestData.course_id
-        ))) {
-          return { forbidden: true };
-        }
+      }
+      let commandRef = null;
+      let commandSnap = null;
+      if (action === COMPLETE_COMMAND_TYPE) {
         const expiresAt = toDate(requestData.demand_window_expires_at);
-
-        if (typeof requestData.device_id !== 'string' || !expiresAt) {
-          return { invalid: true };
-        }
-
+        if (typeof requestData.device_id !== 'string' || !expiresAt) return { invalid: true };
         const commandId = completeCommandId(requestId);
-        const commandRef = db.collection('devices').doc(requestData.device_id)
+        commandRef = db.collection('devices').doc(requestData.device_id)
           .collection('commands').doc(commandId);
-        const commandSnap = await transaction.get(commandRef);
+        commandSnap = await transaction.get(commandRef);
+      }
+      if (currentStatus !== actionConfig.status) {
+        transaction.update(requestRef, {
+          status: actionConfig.status,
+          [actionConfig.timestampField]: FieldValue.serverTimestamp(),
+          operator_id: operator.identity.uid,
+        });
+      }
+      if (commandRef && !commandSnap.exists) {
+        transaction.set(commandRef, {
+          command_id: commandRef.id,
+          device_id: requestData.device_id,
+          type: COMPLETE_COMMAND_TYPE,
+          request_id: requestId,
+          status: 'pending',
+          created_at: FieldValue.serverTimestamp(),
+          expires_at: requestData.demand_window_expires_at,
+          created_by: operator.identity.uid,
+          acknowledged_at: null,
+        });
+      }
+      return {
+        commandId: commandRef?.id,
+        created: Boolean(commandRef && !commandSnap.exists),
+        deviceId: requestData.device_id,
+        changed: currentStatus !== actionConfig.status,
+      };
+    });
 
-        if (requestData.status !== actionConfig.status) {
-          transaction.update(requestRef, {
-            status: actionConfig.status,
-            [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-            operator_id: operator.identity.uid,
-          });
-        }
-
-        if (!commandSnap.exists) {
-          transaction.set(commandRef, {
-            command_id: commandId,
-            device_id: requestData.device_id,
-            type: COMPLETE_COMMAND_TYPE,
-            request_id: requestId,
-            status: 'pending',
-            created_at: FieldValue.serverTimestamp(),
-            expires_at: requestData.demand_window_expires_at,
-            created_by: operator.identity.uid,
-            acknowledged_at: null,
-          });
-        }
-
-        return { commandId, created: !commandSnap.exists, deviceId: requestData.device_id };
+    if (result.notFound) return res.status(404).send('Request not found\n');
+    if (result.forbidden) return res.status(403).send('Operator is not authorized for this Course\n');
+    if (result.invalid) return res.status(422).send('Request or Course is missing valid completion data\n');
+    if (result.conflict) return res.status(409).send('Request is already in a conflicting terminal state\n');
+    if (result.priorDay) {
+      return res.status(409).json({
+        error: 'prior_day_request_requires_cancellation',
+        message: 'Requests received on a prior Course-local calendar day must be cancelled, not completed.',
       });
-
-      if (result.notFound) {
-        return res.status(404).send('Request not found\n');
-      }
-      if (result.forbidden) {
-        return res.status(403).send('Operator is not authorized for this Course\n');
-      }
-      if (result.invalid) {
-        return res.status(422).send('Request is missing command correlation data\n');
-      }
-
+    }
+    if (result.commandId) {
       console.log('COMPLETE command correlation:', {
         request_id: requestId,
         command_id: result.commandId,
         device_id: result.deviceId,
         created: result.created,
       });
-    } else {
-      const requestSnap = await requestRef.get();
-
-      if (!requestSnap.exists) {
-        return res.status(404).send('Request not found\n');
-      }
-
-      if (!operator.assignment.courses.some((course) => (
-        course.customer_id === requestSnap.data().customer_id &&
-        course.course_id === requestSnap.data().course_id
-      ))) {
-        return res.status(403).send('Operator is not authorized for this Course\n');
-      }
-
-      await requestRef.update({
-        status: actionConfig.status,
-        [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-        operator_id: operator.identity.uid,
-      });
     }
 
     console.log('Fairway request status updated:', {
       request_id: requestId,
-      status: actionConfig.status
+      status: actionConfig.status,
+      changed: result.changed,
     });
 
     return res.status(200).send(`OK ${requestId} ${actionConfig.status}\n`);
@@ -1570,6 +1644,9 @@ function createFairwayHandlers(db, {
       if (req.method === 'GET' && path === '/api/v1/operator/dashboard') {
         return await getOperatorDashboard(req, res);
       }
+      if (req.method === 'GET' && path === '/api/v1/operator/service-state') {
+        return await getOperatorServiceState(req, res);
+      }
       if (req.method === 'PATCH' && path === '/api/v1/operator/notification-preferences') {
         return await updateOperatorNotificationPreference(req, res);
       }
@@ -1610,6 +1687,9 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error instanceof ServiceControlError) {
+        return res.status(error.status).json({ error: error.code, message: error.message });
+      }
       if (error && error.type === 'entity.parse.failed') {
         return res.status(400).send('Invalid JSON\n');
       }

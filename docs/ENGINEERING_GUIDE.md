@@ -138,17 +138,61 @@ authorization remain separate. Release-specific rollout, observation, stop
 conditions, and compatible recovery are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
 
-### Approved service/reporting architecture — not yet implemented
+### Operator Service Control and Authoritative Intervals
 
-The [opening-weekend targets](UX_SPECIFICATION.md#approved-opening-weekend-targets--not-yet-implemented)
-require one backend-owned course-service capability for current state,
-authoritative transitions/accounting, and request eligibility. State and audit
-must stay consistent under concurrency, retries, response loss, and failures;
-frontends operate explicit authorized interfaces rather than duplicate owners.
-Reporting is a read-only consumer: its failure cannot block service controls
-or actions on existing requests. Keep shared request/authentication,
-notification, and correlated COMPLETE contracts compatible with fielded
-devices; removal of schedule control must not change independent firmware
-power/lifecycle behavior. No source implementation or production cutover is
-established by this target. See [the backlog](feature_backlog.md) for blockers
-and genuinely unresolved rate/coverage decisions.
+The approved source increment implements the UX owner's
+[Operator Service Control and Intervals](UX_SPECIFICATION.md#approved-operator-service-control-and-intervals--source-implemented-rollout-pending)
+with one backend owner in
+[service_control.js](../fairway_backend/cloudrun_receiver/lib/service_control.js):
+Course state, generation-checked Resume/Suspend, migration, interval records,
+audit events, and operation receipts. Its explicit authorized interfaces are
+the operator service-state and transition routes and Admin per-Course cutover
+route in [index.js](../fairway_backend/cloudrun_receiver/index.js). Reads and
+button requests do not initialize Courses. The activation gate must be enabled
+only after old backend revisions and write paths are fenced/drained. During
+staged rollout, uncutover Courses retain read-only schedule eligibility;
+requests transactionally read the Course so cutover and request acceptance
+serialize. After atomic cutover, the v2 service state is authoritative and
+schedule fields are removed. New Courses are initialized off.
+
+The Course document owns `service_schema_version`, `service_status`,
+`service_generation`, `service_coverage_started_at`, and the active interval
+identifier. Nested `service_intervals` represent actual on-time,
+`service_events` record migration baselines and actual transitions, and
+`service_operations` hold idempotency receipts. A successful state change,
+required evidence, interval adjustment, and receipt commit together. A
+generation conflict is explicit; retrying the same operation replays its
+receipt, while operation-ID reuse for a different intent is rejected. A
+failed required audit/interval write aborts the state change.
+
+Request acceptance uses the same Course transaction boundary after activation:
+new v2 requests receive server-owned acceptance metadata; legacy eligibility
+remains available only until explicit per-Course cutover. Existing request
+COMPLETE/Cancel transactions serialize against service state, permit eligible
+same-local-day completion while off, reject prior-local-day COMPLETE, and
+preserve manual Cancel. Device request and correlated COMPLETE wire contracts
+are unchanged. Frontend service actions use the explicit operation interface;
+Admin schedule submission is rejected with an update instruction. Reporting in
+[service_reporting.js](../fairway_backend/cloudrun_receiver/lib/service_reporting.js)
+is read-only and cannot block controls or request actions. The separately
+authorized `GET /api/v1/operator/service-state` reads only the assigned
+Course's service state; it does not depend on dashboard metric, request, or
+interval queries. The Operator UI uses this response for controls, so a
+dashboard/reporting outage cannot hide or disable otherwise available service
+actions.
+
+Active Cart Hours come only from authoritative intervals beginning at each
+Course's atomic cutover; active migration baselines are explicitly not operator
+Resume events. Reporting allocates actual elapsed intervals to course-local
+Day, Monday-start Week, and Month, counts Completed Requests by completion
+time, and retains received-time History attribution. Rates are period totals,
+computed unrounded; known positive hours with zero completions yield zero.
+Unknown, zero, partial, or incomplete hours yield “Rate unavailable” while
+counts remain visible. No historical hours are reconstructed. The broader
+Service History/Performance & Outcomes redesign remains out of scope.
+
+This describes branch source, not a production deployment or Course cutover.
+The feature branch's local tests/build and emulator evidence, remaining gaps,
+and ordered rollout/recovery procedure are recorded in the
+[Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery).
+Independent firmware lifecycle and power contracts remain unchanged.
