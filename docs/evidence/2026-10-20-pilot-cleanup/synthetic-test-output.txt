@@ -1,0 +1,2 @@
+PASS synthetic tests: strict nanosecond boundary, protected ID/ties/later, legacy inclusion, invalid input, path allowlist, dependency classification, version conflicts, atomicity, interrupted-run absence reconciliation.
+<shellId: 893 completed with exit code 0>

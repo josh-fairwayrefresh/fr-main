@@ -86,3 +86,24 @@ Each physical marker has a permanent device identity and unique credential. The 
 ## Change and Validation Discipline
 
 Follow the Fidelity Mandate above and the engineering workflow in `docs/README.md`. Inspect current source and the owning SoT before changing behavior. Preserve accepted tablet/desktop and device behavior unless an explicitly authorized change requires otherwise. Keep changes within scope, update the owner document, and validate both the changed behavior and adjacent accepted behavior. Stop for CPO/Lead Architect direction when evidence or authority is insufficient.
+
+### Branch publication and independent review
+
+The canonical GitHub repository is `josh-fairwayrefresh/fr-main`. For material
+development, begin on an appropriately scoped branch from accepted `main`
+before implementation. Within explicit authorization, develop, validate,
+commit, and push that branch; use a draft pull request targeting `main` to
+expose in-progress changes and evidence.
+
+Each review handoff identifies the repository, branch, full review commit SHA,
+PR URL, completed validation, and known gaps. The Lead Architect independently
+examines the actual remote changes and evidence at that commit, rather than
+relying on the implementation summary. Address feedback on the same branch
+and identify subsequent commits for review.
+
+Merge only after required validation, architectural review, CPO acceptance,
+and explicit merge authorization. Branch publication is not acceptance and
+does not authorize deployment, flashing, or production-data operations.
+Apply the existing roles and authorization boundaries in
+`docs/Continuous_improvement_Kaizen_1.0.md`; this is their remote-review
+mechanism, not a separate approval process.
