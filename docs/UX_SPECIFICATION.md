@@ -314,14 +314,18 @@ or reconstructed historical service sessions are accepted.
   Do not invent historical sessions or represent uncertain hours as measured.
 - History uses course-local calendar Day, Monday-through-Sunday Week, and
   calendar Month, with historical navigation and complete retrieval. Filter
-  the entire `Outcome | Request | Received | Duration` tally by the selected
-  period; include open, completed, and cancelled requests. Unsettled tally
-  period-attribution details remain explicit CPO decisions below.
+  the entire `Outcome | Request | Received | Duration` Service History tally
+  by `received_at` within the selected course-local calendar period,
+  regardless of current status; include open, completed, and cancelled
+  requests. A request received Monday and completed Tuesday remains in
+  Monday's History tally with its updated outcome.
 - Replace "Transactions" with "Completed Requests"; exclude cancelled
   requests. Fairway completions are not total cart sales, orders, or
-  transactions. Count completions by completion time. A request accepted while
-  service was on still qualifies when completed after shutdown; do not require
-  completion itself to fall inside an on interval.
+  transactions. Attribute Completed Requests to completion time: that Monday
+  request completed Tuesday counts toward Tuesday's Completed Requests. A
+  request accepted while service was active still qualifies when completed
+  after suspension; do not require completion itself to fall inside an on
+  interval.
 - Preserve official pilot request history/counts as-is, beginning at protected
   request `bUgIybnJz0Xv7YMdz2Pm` at `2026-10-17T16:39:35.270Z`.
   Incomplete historical operator evidence must not exclude retained pilot

@@ -91,19 +91,23 @@ affected acceptance/release claim, not a newly asserted whole-product shutdown.
   unmet. Blocks accurate target reporting, not independent request actions.
 - **Durable outcome/dependencies/acceptance:** Complete authorized retrieval
   or accountable aggregation with explicit coverage; course-local calendar
-  day/week/month and Monday weeks; filtered open/completed/cancelled tally.
-  Use completion time for completed counts and retain qualification for
-  requests accepted while on then completed after off. Preserve official
+  day/week/month and Monday weeks. Service History selects requests by
+  `received_at` within the selected course-local calendar period regardless
+  of current status, including open/completed/cancelled outcomes. A request
+  received Monday and completed Tuesday stays in Monday's tally with its
+  updated outcome; its Completed Requests count belongs to Tuesday by
+  completion time. Retain qualification for requests accepted while service
+  was active then completed after suspension. Preserve official
   pilot counts/history; never fabricate earlier service intervals.
   Depend on authoritative service transitions, timezone and explicit CPO
   decisions below. Validate cap-exceeding datasets, boundary/DST transitions,
-  historical navigation, cross-shutdown completions, ongoing intervals,
+  historical navigation, Monday-received/Tuesday-completed attribution,
+  cross-shutdown completions, ongoing intervals,
   retries/concurrency, and partial/unknown coverage without blocking controls.
 - **CPO decisions still required:** Exact rate numerators/denominators and
   display/rounding/zero-hour behavior; how rates represent unknown or partial
   historical service coverage without reducing official pilot counts; how
-  uncertainty is presented. Confirm tally period attribution for closed rows
-  versus open rows where not established by the completion-count rule.
+  uncertainty is presented.
   No numeric default, inferred historical hours, or new coverage cutoff is
   authorized here. Approved target intent does not settle these semantics.
 

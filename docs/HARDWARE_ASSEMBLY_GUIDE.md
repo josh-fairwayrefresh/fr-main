@@ -12,7 +12,9 @@ The [current BOM reconciliation](HARDWARE_BOM.md#prototype-33-parts-list-reconci
 designates ElectroCookie boards and a USB screw-terminal adapter/WAGO
 connectors. Older "Perma-Proto" labels describe recorded distribution, not a
 requirement to purchase Adafruit 571. The parts list alone does not establish
-new trace connections, wire sizing, quantities, or electrical qualification.
+new trace connections, wire sizing, installed quantities, or electrical
+qualification. BOM-listed procurement quantities are distinct from verified
+installation and the terminal usage documented below.
 
 **The VXX pack and USB service cable are mutually exclusive power sources.** Disconnect VXX field power before connecting Feather USB for development or service; disconnect USB before reconnecting field power. Never drive the shared VBUS domain from both sources simultaneously.
 
