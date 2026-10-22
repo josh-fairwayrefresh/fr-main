@@ -139,6 +139,51 @@ Monarch were not accessed or changed. The build was used to prepare the review
 application; its chunk-size warning remains a build warning, not a test
 result.
 
+### CPO_stats_fix reporting/History refresh correction — 2026-10-22
+
+The reporting correction was built from feature commit
+`69c76efd6b3a8b5c67cec899612d2416fb7c0905` and published only to the sandbox.
+Receiver revision `fairway-button-receiver-sandbox-00022-td8` is Ready and
+serves 100% of traffic in `fairway-refresh-sandbox-260930`; its image digest
+is `sha256:ad5da2c11197ceae1b63e43a1db7002e67ba88700e64733314c57c6b9b1c5215`.
+The existing sandbox service account and Admin revision were retained.
+
+Hosting `dist` was published using `firebase.sandbox.json` and
+`--only hosting`. The live-channel listing reports its latest release at
+`2026-10-22 14:20:38`; it does not expose the finalized version ID. A direct
+read of the Firebase Hosting releases API returned 403, so the version ID is
+not established here. The served JavaScript is
+`/assets/index-DRg9B-sO.js`, SHA-256
+`e6ad3301e8affa355a91bba310ff5c8964ad3dde374e9bde6e640c126e1a3cd2`,
+matching the local build. Its active Firebase project is the sandbox and its
+only compiled Cloud Run endpoints are the sandbox Receiver and Admin URLs;
+the production project ID remains present only as an environment-validation
+guard. `/`, `/admin`, `/index.html`, `/manifest.webmanifest`, and `/sw.js`
+each returned HTTP 200 with `Cache-Control: max-age=3600`.
+
+Authenticated browser inspection of Course `CUST-0004/COURSE-0003` showed
+Course-period History and KPI values together. The observed Day summary was
+2 completed requests, 2.65 active hours, 5.5 minutes average completion, and
+0.8 requests/hour; Week showed 3, 4.62 hours, 5.3 minutes, and 0.6/hour;
+Month showed 4, 6.58 hours, 9 minutes, and 0.6/hour. Active hours advanced
+between observations while the service remained ON. Cancelled entries appeared
+in History but were not counted as completed. The Requests view showed the
+existing synthetic open request `CPO REVIEW SYNTHETIC - Hole 11` with both
+Complete and Cancel actions; neither action was activated.
+
+One History navigation immediately after deployment logged a transient
+browser fetch/CORS error and displayed a metrics-unavailable alert. Subsequent
+preflight checks against both sandbox Receiver hostnames returned HTTP 204
+with `Access-Control-Allow-Origin: *`, and a full page reload followed by
+History navigation rendered the current metrics and rows. Treat the isolated
+failure as a reported transient observation; its cause was not established.
+
+No automated tests, simulated request outcomes, or device actions were run.
+The only frontend validation was the sandbox-configured build and the
+authorized read-only UI inspection above. The synthetic Course and its open
+request were not modified. Production and Monarch were not accessed or
+changed; no Admin deployment, merge, or production release occurred.
+
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
 Under explicit CPO authorization, the one-time cleanup in production project
