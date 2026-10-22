@@ -138,7 +138,7 @@ authorization remain separate. Release-specific rollout, observation, stop
 conditions, and compatible recovery are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
 
-### CPO_stats_fix reporting architecture — not yet implemented
+### CPO_stats_fix reporting architecture — feature implementation pending CPO review
 
 CPO_stats_fix adds reporting over existing operator actions and request
 records. The existing operational service controls and their source of truth
@@ -147,10 +147,13 @@ request timestamps without introducing a second service-state owner or
 changing request eligibility. Keep reporting read-only with respect to
 operational records and isolated from request actions.
 
-The Cart UI presents the reporting capability; one authoritative reporting
-path owns the calculations and aggregation. Preserve existing schedules,
+The Cart UI presents the reporting capability;
+[the reporting module](../fairway_backend/cloudrun_receiver/lib/service_reporting.js)
+owns the calculations and aggregation over read-only request and existing
+service-event records. The source implementation is in a feature branch and
+is not accepted or deployed. Preserve existing schedules,
 ON/OFF and Suspend/Resume behavior, request actions, permissions, notifications,
 device protocol, firmware, and Course schema. No schedule removal, Course
 conversion, migration, or operational cutover is a prerequisite. The
-[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented)
+[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements)
 is authoritative for current behavior and the detailed reporting requirements.

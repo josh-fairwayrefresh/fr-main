@@ -19,7 +19,7 @@ change.
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
-| CPO_stats_fix reporting | CPO-approved reporting-only successor scope; not yet implemented. Preserve existing operational behavior and use the detailed [UX owner requirements](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented). Rejected service-control, schedule-removal, schema-conversion, cutover, and rollback work is not a dependency. |
+| CPO_stats_fix reporting | CPO-approved reporting-only successor; source implementation is in a feature branch pending CPO review and is not accepted or deployed. Preserve existing operational behavior and use the detailed [UX owner requirements](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements). Rejected service-control, schedule-removal, schema-conversion, cutover, and rollback work is not a dependency. |
 | Active queue truncation | Confirmed source defect; older open work can disappear behind newer closed requests. Blocks complete-queue acceptance; [details](#active-queue-truncation). |
 | Notifier source/deployment and sandbox-delivery gap | Established deployment divergence; do not claim delivery-time entitlement/preference enforcement or sandbox delivery acceptance. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
@@ -54,7 +54,7 @@ whole-product shutdown.
 ### CPO_stats_fix reporting
 
 - **Scope:** Deliver the reporting requirements in the
-  [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented)
+  [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements)
   while preserving current service controls, schedules, request handling,
   permissions, notifications, device protocol, firmware, and Course schema.
 - **Boundary:** Observe existing operator Resume/Suspend actions and request

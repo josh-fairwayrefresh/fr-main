@@ -78,8 +78,21 @@ function RequestFocus({ request, queueLength, onAction, pending }) {
   </article>;
 }
 
+function formatHours(value) {
+  return Number(value || 0).toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatAverageCompletion(value) {
+  return value == null ? '-' : `${value} min`;
+}
+
 function Performance({ summary }) {
-  return <section className="op-performance"><span>CURRENT PERFORMANCE</span><div><strong>{summary?.completed_transactions ?? 0}</strong><small>Transactions</small></div><div><strong>{summary?.transactions_per_cart_hour ?? 0}</strong><small>Transactions per hour</small></div><div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests / cart hour</small></div></section>;
+  return <section className="op-performance"><span>CURRENT PERFORMANCE - DAY</span>
+    <div><strong>{summary?.completed_requests ?? 0}</strong><small>Completed Requests</small></div>
+    <div><strong>{formatHours(summary?.active_cart_hours)}</strong><small>Active Cart Hours</small></div>
+    <div><strong>{formatAverageCompletion(summary?.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong><small>Average Completion Time</small></div>
+    <div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests per Hour</small></div>
+  </section>;
 }
 
 function RecentHistory({ history, onOpen }) {
@@ -105,7 +118,12 @@ function HistoryView({ dashboard }) {
   const [period, setPeriod] = useState('daily');
   const summary = dashboard?.summaries?.[period] || {};
   const history = dashboard?.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Transactions</span><strong>{summary.completed_transactions ?? 0}</strong></div><div><Clock3 size={18} /><span>Active cart hours</span><strong>{summary.active_cart_hours ?? 0}</strong></div><div><CheckCircle2 size={18} /><span>Transactions per hour</span><strong>{summary.transactions_per_cart_hour ?? 0}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${summary.average_completion_minutes} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics">
+    <div><BarChart3 size={18} aria-hidden="true" /><span>Completed Requests</span><strong>{summary.completed_requests ?? 0}</strong></div>
+    <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
+    <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
+    <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
+  </div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
 }
 
 export default function OperatorApp({

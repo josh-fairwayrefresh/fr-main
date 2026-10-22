@@ -37,7 +37,7 @@ assuming accepted source was deployed.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
-| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix is the unimplemented reporting-only successor; it preserves existing operations. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
+| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix has a separate source implementation in a feature branch pending CPO review; it is not accepted or deployed and preserves existing operations. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
 | Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
 | Hosting | The Alignment Register records production Hosting version `995c6b063a9af3c5`, release `1792037695879000`, and assets `index-B_OqSsPI.js` (SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`) / `index-CSksNdOy.css` (SHA-256 `6557df96a561960ec6ee7100aa484c3c85b4b7f1e16bc9d25d20c99f98cba6a0`). The October 17 check returned 403 for Hosting management, so present version availability was not established; no new cloud inspection was performed. The custom-location correction was not shown deployed by that evidence. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
@@ -2593,6 +2593,7 @@ Collection schema is owned by the backend implementation.
 Indexes:
 
 - `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` defines the deployed `requests` composite index required by demand-window-aware duplicate suppression (`device_id`, `status`, and `demand_window_expires_at`).
+- The CPO_stats_fix branch adds a `requests` composite index on `customer_id`, `course_id`, and `completed_at` for the bounded course-local reporting query. Before any authorized backend deployment of that source, verify the index is `READY` in the target environment. If absent, publish only that index from `fairway_webapp/cart_operator_dashboard/` with `npx firebase-tools deploy --config firebase.json --only firestore:indexes --project fairway-refresh-sandbox-260930 --non-interactive`, then wait for `READY`. This is an additive query index only; it does not migrate or modify records. The index has not been deployed or verified in any environment for this increment.
 
 ---
 

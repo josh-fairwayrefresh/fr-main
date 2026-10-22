@@ -5,10 +5,14 @@ const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/envi
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
 const {
-  activeServiceMinutes,
   nextScheduledStart,
   resolveCourseServiceState,
 } = require('./lib/course_service');
+const {
+  aggregateSummaries,
+  periodBounds,
+  summarizeCoursePeriods,
+} = require('./lib/service_reporting');
 const {
   authenticateDeviceCredential,
   updateDeviceAssignment,
@@ -717,9 +721,6 @@ function createFairwayHandlers(db, {
   }
 
   async function courseServiceReadModel(course, requestTime) {
-    const eventsSnap = await coursesCollection(db, course.customer_id).doc(course.course_id)
-      .collection('service_events').orderBy('recorded_at', 'desc').limit(500).get();
-    const events = eventsSnap.docs.map((event) => event.data());
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
@@ -727,13 +728,41 @@ function createFairwayHandlers(db, {
       timezone: course.timezone,
       service_schedule: course.service_schedule,
       service_state: resolveCourseServiceState(course, requestTime),
-      service_events: events,
     };
   }
 
   function operatorCourseServiceModel(course) {
     const { service_events: _serviceEvents, ...model } = course;
     return model;
+  }
+
+  async function courseReportingSummary(course, requestTime) {
+    const bounds = periodBounds(requestTime, course.timezone);
+    const summaryRangeStart = bounds.weekly.start < bounds.monthly.start
+      ? bounds.weekly.start
+      : bounds.monthly.start;
+    const serviceEvents = coursesCollection(db, course.customer_id).doc(course.course_id)
+      .collection('service_events');
+    const [priorEventSnapshot, periodEventSnapshot, completedRequestSnapshot] = await Promise.all([
+      serviceEvents.where('recorded_at', '<', summaryRangeStart)
+        .orderBy('recorded_at', 'desc').limit(1).get(),
+      serviceEvents.where('recorded_at', '>=', summaryRangeStart)
+        .where('recorded_at', '<=', requestTime)
+        .orderBy('recorded_at', 'asc').get(),
+      db.collection('requests')
+        .where('customer_id', '==', course.customer_id)
+        .where('course_id', '==', course.course_id)
+        .where('completed_at', '>=', summaryRangeStart)
+        .where('completed_at', '<=', requestTime)
+        .orderBy('completed_at', 'asc')
+        .get(),
+    ]);
+    const events = [
+      ...priorEventSnapshot.docs,
+      ...periodEventSnapshot.docs,
+    ].map((document) => document.data());
+    const requests = completedRequestSnapshot.docs.map((document) => document.data());
+    return summarizeCoursePeriods(course, events, requests, requestTime);
   }
 
   async function getOperatorDashboard(req, res) {
@@ -757,53 +786,20 @@ function createFairwayHandlers(db, {
     const courses = (await Promise.all(assignedCourses.map((assignment) =>
       getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
       .filter(Boolean);
-    const serviceCourses = await Promise.all(courses.map((course) =>
-      courseServiceReadModel(course, requestTime)));
-    const requestSnapshots = await Promise.all(courses.map((course) => (
-      db.collection('requests')
+    const [serviceCourses, requestSnapshots, courseSummaries] = await Promise.all([
+      Promise.all(courses.map((course) =>
+        courseServiceReadModel(course, requestTime))),
+      Promise.all(courses.map((course) => db.collection('requests')
         .where('customer_id', '==', course.customer_id)
         .where('course_id', '==', course.course_id)
         .limit(5000)
-        .get()
-    )));
+        .get())),
+      Promise.all(courses.map((course) => courseReportingSummary(course, requestTime))),
+    ]);
     const requests = requestSnapshots.flatMap((snapshot) => (
       snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
     ));
-    const periods = [
-      ['daily', 24 * 60],
-      ['weekly', 7 * 24 * 60],
-      ['monthly', 30 * 24 * 60],
-    ];
-    const summaries = Object.fromEntries(periods.map(([period, durationMinutes]) => {
-      const start = new Date(requestTime.getTime() - durationMinutes * 60000);
-      const periodRequests = requests.filter((request) => {
-        const receivedAt = toDate(request.received_at);
-        return receivedAt && receivedAt >= start && receivedAt <= requestTime;
-      });
-      const completed = periodRequests.filter((request) => request.status === 'completed');
-      const cancelled = periodRequests.filter((request) => request.status === 'cancelled');
-      const activeMinutes = courses.reduce((total, course) => {
-        const service = serviceCourses.find((item) => item.course_id === course.course_id);
-        return total + activeServiceMinutes(course, service.service_events, start, requestTime);
-      }, 0);
-      const activeHours = activeMinutes / 60;
-      const completionMinutes = completed.map((request) => {
-        const receivedAt = toDate(request.received_at);
-        const completedAt = toDate(request.completed_at);
-        return receivedAt && completedAt ? (completedAt - receivedAt) / 60000 : null;
-      }).filter((value) => value !== null);
-      return [period, {
-        requests: periodRequests.length,
-        completed_transactions: completed.length,
-        cancelled_requests: cancelled.length,
-        active_cart_hours: Number(activeHours.toFixed(2)),
-        transactions_per_cart_hour: activeHours > 0 ? Number((completed.length / activeHours).toFixed(1)) : 0,
-        requests_per_hour: activeHours > 0 ? Number((periodRequests.length / activeHours).toFixed(1)) : 0,
-        average_completion_minutes: completionMinutes.length > 0
-          ? Number((completionMinutes.reduce((sum, value) => sum + value, 0) / completionMinutes.length).toFixed(1))
-          : null,
-      }];
-    }));
+    const summaries = aggregateSummaries(courseSummaries);
     const history = requests
       .filter((request) => ['completed', 'cancelled'].includes(request.status))
       .sort((left, right) => toDate(right.received_at) - toDate(left.received_at))

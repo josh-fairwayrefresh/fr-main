@@ -679,10 +679,28 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
     received_at: new Date('2026-10-01T18:00:00.000Z'),
     completed_at: new Date('2026-10-01T18:10:00.000Z'),
   });
+  await db.collection('requests').doc('cancelled-assigned').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', hole: 8, status: 'cancelled',
+    received_at: new Date('2026-10-01T18:20:00.000Z'),
+    completed_at: new Date('2026-10-01T18:25:00.000Z'),
+  });
+  await db.collection('requests').doc('completed-prior-day').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', hole: 9, status: 'completed',
+    received_at: new Date('2026-09-30T06:20:00.000Z'),
+    completed_at: new Date('2026-09-30T06:30:00.000Z'),
+  });
   await db.collection('requests').doc('completed-other').set({
     course_id: 'COURSE-9999', hole: 18, status: 'completed',
     received_at: new Date('2026-10-01T18:00:00.000Z'),
     completed_at: new Date('2026-10-01T18:05:00.000Z'),
+  });
+  const serviceEvents = db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001').collection('service_events');
+  await serviceEvents.doc('resume').set({
+    type: 'resumed', recorded_at: new Date('2026-10-01T18:00:00.000Z'),
+  });
+  await serviceEvents.doc('suspend').set({
+    type: 'suspended', recorded_at: new Date('2026-10-01T18:30:00.000Z'),
   });
   const { fairwayButtonReceiver } = createFairwayHandlers(db, {
     now: () => requestTime,
@@ -696,9 +714,17 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
 
   assert.strictEqual(response.statusCode, 200);
   assert.deepStrictEqual(response.body.courses.map((course) => course.course_id), ['COURSE-0001']);
+  assert.strictEqual(response.body.summaries.daily.completed_requests, 1);
+  assert.strictEqual(response.body.summaries.daily.active_cart_hours, 0.5);
+  assert.strictEqual(response.body.summaries.daily.requests_per_hour, 2);
   assert.strictEqual(response.body.summaries.daily.completed_transactions, 1);
+  assert.strictEqual(response.body.summaries.daily.transactions_per_cart_hour, 2);
   assert.strictEqual(response.body.summaries.daily.average_completion_minutes, 10);
-  assert.deepStrictEqual(response.body.history.map((request) => request.request_id), ['completed-assigned']);
+  assert.deepStrictEqual(response.body.history.map((request) => request.request_id), [
+    'cancelled-assigned', 'completed-assigned', 'completed-prior-day',
+  ]);
+  assert.strictEqual(response.body.summaries.weekly.completed_requests, 2);
+  assert.strictEqual(response.body.summaries.monthly.completed_requests, 1);
   assert.strictEqual(response.body.courses[0].customer_id, 'CUST-0001');
   assert.strictEqual(response.body.courses[0].course_id, 'COURSE-0001');
 });
@@ -770,10 +796,10 @@ test('Fairway Refresh Staff receive Cart access to courses across customers', as
   });
   await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Monarch Bay GC' });
   await db.collection('customers').doc('CUST-0001').collection('courses')
-    .doc('COURSE-0001').set({ course_name: 'Tony Lema Course' });
+    .doc('COURSE-0001').set({ course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles' });
   await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Other Customer' });
   await db.collection('customers').doc('CUST-0002').collection('courses')
-    .doc('COURSE-0002').set({ course_name: 'Other Course' });
+    .doc('COURSE-0002').set({ course_name: 'Other Course', timezone: 'America/Los_Angeles' });
   const { fairwayButtonReceiver } = createFairwayHandlers(db, {
     verifyOperatorToken: operatorVerifier('valid-token', globalAdminUid),
     vapidPublicKey: 'public-vapid-key',

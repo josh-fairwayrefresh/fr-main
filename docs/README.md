@@ -29,9 +29,10 @@ Current accepted source describes implementation, not proof of deployment.
 Use the Deployment Guide's latest-known alignment summary for dated runtime
 evidence; older release records are historical, not competing current states
 or standing authorizations. The CPO_stats_fix reporting scope is the successor
-to the rejected combined service-control/reporting approach and is **not yet
-implemented**. Its authoritative requirements are in the
-[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented).
+to the rejected combined service-control/reporting approach. Its source
+implementation is in a feature branch pending CPO review; it is not accepted or
+deployed. Its authoritative requirements are in the
+[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements).
 It preserves current operational behavior; the rejected targets are not active
 instructions. Unknown measurements, incomplete
 acceptance, and unresolved product decisions remain explicit in the backlog.

@@ -35,15 +35,22 @@ class FakeDocSnapshot {
 
 function matchesFilter(data, filter) {
   const actual = data[filter.field];
+  const comparable = (value) => (
+    value instanceof Date ? value.getTime() :
+      value && typeof value.toDate === 'function' ? value.toDate().getTime() : value
+  );
+  const actualValue = comparable(actual);
+  const filterValue = comparable(filter.value);
   if (filter.op === '==') {
     return actual === filter.value;
   }
   if (filter.op === 'in') {
     return Array.isArray(filter.value) && filter.value.includes(actual);
   }
-  if (filter.op === '>') {
-    return actual > filter.value;
-  }
+  if (filter.op === '>') return actualValue > filterValue;
+  if (filter.op === '>=') return actualValue >= filterValue;
+  if (filter.op === '<') return actualValue < filterValue;
+  if (filter.op === '<=') return actualValue <= filterValue;
   throw new Error(`Unsupported fake Firestore query operator: ${filter.op}`);
 }
 

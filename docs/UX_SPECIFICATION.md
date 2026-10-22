@@ -291,12 +291,14 @@ full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
-## CPO Stats Fix Reporting Requirements (NOT YET IMPLEMENTED)
+## CPO Stats Fix Reporting Requirements
 
 The current Cart Operator behavior is described above, including recurring
 schedule-based service availability and the existing rolling summary periods.
 CPO Stats Fix adds reporting while preserving that operational baseline; it
-is not a service-control replacement.
+is not a service-control replacement. The source implementation is in a
+feature branch pending CPO hands-on review; the production application retains
+the existing reporting behavior until review, acceptance, and release.
 
 - Preserve existing ON/OFF, Suspend/Resume, request eligibility,
   COMPLETE/Cancel, notifications, permissions, device protocol, and firmware.

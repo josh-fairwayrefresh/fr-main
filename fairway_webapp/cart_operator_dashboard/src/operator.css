@@ -77,9 +77,9 @@
 .op-summary > section { padding-bottom: 25px; }
 .op-performance { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; border-bottom: 1px solid #d3dad5; }
 .op-performance > span { grid-column: 1 / -1; }
-.op-performance > div:first-of-type { grid-column: 1 / -1; }
+.op-performance > div { min-width: 0; }
 .op-performance strong, .op-performance small { display: block; }
-.op-performance strong { font: 700 32px/1 Georgia, serif; }
+.op-performance strong { font: 700 27px/1.05 Georgia, serif; overflow-wrap: anywhere; }
 .op-performance small { margin-top: 6px; color: var(--op-ink); font-size: 12px; font-weight: 700; line-height: 1.25; }
 .op-recent { padding-top: 25px; }
 .op-recent > div { margin-bottom: 13px; display: flex; justify-content: space-between; align-items: end; }
