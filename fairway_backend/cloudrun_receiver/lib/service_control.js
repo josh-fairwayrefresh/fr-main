@@ -61,7 +61,7 @@ async function readCourseServiceState(transaction, courseRef, course, currentTim
 }
 
 async function cutoverCourse(db, {
-  customerId, courseId, fieldValue, now = () => new Date(), enabled,
+  customerId, courseId, fieldValue, now = () => new Date(), enabled, dryRun = false,
 }) {
   if (!enabled) {
     throw new ServiceControlError('service_control_not_activated', 'Service cutover is not enabled.', 503);
@@ -82,7 +82,13 @@ async function cutoverCourse(db, {
       if (state.status !== 'ready') {
         throw new ServiceControlError('course_service_inconsistent', 'Course service state is inconsistent.', 422);
       }
-      return { already_initialized: true, service_state: state };
+      return {
+        customer_id: customerId,
+        course_id: courseId,
+        dry_run: dryRun,
+        already_initialized: true,
+        service_state: state,
+      };
     }
     const [existingMigrationEvent, existingMigrationInterval] = await Promise.all([
       transaction.get(migrationEvent),
@@ -107,6 +113,18 @@ async function cutoverCourse(db, {
     }
 
     const active = resolveCourseServiceState(course, now()).active;
+    if (dryRun) {
+      return {
+        customer_id: customerId,
+        course_id: courseId,
+        dry_run: true,
+        already_initialized: false,
+        migration_baseline: active ? 'active' : 'off',
+        removes_legacy_schedule: true,
+        service_state: { status: 'ready', active, generation: 0 },
+      };
+    }
+
     const nextCourse = {
       service_schema_version: SERVICE_SCHEMA_VERSION,
       service_status: active ? 'on' : 'off',
@@ -136,6 +154,9 @@ async function cutoverCourse(db, {
       });
     }
     return {
+      customer_id: customerId,
+      course_id: courseId,
+      dry_run: false,
       already_initialized: false,
       service_state: { status: 'ready', active, generation: 0 },
     };

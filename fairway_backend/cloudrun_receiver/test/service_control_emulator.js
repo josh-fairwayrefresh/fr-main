@@ -148,6 +148,22 @@ async function main() {
     assert.equal(course.service_schema_version, undefined, 'disabled activation gate must not migrate');
     assert.ok(course.service_schedule, 'disabled activation gate must preserve legacy schedule');
 
+    const preview = await cutoverCourse(db, {
+      customerId,
+      courseId,
+      fieldValue: FieldValue,
+      enabled: true,
+      dryRun: true,
+    });
+    assert.equal(preview.dry_run, true);
+    assert.equal(preview.customer_id, customerId);
+    assert.equal(preview.course_id, courseId);
+    assert.equal(preview.already_initialized, false);
+    assert.equal(preview.service_state.active, true);
+    course = (await courseRef.get()).data();
+    assert.equal(course.service_schema_version, undefined, 'preflight must not migrate');
+    assert.ok(course.service_schedule, 'preflight must preserve legacy eligibility');
+
     const firstSecret = await seedDevice(firstDeviceId);
     const handlers = createFairwayHandlers(db, {
       serviceControlV2Active: true,

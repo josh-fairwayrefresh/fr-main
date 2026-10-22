@@ -21,7 +21,19 @@ Purpose of the button marker UX
 
 ## Golfer Button and Indicator Behavior
 
-Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **red** (TRY AGAIN). Indicator hardware identity and wiring are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md` and are not duplicated here.
+The CPO confirms the physical indicator labels are red **“On break”**,
+orange **“Sending…”**, and green **“Success!”**. Existing firmware behavior
+remains unchanged: orange pulses during an unresolved transaction, green
+signals acceptance, and red signals terminal transaction failure. Red is also
+used for transaction failures and does not uniquely diagnose service
+suspension. Hardware identity and wiring are owned by
+`docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+The Cart Operator's authoritative service state controls request eligibility:
+ON processes button presses normally. OFF rejects new presses without
+creating a request or triggering a notification. Requests accepted before
+Suspend remain manageable under the approved completion and cancellation
+rules.
 
 ### 1. Idle
 - All three indicators are off.
@@ -29,19 +41,19 @@ Golfer-facing indicators: **orange** (SENDING), **green** (REQUEST RECEIVED), **
 
 ### 2. Initial valid press / transaction underway
 - A valid press begins the bounded golfer transaction (existing hard 15-second budget, unchanged).
-- Orange begins immediately as the golfer-facing acknowledgement and pulses while the transaction is unresolved.
+- The orange **“Sending…”** indicator begins immediately as the golfer-facing acknowledgement and pulses while the transaction is unresolved.
 - The button does not initiate additional requests while this transaction is unresolved; additional presses during the unresolved transaction do not create another service request or another transaction.
 - Internal transport retries remain implementation detail and do not represent additional golfer requests.
 
 ### 3. Successful request
 - When Fairway successfully accepts the service request, orange ends.
-- Green performs a blink-blink indication, followed by approximately 5 seconds of solid green.
+- Green **“Success!”** performs a blink-blink indication, followed by approximately 5 seconds of solid green.
 - Success means the accepted golfer service request is represented in the Fairway operator workflow/dashboard.
 - Successful acceptance starts the fixed five-minute demand window, measured from the initial physical button press.
 
 ### 4. Failed request
 - If the transaction reaches terminal failure within the 15-second budget, orange ends.
-- Red performs a blink-blink indication, followed by approximately 5 seconds of solid red.
+- Red performs a blink-blink indication, followed by approximately 5 seconds of solid red. Its physical label is **“On break”**, but red also means terminal transaction failure; the color alone does not identify which condition occurred.
 - A failed transaction does not start a demand window.
 - After the failure indication completes, the button is enabled again; the next valid press begins a completely new bounded golfer transaction.
 - There is no long retry lockout.

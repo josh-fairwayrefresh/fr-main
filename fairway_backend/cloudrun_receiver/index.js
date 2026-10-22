@@ -1110,7 +1110,9 @@ function createFairwayHandlers(db, {
   }
 
   async function cutoverAdminCourse(req, res, customerId, courseId) {
-    if (Object.keys(req.body || {}).length !== 0) {
+    const body = req.body || {};
+    const dryRun = Object.keys(body).length === 1 && body.dry_run === true;
+    if (Object.keys(body).length !== 0 && !dryRun) {
       return res.status(400).json({ error: 'invalid_cutover_request' });
     }
     const course = await getCourseForCustomer(db, customerId, courseId);
@@ -1121,6 +1123,7 @@ function createFairwayHandlers(db, {
       fieldValue: FieldValue,
       now,
       enabled: serviceControlV2Active,
+      dryRun,
     }));
   }
 

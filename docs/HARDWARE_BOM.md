@@ -21,9 +21,9 @@ The current field-power architecture uses a regulated Voltaic V25, V50, or V75 U
 | Headers | Adafruit 2940 and 3009 | Feather female and male breakaway headers |
 | Wiring | Adafruit 288 | 22 AWG stranded silicone wire |
 | Pushbutton | E-Switch PV8FWY0SS | Non-illuminated momentary button; leads 1 and 4 are the CPO continuity-tested switch contacts |
-| Orange indicator | Dialight 656-3352-303F | 5 VDC, SENDING |
-| Green indicator | Dialight 656-3202-303F | 5 VDC, REQUEST RECEIVED |
-| Red indicator | Dialight 656-3102-303F | 5 VDC, TRY AGAIN |
+| Orange indicator | Dialight 656-3352-303F | 5 VDC; physical label “Sending…”; existing firmware pulses during an unresolved transaction |
+| Green indicator | Dialight 656-3202-303F | 5 VDC; physical label “Success!”; existing firmware blinks then holds after acceptance |
+| Red indicator | Dialight 656-3102-303F | 5 VDC; physical label “On break”; existing firmware also uses red for terminal transaction failure, so red alone does not diagnose service state |
 | Indicator drivers | ALLECIN 2N3904, TO-92, qty 3 | One NPN transistor per indicator; procured-batch lead order is in the assembly guide |
 | Base drive resistors | 2.2 kΩ, qty 3 | Feather GPIO to transistor base |
 | Base pull-down resistors | 100 kΩ, qty 3 | Transistor base to common GND |
@@ -42,6 +42,8 @@ These are attributed BOM-listed facts, not verification of installed parts,
 dimensions, quantities, wiring, electrical qualification, or measured autonomy.
 V25 is the named pack; the established V25/V50/V75 regulated-output designation
 and its qualification limits remain unchanged.
+The CPO-confirmed indicator label text is recorded here for part/label
+identification; the labels do not change firmware timing or behavior.
 Existing button/indicator/driver components and established reference identities
 are retained. The [retained panel reference](vendor/voltaic/5366_Voltaic+Systems+P126+R1E.pdf)
 is not evidence of pack-specific charging wiring.

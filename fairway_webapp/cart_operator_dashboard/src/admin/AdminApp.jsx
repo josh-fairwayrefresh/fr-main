@@ -5,7 +5,12 @@ import {
   LogOut, Plus, RefreshCw, Save, Search, ShieldCheck, Users,
   Wrench, X,
 } from 'lucide-react';
-import { adminRequest, downloadBlob } from './adminApi';
+import {
+  adminRequest,
+  downloadBlob,
+  executeCourseCutover,
+  preflightCourseCutover,
+} from './adminApi';
 import AdminUserManagement from './AdminUserManagement';
 import './admin.css';
 
@@ -112,8 +117,76 @@ function DeviceDetail({ user, apiBaseUrl, device, customers, close, refresh }) {
 function SectionTitle({ eyebrow, title }) { return <div className="a-section-heading"><div><p>{eyebrow}</p><h3>{title}</h3></div></div>; }
 function PrimaryButton({ pending, text }) { return <button className="a-primary" disabled={pending}><Save size={16} />{pending ? 'Saving…' : text}</button>; }
 
+function CourseCutoverModal({ user, apiBaseUrl, customer, course, close, refresh }) {
+  const [preflight, setPreflight] = useState(null);
+  const [confirmation, setConfirmation] = useState('');
+  const [result, setResult] = useState(null);
+  const [pending, setPending] = useState('');
+  const [error, setError] = useState('');
+  async function runPreflight() {
+    setPending('preflight');
+    setError('');
+    setPreflight(null);
+    setResult(null);
+    try {
+      const response = await preflightCourseCutover(
+        user, apiBaseUrl, customer.customer_id, course.course_id
+      );
+      setPreflight(response);
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setPending('');
+    }
+  }
+
+  async function executeCutover() {
+    if (!preflight || preflight.already_initialized || confirmation !== course.course_id) return;
+    setPending('cutover');
+    setError('');
+    try {
+      const response = await executeCourseCutover(
+        user, apiBaseUrl, customer.customer_id, course.course_id
+      );
+      setResult(response);
+      await refresh();
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setPending('');
+    }
+  }
+
+  return <div className="a-overlay">
+    <div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="cutover-title">
+      <header>
+        <h2 id="cutover-title">Course service cutover</h2>
+        <button className="a-icon" type="button" onClick={close} disabled={Boolean(pending)} aria-label="Close"><X size={20} /></button>
+      </header>
+      <div className="a-form">
+        <Notice error={error}>{result ? `Cutover confirmed for ${result.customer_id} / ${result.course_id}. Current service is ${result.service_state.active ? 'ON' : 'OFF'} (generation ${result.service_state.generation}).${result.already_initialized ? ' The Course was already initialized; no second migration was written.' : ''}` : ''}</Notice>
+        <p><strong>Customer:</strong> {customer.customer_name} ({customer.customer_id})<br /><strong>Course:</strong> {course.course_name} ({course.course_id})</p>
+        <p>Preflight is read-only. It checks the backend-owned migration rules and reports the effective service state now; it does not reserve that state. The cutover transaction checks and samples it again atomically. No credentials are displayed or saved by this tool.</p>
+        {preflight && <div className="a-notice" role="status">
+          {preflight.already_initialized
+            ? `Already initialized: service is ${preflight.service_state.active ? 'ON' : 'OFF'} (generation ${preflight.service_state.generation}).`
+            : `Preflight currently sees service ${preflight.migration_baseline === 'active' ? 'ON' : 'OFF'}. Cutover will re-evaluate and preserve the effective state at its atomic commit, record migration evidence, and remove legacy schedule fields.`}
+        </div>}
+        {preflight && !preflight.already_initialized && !result && <label>Type {course.course_id} to confirm this exact Course<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>}
+        <div className="a-modal-actions">
+          <button type="button" onClick={close} disabled={Boolean(pending)}>Close</button>
+          {!preflight && <button className="a-primary" type="button" onClick={runPreflight} disabled={Boolean(pending)}>{pending === 'preflight' ? 'Checking…' : 'Run read-only preflight'}</button>}
+          {preflight && !preflight.already_initialized && !result && <button className="a-primary" type="button" onClick={executeCutover} disabled={Boolean(pending) || confirmation !== course.course_id}>{pending === 'cutover' ? 'Cutting over…' : 'Cut over this Course'}</button>}
+          {error && preflight && !result && <button type="button" onClick={executeCutover} disabled={Boolean(pending) || confirmation !== course.course_id}>Retry same Course</button>}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
 function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
   const isCourse = course !== null; const editing = Boolean(isCourse ? course?.course_id : customer?.customer_id);
+  const [showCutover, setShowCutover] = useState(false);
   const [form, setForm] = useState(isCourse ? {
     course_name: course?.course_name || '',
     timezone: course?.timezone || '',
@@ -121,7 +194,10 @@ function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
   } : { customer_name: customer?.customer_name || '', comments: customer?.comments || '' });
   const [pending, setPending] = useState(false); const [error, setError] = useState('');
   async function submit(event) { event.preventDefault(); setPending(true); setError(''); let path = '/api/v1/admin/customers'; if (isCourse) path = `${path}/${customer.customer_id}/courses${editing ? `/${course.course_id}` : ''}`; else if (editing) path += `/${customer.customer_id}`; const body = isCourse ? { course_name: form.course_name, timezone: form.timezone, comments: form.comments } : form; try { await adminRequest(user, apiBaseUrl, path, { method: editing ? 'PATCH' : 'POST', body }); await refresh(); close(); } catch (err) { setError(err.message); } finally { setPending(false); } }
-  return <div className="a-overlay"><div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><header><h2 id="customer-modal-title">{editing ? 'Edit' : 'Add'} {isCourse ? 'course' : 'customer'}</h2><button className="a-icon" type="button" onClick={close} aria-label="Close"><X size={20} /></button></header><form className="a-form" onSubmit={submit}><Notice error={error} />{isCourse ? <><label>Course name<input value={form.course_name} onChange={(event) => setForm({ ...form, course_name: event.target.value })} required /></label><label>Timezone<input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="America/Los_Angeles" required /></label></> : <label>Customer name<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} required /></label>}<label>Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label><div className="a-modal-actions"><button type="button" onClick={close}>Cancel</button><PrimaryButton pending={pending} text="Save" /></div></form></div></div>;
+  return <>
+    <div className="a-overlay"><div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><header><h2 id="customer-modal-title">{editing ? 'Edit' : 'Add'} {isCourse ? 'course' : 'customer'}</h2><button className="a-icon" type="button" onClick={close} aria-label="Close"><X size={20} /></button></header><form className="a-form" onSubmit={submit}><Notice error={error} />{isCourse ? <><label>Course name<input value={form.course_name} onChange={(event) => setForm({ ...form, course_name: event.target.value })} required /></label><label>Timezone<input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="America/Los_Angeles" required /></label></> : <label>Customer name<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} required /></label>}<label>Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label><div className="a-modal-actions"><button type="button" onClick={close}>Cancel</button>{isCourse && editing && course.service_schema_version !== 2 && <button type="button" onClick={() => setShowCutover(true)}>Prepare service cutover</button>}<PrimaryButton pending={pending} text="Save" /></div></form></div></div>
+    {showCutover && <CourseCutoverModal user={user} apiBaseUrl={apiBaseUrl} customer={customer} course={course} close={() => setShowCutover(false)} refresh={refresh} />}
+  </>;
 }
 function CustomersView({ user, apiBaseUrl, customers, refresh }) {
   const [editor, setEditor] = useState(null);

@@ -240,12 +240,37 @@ test('Admin Course cutover requires the activation gate and is explicit/idempote
   const path = '/api/v1/admin/customers/CUST-0001/courses/COURSE-0001/service-cutover';
   const disabled = await createAdminApi(db)({ method: 'POST', path, body: {} });
   assert.equal(disabled.statusCode, 503);
+  const disabledPreflight = await createAdminApi(db)({
+    method: 'POST', path, body: { dry_run: true },
+  });
+  assert.equal(disabledPreflight.statusCode, 503);
   assert.equal((await db.collection('customers').doc('CUST-0001')
     .collection('courses').doc('COURSE-0001').get()).data().service_schema_version, undefined);
 
   const request = createAdminApi(db, true);
+  const preflight = await request({ method: 'POST', path, body: { dry_run: true } });
+  assert.equal(preflight.statusCode, 200, JSON.stringify(preflight.body));
+  assert.equal(preflight.body.dry_run, true);
+  assert.equal(preflight.body.customer_id, 'CUST-0001');
+  assert.equal(preflight.body.course_id, 'COURSE-0001');
+  assert.equal(preflight.body.already_initialized, false);
+  assert.equal(preflight.body.service_state.status, 'ready');
+  assert.equal(preflight.body.removes_legacy_schedule, true);
+  const afterPreflight = (await db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001').get()).data();
+  assert.equal(afterPreflight.service_schema_version, undefined);
+  assert.ok(afterPreflight.service_schedule, 'preflight must not modify the Course');
+
+  const invalidPreflight = await request({
+    method: 'POST', path, body: { dry_run: false },
+  });
+  assert.equal(invalidPreflight.statusCode, 400);
+
   const cutover = await request({ method: 'POST', path, body: {} });
   assert.equal(cutover.statusCode, 200, JSON.stringify(cutover.body));
+  assert.equal(cutover.body.dry_run, false);
+  assert.equal(cutover.body.customer_id, 'CUST-0001');
+  assert.equal(cutover.body.course_id, 'COURSE-0001');
   assert.equal(cutover.body.already_initialized, false);
   assert.equal(cutover.body.service_state.status, 'ready');
   const courseRef = db.collection('customers').doc('CUST-0001')
@@ -256,6 +281,12 @@ test('Admin Course cutover requires the activation gate and is explicit/idempote
   const repeated = await request({ method: 'POST', path, body: {} });
   assert.equal(repeated.statusCode, 200);
   assert.equal(repeated.body.already_initialized, true);
+  const alreadyInitializedPreflight = await request({
+    method: 'POST', path, body: { dry_run: true },
+  });
+  assert.equal(alreadyInitializedPreflight.statusCode, 200);
+  assert.equal(alreadyInitializedPreflight.body.dry_run, true);
+  assert.equal(alreadyInitializedPreflight.body.already_initialized, true);
 });
 
 test('sandbox backend environment validation fails closed', () => {

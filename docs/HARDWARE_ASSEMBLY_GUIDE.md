@@ -33,11 +33,16 @@ Specifications: [Nordic nPM1300 Product Specification](https://docs.nordicsemi.c
 
 ### Three 5 V indicators
 
-| Indicator | Feather GPIO | Meaning |
-|---|---|---|
-| Orange | J1/6 / P0.30 / D6 | SENDING |
-| Green | J1/7 / P0.29 / D5 | REQUEST RECEIVED |
-| Red | J1/8 / P0.28 / D4 | TRY AGAIN |
+| Indicator | Feather GPIO | Label beside indicator | Existing firmware indication |
+|---|---|---|---|
+| Orange | J1/6 / P0.30 / D6 | “Sending…” | Pulses while a golfer transaction is unresolved |
+| Green | J1/7 / P0.29 / D5 | “Success!” | Blink-blink, then approximately five seconds solid after acceptance |
+| Red | J1/8 / P0.28 / D4 | “On break” | Also gives the existing terminal transaction-failure pattern; red alone does not distinguish service suspension from a failed transaction |
+
+The labels above are the CPO-confirmed physical label text. They do not change
+firmware behavior or timing. Service OFF is enforced by the backend: a new
+press is rejected without creating a request or notification. Previously
+accepted requests remain manageable under the approved COMPLETE/Cancel rules.
 
 Each indicator's positive lead connects to the +5 V rail; its negative lead connects to the collector of its own 2N3904. Each transistor emitter connects to common GND; Feather GPIO connects through 2.2 kΩ to the base; a 100 kΩ resistor connects base to common GND. For the procured ALLECIN 2N3904 batch, with flat face toward the viewer and leads downward: LEFT = Collector, MIDDLE = Base, RIGHT = Emitter.
 

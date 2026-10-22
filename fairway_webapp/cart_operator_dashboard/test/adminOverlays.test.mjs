@@ -9,5 +9,7 @@ const adminAppSource = await readFile(
 
 test('Admin detail overlays retain their close icon dependency', () => {
   assert.match(adminAppSource, /Wrench, X,/);
-  assert.equal([...adminAppSource.matchAll(/<X\b/g)].length, 2);
+  assert.equal([...adminAppSource.matchAll(/<X\b/g)].length, 3);
+  assert.match(adminAppSource, /Prepare service cutover/);
+  assert.match(adminAppSource, /Type \{course\.course_id\} to confirm this exact Course/);
 });

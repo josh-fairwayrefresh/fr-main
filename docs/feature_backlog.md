@@ -62,13 +62,20 @@ acceptance/release claim, not a newly asserted whole-product shutdown.
   interval-based local-calendar reporting, and updated operator/Admin
   behavior. Details and requirements belong to the [UX](UX_SPECIFICATION.md#approved-operator-service-control-and-intervals--source-implemented-rollout-pending)
   and [Engineering](ENGINEERING_GUIDE.md#operator-service-control-and-authoritative-intervals)
-  owners. Local validation is complete; this backlog entry remains open until
-  independent review and CPO acceptance. Source and local tests do not establish
-  deployed behavior.
+  owners. The Lead Architect review passed at `8d5a8e137c38196dd446e49b54b84db3bb0a74fa`;
+  subsequent authenticated cutover-preflight tooling and label/documentation
+  changes require review at their final SHA. The Admin UI now invokes the
+  backend-owned cutover endpoint with a read-only preflight, explicit Course
+  confirmation, target validation, and idempotent retry behavior. Local
+  validation does not establish remote deployment or cutover behavior.
 - **Release boundary:** No remote sandbox deployment, production inspection,
   production migration, or production rollout is authorized or claimed.
   Follow the ordered fencing, activation, per-Course cutover, operator refresh,
   and recovery sequence in the [Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery).
+  Read-only sandbox preparation found the prior Hosting artifact still served;
+  current Cloud Run revision/gate inspection was blocked by expired local
+  gcloud authentication, and remote synthetic account/Course/device identities
+  remain unverified. No credential or IAM change was attempted.
 
 ### Reporting integration and deferred history work
 
