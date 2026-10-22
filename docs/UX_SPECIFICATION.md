@@ -328,6 +328,11 @@ authorization.
   completions divided by total active hours. Average Completion Time for a
   multi-day period is total completion duration divided by the total completed
   request count, not an unweighted average of daily averages.
+- History rows use the same selected Course and calendar period as the KPIs:
+  completed rows are selected by completion time and cancelled rows by
+  cancellation time. Refresh reporting when request outcomes change, including
+  changes made by another operator, and at minute-level intervals so ongoing
+  active time and local calendar-period boundaries become current.
 - Started periods with no activity display 0. Zero Active Cart Hours produces
   0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
   display.

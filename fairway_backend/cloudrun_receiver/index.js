@@ -6,9 +6,9 @@ const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
 const { resolveCourseServiceState } = require('./lib/course_service');
 const {
-  aggregateSummaries,
+  aggregateCourseReports,
   periodBounds,
-  summarizeCoursePeriods,
+  reportCoursePeriods,
 } = require('./lib/service_reporting');
 const {
   authenticateDeviceCredential,
@@ -732,7 +732,7 @@ function createFairwayHandlers(db, {
     return model;
   }
 
-  async function courseReportingSummary(course, requestTime) {
+  async function courseReportingSummary(course, requestTime, historyRequests) {
     const bounds = periodBounds(requestTime, course.timezone);
     const summaryRangeStart = bounds.weekly.start < bounds.monthly.start
       ? bounds.weekly.start
@@ -758,7 +758,21 @@ function createFairwayHandlers(db, {
       ...periodEventSnapshot.docs,
     ].map((document) => document.data());
     const requests = completedRequestSnapshot.docs.map((document) => document.data());
-    return summarizeCoursePeriods(course, events, requests, requestTime);
+    const completedHistory = completedRequestSnapshot.docs.map((document) => ({
+      request_id: document.id,
+      ...document.data(),
+    }));
+    const historyById = new Map([
+      ...historyRequests.map((request) => [request.request_id, request]),
+      ...completedHistory.map((request) => [request.request_id, request]),
+    ]);
+    return reportCoursePeriods(
+      course,
+      events,
+      requests,
+      [...historyById.values()],
+      requestTime,
+    );
   }
 
   async function getOperatorDashboard(req, res) {
@@ -782,7 +796,7 @@ function createFairwayHandlers(db, {
     const courses = (await Promise.all(assignedCourses.map((assignment) =>
       getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
       .filter(Boolean);
-    const [serviceCourses, requestSnapshots, courseSummaries] = await Promise.all([
+    const [serviceCourses, requestSnapshots] = await Promise.all([
       Promise.all(courses.map((course) =>
         courseServiceReadModel(course))),
       Promise.all(courses.map((course) => db.collection('requests')
@@ -790,20 +804,20 @@ function createFairwayHandlers(db, {
         .where('course_id', '==', course.course_id)
         .limit(5000)
         .get())),
-      Promise.all(courses.map((course) => courseReportingSummary(course, requestTime))),
     ]);
-    const requests = requestSnapshots.flatMap((snapshot) => (
+    const courseRequests = requestSnapshots.map((snapshot) => (
       snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
     ));
-    const summaries = aggregateSummaries(courseSummaries);
-    const history = requests
-      .filter((request) => ['completed', 'cancelled'].includes(request.status))
-      .sort((left, right) => toDate(right.received_at) - toDate(left.received_at))
-      .slice(0, 100);
+    const courseReports = await Promise.all(courses.map((course, index) =>
+      courseReportingSummary(course, requestTime, courseRequests[index])));
+    const reports = aggregateCourseReports(courseReports);
+    const summaries = Object.fromEntries(Object.entries(reports)
+      .map(([period, report]) => [period, report.summary]));
     return res.status(200).json({
       courses: serviceCourses.map(operatorCourseServiceModel),
+      reports,
       summaries,
-      history,
+      history: reports.daily.history,
     });
   }
 

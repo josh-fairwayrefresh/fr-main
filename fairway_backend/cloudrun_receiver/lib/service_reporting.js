@@ -125,6 +125,22 @@ function completedRequestsInRange(requests, range) {
   });
 }
 
+function outcomeTime(request) {
+  if (request.status === 'completed') return toDate(request.completed_at);
+  if (request.status === 'cancelled') return toDate(request.cancelled_at);
+  return null;
+}
+
+function historyRequestsInRange(requests, range) {
+  return requests
+    .filter((request) => {
+      const timestamp = outcomeTime(request);
+      return timestamp && timestamp >= range.start && timestamp <= range.end;
+    })
+    .sort((left, right) => outcomeTime(right) - outcomeTime(left))
+    .slice(0, 100);
+}
+
 function totalCompletionDurationMs(requests) {
   let total = 0;
   let validCount = 0;
@@ -198,6 +214,15 @@ function summarizeCoursePeriods(course, events, requests, asOf) {
   ]));
 }
 
+function reportCoursePeriods(course, events, completedRequests, historyRequests, asOf) {
+  const summaries = summarizeCoursePeriods(course, events, completedRequests, asOf);
+  const bounds = periodBounds(asOf, course.timezone);
+  return Object.fromEntries(SUMMARY_PERIODS.map((period) => [period, {
+    summary: summaries[period],
+    history: historyRequestsInRange(historyRequests, bounds[period]),
+  }]));
+}
+
 function aggregateSummaries(summariesByCourse) {
   return Object.fromEntries(SUMMARY_PERIODS.map((period) => {
     const summaries = summariesByCourse.map((summaries) => summaries[period]);
@@ -222,11 +247,27 @@ function aggregateSummaries(summariesByCourse) {
   }));
 }
 
+function aggregateCourseReports(reportsByCourse) {
+  const summaryByCourse = reportsByCourse.map((reports) => Object.fromEntries(
+    SUMMARY_PERIODS.map((period) => [period, reports[period].summary]),
+  ));
+  const summaries = aggregateSummaries(summaryByCourse);
+  return Object.fromEntries(SUMMARY_PERIODS.map((period) => [period, {
+    summary: summaries[period],
+    history: reportsByCourse.flatMap((reports) => reports[period].history)
+      .sort((left, right) => outcomeTime(right) - outcomeTime(left))
+      .slice(0, 100),
+  }]));
+}
+
 module.exports = {
   activeSecondsByLocalDay,
+  aggregateCourseReports,
   aggregateSummaries,
   completedRequestsInRange,
   finalizeSummary,
+  historyRequestsInRange,
   periodBounds,
+  reportCoursePeriods,
   summarizeCoursePeriods,
 };
