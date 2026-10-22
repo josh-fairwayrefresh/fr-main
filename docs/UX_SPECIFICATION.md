@@ -316,6 +316,12 @@ production deployment, remote sandbox validation, or CPO acceptance.
   failure to persist required transition evidence aborts the transition.
   The operator reads service state through a separate authorized state
   interface, independent of dashboard reporting reads.
+  The client scopes asynchronous dashboard and service-state results to the
+  customer and Course, and only the latest initiated read for that Course and
+  data channel may publish. Ready service-state generations cannot move
+  backwards. A current integrity status or read error remains visible and
+  blocks new service controls; an older response or error cannot replace a
+  newer result.
   Preserve Course authorization, notification behavior, request deduplication,
   and deployed-device request/COMPLETE wire contracts.
 - The rollout activation gate does not migrate Courses on reads, requests, or

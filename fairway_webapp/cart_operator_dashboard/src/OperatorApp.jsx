@@ -15,11 +15,12 @@ import {
 } from './lib/courseContext.mjs';
 import { requestLocationLabel } from './lib/requestLocation.mjs';
 import {
+  createCourseRefreshCoordinator,
   createServiceOperationRegistry,
   matchesCourseIdentity,
+  refreshCourseSnapshot,
   runRequestAction,
   runServiceOperation,
-  setCourseResponse,
   setCourseValue,
 } from './lib/operatorWorkflow.mjs';
 import './operator.css';
@@ -163,6 +164,8 @@ export default function OperatorApp({
   const [, setOperationRevision] = useState(0);
   const operationRegistry = useRef(null);
   if (!operationRegistry.current) operationRegistry.current = createServiceOperationRegistry();
+  const refreshCoordinator = useRef(null);
+  if (!refreshCoordinator.current) refreshCoordinator.current = createCourseRefreshCoordinator();
   const [pendingRequests, setPendingRequests] = useState({});
   const [celebration, setCelebration] = useState('');
 
@@ -170,45 +173,74 @@ export default function OperatorApp({
     if (!targetCourse) return;
     const targetKey = courseKey(targetCourse);
     const query = `?customer_id=${encodeURIComponent(targetCourse.customer_id)}&course_id=${encodeURIComponent(targetCourse.course_id)}`;
-    try {
-      const response = await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`);
-      if (!response.courses?.some((item) => matchesCourseIdentity(targetCourse, item))) {
-        throw new Error('Dashboard response did not match the selected Course.');
-      }
-      setDashboards((current) => setCourseValue(current, targetCourse, response));
-      setDashboardErrors((current) => {
-        const next = { ...current };
-        delete next[targetKey];
-        return next;
-      });
-    } catch (reason) {
-      setDashboardErrors((current) => setCourseValue(current, targetCourse, reason.message));
-    }
+    await refreshCourseSnapshot({
+      coordinator: refreshCoordinator.current,
+      course: targetCourse,
+      channel: 'dashboard',
+      load: async () => {
+        const response = await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`);
+        if (!response.courses?.some((item) => matchesCourseIdentity(targetCourse, item))) {
+          throw new Error('Dashboard response did not match the selected Course.');
+        }
+        return response;
+      },
+      onSuccess: (response, isCurrent) => {
+        setDashboards((current) => (
+          isCurrent() ? setCourseValue(current, targetCourse, response) : current
+        ));
+        setDashboardErrors((current) => {
+          if (!isCurrent()) return current;
+          const next = { ...current };
+          delete next[targetKey];
+          return next;
+        });
+      },
+      onError: (reason, isCurrent) => {
+        setDashboardErrors((current) => (
+          isCurrent() ? setCourseValue(current, targetCourse, reason.message) : current
+        ));
+      },
+    });
   }
 
   async function refreshServiceState(targetCourse, throwOnError = false) {
     if (!targetCourse) return;
     const targetKey = courseKey(targetCourse);
     const query = `?customer_id=${encodeURIComponent(targetCourse.customer_id)}&course_id=${encodeURIComponent(targetCourse.course_id)}`;
-    try {
-      const response = await operatorRequest(
-        user,
-        apiBaseUrl,
-        `/api/v1/operator/service-state${query}`
-      );
-      if (!matchesCourseIdentity(targetCourse, response)) {
-        throw new Error('Service-state response did not match the selected Course.');
-      }
-      setServiceSnapshots((current) => setCourseResponse(current, targetCourse, response));
-      setServiceStateErrors((current) => {
-        const next = { ...current };
-        delete next[targetKey];
-        return next;
-      });
-    } catch (reason) {
-      setServiceStateErrors((current) => setCourseValue(current, targetCourse, reason.message));
-      if (throwOnError) throw reason;
-    }
+    const result = await refreshCourseSnapshot({
+      coordinator: refreshCoordinator.current,
+      course: targetCourse,
+      channel: 'service-state',
+      load: async () => {
+        const response = await operatorRequest(
+          user,
+          apiBaseUrl,
+          `/api/v1/operator/service-state${query}`
+        );
+        if (!matchesCourseIdentity(targetCourse, response)) {
+          throw new Error('Service-state response did not match the selected Course.');
+        }
+        return response;
+      },
+      onSuccess: (response, isCurrent) => {
+        setServiceSnapshots((current) => (
+          isCurrent() ? setCourseValue(current, targetCourse, response) : current
+        ));
+        setServiceStateErrors((current) => {
+          if (!isCurrent()) return current;
+          const next = { ...current };
+          delete next[targetKey];
+          return next;
+        });
+      },
+      onError: (reason, isCurrent) => {
+        setServiceStateErrors((current) => (
+          isCurrent() ? setCourseValue(current, targetCourse, reason.message) : current
+        ));
+      },
+    });
+    if (throwOnError && result.status === 'error') throw result.error;
+    return result;
   }
 
   const selectedCourse = operatorConfig.courses.find((item) => courseKey(item) === selectedCourseKey)

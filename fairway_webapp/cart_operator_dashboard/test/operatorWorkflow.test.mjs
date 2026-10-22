@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  createCourseRefreshCoordinator,
   createServiceOperationRegistry,
   matchesCourseIdentity,
+  refreshCourseSnapshot,
   runRequestAction,
   runServiceOperation,
-  setCourseResponse,
 } from '../src/lib/operatorWorkflow.mjs';
 
 const courseA = { customer_id: 'customer-a', course_id: 'course-a' };
@@ -13,8 +14,40 @@ const courseB = { customer_id: 'customer-b', course_id: 'course-b' };
 
 function deferred() {
   let resolve;
-  const promise = new Promise((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject;
+  const promise = new Promise((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+function createRefreshHarness() {
+  const coordinator = createCourseRefreshCoordinator();
+  const snapshots = new Map();
+  const errors = new Map();
+
+  function refresh(course, channel, load) {
+    return refreshCourseSnapshot({
+      coordinator,
+      course,
+      channel,
+      load,
+      onSuccess: (response, isCurrent) => {
+        if (isCurrent()) {
+          snapshots.set(`${course.customer_id}/${course.course_id}/${channel}`, response);
+          errors.delete(`${course.customer_id}/${course.course_id}/${channel}`);
+        }
+      },
+      onError: (error, isCurrent) => {
+        if (isCurrent()) {
+          errors.set(`${course.customer_id}/${course.course_id}/${channel}`, error.message);
+        }
+      },
+    });
+  }
+
+  return { errors, refresh, snapshots };
 }
 
 test('service retries remain scoped to the originating Course across selection changes', async () => {
@@ -102,28 +135,148 @@ test('service retries remain scoped to the originating Course across selection c
   reporting.resolve();
 });
 
-test('out-of-order and mismatched responses cannot populate another Course cache', () => {
-  let snapshots = {};
-  const responseA = {
+test('an older service read cannot replace the state confirmed after Suspend', async () => {
+  const harness = createRefreshHarness();
+  const oldRead = deferred();
+  const delayedRead = harness.refresh(courseA, 'service-state', () => oldRead.promise);
+  const suspendedState = {
     customer_id: courseA.customer_id,
     course_id: courseA.course_id,
-    value: 'A response',
+    service_state: { status: 'ready', active: false, generation: 8 },
   };
-  const responseB = {
+  assert.equal((await harness.refresh(courseA, 'service-state', async () => suspendedState)).status, 'accepted');
+
+  oldRead.resolve({
+    customer_id: courseA.customer_id,
+    course_id: courseA.course_id,
+    service_state: { status: 'ready', active: true, generation: 7 },
+  });
+  assert.equal((await delayedRead).status, 'superseded');
+  assert.equal(
+    harness.snapshots.get('customer-a/course-a/service-state').service_state.active,
+    false
+  );
+});
+
+test('newest same-Course dashboard response wins when reads finish in reverse order', async () => {
+  const harness = createRefreshHarness();
+  const first = deferred();
+  const second = deferred();
+  const oldRead = harness.refresh(courseA, 'dashboard', () => first.promise);
+  const newRead = harness.refresh(courseA, 'dashboard', () => second.promise);
+  const latest = {
+    courses: [{ ...courseA, requests: [{ id: 'latest' }] }],
+  };
+  second.resolve(latest);
+  assert.equal((await newRead).status, 'accepted');
+  first.resolve({ courses: [{ ...courseA, requests: [{ id: 'stale' }] }] });
+  assert.equal((await oldRead).status, 'superseded');
+  assert.deepEqual(
+    harness.snapshots.get('customer-a/course-a/dashboard').courses[0].requests,
+    [{ id: 'latest' }]
+  );
+});
+
+test('a superseded failure cannot replace a newer successful refresh', async () => {
+  const harness = createRefreshHarness();
+  const first = deferred();
+  const oldRead = harness.refresh(courseA, 'dashboard', () => first.promise);
+  const latest = { courses: [{ ...courseA, requests: [] }] };
+  assert.equal((await harness.refresh(courseA, 'dashboard', async () => latest)).status, 'accepted');
+
+  first.reject(new Error('late dashboard failure'));
+  assert.equal((await oldRead).status, 'superseded');
+  assert.equal(harness.errors.has('customer-a/course-a/dashboard'), false);
+  assert.equal(harness.snapshots.get('customer-a/course-a/dashboard'), latest);
+});
+
+test('switching Courses and returning cannot publish an outstanding old read', async () => {
+  const harness = createRefreshHarness();
+  const outstandingA = deferred();
+  const oldReadA = harness.refresh(courseA, 'service-state', () => outstandingA.promise);
+
+  const stateB = {
     customer_id: courseB.customer_id,
     course_id: courseB.course_id,
-    value: 'B response',
+    service_state: { status: 'ready', active: true, generation: 4 },
   };
+  await harness.refresh(courseB, 'service-state', async () => stateB);
 
-  snapshots = setCourseResponse(snapshots, courseB, responseB);
-  snapshots = setCourseResponse(snapshots, courseA, responseA);
-  assert.equal(snapshots['customer-a/course-a'].value, 'A response');
-  assert.equal(snapshots['customer-b/course-b'].value, 'B response');
-  assert.equal(matchesCourseIdentity(courseB, responseA), false);
-  const beforeMismatch = snapshots;
-  snapshots = setCourseResponse(snapshots, courseB, responseA);
-  assert.equal(snapshots, beforeMismatch);
-  assert.equal(snapshots['customer-b/course-b'].value, 'B response');
+  const returnedStateA = {
+    customer_id: courseA.customer_id,
+    course_id: courseA.course_id,
+    service_state: { status: 'ready', active: false, generation: 8 },
+  };
+  await harness.refresh(courseA, 'service-state', async () => returnedStateA);
+  outstandingA.resolve({
+    customer_id: courseA.customer_id,
+    course_id: courseA.course_id,
+    service_state: { status: 'ready', active: true, generation: 7 },
+  });
+
+  assert.equal((await oldReadA).status, 'superseded');
+  assert.equal(
+    harness.snapshots.get('customer-a/course-a/service-state').service_state.active,
+    false
+  );
+  assert.equal(
+    harness.snapshots.get('customer-b/course-b/service-state').service_state.active,
+    true
+  );
+});
+
+test('current integrity and error responses are published instead of hidden by older readiness', async () => {
+  const harness = createRefreshHarness();
+  const ready = {
+    customer_id: courseA.customer_id,
+    course_id: courseA.course_id,
+    service_state: { status: 'ready', active: true, generation: 8 },
+  };
+  await harness.refresh(courseA, 'service-state', async () => ready);
+
+  const inconsistent = {
+    customer_id: courseA.customer_id,
+    course_id: courseA.course_id,
+    service_state: { status: 'inconsistent', active: null, generation: null },
+  };
+  assert.equal(
+    (await harness.refresh(courseA, 'service-state', async () => inconsistent)).status,
+    'accepted'
+  );
+  assert.equal(
+    harness.snapshots.get('customer-a/course-a/service-state').service_state.status,
+    'inconsistent'
+  );
+  assert.equal(harness.errors.has('customer-a/course-a/service-state'), false);
+
+  const staleGeneration = {
+    customer_id: courseA.customer_id,
+    course_id: courseA.course_id,
+    service_state: { status: 'ready', active: true, generation: 7 },
+  };
+  assert.equal(
+    (await harness.refresh(courseA, 'service-state', async () => staleGeneration)).status,
+    'error'
+  );
+  assert.equal(
+    harness.errors.get('customer-a/course-a/service-state'),
+    'Service-state response was older than the latest confirmed generation.'
+  );
+  assert.equal(
+    harness.snapshots.get('customer-a/course-a/service-state').service_state.status,
+    'inconsistent'
+  );
+
+  const currentFailure = harness.refresh(
+    courseA,
+    'service-state',
+    async () => { throw new Error('current state read failed'); }
+  );
+  assert.equal((await currentFailure).status, 'error');
+  assert.equal(
+    harness.errors.get('customer-a/course-a/service-state'),
+    'current state read failed'
+  );
 });
 
 test('service controls finish after authoritative state refresh without waiting for reporting', async () => {
