@@ -988,6 +988,100 @@ test('service state remains independently readable during dashboard reporting fa
   assert.equal(cancel.statusCode, 200, 'reporting query failure must not block Cancel');
 });
 
+test('inconsistent authoritative service state blocks readiness, new requests, and controls only', async () => {
+  const db = new FakeFirestore();
+  const requestTime = new Date('2026-10-21T20:00:00.000Z');
+  await setUpOperatorAssignment(db);
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    service_schema_version: 2,
+    service_status: 'on',
+    service_generation: 4,
+    service_coverage_started_at: new Date('2026-10-01T16:00:00.000Z'),
+    active_service_interval_id: 'missing-interval',
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Tony Lema Course',
+  });
+  const handlers = createFairwayHandlers(db, {
+    now: () => requestTime,
+    serviceControlV2Active: true,
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const query = { customer_id: 'CUST-0001', course_id: 'COURSE-0001' };
+  const dashboard = createResponse();
+  await handlers.fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/dashboard',
+    query,
+    headers: { authorization: 'Bearer valid-token' },
+  }), dashboard);
+  assert.equal(dashboard.statusCode, 200);
+  assert.equal(dashboard.body.courses[0].service_state.status, 'inconsistent');
+
+  const serviceState = createResponse();
+  await handlers.fairwayButtonReceiver(createRequest({
+    method: 'GET',
+    path: '/api/v1/operator/service-state',
+    query,
+    headers: { authorization: 'Bearer valid-token' },
+  }), serviceState);
+  assert.equal(serviceState.statusCode, 200);
+  assert.equal(serviceState.body.service_state.status, 'inconsistent');
+
+  const button = createResponse();
+  await handlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), button);
+  assert.equal(button.statusCode, 503);
+  assert.equal((await db.collection('requests').get()).size, 0);
+
+  const resume = createResponse();
+  await handlers.fairwayButtonReceiver(createRequest({
+    method: 'POST',
+    path: '/api/v1/operator/service/resume',
+    body: {
+      customer_id: 'CUST-0001',
+      course_id: 'COURSE-0001',
+      operation_id: 'inconsistent-resume',
+      expected_generation: 4,
+    },
+    headers: { authorization: 'Bearer valid-token' },
+  }), resume);
+  assert.equal(resume.statusCode, 409);
+  assert.equal(resume.body.error, 'course_service_inconsistent');
+
+  await db.collection('requests').doc('complete-while-inconsistent').set({
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    device_id: 'FRB-0001',
+    status: 'new',
+    received_at: requestTime,
+    demand_window_expires_at: new Date('2026-10-21T20:05:00.000Z'),
+  });
+  const complete = createResponse();
+  await handlers.updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer valid-token' },
+  }), complete, 'complete-while-inconsistent', 'complete');
+  assert.equal(complete.statusCode, 200);
+
+  await db.collection('requests').doc('cancel-while-inconsistent').set({
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    device_id: 'FRB-0001',
+    status: 'new',
+    received_at: requestTime,
+    demand_window_expires_at: new Date('2026-10-21T20:05:00.000Z'),
+  });
+  const cancel = createResponse();
+  await handlers.updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer valid-token' },
+  }), cancel, 'cancel-while-inconsistent', 'cancel');
+  assert.equal(cancel.statusCode, 200);
+});
+
 test('prior-day open requests cannot complete but remain manually cancellable', async () => {
   const db = new FakeFirestore();
   const requestTime = new Date('2026-10-21T20:00:00.000Z');

@@ -5,6 +5,8 @@ const { FakeFirestore } = require('./fake_firestore');
 const {
   ServiceControlError,
   cutoverCourse,
+  readCourseServiceState,
+  serviceState,
   transitionCourseService,
 } = require('../lib/service_control');
 
@@ -31,6 +33,28 @@ async function seedLegacy(db, active) {
   });
 }
 
+async function seedV2(db, {
+  status = 'on',
+  generation = 0,
+  coverage = new Date('2026-10-01T16:00:00.000Z'),
+  intervalId = status === 'on' ? 'active-interval' : null,
+  interval = { start_at: coverage, end_at: null },
+} = {}) {
+  await db.collection('customers').doc('CUST-1').set({ customer_name: 'Test' });
+  await courseRef(db).set({
+    course_name: 'Test course',
+    timezone: 'America/Los_Angeles',
+    service_schema_version: 2,
+    service_status: status,
+    service_generation: generation,
+    service_coverage_started_at: coverage,
+    active_service_interval_id: intervalId,
+  });
+  if (intervalId && interval) {
+    await courseRef(db).collection('service_intervals').doc(intervalId).set(interval);
+  }
+}
+
 async function transition(db, action, operationId, expectedGeneration, actorId = 'operator-1') {
   return transitionCourseService(db, {
     customerId: 'CUST-1',
@@ -44,6 +68,54 @@ async function transition(db, action, operationId, expectedGeneration, actorId =
 }
 
 async function run() {
+  const projection = {
+    service_schema_version: 2,
+    service_status: 'on',
+    service_generation: 1,
+    service_coverage_started_at: new Date('2026-10-01T16:00:00.000Z'),
+    active_service_interval_id: 'active-interval',
+  };
+  assert.deepEqual(serviceState(projection, now()), {
+    status: 'ready', active: true, generation: 1,
+  });
+  for (const malformed of [
+    { ...projection, service_generation: -1 },
+    { ...projection, service_generation: Number.MAX_SAFE_INTEGER + 1 },
+    { ...projection, service_coverage_started_at: 'not-a-timestamp' },
+    { ...projection, service_coverage_started_at: new Date('2026-10-22T00:00:00.000Z') },
+    { ...projection, service_status: 'unknown' },
+    { ...projection, active_service_interval_id: 'invalid/path' },
+    { ...projection, service_status: 'off' },
+  ]) {
+    assert.equal(serviceState(malformed, now()).status, 'inconsistent');
+  }
+
+  for (const interval of [null, { start_at: new Date('2026-10-01T16:00:00.000Z'), end_at: new Date() }]) {
+    const inconsistentDb = new FakeFirestore();
+    await seedV2(inconsistentDb, { interval });
+    const state = await inconsistentDb.runTransaction(async (transaction) => {
+      const courseSnap = await transaction.get(courseRef(inconsistentDb));
+      return readCourseServiceState(
+        transaction, courseRef(inconsistentDb), courseSnap.data(), now()
+      );
+    });
+    assert.equal(state.status, 'inconsistent');
+    await assert.rejects(
+      () => transition(inconsistentDb, 'resume', 'invalid-state-operation', 0),
+      (error) => error.code === 'course_service_inconsistent'
+    );
+    assert.equal((await courseRef(inconsistentDb).collection('service_operations').get()).size, 0);
+  }
+
+  const corruptedReplayDb = new FakeFirestore();
+  await seedV2(corruptedReplayDb);
+  await transition(corruptedReplayDb, 'suspend', 'corrupted-replay', 0);
+  await courseRef(corruptedReplayDb).update({ service_generation: -1 });
+  await assert.rejects(
+    () => transition(corruptedReplayDb, 'suspend', 'corrupted-replay', 0),
+    (error) => error.code === 'course_service_inconsistent'
+  );
+
   const disabledDb = new FakeFirestore();
   await seedLegacy(disabledDb, true);
   await assert.rejects(() => cutoverCourse(disabledDb, {
@@ -66,6 +138,9 @@ async function run() {
   assert.equal((await cutoverCourse(db, {
     customerId: 'CUST-1', courseId: 'COURSE-1', fieldValue, now, enabled: true,
   })).already_initialized, true);
+  const migrationEventRef = courseRef(db).collection('service_events')
+    .doc('migration-baseline-v2');
+  const migrationEvidence = (await migrationEventRef.get()).data();
 
   const suspend = await transition(db, 'suspend', 'operation-001', 0);
   assert.equal(suspend.changed, true);
@@ -90,6 +165,26 @@ async function run() {
   assert.equal(noOpReplay.changed, false);
   const events = await courseRef(db).collection('service_events').get();
   assert.equal(events.size, 3); // migration baseline and two actual transitions
+  assert.deepEqual((await migrationEventRef.get()).data(), migrationEvidence);
+
+  const collisionDb = new FakeFirestore();
+  await seedLegacy(collisionDb, true);
+  await cutoverCourse(collisionDb, {
+    customerId: 'CUST-1', courseId: 'COURSE-1', fieldValue, now, enabled: true,
+  });
+  const collisionBaselineRef = courseRef(collisionDb).collection('service_events')
+    .doc('migration-baseline-v2');
+  const originalBaseline = (await collisionBaselineRef.get()).data();
+  const collision = await transition(collisionDb, 'suspend', 'migration-baseline-v2', 0);
+  assert.equal(collision.service_state.active, false);
+  assert.deepEqual((await collisionBaselineRef.get()).data(), originalBaseline);
+  assert.equal((await courseRef(collisionDb).collection('service_events')
+    .doc('operator-migration-baseline-v2').get()).exists, true);
+  assert.equal((await transition(collisionDb, 'suspend', 'migration-baseline-v2', 0)).replayed, true);
+  await assert.rejects(
+    () => transition(collisionDb, 'resume', 'migration-baseline-v2', 0),
+    (error) => error.code === 'operation_id_reused'
+  );
 
   const offDb = new FakeFirestore();
   await seedLegacy(offDb, false);

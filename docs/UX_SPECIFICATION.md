@@ -342,10 +342,11 @@ production deployment, remote sandbox validation, or CPO acceptance.
   Month. Week/Month use period totals, not averages of daily rates. Count
   completion by `completed_at`; retain the existing Service History
   received-time attribution and ordering. Cancelled requests are excluded.
-  A request received Monday and completed Tuesday remains in Monday's
-  received-time History and counts as a Tuesday completion. A request accepted
-  while service was active may be completed after Suspend and still counts at
-  completion time.
+  A same-course-local-day request accepted while service was active may be
+  completed after Suspend and counts at completion time. An open request
+  received on a prior course-local calendar day cannot be completed; it must
+  be manually cancelled. Preserve already-recorded pilot history without
+  retrospective rewriting.
 - Compute rates from unrounded values and round only for display. Known
   positive hours with zero completions produce rate 0. Zero, unknown, partial,
   or otherwise incomplete hours produce “Rate unavailable”; Completed Requests

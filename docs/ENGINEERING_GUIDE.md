@@ -159,7 +159,10 @@ The Course document owns `service_schema_version`, `service_status`,
 `service_generation`, `service_coverage_started_at`, and the active interval
 identifier. Nested `service_intervals` represent actual on-time,
 `service_events` record migration baselines and actual transitions, and
-`service_operations` hold idempotency receipts. A successful state change,
+`service_operations` hold idempotency receipts. The migration event has the
+reserved `migration-baseline-v2` identity; operator event keys use the
+disjoint `operator-<operation_id>` namespace and existing evidence is never
+overwritten. A successful state change,
 required evidence, interval adjustment, and receipt commit together. A
 generation conflict is explicit; retrying the same operation replays its
 receipt, while operation-ID reuse for a different intent is rejected. A
@@ -176,10 +179,11 @@ Admin schedule submission is rejected with an update instruction. Reporting in
 [service_reporting.js](../fairway_backend/cloudrun_receiver/lib/service_reporting.js)
 is read-only and cannot block controls or request actions. The separately
 authorized `GET /api/v1/operator/service-state` reads only the assigned
-Course's service state; it does not depend on dashboard metric, request, or
-interval queries. The Operator UI uses this response for controls, so a
-dashboard/reporting outage cannot hide or disable otherwise available service
-actions.
+Course's service state and validates its referenced open interval when service
+is on; it does not depend on dashboard metric, history, or request queries.
+The Operator UI uses this response for controls, so a dashboard/reporting
+outage cannot hide or disable otherwise available service actions, while
+inconsistent authoritative state is never presented as ready.
 
 Active Cart Hours come only from authoritative intervals beginning at each
 Course's atomic cutover; active migration baselines are explicitly not operator

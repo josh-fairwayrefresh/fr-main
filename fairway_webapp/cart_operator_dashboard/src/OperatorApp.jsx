@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   BarChart3, Check, CheckCircle2, ChevronRight, Clock3, Coffee,
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
@@ -14,6 +14,14 @@ import {
   selectedCourseFromLocation,
 } from './lib/courseContext.mjs';
 import { requestLocationLabel } from './lib/requestLocation.mjs';
+import {
+  createServiceOperationRegistry,
+  matchesCourseIdentity,
+  runRequestAction,
+  runServiceOperation,
+  setCourseResponse,
+  setCourseValue,
+} from './lib/operatorWorkflow.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -127,7 +135,7 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
     {loadState === 'loading' && <div className="op-message">Loading requests...</div>}
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
     {loadState === 'ready' && !next && <EmptyQueue serviceActive={serviceActive} />}
-    {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending === next.id} timezone={timezone} />}
+    {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending} timezone={timezone} />}
     {requests.length > 1 && <section className="op-up-next"><div><span>UP NEXT</span><strong>{requests.length - 1} more {requests.length === 2 ? 'request' : 'requests'}</strong></div>{requests.slice(1).map((request, index) => <article key={request.id}><span>{index + 2}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} /></article>)}</section>}
   </section><aside className="op-summary"><Performance summary={summary} /><RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
@@ -144,95 +152,129 @@ export default function OperatorApp({
   focusedRequestId, isAdmin, onOpenAdmin, onOpenInventory, onSignOut, onRequestAction,
 }) {
   const [tab, setTab] = useState('requests');
-  const [dashboard, setDashboard] = useState(null);
-  const [dashboardError, setDashboardError] = useState('');
-  const [serviceSnapshot, setServiceSnapshot] = useState(null);
-  const [serviceStateError, setServiceStateError] = useState('');
+  const [dashboards, setDashboards] = useState({});
+  const [dashboardErrors, setDashboardErrors] = useState({});
+  const [serviceSnapshots, setServiceSnapshots] = useState({});
+  const [serviceStateErrors, setServiceStateErrors] = useState({});
   const [selectedCourseKey, setSelectedCourseKey] = useState(() => {
     const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
     return selected ? courseKey(selected) : '';
   });
-  const [pending, setPending] = useState('');
+  const [, setOperationRevision] = useState(0);
+  const operationRegistry = useRef(null);
+  if (!operationRegistry.current) operationRegistry.current = createServiceOperationRegistry();
+  const [pendingRequests, setPendingRequests] = useState({});
   const [celebration, setCelebration] = useState('');
-  const [serviceError, setServiceError] = useState('');
-  const [serviceRetry, setServiceRetry] = useState(null);
 
-  async function refreshDashboard(selectedCourse = course) {
-    setDashboard(null);
-    const query = selectedCourse
-      ? `?customer_id=${encodeURIComponent(selectedCourse.customer_id)}&course_id=${encodeURIComponent(selectedCourse.course_id)}`
-      : '';
+  async function refreshDashboard(targetCourse) {
+    if (!targetCourse) return;
+    const targetKey = courseKey(targetCourse);
+    const query = `?customer_id=${encodeURIComponent(targetCourse.customer_id)}&course_id=${encodeURIComponent(targetCourse.course_id)}`;
     try {
-      setDashboard(await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`));
-      setDashboardError('');
+      const response = await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`);
+      if (!response.courses?.some((item) => matchesCourseIdentity(targetCourse, item))) {
+        throw new Error('Dashboard response did not match the selected Course.');
+      }
+      setDashboards((current) => setCourseValue(current, targetCourse, response));
+      setDashboardErrors((current) => {
+        const next = { ...current };
+        delete next[targetKey];
+        return next;
+      });
     } catch (reason) {
-      setDashboardError(reason.message);
+      setDashboardErrors((current) => setCourseValue(current, targetCourse, reason.message));
     }
   }
 
-  async function refreshServiceState(selectedCourse = course) {
-    setServiceSnapshot(null);
-    if (!selectedCourse) {
-      setServiceStateError('Select a course to load service state.');
-      return;
-    }
-    const query = `?customer_id=${encodeURIComponent(selectedCourse.customer_id)}&course_id=${encodeURIComponent(selectedCourse.course_id)}`;
+  async function refreshServiceState(targetCourse, throwOnError = false) {
+    if (!targetCourse) return;
+    const targetKey = courseKey(targetCourse);
+    const query = `?customer_id=${encodeURIComponent(targetCourse.customer_id)}&course_id=${encodeURIComponent(targetCourse.course_id)}`;
     try {
-      setServiceSnapshot(await operatorRequest(
+      const response = await operatorRequest(
         user,
         apiBaseUrl,
         `/api/v1/operator/service-state${query}`
-      ));
-      setServiceStateError('');
+      );
+      if (!matchesCourseIdentity(targetCourse, response)) {
+        throw new Error('Service-state response did not match the selected Course.');
+      }
+      setServiceSnapshots((current) => setCourseResponse(current, targetCourse, response));
+      setServiceStateErrors((current) => {
+        const next = { ...current };
+        delete next[targetKey];
+        return next;
+      });
     } catch (reason) {
-      setServiceStateError(reason.message);
+      setServiceStateErrors((current) => setCourseValue(current, targetCourse, reason.message));
+      if (throwOnError) throw reason;
     }
   }
 
   const selectedCourse = operatorConfig.courses.find((item) => courseKey(item) === selectedCourseKey)
     || selectedCourseFromLocation(operatorConfig.courses, window.location.search);
+  const dashboard = selectedCourse ? dashboards[courseKey(selectedCourse)] : null;
+  const dashboardError = selectedCourse ? dashboardErrors[courseKey(selectedCourse)] : '';
+  const serviceSnapshot = selectedCourse ? serviceSnapshots[courseKey(selectedCourse)] : null;
+  const serviceStateError = selectedCourse ? serviceStateErrors[courseKey(selectedCourse)] : '';
   const dashboardCourse = mergeDashboardCourse(selectedCourse, dashboard?.courses);
-  const serviceSnapshotMatches = serviceSnapshot?.customer_id === dashboardCourse?.customer_id
-    && serviceSnapshot?.course_id === dashboardCourse?.course_id;
+  const serviceSnapshotMatches = matchesCourseIdentity(dashboardCourse, serviceSnapshot);
   const course = {
     ...dashboardCourse,
     ...(serviceSnapshotMatches ? serviceSnapshot : {}),
     service_state: serviceSnapshotMatches ? serviceSnapshot.service_state : null,
   };
+  const selectedOperation = course ? operationRegistry.current.get(course) : {
+    operation: null, error: '', pending: false,
+  };
   useEffect(() => {
-    refreshDashboard(course);
-    refreshServiceState(course);
-  }, [user, apiBaseUrl, course?.customer_id, course?.course_id]);
+    refreshDashboard(selectedCourse);
+    refreshServiceState(selectedCourse);
+  }, [user, apiBaseUrl, selectedCourse?.customer_id, selectedCourse?.course_id]);
   const selectedRequests = requests.filter((request) => (
     !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
   ));
 
   async function actOnRequest(request, action) {
-    setPending(request.id);
+    const requestKey = `${courseKey(request)}/${request.id}`;
+    setPendingRequests((current) => ({ ...current, [requestKey]: true }));
     try {
-      await onRequestAction(request, action);
-      if (action === 'complete') {
+      await runRequestAction({
+        request,
+        mutate: (item) => onRequestAction(item, action),
+        refreshDashboard: (item) => refreshDashboard(item),
+      });
+      if (action === 'complete' && course && courseKey(course) === courseKey(request)) {
         setCelebration(`${requestLocationLabel(request)} complete`);
         window.setTimeout(() => setCelebration(''), 1800);
       }
-      await refreshDashboard();
     } finally {
-      setPending('');
+      setPendingRequests((current) => {
+        const next = { ...current };
+        delete next[requestKey];
+        return next;
+      });
     }
   }
 
   async function toggleService() {
     if (!course) return;
-    if (!serviceRetry && course.service_state?.status !== 'ready') {
-      setServiceError('Service cutover is required. Refresh the app and contact the administrator.');
+    const registry = operationRegistry.current;
+    const current = registry.get(course);
+    if (!current.operation && (serviceStateError || course.service_state?.status !== 'ready')) {
+      registry.setError(
+        course,
+        serviceStateError || 'Service cutover is required. Refresh the app and contact the administrator.'
+      );
+      setOperationRevision((revision) => revision + 1);
       return;
     }
-    const action = serviceRetry?.action || (course.service_state.active ? 'suspend' : 'resume');
+    const action = current.operation?.action || (course.service_state.active ? 'suspend' : 'resume');
     const prompt = action === 'suspend'
       ? `Suspend new beverage requests for ${course.course_name}? Existing requests remain actionable.`
       : `Resume beverage requests for ${course.course_name}?`;
-    if (!serviceRetry && !window.confirm(prompt)) return;
-    const operation = serviceRetry || {
+    if (!current.operation && !window.confirm(prompt)) return;
+    const operation = registry.begin(course, () => ({
       action,
       body: {
         customer_id: course.customer_id,
@@ -240,27 +282,29 @@ export default function OperatorApp({
         operation_id: newOperationId(),
         expected_generation: course.service_state.generation,
       },
-    };
-    setServiceRetry(operation);
-    setPending('service');
-    setServiceError('');
+    }));
+    setOperationRevision((revision) => revision + 1);
     try {
-      await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${operation.action}`, {
-        method: 'POST',
-        body: operation.body,
+      await runServiceOperation({
+        course,
+        operation,
+        mutate: (target, pendingOperation) => operatorRequest(
+          user,
+          apiBaseUrl,
+          `/api/v1/operator/service/${pendingOperation.action}`,
+          { method: 'POST', body: pendingOperation.body }
+        ),
+        refreshServiceState: (target) => refreshServiceState(target, true),
+        refreshDashboard,
       });
-      setServiceRetry(null);
-      await Promise.all([refreshDashboard(), refreshServiceState()]);
+      registry.succeed(course, operation);
     } catch (reason) {
-      setServiceError(reason.message);
-      if ([400, 409, 426].includes(reason.status)) setServiceRetry(null);
-      await Promise.all([refreshDashboard(), refreshServiceState()]);
-    } finally {
-      setPending('');
+      registry.fail(course, operation, reason.message, ![400, 409, 426].includes(reason.status));
     }
+    setOperationRevision((revision) => revision + 1);
   }
 
-  const serviceAction = serviceRetry?.action || (course?.service_state?.active ? 'suspend' : 'resume');
+  const serviceAction = selectedOperation.operation?.action || (course?.service_state?.active ? 'suspend' : 'resume');
   const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
 
   return <main className="operator-app"><header className="op-header">
@@ -278,16 +322,16 @@ export default function OperatorApp({
     <div className="op-header-context">
       <div className="op-course-context">
         <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); setDashboard(null); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
         <ServiceStatus course={course} />
-        <button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course || (!serviceRetry && course.service_state?.status !== 'ready')} aria-label={`${serviceRetry ? 'Retry ' : ''}${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
+        <button className="op-suspend" type="button" onClick={toggleService} disabled={selectedOperation.pending || !course || (!selectedOperation.operation && (serviceStateError || course.service_state?.status !== 'ready'))} aria-label={`${selectedOperation.operation ? 'Retry ' : ''}${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
-          <span>{serviceRetry ? `Retry ${serviceActionLabel}` : serviceActionLabel}</span>
+          <span>{selectedOperation.operation ? `Retry ${serviceActionLabel}` : serviceActionLabel}</span>
         </button>
         <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}{serviceStateError && <p role="alert">Service state unavailable: {serviceStateError}</p>}{serviceError && <p role="alert">{serviceError} Refresh the app from its HTTPS address if it is installed.</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} timezone={course?.timezone} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}{serviceStateError && <p role="alert">Service state unavailable: {serviceStateError}</p>}{selectedOperation.error && <p role="alert">{selectedOperation.error} Refresh the app from its HTTPS address if it is installed.</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={Boolean(course && pendingRequests[`${courseKey(course)}/${selectedRequests[0]?.id}`])} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} timezone={course?.timezone} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

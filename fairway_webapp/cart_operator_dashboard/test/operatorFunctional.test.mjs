@@ -12,7 +12,7 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.match(source, /OLDEST ACTIVE REQUEST/);
   assert.match(source, /Complete service/);
   assert.match(source, /Cancel request/);
-  assert.match(source, /operator\/service\/\$\{operation\.action\}/);
+  assert.match(source, /operator\/service\/\$\{pendingOperation\.action\}/);
   assert.match(source, /operator\/dashboard/);
   assert.match(source, /op-queue-summary/);
   assert.doesNotMatch(source, /NEXT REQUEST/);
@@ -20,7 +20,7 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.doesNotMatch(source, />CONFIRM</);
   assert.match(source, /api\/v1\/operator\/service-state/);
   assert.match(source, /service_state: serviceSnapshotMatches \? serviceSnapshot\.service_state : null/);
-  assert.match(source, /Promise\.all\(\[refreshDashboard\(\), refreshServiceState\(\)\]\)/);
+  assert.match(source, /refreshDashboard\(selectedCourse\);\s*refreshServiceState\(selectedCourse\);/);
 });
 
 test('Assigned customer users have an Inventory link into the shared authenticated session', () => {
@@ -37,7 +37,7 @@ test('mobile operator header preserves navigation, course selection, and labeled
   assert.match(source, /<nav aria-label="Cart Operator navigation">/);
   assert.match(source, /aria-label="Select course"/);
   assert.match(source, /aria-label=\{.*serviceActionLabel.*course\?\.course_name/);
-  assert.match(source, /<span>\{serviceRetry \? `Retry \$\{serviceActionLabel\}` : serviceActionLabel\}<\/span>/);
+  assert.match(source, /<span>\{selectedOperation\.operation \? `Retry \$\{serviceActionLabel\}` : serviceActionLabel\}<\/span>/);
   assert.match(operatorStyles, /@media \(max-width: 1180px\)/);
   assert.match(operatorStyles, /\.op-course-context \{ display: grid;/);
   assert.match(operatorStyles, /\.op-service-controls \{ display: flex; flex-wrap: wrap;/);

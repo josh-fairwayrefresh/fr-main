@@ -19,14 +19,17 @@ function validateOperationId(operationId) {
     /^[A-Za-z0-9_-]{8,128}$/.test(operationId);
 }
 
-function serviceState(course) {
+function serviceState(course, currentTime = new Date()) {
   if (course.service_schema_version !== SERVICE_SCHEMA_VERSION) {
     return { status: 'cutover_required', active: null, generation: null };
   }
   if (!['on', 'off'].includes(course.service_status) ||
-      !Number.isInteger(course.service_generation) ||
+      !Number.isSafeInteger(course.service_generation) || course.service_generation < 0 ||
       !timestampDate(course.service_coverage_started_at) ||
-      (course.service_status === 'on' && typeof course.active_service_interval_id !== 'string') ||
+      timestampDate(course.service_coverage_started_at) > currentTime ||
+      (course.service_status === 'on' &&
+        (typeof course.active_service_interval_id !== 'string' ||
+          !course.active_service_interval_id || course.active_service_interval_id.includes('/'))) ||
       (course.service_status === 'off' && course.active_service_interval_id !== null)) {
     return { status: 'inconsistent', active: null, generation: null };
   }
@@ -35,6 +38,26 @@ function serviceState(course) {
     active: course.service_status === 'on',
     generation: course.service_generation,
   };
+}
+
+async function readCourseServiceState(transaction, courseRef, course, currentTime = new Date()) {
+  const state = serviceState(course, currentTime);
+  if (state.status !== 'ready' || !state.active) return state;
+
+  const intervalRef = courseRef.collection('service_intervals')
+    .doc(course.active_service_interval_id);
+  const intervalSnap = await transaction.get(intervalRef);
+  if (!intervalSnap.exists) {
+    return { status: 'inconsistent', active: null, generation: null };
+  }
+  const interval = intervalSnap.data();
+  const coverageStart = timestampDate(course.service_coverage_started_at);
+  const intervalStart = timestampDate(interval.start_at);
+  if (!intervalStart || intervalStart < coverageStart || intervalStart > currentTime ||
+      interval.end_at !== null) {
+    return { status: 'inconsistent', active: null, generation: null };
+  }
+  return state;
 }
 
 async function cutoverCourse(db, {
@@ -55,11 +78,22 @@ async function cutoverCourse(db, {
     }
     const course = courseSnap.data();
     if (course.service_schema_version === SERVICE_SCHEMA_VERSION) {
-      const state = serviceState(course);
+      const state = await readCourseServiceState(transaction, courseRef, course, now());
       if (state.status !== 'ready') {
         throw new ServiceControlError('course_service_inconsistent', 'Course service state is inconsistent.', 422);
       }
       return { already_initialized: true, service_state: state };
+    }
+    const [existingMigrationEvent, existingMigrationInterval] = await Promise.all([
+      transaction.get(migrationEvent),
+      transaction.get(migrationInterval),
+    ]);
+    if (existingMigrationEvent.exists || existingMigrationInterval.exists) {
+      throw new ServiceControlError(
+        'course_requires_reconciliation',
+        'Migration evidence already exists for an uninitialized Course.',
+        422
+      );
     }
     const suspension = course.service_suspension;
     const suspendedAt = timestampDate(suspension?.suspended_at);
@@ -110,18 +144,18 @@ async function cutoverCourse(db, {
 
 async function transitionCourseService(db, {
   customerId, courseId, actorId, action, operationId, expectedGeneration,
-  fieldValue,
+  fieldValue, now = () => new Date(),
 }) {
   if (!['resume', 'suspend'].includes(action) ||
       !validateOperationId(operationId) ||
-      !Number.isInteger(expectedGeneration) ||
+      !Number.isSafeInteger(expectedGeneration) || expectedGeneration < 0 ||
       typeof actorId !== 'string' || !actorId) {
     throw new ServiceControlError('invalid_service_operation', 'A valid action, operation ID, actor, and generation are required.', 400);
   }
 
   const courseRef = coursesCollection(db, customerId).doc(courseId);
   const receiptRef = courseRef.collection('service_operations').doc(operationId);
-  const eventRef = courseRef.collection('service_events').doc(operationId);
+  const eventRef = courseRef.collection('service_events').doc(`operator-${operationId}`);
   const intervalCollection = courseRef.collection('service_intervals');
 
   return db.runTransaction(async (transaction) => {
@@ -133,6 +167,15 @@ async function transitionCourseService(db, {
           receipt.customer_id !== customerId || receipt.course_id !== courseId) {
         throw new ServiceControlError('operation_id_reused', 'Operation ID was already used for a different operation.', 409);
       }
+      const courseSnap = await transaction.get(courseRef);
+      if (!courseSnap.exists ||
+          (await readCourseServiceState(transaction, courseRef, courseSnap.data(), now())).status !== 'ready') {
+        throw new ServiceControlError(
+          'course_service_inconsistent',
+          'Course service state is inconsistent.',
+          409
+        );
+      }
       return { ...receipt.result, replayed: true };
     }
 
@@ -141,12 +184,29 @@ async function transitionCourseService(db, {
       throw new ServiceControlError('course_not_found', 'Course was not found.', 404);
     }
     const course = courseSnap.data();
-    const state = serviceState(course);
+    const state = await readCourseServiceState(transaction, courseRef, course, now());
     if (state.status !== 'ready') {
-      throw new ServiceControlError('course_cutover_required', 'Course service must be explicitly cut over before controls are available.', 409);
+      throw new ServiceControlError(
+        state.status === 'cutover_required' ? 'course_cutover_required' : 'course_service_inconsistent',
+        state.status === 'cutover_required'
+          ? 'Course service must be explicitly cut over before controls are available.'
+          : 'Course service state is inconsistent.',
+        409
+      );
     }
     if (expectedGeneration !== state.generation) {
       throw new ServiceControlError('service_generation_conflict', 'Service state changed. Refresh and try again.', 409);
+    }
+    if (!Number.isSafeInteger(state.generation + 1)) {
+      throw new ServiceControlError('service_generation_exhausted', 'Service generation cannot be incremented safely.', 409);
+    }
+    const existingEvent = await transaction.get(eventRef);
+    if (existingEvent.exists) {
+      throw new ServiceControlError(
+        'service_event_already_exists',
+        'An immutable service event already exists for this operation.',
+        409
+      );
     }
 
     const nextActive = action === 'resume';
@@ -163,7 +223,6 @@ async function transitionCourseService(db, {
         throw new ServiceControlError('service_state_inconsistent', 'Active service interval is inconsistent.', 409);
       }
     }
-
     const result = {
       service_state: {
         status: 'ready',
@@ -254,6 +313,7 @@ module.exports = {
   ServiceControlError,
   cutoverCourse,
   intervalMinutes,
+  readCourseServiceState,
   serviceState,
   transitionCourseService,
   validateOperationId,

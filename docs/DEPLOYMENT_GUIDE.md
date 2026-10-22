@@ -131,11 +131,14 @@ implementation authorization.
 
 ### Compatible recovery
 
-- **Before the gate or before any Course cutover:** Disable the gate or restore
-  the verified pre-cutover backend only after confirming no Course has
-  migrated and no v2 transition committed. Existing schedules remain intact.
-  Re-enable old schedule controls only through the explicitly approved
-  compatible revision; do not claim interval accounting for that period.
+- **Before any v2 data is created or cut over:** The gate prevents migration
+  and transition calls, but new Course creation already writes schema v2.
+  Return to legacy code only after verifying all relevant Course records and
+  dependent data remain compatible with that code, including newly created
+  Courses; absence of a cutover or transition alone is not sufficient.
+  Existing schedules remain intact. Re-enable old schedule controls only
+  through the explicitly approved compatible revision; do not claim interval
+  accounting for that period.
 - **After any Course cutover or v2 transition:** Do not restore a backend that
   reads only schedules, delete v2 records, recreate schedules, or replay
   operations with new IDs. Keep Course state, intervals, events, and receipts

@@ -13,6 +13,7 @@ const customerId = `test_${runId}`;
 const courseId = `course_${runId}`;
 const firstDeviceId = `first_${runId}`;
 const secondDeviceId = `second_${runId}`;
+const inconsistentDeviceId = `inconsistent_${runId}`;
 const operatorId = `operator_${runId}`;
 
 function requireSafeEnvironment() {
@@ -82,7 +83,14 @@ async function cleanTestRecords() {
   await db.collection('customers').doc(customerId).delete();
   await db.collection('devices').doc(firstDeviceId).delete();
   await db.collection('devices').doc(secondDeviceId).delete();
+  await db.collection('devices').doc(inconsistentDeviceId).delete();
   await db.collection('user_access').doc(operatorId).delete();
+  const requests = await db.collection('requests').where('customer_id', '==', customerId).get();
+  for (const requestDocument of requests.docs) {
+    if (requestDocument.data().course_id !== courseId) continue;
+    // eslint-disable-next-line no-await-in-loop
+    await requestDocument.ref.delete();
+  }
 }
 
 function response() {
@@ -96,12 +104,13 @@ function response() {
   };
 }
 
-function request({ body = {}, headers = {}, method = 'POST', path = '/' } = {}) {
+function request({ body = {}, headers = {}, method = 'POST', path = '/', query = {} } = {}) {
   return {
     body,
     headers,
     method,
     path,
+    query,
     get(name) { return headers[name.toLowerCase()] || headers[name]; },
   };
 }
@@ -266,7 +275,80 @@ async function main() {
     assert.ok(intervals.docs.find((doc) => doc.id === 'migration-baseline-v2').data().end_at);
     assert.equal(operations.size, 2, 'successful Suspend and Resume each receive an operation receipt');
     assert.equal(events.size, 3, 'migration and the two successful transitions must persist');
-    console.log('PASS: Firestore emulator validates gated cutover, request/cutover and request/Suspend races, atomic transitions, replay, and operation-ID misuse');
+
+    const migrationEventRef = courseRef.collection('service_events').doc('migration-baseline-v2');
+    const migrationEvidence = (await migrationEventRef.get()).data();
+    await transitionCourseService(db, {
+      customerId,
+      courseId,
+      actorId: operatorId,
+      action: 'suspend',
+      operationId: 'migration-baseline-v2',
+      expectedGeneration: 2,
+      fieldValue: FieldValue,
+    });
+    assert.deepEqual((await migrationEventRef.get()).data(), migrationEvidence);
+    assert.equal((await courseRef.collection('service_events')
+      .doc('operator-migration-baseline-v2').get()).exists, true);
+    assert.equal((await transitionCourseService(db, {
+      customerId,
+      courseId,
+      actorId: operatorId,
+      action: 'suspend',
+      operationId: 'migration-baseline-v2',
+      expectedGeneration: 2,
+      fieldValue: FieldValue,
+    })).replayed, true);
+    await assert.rejects(
+      transitionCourseService(db, {
+        customerId,
+        courseId,
+        actorId: operatorId,
+        action: 'resume',
+        operationId: 'migration-baseline-v2',
+        expectedGeneration: 2,
+        fieldValue: FieldValue,
+      }),
+      (error) => error.code === 'operation_id_reused'
+    );
+
+    await courseRef.update({
+      service_status: 'on',
+      active_service_interval_id: 'missing-interval',
+    });
+    const inconsistentSecret = await seedDevice(inconsistentDeviceId);
+    const inconsistentRequest = response();
+    await handlers.handleDeviceEvent(request({
+      body: { device_id: inconsistentDeviceId, event_type: 'button_press' },
+      headers: { 'x-fairway-device-key': inconsistentSecret },
+    }), inconsistentRequest);
+    assert.equal(inconsistentRequest.statusCode, 503, 'missing active interval must block request acceptance');
+    assert.equal((await db.collection('requests')
+      .where('device_id', '==', inconsistentDeviceId).get()).size, 0);
+    await assert.rejects(
+      transitionCourseService(db, {
+        customerId,
+        courseId,
+        actorId: operatorId,
+        action: 'resume',
+        operationId: `inconsistent_${runId}`,
+        expectedGeneration: 3,
+        fieldValue: FieldValue,
+      }),
+      (error) => error.code === 'course_service_inconsistent'
+    );
+
+    const stateResponse = response();
+    await handlers.fairwayButtonReceiver(request({
+      method: 'GET',
+      path: '/api/v1/operator/service-state',
+      query: { customer_id: customerId, course_id: courseId },
+      headers: { authorization: 'Bearer emulator-test-token' },
+    }), stateResponse);
+    assert.equal(stateResponse.statusCode, 200);
+    assert.equal(stateResponse.body.service_state.status, 'inconsistent');
+
+    console.log('PASS: Firestore emulator validates gated cutover, request races, interval integrity, immutable migration evidence, atomic transitions, replay, and operation-ID misuse');
   } finally {
     try {
       await cleanTestRecords();

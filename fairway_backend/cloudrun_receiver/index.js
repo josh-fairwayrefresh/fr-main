@@ -16,7 +16,7 @@ const {
 const {
   ServiceControlError,
   cutoverCourse,
-  serviceState,
+  readCourseServiceState,
   transitionCourseService,
 } = require('./lib/service_control');
 const { localDate, summarizeOperatorDashboard } = require('./lib/service_reporting');
@@ -237,8 +237,11 @@ function createFairwayHandlers(db, {
         const current = courseSnap.data();
         if (!existing.empty) return { requestId: existing.docs[0].id, duplicate: true };
         const versioned = current.service_schema_version === 2;
+        const authoritativeState = versioned
+          ? await readCourseServiceState(transaction, courseRef, current, requestTime)
+          : null;
         const eligible = versioned
-          ? ['on', 'off'].includes(current.service_status) && current.service_status === 'on'
+          ? authoritativeState.status === 'ready' && authoritativeState.active
           : serviceControlV2Active && resolveCourseServiceState(current, requestTime).active;
         if (!eligible) return { unavailable: true };
         transaction.set(requestRef, {
@@ -770,7 +773,12 @@ function createFairwayHandlers(db, {
   }
 
   async function courseServiceReadModel(course, requestTime) {
-    const current = serviceState(course);
+    const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
+    const current = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(courseRef);
+      if (!snapshot.exists) return { status: 'inconsistent', active: null, generation: null };
+      return readCourseServiceState(transaction, courseRef, snapshot.data(), requestTime);
+    });
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
@@ -796,12 +804,18 @@ function createFairwayHandlers(db, {
     }
     const course = await authorizedCourse(operator, courseId, customerId);
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
+    const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
+    const service = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(courseRef);
+      if (!snapshot.exists) return { status: 'inconsistent', active: null, generation: null };
+      return readCourseServiceState(transaction, courseRef, snapshot.data(), now());
+    });
     return res.status(200).json({
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
-      service_state: serviceState(course),
+      service_state: service,
     });
   }
 
@@ -888,6 +902,7 @@ function createFairwayHandlers(db, {
       operationId: req.body?.operation_id,
       expectedGeneration: req.body?.expected_generation,
       fieldValue: FieldValue,
+      now,
     });
     return res.status(200).json(result);
   }
