@@ -195,8 +195,10 @@ Unknown, zero, partial, or incomplete hours yield “Rate unavailable” while
 counts remain visible. No historical hours are reconstructed. The broader
 Service History/Performance & Outcomes redesign remains out of scope.
 
-This describes branch source, not a production deployment or Course cutover.
-The feature branch's local tests/build and emulator evidence, remaining gaps,
-and ordered rollout/recovery procedure are recorded in the
-[Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery).
-Independent firmware lifecycle and power contracts remain unchanged.
+This describes branch source. The separately authorized 2026-10-22 sandbox
+deployment and synthetic Course cutovers are recorded in the
+[Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery);
+no production deployment or Course cutover is claimed. Local validation,
+remaining gaps, and the production rollout/recovery procedure are recorded
+there as well. Independent firmware lifecycle and power contracts remain
+unchanged.

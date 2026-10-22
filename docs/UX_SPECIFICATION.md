@@ -311,8 +311,10 @@ increment is claimed here.
 
 The CPO-approved requirements below are implemented in the current feature
 branch source and local tests. They supersede schedule-based service control
-for Courses after their explicit cutover. This source status is not a claim of
-production deployment, remote sandbox validation, or CPO acceptance.
+for Courses after their explicit cutover. A separately authorized synthetic
+sandbox deployment and rehearsal occurred on 2026-10-22; see the Deployment
+Guide for exact artifacts, results, and limitations. This is not a claim of
+production deployment or CPO acceptance.
 
 - Resume turns service on; Suspend turns service off. State persists until an
   authorized operator explicitly changes it. Midnight, a scheduled opening,

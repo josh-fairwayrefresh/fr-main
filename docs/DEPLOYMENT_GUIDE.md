@@ -38,8 +38,9 @@ label or assuming accepted source was deployed.
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
 | Accepted repository baseline | `11feb67696e69e504592908a8ffafcdcb7271bd0`, the October 21 documentation merge; the opening-weekend service/reporting targets remain unimplemented. |
-| Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
-| Hosting | October 17 inspection: `index-B_OqSsPI.js`, predating the accepted custom-location correction. That correction is source-validated, not shown deployed. Exact Hosting version was unavailable (403). |
+| Production Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. No production reinspection or mutation occurred for the sandbox rehearsal. |
+| Production Hosting | October 17 inspection: `index-B_OqSsPI.js`, predating the accepted custom-location correction. That correction is source-validated, not shown deployed. Exact Hosting version was unavailable (403). |
+| Sandbox Operator Service Control | On October 22, the PR #4 Receiver/Admin revisions `fairway-button-receiver-sandbox-00019-bdd` / `fairway-admin-sandbox-00015-jl8` and Hosting version `a07e3bcc50eb534f` were serving in `fairway-refresh-sandbox-260930`. Both service gates were verified true. The synthetic-only rehearsal and remaining gaps are recorded below. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
 | Firmware / commissioning | Per-device recovery manifests and execution records establish artifacts, not inconsistent registry `firmware_generation` labels. FRB-0001 through FRB-0005 physical validation complete; FRB-0006 reliability acceptance pending. One-time debug-key recoveries do not resolve production signing. |
 | Field power | V25/V50/V75 VBUS architecture supersedes external 6106/5580/LiPo. Current field-idle consumption and autonomy are not measured; solar sufficiency is an operating assumption. |
@@ -68,23 +69,25 @@ deployment, credentials, device operations, or production-data changes.
 
 ## Operator Service Control Rollout and Recovery
 
-This procedure is for a separately authorized future release. The feature
-branch contains source changes and a synthetic local Firestore-emulator test;
-no remote sandbox release, production inspection, activation, or Course
-cutover has been performed. Do not execute this procedure under the current
-implementation authorization.
+The ordered procedure below remains the release procedure for production or
+another separately authorized environment. The authorized sandbox deployment
+and rehearsal completed on 2026-10-22; its exact evidence and remaining limits
+are recorded in the dated execution section below. No production inspection,
+deployment, activation, or Course cutover is claimed.
 
 ### Ordered release and per-Course cutover
 
 1. Complete independent Lead Architect review and CPO acceptance of one exact
-   source SHA. Validate the matching backend/frontend artifacts, request and
-   notification contracts, authorization, stale clients, and compatible
-   recovery target in an authorized isolated sandbox. Record artifact/config
-   identities and stop conditions. The Lead Architect source review passed at
-   `8d5a8e137c38196dd446e49b54b84db3bb0a74fa`; the current cutover tooling and
-   label/documentation corrections are subsequent source changes and require
-   review at their final pushed SHA. Remote sandbox validation has not yet
-   occurred for this source increment.
+   source SHA for the intended environment. Validate the matching
+   backend/frontend artifacts, request and notification contracts,
+   authorization, stale clients, and compatible recovery target in an
+   authorized isolated sandbox. Record artifact/config identities and stop
+   conditions. For the completed sandbox rehearsal, the backend execution
+   package was `ec085b3f40dd1a5c10e24b6b5062f9b156c1214e`; the
+   Hosting-only frontend correction was reviewed at
+   `434d074bab0d13feb5125e2935d6f182f5fd8aac`. Their deployed artifacts and
+   scope are distinguished below. Production acceptance and rollout remain
+   separate.
 2. Deploy the compatible backend revision with
    `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE=false`. This keeps legacy schedule
    eligibility for uncutover Courses and keeps the explicit Admin cutover
@@ -165,14 +168,12 @@ implementation authorization.
   by this UI. Retain the displayed identity and result in the release record;
   never substitute direct database writes or an unreviewed script.
 
-### Sandbox rehearsal package — preparation evidence and release blockers
+### Sandbox rehearsal preparation record — 2026-10-21 (historical)
 
-This section records read-only preparation only. The CPO completed local
-interactive gcloud reauthentication; the inventory below was read from
-`fairway-refresh-sandbox-260930` on 2026-10-21. No remote sandbox deployment,
-Firestore/Auth mutation, Course cutover, notifier deployment, or device
-operation was performed. Credential values and device credentials were not
-read into this report.
+This section preserves the read-only preparation evidence as it stood on
+2026-10-21. Its release-blocker statements describe that date and are
+superseded by the separately authorized 2026-10-22 sandbox execution record
+below. No credential values or device credentials are reproduced here.
 
 #### Target identity and exactness
 
@@ -388,6 +389,137 @@ loopback host and synthetic sandbox backend configuration, rejects
 credential-bearing environment variables, and deletes only its uniquely
 named test documents. It validates the actual Firestore transaction boundary,
 not production IAM, cloud networking, deployment, or field operation.
+
+### Sandbox deployment and rehearsal — 2026-10-22
+
+This is the execution record for the authorized sandbox-only rehearsal. It
+does not establish production readiness, CPO acceptance, or permission to
+merge, deploy elsewhere, alter IAM, operate physical devices, or clean up
+records.
+
+#### Published source and artifacts
+
+- Backend Receiver/Admin images were prepared from execution-package source
+  `ec085b3f40dd1a5c10e24b6b5062f9b156c1214e`. No backend redeployment was
+  made for the later Hosting-only cache correction.
+- The reviewed frontend correction was source
+  `434d074bab0d13feb5125e2935d6f182f5fd8aac`, published with
+  `fairway_webapp/cart_operator_dashboard/firebase.sandbox.json` to Hosting
+  site `fairway-refresh-sandbox-260930`.
+- Hosting release `1792685220772000` serves version
+  `a07e3bcc50eb534f`. The published JavaScript SHA-256 is
+  `0e34e616b64659207fce8b763486371ae2e7c4690ca114e4a245b5ed0b8f1742`;
+  CSS SHA-256 is
+  `7d4a3d250b6ec84eb34dc692f34f9ea3394f4deb3a88afdb3c557fe6256c6111`.
+  The served bundle was checked for the sandbox Firebase project and the
+  expected sandbox Receiver/Admin endpoints; no production API endpoint was
+  present.
+- Live HTTPS responses were checked after publication:
+
+  | Path | Status | `Cache-Control` |
+  | --- | --- | --- |
+  | `/`, `/admin`, `/index.html` | 200 | `no-cache, no-store, must-revalidate` |
+  | `/manifest.webmanifest`, `/sw.js` | 200 | `no-cache, must-revalidate` |
+
+#### Backend routing, fencing, and recovery
+
+| Role | Serving revision | Image digest | Traffic | Gate |
+| --- | --- | --- | --- | --- |
+| Receiver | `fairway-button-receiver-sandbox-00019-bdd` | `sha256:39a7a94aacf549c6827a3a254d6d392024ee18e541024669e0e4aca14dcfbd7e` | 100% | `true` |
+| Admin | `fairway-admin-sandbox-00015-jl8` | `sha256:661efbe99c37fb1e1480385d0900ac17123dbe1d9d65401f39cba70c7e2ab1e6` | 100% | `true` |
+
+Both services run under
+`fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com`.
+Ingress is `all` and Cloud Run invoker IAM is disabled; application-level
+authentication/authorization remains the control boundary. Before activation,
+old revision traffic and revision-tagged/direct paths were checked for fencing.
+The current serving revisions and all recovery revisions were rechecked after
+the rehearsal; each gate is `true`.
+
+Prepared no-traffic recovery revisions were
+`fairway-button-receiver-sandbox-00018-968` and
+`fairway-admin-sandbox-00014-hjm`, using the same respective image digests as
+the serving revisions. Traffic failback to the recovery pair and restoration
+to the serving pair were exercised; Course state and generations remained
+readable and unchanged across failback. Because recovery uses the same images,
+this demonstrates deployment/configuration failback, not recovery from a
+defect in those images. Legacy or gate-closed revisions are not valid
+post-cutover recovery.
+
+#### Synthetic scope and final state
+
+The run-labeled synthetic Customer is `CUST-0004` (“PR4 Synthetic Validation
+20261022-1133Z”). Only its two new Courses were cut over:
+
+| Course | Cutover baseline | Final observed state |
+| --- | --- | --- |
+| `COURSE-0003` (“PR4 Service ON 20261022-1133Z”) | ON, generation 0 | OFF, generation 7 |
+| `COURSE-0004` (“PR4 Service OFF 20261022-1133Z”) | OFF, generation 0 | OFF, generation 0 |
+
+Synthetic Devices `FRB-0003` and `FRB-0004` were used for software protocol
+checks. A dedicated synthetic operator account was scoped only to
+`CUST-0004` and these Courses. Device credentials and authentication secrets
+are intentionally omitted. The protected pre-existing Course/Device records
+were not used as test targets. No cleanup was performed or authorized.
+
+#### Rehearsal evidence
+
+- **Cutover and persistence:** The ON and OFF legacy states were preserved at
+  explicit per-Course cutover. No ordinary read or request performed
+  migration. Both Courses remained queryable through recovery failbacks, and
+  the authenticated Cart Operator UI displayed both as suspended after the
+  tests.
+- **ON/OFF request protocol:** An OFF press was rejected with
+  `503 service_unavailable`; Course request totals remained zero for
+  `COURSE-0004`. An ON press for `COURSE-0003` created exactly one accepted
+  request; an immediate duplicate returned the same request ID with
+  `duplicate: true`.
+- **Controls and retries:** No-op Resume and receipt replay succeeded;
+  conflicting operation-ID reuse returned 409; a response-loss retry with
+  the same ID recovered the original Suspend result; simultaneous Resume and
+  Suspend at one generation returned one success and one 409 conflict.
+  A stale service mutation without generation/idempotency metadata returned
+  426. Same-day COMPLETE and Cancel both succeeded while service was off.
+- **Authorization and isolation:** The synthetic operator's access was
+  limited to the new Customer/Courses. Unauthenticated bootstrap returned
+  401 and an unauthorized Course request returned 403. No protected Course
+  was used.
+- **Reporting and Cart Operator UI:** A dashboard/report read and service
+  operation completed independently. The authenticated UI showed
+  `COURSE-0003` with one completed request, partial Active Cart Hours
+  (`0.11839416666666665` hours), and “Rate unavailable”; Service History
+  displayed one Completed and one Cancelled request. For `COURSE-0004`, the
+  UI showed a suspended service, no queued requests, zero completed requests,
+  partial coverage, and “Rate unavailable.” These are expected partial-day
+  results after cutover, not full-period measurements.
+- **Recovery:** Traffic failback to the gate-enabled v2 revisions after
+  synthetic migration preserved state and generation; intended serving
+  revisions were restored and checked. Hosting remained on the reviewed
+  sandbox version.
+
+#### Coverage limits and stop boundaries
+
+- No sandbox notifier was deployed. The OFF press and zero Course request
+  count were verified, but notification-dispatch records were not directly
+  queried; actual push delivery, delivery-time preference/entitlement checks,
+  phone receipt, and physical LED observation remain unverified. No physical
+  device was operated.
+- No prior-day open request was created or tested remotely. The remote
+  same-day COMPLETE/Cancel path passed; prior-day COMPLETE rejection and
+  manual cancellation remain covered only by existing local tests/evidence.
+- A reporting outage was not injected into shared sandbox traffic. Normal
+  report/control concurrency passed; outage isolation remains supported by
+  local validation rather than a remote outage test.
+- No unsafe shared-environment fault injection was attempted. No unexpected
+  pre-existing-record mutation was reported; the protected Course/Device
+  identities above were not targets. No production resource was inspected or
+  changed.
+
+The sandbox rehearsal is partial protocol/UI evidence, not full increment
+acceptance. Preserve synthetic records and their authoritative events,
+intervals, and receipts. Production rollout, merge, CPO acceptance, notifier
+delivery, physical indicator observation, and any cleanup remain separate
+boundaries.
 
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
