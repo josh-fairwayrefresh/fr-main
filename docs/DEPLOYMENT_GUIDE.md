@@ -37,7 +37,7 @@ assuming accepted source was deployed.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
-| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix has a separate source implementation in a feature branch pending CPO review; it is not accepted or deployed and preserves existing operations. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
+| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix has a separate source implementation in a feature branch pending CPO review; it is not accepted or deployed. The candidate changes operator service control to persistent Resume/Suspend state while preserving request, notification, authorization, device-protocol, and firmware contracts. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
 | Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
 | Hosting | The Alignment Register records production Hosting version `995c6b063a9af3c5`, release `1792037695879000`, and assets `index-B_OqSsPI.js` (SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`) / `index-CSksNdOy.css` (SHA-256 `6557df96a561960ec6ee7100aa484c3c85b4b7f1e16bc9d25d20c99f98cba6a0`). The October 17 check returned 403 for Hosting management, so present version availability was not established; no new cloud inspection was performed. The custom-location correction was not shown deployed by that evidence. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
@@ -65,6 +65,27 @@ in recovery reasoning; reverting code alone may not restore compatibility.
 Stop on mismatched identity, failed acceptance/safety checks, unexpected
 mutations, or incompatible recovery. Publication/merge does not authorize
 deployment, credentials, device operations, or production-data changes.
+
+### CPO_stats_fix service-state rollback limitation
+
+The CPO_stats_fix candidate makes Resume/Suspend the persistent ON/OFF owner
+and removes schedules from active Admin configuration. The stable release
+instead uses Course schedules and temporary suspension expiry for request
+eligibility. Returning to that stable backend therefore does not preserve the
+candidate's persistent service state: it ignores the candidate's suspension
+shape, re-applies schedule gating, and cannot accept requests for candidate-
+created Courses that have no legacy schedule. Reverting Hosting alone does not
+restore the backend contract. No data conversion or compatibility layer is
+authorized by the increment; a production release must have a separately
+reviewed recovery decision and must not be described as behavior-preserving
+rollback to the stable release.
+
+The proposed sandbox Course records originated in rejected PR #4. Before
+publication, verify their stored Course state and transition-event shapes
+read-only against this candidate's existing `service_suspension` and
+`service_events` contract. Authentication or a successful UI session does not
+establish record compatibility. Stop if the fields or prior events are
+incompatible; do not convert or repair them under this increment.
 
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 

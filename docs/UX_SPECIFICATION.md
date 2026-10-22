@@ -293,17 +293,27 @@ independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
 ## CPO Stats Fix Reporting Requirements
 
-The current Cart Operator behavior is described above, including recurring
-schedule-based service availability and the existing rolling summary periods.
-CPO Stats Fix adds reporting while preserving that operational baseline; it
-is not a service-control replacement. The source implementation is in a
-feature branch pending CPO hands-on review; the production application retains
-the existing reporting behavior until review, acceptance, and release.
+The preceding section records the CPO-accepted production behavior, including
+schedule-driven service availability and schedule controls. The CPO clarified
+the candidate behavior for CPO_stats_fix: Resume/Suspend is the persistent
+operational control, independent of schedules, midnight, and elapsed time, and
+the Beverage Service Schedule is removed from active Admin configuration UI.
+The existing stored schedule fields are retained. This candidate is in a
+feature branch pending CPO hands-on review; production remains on its accepted
+schedule-driven behavior until review, acceptance, and explicit release
+authorization.
 
-- Preserve existing ON/OFF, Suspend/Resume, request eligibility,
-  COMPLETE/Cancel, notifications, permissions, device protocol, and firmware.
-  Do not redesign service controls, remove schedules, or convert the Course
-  schema.
+- Resume turns service ON until Suspend; Suspend turns service OFF until
+  Resume. Schedules, midnight, and elapsed time do not change that state.
+  One operational owner supplies current service state and records operator
+  transitions. Request eligibility reads that state directly. Reporting
+  consumes transition/request records and is never a prerequisite for
+  accepting requests.
+- Remove the Beverage Service Schedule from active control/configuration UI.
+  Preserve existing stored schedule fields for backward compatibility; do not
+  delete them or introduce PR #4 migration/cutover machinery.
+- Preserve request handling, COMPLETE/Cancel, notifications, permissions,
+  device protocol, and firmware contracts.
 - **Active Cart Hours** are calculated from existing operator Resume/Suspend
   actions. Include ongoing active time through the present and allocate elapsed
   time across course-local days. Sum duration and round it to the nearest

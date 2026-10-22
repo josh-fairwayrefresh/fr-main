@@ -443,11 +443,11 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema Course',
       timezone: 'America/Los_Angeles',
-      service_schedule: SERVICE_SCHEDULE,
     },
   });
   assert.strictEqual(course.statusCode, 201);
   assert.match(course.body.course_id, /^COURSE-\d{4}$/);
+  assert.strictEqual(course.body.service_schedule, undefined);
 
   await db.collection('devices').doc('FRB-0099').set({
     customer_id: customer.body.customer_id,

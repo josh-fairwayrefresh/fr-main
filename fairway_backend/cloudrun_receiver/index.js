@@ -4,10 +4,7 @@ require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
-const {
-  nextScheduledStart,
-  resolveCourseServiceState,
-} = require('./lib/course_service');
+const { resolveCourseServiceState } = require('./lib/course_service');
 const {
   aggregateSummaries,
   periodBounds,
@@ -720,14 +717,13 @@ function createFairwayHandlers(db, {
     return getCourseForCustomer(db, assignment.customer_id, assignment.course_id);
   }
 
-  async function courseServiceReadModel(course, requestTime) {
+  async function courseServiceReadModel(course) {
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
-      service_schedule: course.service_schedule,
-      service_state: resolveCourseServiceState(course, requestTime),
+      service_state: resolveCourseServiceState(course),
     };
   }
 
@@ -788,7 +784,7 @@ function createFairwayHandlers(db, {
       .filter(Boolean);
     const [serviceCourses, requestSnapshots, courseSummaries] = await Promise.all([
       Promise.all(courses.map((course) =>
-        courseServiceReadModel(course, requestTime))),
+        courseServiceReadModel(course))),
       Promise.all(courses.map((course) => db.collection('requests')
         .where('customer_id', '==', course.customer_id)
         .where('course_id', '==', course.course_id)
@@ -819,25 +815,26 @@ function createFairwayHandlers(db, {
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
     const requestTime = now();
     const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
-    if (action === 'suspend') {
-      const until = nextScheduledStart(course, requestTime);
-      if (!until) return res.status(409).send('Course service schedule is not configured\n');
-      await courseRef.update({
-        service_suspension: { suspended_at: requestTime, until, suspended_by: operator.identity.uid },
+    const suspended = action === 'suspend';
+    const eventRef = courseRef.collection('service_events').doc();
+    await db.runTransaction(async (transaction) => {
+      const courseSnapshot = await transaction.get(courseRef);
+      if (!courseSnapshot.exists) throw new Error('Course disappeared during service update');
+      transaction.update(courseRef, {
+        service_suspension: suspended
+          ? { suspended_at: requestTime, suspended_by: operator.identity.uid }
+          : null,
         updated_at: requestTime,
       });
-      await courseRef.collection('service_events').add({
-        type: 'suspended', recorded_at: requestTime, operator_id: operator.identity.uid, until,
+      transaction.set(eventRef, {
+        type: suspended ? 'suspended' : 'resumed',
+        recorded_at: requestTime,
+        operator_id: operator.identity.uid,
       });
-    } else {
-      await courseRef.update({ service_suspension: null, updated_at: requestTime });
-      await courseRef.collection('service_events').add({
-        type: 'resumed', recorded_at: requestTime, operator_id: operator.identity.uid,
-      });
-    }
+    });
     const updated = await getCourseForCustomer(db, course.customer_id, course.course_id);
     return res.status(200).json(operatorCourseServiceModel(
-      await courseServiceReadModel(updated, requestTime)
+      await courseServiceReadModel(updated)
     ));
   }
 

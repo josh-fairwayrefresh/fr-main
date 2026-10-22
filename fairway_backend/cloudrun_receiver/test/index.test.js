@@ -591,7 +591,7 @@ test('authenticated CANCEL closes an assigned request without creating a Device 
   assert.strictEqual(commands.empty, true);
 });
 
-test('Course suspension blocks new button requests but preserves active-request actions', async () => {
+test('Course suspension remains OFF after its legacy expiry and preserves active-request actions', async () => {
   const db = new FakeFirestore();
   const requestTime = new Date('2026-10-01T19:00:00.000Z');
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
@@ -620,6 +620,16 @@ test('Course suspension blocks new button requests but preserves active-request 
   }), button);
   assert.strictEqual(button.statusCode, 503);
   assert.strictEqual(button.body.status, 'service_unavailable');
+  const afterLegacyExpiry = createResponse();
+  const laterHandlers = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-03T19:00:00.000Z'),
+    verifyOperatorToken: operatorVerifier(),
+  });
+  await laterHandlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), afterLegacyExpiry);
+  assert.strictEqual(afterLegacyExpiry.statusCode, 503);
   const newRequests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
   assert.strictEqual(newRequests.size, 1);
 
@@ -630,7 +640,32 @@ test('Course suspension blocks new button requests but preserves active-request 
   assert.strictEqual(complete.statusCode, 200);
 });
 
-test('assigned operators can suspend until the next scheduled start and resume service', async () => {
+test('service ON accepts button requests outside the retained legacy schedule', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    service_schedule: { days: [1], start: '09:00', end: '10:00' },
+    service_suspension: null,
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Tony Lema Course',
+  });
+  const handlers = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-03T19:00:00.000Z'),
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const response = createResponse();
+  await handlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), response);
+
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.status, 'accepted');
+});
+
+test('assigned operators can keep service OFF until Resume regardless of schedule or elapsed time', async () => {
   const db = new FakeFirestore();
   const requestTime = new Date('2026-10-01T19:00:00.000Z');
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
@@ -651,7 +686,10 @@ test('assigned operators can suspend until the next scheduled start and resume s
   }), suspend);
   assert.strictEqual(suspend.statusCode, 200);
   assert.strictEqual(suspend.body.service_state.suspended, true);
-  assert.strictEqual(suspend.body.service_state.suspension_until.toISOString(), '2026-10-02T16:00:00.000Z');
+  assert.strictEqual(suspend.body.service_state.active, false);
+  const storedSuspension = await db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001').get();
+  assert.strictEqual(storedSuspension.data().service_suspension.until, undefined);
 
   const resume = createResponse();
   await fairwayButtonReceiver(createRequest({

@@ -29,9 +29,8 @@ function isValidIanaTimezone(timezone) {
  *
  *   course_name                course name
  *   timezone                   IANA timezone name (e.g. "America/Los_Angeles")
- *   service_schedule           { days: [0-6], start: "HH:MM", end: "HH:MM" }
- *                              recurring Course-local beverage-service window
- *   service_suspension         temporary operator suspension or null
+ *   service_schedule           retained legacy configuration; not active control
+ *   service_suspension         persistent operator OFF state or null
  *   comments                   administrator free-text notes
  *   created_at / updated_at    standard metadata
  */
@@ -63,7 +62,7 @@ async function createCourse(db, {
   if (!isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
   }
-  if (!isValidServiceSchedule(serviceSchedule)) {
+  if (serviceSchedule !== undefined && !isValidServiceSchedule(serviceSchedule)) {
     throw new Error('Service schedule requires selected days and a valid start/end window');
   }
   if (comments !== null && typeof comments !== 'string') {
@@ -81,12 +80,12 @@ async function createCourse(db, {
   const courseDoc = {
     course_name: courseName,
     timezone,
-    service_schedule: serviceSchedule,
     service_suspension: null,
     comments,
     created_at: now,
     updated_at: now,
   };
+  if (serviceSchedule !== undefined) courseDoc.service_schedule = serviceSchedule;
 
   await coursesCollection(db, customerId).doc(courseId).set(courseDoc);
 

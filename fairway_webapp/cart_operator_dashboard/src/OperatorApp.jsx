@@ -51,7 +51,7 @@ function Brand() {
 
 function ServiceStatus({ course }) {
   const state = course?.service_state;
-  const label = state?.suspended ? 'Service Suspended' : state?.active ? 'Service Active' : 'Outside Service Hours';
+  const label = state?.active ? 'Service ON' : 'Service OFF';
   return <div className={`op-status ${state?.active ? 'active' : ''}`}><i />{label}</div>;
 }
 
@@ -179,8 +179,8 @@ export default function OperatorApp({
     if (!course) return;
     const action = course.service_state?.suspended ? 'resume' : 'suspend';
     const prompt = action === 'suspend'
-      ? `Suspend new beverage requests for ${course.course_name} until the next scheduled service start? Existing requests remain actionable.`
-      : `Resume beverage requests for ${course.course_name}?`;
+      ? `Turn service OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
+      : `Turn service ON for ${course.course_name} until an operator suspends it?`;
     if (!window.confirm(prompt)) return;
     setPending('service');
     try {

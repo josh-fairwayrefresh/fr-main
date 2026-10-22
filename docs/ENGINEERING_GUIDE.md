@@ -138,22 +138,21 @@ authorization remain separate. Release-specific rollout, observation, stop
 conditions, and compatible recovery are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
 
-### CPO_stats_fix reporting architecture — feature implementation pending CPO review
+### CPO_stats_fix architecture — pending CPO hands-on review
 
-CPO_stats_fix adds reporting over existing operator actions and request
-records. The existing operational service controls and their source of truth
-remain authoritative; reporting observes existing Resume/Suspend actions and
-request timestamps without introducing a second service-state owner or
-changing request eligibility. Keep reporting read-only with respect to
-operational records and isolated from request actions.
+CPO_stats_fix keeps one operational owner for Course service state and
+operator transitions. Resume sets service ON and Suspend sets it OFF; this
+state is independent of schedules and elapsed time. Request eligibility reads
+that same state. Reporting consumes the transition and request records and
+must never be a prerequisite for accepting requests.
 
 The Cart UI presents the reporting capability;
 [the reporting module](../fairway_backend/cloudrun_receiver/lib/service_reporting.js)
-owns the calculations and aggregation over read-only request and existing
-service-event records. The source implementation is in a feature branch and
-is not accepted or deployed. Preserve existing schedules,
-ON/OFF and Suspend/Resume behavior, request actions, permissions, notifications,
-device protocol, firmware, and Course schema. No schedule removal, Course
-conversion, migration, or operational cutover is a prerequisite. The
-[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements)
-is authoritative for current behavior and the detailed reporting requirements.
+owns KPI calculation and period aggregation. The candidate removes Beverage
+Service Schedule from active Admin controls but retains existing stored fields
+for compatibility; it introduces no schedule migration or PR #4 cutover
+machinery. Existing request actions, permissions, notifications, device
+protocol, and firmware remain unchanged. The stable production application
+continues its accepted schedule-driven behavior until a separately authorized
+release. The [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements)
+owns detailed behavior and acceptance requirements.
