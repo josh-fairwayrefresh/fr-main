@@ -32,9 +32,14 @@ test('active time is rounded to the nearest minute for reporting', () => {
   const summaries = summarizeCoursePeriods({ timezone: 'America/Los_Angeles' }, [
     { type: 'resumed', recorded_at: new Date('2026-10-01T18:00:00.000Z') },
     { type: 'suspended', recorded_at: new Date('2026-10-01T18:00:31.000Z') },
-  ], [], new Date('2026-10-01T19:00:00.000Z'));
+  ], [{
+    status: 'completed',
+    received_at: new Date('2026-10-01T18:00:00.000Z'),
+    completed_at: new Date('2026-10-01T18:01:00.000Z'),
+  }], new Date('2026-10-01T19:00:00.000Z'));
 
   assert.strictEqual(summaries.daily.active_cart_hours, 0.02);
+  assert.strictEqual(summaries.daily.requests_per_hour, 60);
 });
 
 test('a started period with no activity reports zero for every KPI', () => {

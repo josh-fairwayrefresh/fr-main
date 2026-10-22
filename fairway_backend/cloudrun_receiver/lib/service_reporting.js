@@ -138,34 +138,48 @@ function totalCompletionDurationMs(requests) {
   return { total, validCount };
 }
 
-function requestsPerHour(completedRequestCount, activeCartHours) {
-  return activeCartHours > 0 ? Number((completedRequestCount / activeCartHours).toFixed(1)) : 0;
-}
-
 function totalActiveSeconds(secondsByDay) {
   return [...secondsByDay.values()].reduce((sum, seconds) => sum + seconds, 0);
 }
 
-function composeSummary({ requests, activeSecondsByDay }) {
-  const completedRequestCount = requests.length;
-  const activeCartSeconds = totalActiveSeconds(activeSecondsByDay);
+function finalizeSummary({
+  completedRequestCount,
+  activeCartSeconds,
+  completionDurationTotalMs,
+  completionDurationCount,
+}) {
   const activeCartMinutes = Math.round(activeCartSeconds / 60);
-  const activeCartHours = Number((activeCartMinutes / 60).toFixed(2));
-  const completionDuration = totalCompletionDurationMs(requests);
+  const activeCartHours = activeCartMinutes / 60;
   const averageCompletionMinutes = completedRequestCount === 0
     ? 0
-    : completionDuration.validCount === completedRequestCount
-      ? Number((completionDuration.total / completedRequestCount / 60000).toFixed(1))
+    : completionDurationCount === completedRequestCount
+      ? Number((completionDurationTotalMs / completedRequestCount / 60000).toFixed(1))
       : null;
+  const requestsPerCartHour = activeCartMinutes > 0
+    ? Number((completedRequestCount / (activeCartMinutes / 60)).toFixed(1))
+    : 0;
   return {
     completed_requests: completedRequestCount,
     active_cart_seconds: activeCartSeconds,
-    active_cart_hours: activeCartHours,
-    requests_per_hour: requestsPerHour(completedRequestCount, activeCartHours),
+    active_cart_minutes: activeCartMinutes,
+    active_cart_hours: Number(activeCartHours.toFixed(2)),
+    requests_per_hour: requestsPerCartHour,
     average_completion_minutes: averageCompletionMinutes,
-    completion_duration_total_ms: completionDuration.total,
-    completion_duration_count: completionDuration.validCount,
+    completion_duration_total_ms: completionDurationTotalMs,
+    completion_duration_count: completionDurationCount,
+    completed_transactions: completedRequestCount,
+    transactions_per_cart_hour: requestsPerCartHour,
   };
+}
+
+function composeSummary({ requests, activeSecondsByDay }) {
+  const completionDuration = totalCompletionDurationMs(requests);
+  return finalizeSummary({
+    completedRequestCount: requests.length,
+    activeCartSeconds: totalActiveSeconds(activeSecondsByDay),
+    completionDurationTotalMs: completionDuration.total,
+    completionDurationCount: completionDuration.validCount,
+  });
 }
 
 function summarizeCoursePeriods(course, events, requests, asOf) {
@@ -187,24 +201,24 @@ function summarizeCoursePeriods(course, events, requests, asOf) {
 function aggregateSummaries(summariesByCourse) {
   return Object.fromEntries(SUMMARY_PERIODS.map((period) => {
     const summaries = summariesByCourse.map((summaries) => summaries[period]);
-    const completedRequests = summaries.reduce((sum, summary) => sum + summary.completed_requests, 0);
-    const activeCartMinutes = Math.round(summaries.reduce((sum, summary) => sum + summary.active_cart_seconds, 0) / 60);
-    const activeCartHours = Number((activeCartMinutes / 60).toFixed(2));
-    const completionDurationTotalMs = summaries.reduce((sum, summary) => sum + summary.completion_duration_total_ms, 0);
-    const completionDurationCount = summaries.reduce((sum, summary) => sum + summary.completion_duration_count, 0);
-    const averageCompletionMinutes = completedRequests === 0
-      ? 0
-      : completionDurationCount === completedRequests
-        ? Number((completionDurationTotalMs / completedRequests / 60000).toFixed(1))
-        : null;
-    return [period, {
-      completed_requests: completedRequests,
-      active_cart_hours: activeCartHours,
-      requests_per_hour: requestsPerHour(completedRequests, activeCartHours),
-      average_completion_minutes: averageCompletionMinutes,
-      completed_transactions: completedRequests,
-      transactions_per_cart_hour: requestsPerHour(completedRequests, activeCartHours),
-    }];
+    const finalized = finalizeSummary({
+      completedRequestCount: summaries.reduce((sum, summary) => sum + summary.completed_requests, 0),
+      activeCartSeconds: summaries.reduce((sum, summary) => sum + summary.active_cart_seconds, 0),
+      completionDurationTotalMs: summaries.reduce(
+        (sum, summary) => sum + summary.completion_duration_total_ms, 0,
+      ),
+      completionDurationCount: summaries.reduce(
+        (sum, summary) => sum + summary.completion_duration_count, 0,
+      ),
+    });
+    const {
+      active_cart_seconds: _activeCartSeconds,
+      active_cart_minutes: _activeCartMinutes,
+      completion_duration_total_ms: _completionDurationTotalMs,
+      completion_duration_count: _completionDurationCount,
+      ...summary
+    } = finalized;
+    return [period, summary];
   }));
 }
 
@@ -212,7 +226,7 @@ module.exports = {
   activeSecondsByLocalDay,
   aggregateSummaries,
   completedRequestsInRange,
+  finalizeSummary,
   periodBounds,
-  requestsPerHour,
   summarizeCoursePeriods,
 };
