@@ -167,90 +167,183 @@ implementation authorization.
 
 ### Sandbox rehearsal package — preparation evidence and release blockers
 
-This section records read-only preparation only. No remote sandbox deployment,
+This section records read-only preparation only. The CPO completed local
+interactive gcloud reauthentication; the inventory below was read from
+`fairway-refresh-sandbox-260930` on 2026-10-21. No remote sandbox deployment,
 Firestore/Auth mutation, Course cutover, notifier deployment, or device
-operation was performed.
+operation was performed. Credential values and device credentials were not
+read into this report.
 
 #### Target identity and exactness
 
-| Surface | Known target / evidence | Status and required confirmation |
+| Surface | Verified target / evidence | Status and consequence |
 | --- | --- | --- |
-| Google Cloud / Firebase project and Hosting site | `fairway-refresh-sandbox-260930` | Confirmed by tracked sandbox config and public Hosting response. |
-| Receiver Cloud Run service / URL | `fairway-button-receiver-sandbox`, `us-central1`, `https://fairway-button-receiver-sandbox-269424081919.us-central1.run.app` | URL is present in the public sandbox bundle. The last deployment record identifies revision `fairway-button-receiver-sandbox-00016-8wn`; current revision, traffic, digest, environment, and invoker configuration could not be re-read. |
-| Admin Cloud Run service / URL | `fairway-admin-sandbox`, `us-central1`, `https://fairway-admin-sandbox-269424081919.us-central1.run.app` | URL is present in the public sandbox bundle. The latest located deployment record identifies revision `fairway-admin-sandbox-00012-zr2`, image digest `sha256:c2978a2777de0c2ab142510c048ced12db6b653b009e072f0ab2a5b4cc60b580`; this is historical, not a verified current target. |
-| Hosting content | `https://fairway-refresh-sandbox-260930.web.app`; public `GET /` returned HTTP 200, `Last-Modified: 2026-10-13T08:55:09Z`; JavaScript `assets/index-g6Pbl5DF.js`, SHA-256 `7716e66f635a8b3df5cb73fba1b5b7d74bb7c94cecc09b58efe76e7cd47970a3` | Confirms the publicly served artifact is the prior October 13 bundle, not this feature source. Current Firebase release/version identity and rollback target were not available through authorized CLI inspection. |
-| Frontend deployment config | `fairway_webapp/cart_operator_dashboard/firebase.sandbox.json` targets Hosting site `fairway-refresh-sandbox-260930`; the served bundle points to the sandbox Receiver/Admin URLs above. | Local `.env.sandbox` is absent. Local builds must use synthetic sandbox-prefixed configuration; deployment must use the separately authorized, verified sandbox configuration, never production values. |
-| Backend gate | `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE` controls explicit cutover and v2 behavior. | Live values for both services are unknown. Do not deploy or cut over until current environment, revision traffic, and the closed/open gate are read back. |
-| Reviewed source / candidate artifacts | Lead Architect review passed at `8d5a8e137c38196dd446e49b54b84db3bb0a74fa`; this follow-up adds source changes and will publish a new SHA. | Build from the final reviewed SHA. No receiver/Admin image for that SHA or final Hosting artifact has yet been produced or deployed. Record immutable image digests and built Hosting asset hashes before execution; a source SHA is not an artifact identity. |
-| Local synthetic frontend validation artifact | `assets/index-DhCunsN5.js`, SHA-256 `1e33dfe9f803b840f42dea873edb427fc79e874a3553fe25c827c74e21101dcc`; `assets/index-BsxGzwPt.css`, SHA-256 `7d4a3d250b6ec84eb34dc692f34f9ea3394f4deb3a88afdb3c557fe6256c6111` | Built locally with synthetic project `fairway-refresh-sandbox-local`; these hashes validate the current source build only and are not a deployable `fairway-refresh-sandbox-260930` artifact identity. |
-| Recovery | The source procedure requires a v2-compatible backend after any v2 Course data exists; Hosting-only recovery does not restore backend/data compatibility. | Exact current Cloud Run and Hosting recovery revisions/versions remain unverified. Release is blocked until a compatible backend recovery artifact and retained Hosting version are identified and tested. |
+| Google Cloud / Firebase project and Hosting site | Project and site `fairway-refresh-sandbox-260930`; Cloud Run region `us-central1`. | Exact project is confirmed. All queries were read-only and project-scoped. |
+| Receiver Cloud Run | Service `fairway-button-receiver-sandbox`; serving revision `fairway-button-receiver-sandbox-00016-8wn`; image `us-central1-docker.pkg.dev/fairway-refresh-sandbox-260930/cloud-run-source-deploy/fairway-button-receiver-sandbox@sha256:f15bb3706795e56cf5e96a39fba5851c5440adbd0f906e2090809cca96f080ca`; 100% traffic; Ready; revision created `2026-10-13T04:45:57Z`. Canonical service URL `https://fairway-button-receiver-sandbox-nrnjihmmxq-uc.a.run.app`; legacy alias `https://fairway-button-receiver-sandbox-269424081919.us-central1.run.app`. | This is an older revision, not PR #4 source. No traffic-tagged revision path was found among 16 revisions. Both URLs reach the application. |
+| Admin Cloud Run | Service `fairway-admin-sandbox`; serving revision `fairway-admin-sandbox-00012-zr2`; image `us-central1-docker.pkg.dev/fairway-refresh-sandbox-260930/cloud-run-source-deploy/fairway-admin-sandbox@sha256:c2978a2777de0c2ab142510c048ced12db6b653b009e072f0ab2a5b4cc60b580`; 100% traffic; Ready; revision created `2026-10-13T08:54:23Z`. Canonical service URL `https://fairway-admin-sandbox-nrnjihmmxq-uc.a.run.app`; legacy alias `https://fairway-admin-sandbox-269424081919.us-central1.run.app`. | This is an older revision, not PR #4 source. No traffic-tagged revision path was found among 12 revisions. Both URLs reach the application. |
+| Runtime identity and invocation | Both services run as `fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com`; project grants observed for that identity are `roles/datastore.user` and `roles/firebaseauth.admin`. Both services have ingress `all` and `run.googleapis.com/invoker-iam-disabled=true`; service/project IAM policies contain no `allUsers` or `allAuthenticatedUsers` member. Unauthenticated GETs reached the application (Receiver `/` returned 405; Admin `/` returned 404). | Network invocation is public; Admin/API authorization must be enforced by application-level authentication and authorization. Reconfirm this boundary and test unauthorized Admin operations before release. No per-revision tagged URLs exist in current traffic. |
+| Runtime configuration and gate | Both revisions set `FAIRWAY_ENV=sandbox`, `FAIRWAY_GCP_PROJECT=fairway-refresh-sandbox-260930`, and `GOOGLE_CLOUD_PROJECT=fairway-refresh-sandbox-260930`. Receiver also has VAPID public-key/version variables (values withheld); Admin has `FAIRWAY_SERVICE_MODE=admin` and allowed origin `https://fairway-refresh-sandbox-260930.web.app`. `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE` is absent from both service configurations. | The deployed images predate this PR and do not provide the v2 capability. Candidate source treats an unset gate as false; the live gate is therefore not an enabled feature gate. Do not infer a v2 cutover endpoint or state from these legacy revisions. |
+| Hosting current release/version | Site `https://fairway-refresh-sandbox-260930.web.app`; latest release `sites/fairway-refresh-sandbox-260930/releases/1791881709368000` at `2026-10-13T08:55:09.368Z`; finalized version `sites/fairway-refresh-sandbox-260930/versions/d2f9f8000f8ef0e7`. Public `/` returns 200 with `Last-Modified: Tue, 13 Oct 2026 08:55:09 GMT`. Served `assets/index-g6Pbl5DF.js` SHA-256 is `7716e66f635a8b3df5cb73fba1b5b7d74bb7c94cecc09b58efe76e7cd47970a3`; the bundle contains legacy schedule controls and points at the sandbox service aliases above. | Verified as legacy Hosting, not the PR #4 frontend. Firebase Hosting REST release/version metadata was read using the sandbox quota-project header; no CLI or credential changes were needed. |
+| Hosting predecessor | Immediately preceding release `sites/fairway-refresh-sandbox-260930/releases/1791878595128000` at `2026-10-13T08:03:15.128Z`; finalized version `sites/fairway-refresh-sandbox-260930/versions/4b533bf8eb15052c`, with no `deleteTime`. Its main bundle is `assets/index-KSHg7kba.js`. | It is retained and appears available for re-release, but re-release was not exercised. It is a proposed pre-cutover Hosting rollback only; it is not a compatible post-cutover fallback because it predates service-state controls and does not support v2 operations. |
+| Frontend build configuration | Tracked `fairway_webapp/cart_operator_dashboard/firebase.sandbox.json` targets the exact Hosting site above. Public Firebase config reports project `fairway-refresh-sandbox-260930`, auth domain `fairway-refresh-sandbox-260930.firebaseapp.com`, storage bucket `fairway-refresh-sandbox-260930.firebasestorage.app`, sender ID `269424081919`, and app ID `1:269424081919:web:0e670cd6355be039f005ca`. Candidate build requires `VITE_FAIRWAY_ENV=sandbox`, the matching `VITE_FIREBASE_*` values, `VITE_API_BASE_URL`, and `VITE_ADMIN_API_BASE_URL`; use the canonical Cloud Run service URLs above. | `.env.sandbox` is absent; `.env.sandbox.example` contains placeholders. Keep the Firebase API key and any credentials out of documentation, commits, logs, and this report. Materialize any local build config only from the verified sandbox web-app config and keep it untracked. |
+| Reviewed source and candidate artifacts | Requested reviewed source is `0bc0645338c399e6f54ea1d808f329c3ff195347`. Existing local synthetic-config artifacts are `assets/index-DhCunsN5.js` (SHA-256 `1e33dfe9f803b840f42dea873edb427fc79e874a3553fe25c827c74e21101dcc`) and `assets/index-BsxGzwPt.css` (SHA-256 `7d4a3d250b6ec84eb34dc692f34f9ea3394f4deb3a88afdb3c557fe6256c6111`). | Local output uses `fairway-refresh-sandbox-local`, not the remote Firebase app config. No PR #4 Receiver/Admin image or Hosting version exists yet. Build and record exact artifacts from the reviewed SHA before any approved deployment. |
+| Recovery | The immediately prior Cloud Run revisions and Hosting version are legacy-only. No deployed or staged v2-compatible backend/Hosting recovery pair exists. | Before the first synthetic Course cutover, create and retain v2-compatible backend recovery revisions from the exact approved image digests and retain the finalized v2 Hosting version. After an approved synthetic canary cutover, test the traffic failback and Hosting re-release against v2 state before any broader Course cutover. Keep legacy revisions/Hosting only for pre-cutover recovery. After cutover, never route to the legacy backend or treat the prior legacy page as full recovery; a defect in the reviewed code requires a reviewed forward fix. This recovery-artifact gate remains open. |
 
-The read-only Cloud Run listing for this exact sandbox project could not run:
-the local gcloud credentials require interactive reauthentication, which is
-not authorized by this task. The installed gcloud has no Firebase Hosting
-command group, and no Firebase CLI is installed. No other project was queried.
-Do not substitute historical revision records for fresh Cloud Run traffic,
-gate, IAM, configuration, Firestore, Authentication, or Hosting release
-evidence. Re-establish approved read-only access before deployment
-authorization; do not change credentials or IAM as a workaround.
+The read-only inventory confirms exact current revisions, digests, traffic,
+runtime identities, invocation configuration, gate environment, Hosting
+release/version IDs, and accessible Firestore fixture metadata. The Firebase
+Hosting command group and Firebase CLI are not installed, but the read-only
+Firebase Hosting REST API provided release/version evidence. No production
+project or resource was queried.
 
-#### Synthetic fixture boundary
+#### Synthetic fixture inventory and suitability
 
 The local Firestore-emulator harness creates only unique synthetic records:
 customer `test_svc_<runId>`, course `course_<runId>`, devices
 `first_<runId>` / `second_<runId>` / `inconsistent_<runId>`, and synthetic
 operator UID `operator_<runId>`. These are local emulator identities, not
-remote sandbox fixtures or accounts. The sandbox documentation records an
-existing authorized global Admin but no account UID, synthetic Course/device
-IDs, or disposable device credential. Remote fixture existence and exact
-identities remain unverified. The eventual rehearsal must use an explicitly
-approved sandbox Admin and a clearly synthetic, isolated customer/Course/device
-set; do not guess identities, repurpose a real course/device, create accounts,
-or expose credentials in logs or this document.
+remote sandbox fixtures or accounts.
+
+Read-only Firestore inventory found three Customers, one root Device, four
+`user_access` records, and these relevant relationships:
+
+- `CUST-0001` and `CUST-0001/COURSE-0001` carry synthetic markers, but
+  `COURSE-0001` has neither legacy `service_schedule` nor
+  `service_suspension`. Device `FRB-0002` is assigned to it and the provisioning
+  owner records FRB-0002 as field-tested hardware. Do not cut over this Course,
+  reassign this Device, or operate it for the rehearsal.
+- `CUST-0003/COURSE-0002` has legacy schedule/suspension fields, but its
+  records are not marked synthetic. The two synthetic-marked customer-staff
+  access records and one other enabled customer-staff record all point to
+  `CUST-0003/COURSE-0002`. Do not use that Course or its operators as synthetic
+  fixtures. This is a concrete identity/scope mismatch, not authorization to
+  alter the existing records.
+- One enabled synthetic-marked global Admin access record exists. Its Firebase
+  Authentication identity and an approved login were not independently
+  confirmed. The user-access records alone do not prove a usable login.
+- No isolated synthetic Device exists. The only Device found is the
+  field-tested `FRB-0002`; its credential field was not requested or inspected.
+
+There is therefore no complete, safe remote fixture set. Before rollout,
+request explicit approval to create a dedicated run-labeled synthetic Customer
+and two isolated Courses through the currently deployed legacy Admin workflow:
+one with an effective ON schedule at the planned cutover instant and one
+effective OFF, both in `America/Los_Angeles`. Create them before deploying the
+new backend because current PR #4 Course creation writes schema v2 even with
+the gate closed, and updated Admin rejects schedule submissions. Confirm each
+Course and effective state by authenticated read-only preflight before either
+cutover. Do not create them by direct Firestore writes.
+
+Use the existing global Admin only after its Authentication account is
+confirmed by the CPO. Use an explicitly approved synthetic operator
+Authentication account, or request separate approval to create one through
+the project's authorized identity workflow; then assign it only to the new
+Customer/Courses through the Admin User Management interface. That interface
+manages existing Authentication users and does not create identities.
+
+Request approval to provision two new inventory Devices through the existing
+Admin `Provision Device` workflow with no physical SIM, assign one synthetic
+Device to each Course through normal Admin lifecycle/assignment actions, and
+keep each one-time credential only in an approved ephemeral test secret
+channel. The protocol harness may use those synthetic credentials; never print,
+commit, persist in ordinary logs, or include them in this guide. No physical
+device, firmware, SIM, or marker operation is part of this proposal.
+
+#### Remote mutation approval scope
+
+The following are proposed actions only; none is authorized or performed by
+this documentation task:
+
+1. Create the run-labeled synthetic Customer and two legacy-schedule Courses
+   before backend rollout; create/enable a synthetic operator Authentication
+   account only if no approved account is supplied; assign its access only to
+   the synthetic Customer/Courses.
+2. Provision and assign the two synthetic Devices, issuing synthetic
+   credentials for protocol tests. No physical SIM is used.
+3. Publish Receiver/Admin images and revisions to the two named Cloud Run
+   services; change traffic/routing to fence and drain legacy revisions and
+   direct write paths; publish the reviewed frontend to the named Hosting
+   site. Any ingress, invoker, IAM, or runtime-identity change requires
+   separate explicit approval and must not be used as a workaround.
+4. Change `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE` from false to true only after
+   fencing and client publication are verified; perform the authenticated
+   per-Course cutovers only after the exact preflight, target, and operator
+   approval are recorded.
+5. No cleanup is proposed or authorized. Preserve Course migration evidence,
+   intervals, events, receipts, and all pre-existing records. Any later
+   cleanup must be separately approved and limited to inventoried records
+   created by this unique run; do not rerun the completed Pilot cleanup.
 
 No sandbox notifier/VAPID delivery deployment exists. Backend request
 acceptance and notification-dispatch decisions can be checked with synthetic
 protocol evidence, but actual push delivery, delivery-time entitlement/
 preference filtering, and phone receipt are not covered. Automated protocol
 checks cannot establish physical LED observation. No physical marker operation
-is included or authorized.
+is included or authorized. Receiver VAPID public-key/version configuration is
+present, but this does not establish a deployed notifier or successful push
+delivery.
 
 #### Proposed rehearsal after separate deployment authorization
 
-1. From the exact final reviewed SHA, validate backend tests, frontend tests,
-   emulator tests, sandbox-config frontend build, artifact hashes, endpoint
-   origins, and absence of production configuration. Record image digests for
-   separately built Receiver and Admin images. Use the two existing service
-   names above only after a fresh read confirms project, region, current
-   revisions, image digests, traffic, invoker/ingress, runtime account, and
-   all configuration names/values needed for safe operation. Never print
-   credential values.
-2. Deploy compatible Receiver and Admin revisions with
-   `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE=false`. Verify both exact serving
-   revisions and gate state. Confirm legacy requests and existing COMPLETE/
-   Cancel continue and the Admin preflight/cutover path is closed.
-3. Fence and drain all old Receiver/Admin revisions and all direct legacy
-   service writers. Verify no old revision or path can accept requests,
-   change schedule/suspension state, or bypass the gate. Stop if direct
-   revision URLs, traffic, invoker settings, or write paths cannot be
-   conclusively fenced. Keep the gate closed.
-4. Publish the matching Hosting artifact to the same sandbox site. Verify its
-   content hash, environment-bound API URLs, `/`, `/admin`, and refresh/PWA
-   behavior. Communicate the operator refresh path. Do not clear unrelated
-   browser data.
-5. Enable the gate on both verified backend services only after fencing
-   evidence is recorded. Verify old Admin schedule submissions are rejected
-   explicitly and stale Operator service mutations require an updated client.
-   Existing COMPLETE/Cancel remain available, subject to prior-day COMPLETE
-   rejection.
-6. Using the authenticated Admin cutover UI, target only the named synthetic
-   customer/Course. Read and retain preflight result; confirm target names and
-   IDs; type the exact Course ID; execute once. Verify the result against the
-   backend state and migration event/interval. If the response is lost, retry
-   only the same target and inspect the `already_initialized` result. Do not
-   invoke direct Firestore writes. A later additional Course requires a
-   separately recorded explicit target/preflight/result.
-7. Using only the synthetic device fixture and approved test path, validate:
+1. After written sandbox mutation approval, create the dedicated run-labeled
+   Customer and two legacy-schedule Courses using the currently deployed
+   Admin UI, before replacing its backend or Hosting client. Create/confirm the
+   approved operator Authentication account and assign access only to these
+   Courses. Provision and assign two synthetic Devices through Admin. Do not
+   use `CUST-0001/COURSE-0001`, `CUST-0003/COURSE-0002`, their existing users,
+   or `FRB-0002`. Never use direct Firestore writes.
+2. From reviewed SHA `0bc0645338c399e6f54ea1d808f329c3ff195347`, reuse the
+   already recorded passing source suites without rerunning unchanged tests.
+   Produce the exact sandbox-config frontend and separate Receiver/Admin
+   images. Verify Firebase project, site, endpoint URLs, and absence of
+   production configuration. Record each immutable asset hash and image
+   digest; do not publish secrets in logs or release notes.
+3. Deploy the compatible Receiver and Admin revisions to the two named
+   services with `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE=false`. Confirm the exact
+   revision, digest, runtime identity, gate, service-level invocation policy,
+   and 100% traffic target. Verify the legacy request contract, COMPLETE/
+   Cancel, and closed cutover behavior.
+4. Fence and drain all prior Receiver/Admin revisions and legacy write paths.
+   Confirm no prior revision receives traffic and no revision-tagged/direct
+   path bypasses the serving revision. Both services currently have public
+   network ingress and Cloud Run invoker IAM disabled, so application-level
+   authorization must be verified separately. Stop if an old revision, direct
+   writer, or authorization path cannot be conclusively fenced.
+5. Publish the matching frontend to Hosting site
+   `fairway-refresh-sandbox-260930`. Verify the new release/version, content
+   hashes, Firebase project binding, canonical service URLs, `/`, `/admin`,
+   authenticated Admin operations, and PWA refresh behavior. Communicate the
+   operator refresh path; do not clear unrelated browser data.
+6. Before opening the gate, retain the exact PR #4 Receiver/Admin image
+   digests and finalized v2 Hosting version. Create an additional
+   zero-traffic revision for each backend service from the same immutable
+   v2-compatible image/configuration. Verify its exact digest, configuration,
+   zero-traffic status, and absence of a direct unauthenticated tag. Exercise
+   actual failback through service traffic only after the synthetic canary
+   migration below. This is a deployment/configuration recovery target, not
+   an independent code fallback; a code defect requires a reviewed forward
+   fix. The legacy revisions and prior Hosting version are pre-cutover
+   recovery only.
+7. Set `FAIRWAY_SERVICE_CONTROL_V2_ACTIVE=true` only after fencing,
+   publication, and the staged recovery revisions are verified. Verify cached Admin
+   schedule submissions receive the explicit removal response and stale
+   Operator service mutations require an updated client. Existing COMPLETE/
+   Cancel remain available, subject to prior-day COMPLETE rejection.
+8. Using the authenticated Admin cutover UI, preflight the exact synthetic ON
+   Course, compare the target identity and expected effective legacy state,
+   obtain recorded operator approval, type the exact Course ID, and cut over
+   this one canary Course. Verify authoritative state, generation, migration
+   event, and interval. If the response is lost, retry only the same target and
+   verify the `already_initialized` result. Do not invoke direct Firestore
+   writes.
+9. With only this synthetic v2 Course migrated, perform the approved traffic
+   failback to the staged v2-compatible Receiver/Admin revisions and restore
+   the intended serving revisions. Re-publish the retained v2 Hosting version.
+   Verify course state, generation, intervals, receipts, requests, and existing
+   actions remain consistent. Stop on any mismatch. Only after this recovery
+   evidence passes, preflight and cut over the synthetic OFF Course, then run
+   the remaining protocol checks.
+10. Using only the approved synthetic Device protocol harness, validate:
    ON → button protocol → exactly one accepted request; OFF → rejected
    protocol and no new request or notification-dispatch record; Resume and
    persistent Suspend across reload/time boundary; same-day COMPLETE and
@@ -261,7 +354,7 @@ is included or authorized.
    Verify request, interval, event, receipt, and coverage totals only for the
    isolated test Course. A reporting-outage injection that would affect shared
    sandbox traffic is not acceptable.
-8. Record automated server/protocol results separately from any future
+11. Record automated server/protocol results separately from any future
    physical indicator observation. Push-delivery checks are blocked until an
    authorized sandbox notifier/VAPID deployment exists. Stop on unexpected
    Course changes, mismatched target identity, a non-closed gate before
@@ -269,11 +362,11 @@ is included or authorized.
    cross-Course access, unavailable COMPLETE/Cancel, misleading coverage,
    or an unverified compatible recovery target.
 
-No cleanup is authorized here. After a separately authorized rehearsal,
-cleanup may address only records created by its unique synthetic run, after
-inventory and owner approval; do not delete migration/audit evidence through
-direct writes, touch shared/production data, or rerun the completed Pilot
-cleanup.
+No cleanup is authorized here. No cleanup is proposed in the execution
+package. Preserve Course migration evidence, intervals, events, and receipts.
+Any later cleanup requires separate authorization and an inventory limited to
+this unique run; do not delete authoritative service evidence through direct
+writes, touch shared/production data, or rerun the completed Pilot cleanup.
 
 The local emulator suite uses a distinct synthetic Firestore demo project and
 unique test records (no database-wide cleanup). The approved invocation is:

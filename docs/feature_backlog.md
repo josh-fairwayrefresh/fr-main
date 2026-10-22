@@ -10,7 +10,7 @@ change.
 | Item | Status / boundary |
 |---|---|
 | Cart Operator mobile acceptance | The responsive-layout release is live. Complete authenticated physical-phone/Safari checks at representative small and large phone widths and obtain CPO acceptance. Do not infer acceptance from build checks or unauthenticated route smoke tests. Preserve the accepted iPad and desktop experience. |
-| Operator Service Control and Authoritative Intervals | Lead Architect corrections are implemented on the feature branch; the backend/frontend suites, synthetic-config sandbox build, and isolated Firestore emulator validation pass. Independent review and CPO acceptance remain pending; no remote sandbox or production deployment/cutover has occurred. The authenticated per-Course cutover tooling and remote sandbox validation gaps remain open. Follow the [UX owner](UX_SPECIFICATION.md#approved-operator-service-control-and-intervals--source-implemented-rollout-pending), [architecture owner](ENGINEERING_GUIDE.md#operator-service-control-and-authoritative-intervals), and [release procedure](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery). Production rollout requires separate authorization. |
+| Operator Service Control and Authoritative Intervals | Lead Architect corrections and authenticated per-Course cutover tooling are implemented on the feature branch; previously recorded backend/frontend suites, synthetic-config build, and isolated Firestore emulator validation passed. Source review and CPO acceptance of the latest SHA remain pending; no remote deployment or cutover has occurred. Read-only sandbox inventory now confirms current Cloud Run/Hosting identities and revisions, but no complete safe synthetic fixture set or post-cutover v2-compatible recovery pair exists. Both Cloud Run services allow public network invocation and rely on application-level authorization; this must be verified during the authorized rehearsal. Follow the [UX owner](UX_SPECIFICATION.md#approved-operator-service-control-and-intervals--source-implemented-rollout-pending), [architecture owner](ENGINEERING_GUIDE.md#operator-service-control-and-authoritative-intervals), and [release procedure](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery). Sandbox mutation/deployment and production rollout require separate authorization. |
 | Repeat-press transport and persistence | Firmware-local repeat behavior exists; transporting repeat events and persisting `repeat_press_count`/`last_repeat_press_at` against the originating accepted request is deferred. Keep one authoritative service request per demand window. |
 | Production signing and artifact provenance | Open security/release concern, not unfinished pilot recovery. Synthetic tests and separately authorized completed recoveries used NCS's insecure debug key. Establish approved signing, installed trust-anchor compatibility, and exact artifact provenance before future release promotion; completed one-time exceptions are not standing permission. See [details](#signing-and-provenance). |
 | Orphaned user-access cleanup | Nonblocking post-pilot maintenance. Provide an explicit, auditable administrator-controlled way to review and remove an Auth-orphaned `user_access/{uid}` record without affecting valid users. |
@@ -68,14 +68,18 @@ acceptance/release claim, not a newly asserted whole-product shutdown.
   backend-owned cutover endpoint with a read-only preflight, explicit Course
   confirmation, target validation, and idempotent retry behavior. Local
   validation does not establish remote deployment or cutover behavior.
-- **Release boundary:** No remote sandbox deployment, production inspection,
-  production migration, or production rollout is authorized or claimed.
-  Follow the ordered fencing, activation, per-Course cutover, operator refresh,
-  and recovery sequence in the [Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery).
-  Read-only sandbox preparation found the prior Hosting artifact still served;
-  current Cloud Run revision/gate inspection was blocked by expired local
-  gcloud authentication, and remote synthetic account/Course/device identities
-  remain unverified. No credential or IAM change was attempted.
+- **Release boundary:** No remote sandbox deployment, fixture mutation,
+  production inspection, production migration, or production rollout is
+  authorized or claimed. Read-only inventory after local reauthentication
+  verified the current Cloud Run revisions/digests/traffic, invocation
+  settings, backend gate configuration, Hosting release/predecessor, and
+  Firestore fixture relationships. Existing synthetic-marked access records
+  map to a non-synthetic Course; the synthetic-marked Course is assigned to
+  field-tested FRB-0002. Neither is suitable. No v2-compatible deployed
+  recovery pair exists. Follow the bounded fixture, fencing, activation,
+  per-Course cutover, refresh, and recovery proposal in the
+  [Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery).
+  Do not change credentials or IAM as a workaround.
 
 ### Reporting integration and deferred history work
 
