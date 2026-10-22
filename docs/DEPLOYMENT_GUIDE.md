@@ -37,7 +37,7 @@ assuming accepted source was deployed.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
-| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix has a separate source implementation in a feature branch pending CPO review; it is not accepted or deployed. The candidate changes operator service control to persistent Resume/Suspend state while preserving request, notification, authorization, device-protocol, and firmware contracts. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
+| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix has a separate source implementation published only to the sandbox for CPO review; it is not accepted or production-deployed. The candidate changes operator service control to persistent Resume/Suspend state while preserving request, notification, authorization, device-protocol, and firmware contracts. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
 | Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
 | Hosting | The Alignment Register records production Hosting version `995c6b063a9af3c5`, release `1792037695879000`, and assets `index-B_OqSsPI.js` (SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`) / `index-CSksNdOy.css` (SHA-256 `6557df96a561960ec6ee7100aa484c3c85b4b7f1e16bc9d25d20c99f98cba6a0`). The October 17 check returned 403 for Hosting management, so present version availability was not established; no new cloud inspection was performed. The custom-location correction was not shown deployed by that evidence. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
@@ -80,12 +80,64 @@ authorized by the increment; a production release must have a separately
 reviewed recovery decision and must not be described as behavior-preserving
 rollback to the stable release.
 
-The proposed sandbox Course records originated in rejected PR #4. Before
-publication, verify their stored Course state and transition-event shapes
-read-only against this candidate's existing `service_suspension` and
-`service_events` contract. Authentication or a successful UI session does not
-establish record compatibility. Stop if the fields or prior events are
-incompatible; do not convert or repair them under this increment.
+### CPO_stats_fix sandbox review publication — 2026-10-22
+
+The CPO review application is published only in project
+`fairway-refresh-sandbox-260930` at
+https://fairway-refresh-sandbox-260930.web.app. The reviewed source is
+`270587c0988e10fd4a3bdd8bbd07b9d66c8b093a`. Hosting live version
+`e9b005a1eba692b4` (release `1792702082090000`, finalized
+`2026-10-22T20:48:02.380884Z`) serves asset `index-Bw9Jycl8.js`, SHA-256
+`5a2819d123d8db858803a7fc6fdca754a52558f883a679e5960a93e85c6d972f`.
+The served asset hash matches the reviewed local build. The bundle's active
+Firebase project and Receiver/Admin endpoints target this sandbox; the
+production project identifier is also present as an environment-guard
+constant, but the active runtime configuration targets the sandbox.
+
+The bundle is configured for Firebase project
+`fairway-refresh-sandbox-260930`, Receiver
+`https://fairway-button-receiver-sandbox-269424081919.us-central1.run.app`,
+and Admin
+`https://fairway-admin-sandbox-269424081919.us-central1.run.app`.
+Receiver revision `fairway-button-receiver-sandbox-00020-trp` is Ready and
+serves 100% of sandbox Receiver traffic. Its image digest is
+`sha256:08b8a70e47b00085125268a7a6c0199abb9b3c0da11b9e98d8c8ff6547e1be6d`.
+The existing sandbox service account was retained. No Admin backend
+deployment was made. The reporting composite index on
+`customer_id`, `course_id`, and `completed_at` is READY as
+`CICAgJim14AK`.
+
+The following frontend routes returned HTTP 200 with
+`Cache-Control: max-age=3600`: `/`, `/admin`, `/index.html`,
+`/manifest.webmanifest`, and `/sw.js`. Authenticated browser review confirmed
+the Cart Operator dashboard renders at the two approved Course links:
+
+- `/?customer_id=CUST-0004&course_id=COURSE-0003`
+- `/?customer_id=CUST-0004&course_id=COURSE-0004`
+
+Use the existing authorized sandbox operator account and select the indicated
+Course; no account or credential was created. The browser displayed Service ON
+for both Courses after preparation. Course 4's stored display name still
+contains “Service OFF,” so rely on the current in-app status rather than that
+legacy name.
+
+The CPO authorized resetting only the PR #4 synthetic service data for these
+two Courses after compatibility inspection found it did not match the
+candidate contract. Sixteen service-state/event documents under Course 3 and
+one under Course 4 were removed; rejected service schema/status fields were
+cleared and `service_suspension` was initialized to `null`. No rejected schema
+was migrated or reconciled. No other sandbox records were reset or modified by
+this data-preparation operation. Course 3 currently has one completed and one
+cancelled request and no open request; Course 4 has no requests. No request
+was generated for this review, so COMPLETE/Cancel actions are not currently
+available. The browser
+reports notification permission blocked; push notification delivery has not
+been verified.
+
+No tests, simulated requests, or device actions were run. Production and
+Monarch were not accessed or changed. The build was used to prepare the review
+application; its chunk-size warning remains a build warning, not a test
+result.
 
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
@@ -2614,7 +2666,7 @@ Collection schema is owned by the backend implementation.
 Indexes:
 
 - `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` defines the deployed `requests` composite index required by demand-window-aware duplicate suppression (`device_id`, `status`, and `demand_window_expires_at`).
-- The CPO_stats_fix branch adds a `requests` composite index on `customer_id`, `course_id`, and `completed_at` for the bounded course-local reporting query. Before any authorized backend deployment of that source, verify the index is `READY` in the target environment. If absent, publish only that index from `fairway_webapp/cart_operator_dashboard/` with `npx firebase-tools deploy --config firebase.json --only firestore:indexes --project fairway-refresh-sandbox-260930 --non-interactive`, then wait for `READY`. This is an additive query index only; it does not migrate or modify records. The index has not been deployed or verified in any environment for this increment.
+- The CPO_stats_fix branch adds a `requests` composite index on `customer_id`, `course_id`, and `completed_at` for the bounded course-local reporting query. It is deployed and READY in the CPO review sandbox as index `CICAgJim14AK` in `fairway-refresh-sandbox-260930`. This is an additive query index only; it does not migrate or modify records. Verify READY in any separately authorized target environment before deployment.
 
 ---
 

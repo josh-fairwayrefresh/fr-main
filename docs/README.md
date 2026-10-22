@@ -30,8 +30,9 @@ Use the Deployment Guide's latest-known alignment summary for dated runtime
 evidence; older release records are historical, not competing current states
 or standing authorizations. The CPO_stats_fix reporting scope is the successor
 to the rejected combined service-control/reporting approach. Its source
-implementation is in a feature branch pending CPO review; it is not accepted or
-deployed. The CPO has clarified that the candidate's Resume/Suspend state is
+implementation is in a feature branch and is published only to the sandbox
+for CPO review; it is not accepted or production-deployed. The CPO has
+clarified that the candidate's Resume/Suspend state is
 persistent and schedule-independent, and that schedule controls leave the
 active Admin UI while stored fields remain intact. The stable production
 application still has its accepted schedule-driven behavior until a separately
