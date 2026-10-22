@@ -30,21 +30,22 @@ recoveries and one-time exceptions must not be repeated from this history.
 
 ## Latest-known alignment — not a live-status claim
 
-This October 21 documentation reconciliation reuses established evidence only;
-it performs no new production/device inspection. Resolve apparently competing
-revisions by service and evidence date, not by selecting an older "stable"
-label or assuming accepted source was deployed.
+This table combines the October 21 documentary reconciliation with the
+narrowly scoped read-only production inspection performed on 2026-10-22 for
+PR #4 rollback planning. It is not authorization for production mutation.
+Resolve apparently competing revisions by service and evidence date, not by
+selecting an older "stable" label or assuming accepted source was deployed.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
 | Accepted repository baseline | `11feb67696e69e504592908a8ffafcdcb7271bd0`, the October 21 documentation merge; the opening-weekend service/reporting targets remain unimplemented. |
-| Production Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. No production reinspection or mutation occurred for the sandbox rehearsal. |
-| Production Hosting | October 17 inspection: `index-B_OqSsPI.js`, predating the accepted custom-location correction. That correction is source-validated, not shown deployed. Exact Hosting version was unavailable (403). |
+| Production Receiver / Admin | Read-only recheck on October 22: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`, both Ready at 100% traffic. Image digests remain `sha256:556427bdc2cc428072caa73b6376211d9184049829901c11bfe9eb82b556867f` / `sha256:36a2146248fc485cf55906db09f9a161db5bf0a27ca4090a615cbcd296a8e5e8`. No production mutation occurred. |
+| Production Hosting | The live app still serves `index-B_OqSsPI.js`, SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`, built from baseline `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38`; `/` returned 200 and `Last-Modified: Thu, 15 Oct 2026 04:14:56 GMT`. The Hosting API did not enumerate a release/version for the assumed site ID, so the immutable production Hosting version needed for a no-rebuild rollback is not yet verified. |
 | Sandbox Operator Service Control | On October 22, the PR #4 Receiver/Admin revisions `fairway-button-receiver-sandbox-00019-bdd` / `fairway-admin-sandbox-00015-jl8` and Hosting version `a07e3bcc50eb534f` were serving in `fairway-refresh-sandbox-260930`. Both service gates were verified true. The synthetic-only rehearsal and remaining gaps are recorded below. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
 | Firmware / commissioning | Per-device recovery manifests and execution records establish artifacts, not inconsistent registry `firmware_generation` labels. FRB-0001 through FRB-0005 physical validation complete; FRB-0006 reliability acceptance pending. One-time debug-key recoveries do not resolve production signing. |
 | Field power | V25/V50/V75 VBUS architecture supersedes external 6106/5580/LiPo. Current field-idle consumption and autonomy are not measured; solar sufficiency is an operating assumption. |
-| Cleanup | October 20 permanent deletion and October 21 CPO acceptance complete; official pilot history from the protected cutoff retained. No rerun. |
+| Cleanup | October 20 permanent deletion and October 21 CPO acceptance complete. Preserve all existing Monarch deployment records and data; no cleanup rerun or retrospective rewrite. |
 
 ## Field-safe release readiness
 
@@ -72,8 +73,9 @@ deployment, credentials, device operations, or production-data changes.
 The ordered procedure below remains the release procedure for production or
 another separately authorized environment. The authorized sandbox deployment
 and rehearsal completed on 2026-10-22; its exact evidence and remaining limits
-are recorded in the dated execution section below. No production inspection,
-deployment, activation, or Course cutover is claimed.
+are recorded in the dated execution section below. Production was inspected
+read-only for this rollback plan; no production deployment, activation, or
+Course cutover is claimed.
 
 ### Ordered release and per-Course cutover
 
@@ -114,8 +116,11 @@ deployment, activation, or Course cutover is claimed.
    interface. The transaction samples its effective legacy on/off state and
    atomically writes the schema-v2 state, coverage start, migration evidence,
    and—only for an active Course—a clearly labeled migration-baseline
-   interval. It removes legacy schedule/suspension fields. Reads and requests
-   do not perform migration. Before an individual Course is cut over, the
+   interval. Current branch code also deletes the legacy schedule/suspension;
+   the rollback-safe correction must retain those fields unchanged. Do not
+   start production cutovers before the stable-source fallback and reverse
+   projection have passed the sandbox proof below. Reads and requests do not
+   perform migration. Before an individual Course is cut over, the
    fenced new backend retains its legacy schedule as read-only request
    eligibility; that eligibility transaction shares the Course read with
    cutover, so the request is either accepted against the pre-cutover state
@@ -145,14 +150,16 @@ deployment, activation, or Course cutover is claimed.
   Existing schedules remain intact. Re-enable old schedule controls only
   through the explicitly approved compatible revision; do not claim interval
   accounting for that period.
-- **After any Course cutover or v2 transition:** Do not restore a backend that
-  reads only schedules, delete v2 records, recreate schedules, or replay
-  operations with new IDs. Keep Course state, intervals, events, and receipts
-  authoritative. Restore a reviewed backend revision that understands the
-  v2 schema, retain the activation gate, and reconcile by Course ID and
-  generation. Retry the same operation ID when its receipt may have committed;
-  conflicting reuse is rejected. If the compatible revision cannot safely
-  serve the affected state, stop and escalate for a forward recovery plan.
+- **After any Course cutover or v2 transition (current limitation):** The
+  current cutover transaction deletes `service_schedule` and
+  `service_suspension`, while the last stable production backend determines
+  request eligibility from those fields. The old backend therefore sees a
+  cut-over Course as unscheduled/off; its service controls and request
+  eligibility cannot safely continue from v2 state. V2 intervals, events, and
+  receipts are additional data the old application does not read. Sending
+  traffic back to another revision of the new v2 implementation tests
+  deployment recovery only and does not recover from a defect in that code.
+  The current procedure is not a code-defect rollback plan.
 - Backend request controls and existing-request actions must remain usable
   when dashboard/report reads fail. Required audit/interval write failures
   abort service transitions. Reporting coverage is read-only and must never
@@ -167,6 +174,180 @@ deployment, activation, or Course cutover is claimed.
   `Authorization` request header and are not rendered, persisted, or logged
   by this UI. Retain the displayed identity and result in the release record;
   never substitute direct database writes or an unreviewed script.
+
+### Proposed post-activation code-defect rollback — not implemented
+
+This is the recommended minimum release-preparation work for review before
+any production Course activation. It must not be treated as an executable
+procedure until the Lead Architect approves the design, the compatibility
+artifact is built/reviewed, and the bounded sandbox proof below passes.
+
+#### Production evidence and compatibility finding
+
+On 2026-10-22, read-only inspection confirmed the production project is
+`savvy-kit-496703-r5`, region `us-central1`. Receiver
+`fairway-button-receiver-00026-kg5` and Admin
+`fairway-admin-00017-dvk` were Ready at 100% traffic with the image digests
+listed in the alignment table. The Admin source archive matched the tracked
+source at the prior inspection; the Receiver archive differences from that
+source were limited to Admin user-access and credential-lifecycle code, with
+no request or COMPLETE/ack contract change identified. The live frontend
+asset hash matches the production build of `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38`.
+The exact immutable Hosting version is still unverified, so the frontend
+rollback is not yet demonstrably executable without rebuilding.
+
+Monarch Bay / Tony Lema is `CUST-0001/COURSE-0001`. A field-limited,
+read-only Firestore read found legacy `service_schedule` and
+`service_suspension`, timezone `America/Los_Angeles`, and no v2 service-state
+fields. The sampled schedule covers all seven days from `00:00` to `23:59`;
+the saved suspension had expired at midnight Pacific on October 22, so the
+legacy application evaluated service as on at the inspection time. This
+confirms the stable application depends on the legacy fields the current
+cutover deletes. The October 17, 2026 9:39:35.270 AM Pacific cutoff is the established
+Monarch deployment cutoff. Preserve all existing deployment records and data,
+including records retained at/after that cutoff. These remain Monarch
+deployment records. This inspection read no request contents and made no
+production writes.
+
+The previous production request contract uses the shared `requests` records,
+the same request IDs, and `status`/`received_at`/`confirmed_at`/
+`completed_at`/`cancelled_at` lifecycle fields. V2 adds
+`service_acceptance_generation`, `service_accepted_while_on`, and
+`service_acceptance_source`; the prior backend ignores these additive fields
+and retains its status-based demand-window deduplication. Completed and
+cancelled requests therefore remain representable after code rollback without
+rewriting request documents. However, the old COMPLETE handler has no
+course-local prior-day rejection. That required rule must not silently regress
+during rollback.
+
+#### Recommended minimum design
+
+Prepare a rollback release **from the last stable production source**, not
+from the PR #4 service-control implementation. It should retain the previous
+production application behavior and contain only the compatibility work
+needed for a v2 Course and the required prior-day COMPLETE guard. Build and
+review this artifact before activation, publish it as a no-traffic revision
+on the existing Receiver/Admin services, pin its image digests and
+configuration, and prove it is independent of the PR #4 service-control
+implementation. This is a prepared stable-source fallback, not merely a
+second revision of the new code; it adds no infrastructure.
+
+The smallest PR #4 schema change is to make cutover non-destructive:
+
+1. Stop deleting `service_schedule` and `service_suspension` at cutover.
+   Leave those existing fields unchanged while v2 is active; the stable
+   application must not receive traffic until the fallback projection is
+   prepared. Keep v2 intervals, events, and operation receipts append-only.
+2. Add a generation-checked rollback-preparation operation in the
+   stable-source fallback capability. For every explicitly selected Course,
+   transactionally validate authoritative v2 state and its interval, record
+   the rollback boundary, close an open interval at that instant, preserve
+   all existing events/receipts/intervals, and write the explicit legacy
+   service projection required by the approved rollback semantics. Never
+   erase v2 state or request evidence. Failure of a required rollback audit
+   write aborts that Course's rollback preparation.
+3. Mark each Course as in legacy rollback mode. V2 controls/reporting must
+   not present a continuous active-hours calculation across the rollback
+   period. A later v2 return is a new explicit activation/baseline after
+   reconciling legacy state; the interval gap remains uncovered and rates
+   remain unavailable where coverage is incomplete.
+4. Backport the server-side prior-day COMPLETE rejection into the
+   stable-source fallback. Keep Cancel available. Existing and newly created
+   request IDs/status/timestamps remain untouched; accepted new metadata is
+   ignored by the stable request model.
+
+The rollback projection restores the saved weekly schedule. For a v2 Course
+that is OFF, it also writes a legacy suspension through the next scheduled
+start, matching the old backend's existing Suspend semantics; an ON Course
+has no suspension and is eligible only when its restored schedule is active.
+Therefore v2 OFF is not indefinitely OFF after rollback, and a v2 ON Course
+whose saved schedule is currently closed becomes unavailable until that
+schedule opens. V2 `service_status` must not be represented as equivalent to
+legacy schedule state. **CPO decision required:** explicitly allow this
+bounded break-glass return to legacy schedule/Suspend semantics, including
+time-driven reactivation at a scheduled start, or require persistent explicit
+Resume/Suspend even during rollback. The latter requires a larger
+stable-source compatibility surface and is not satisfied by routing to the
+exact old release. No implementation should choose between these behaviors
+implicitly.
+
+#### Prepared rollback sequence and timing target
+
+After the compatibility artifact and immutable Hosting version are proven
+ready:
+
+1. Trigger and announce the rollback. Pause operator actions; tolerate a
+   brief request/control interruption rather than introducing an unproven
+   intake gate. Route Receiver/Admin traffic to the prepared stable-source
+   fallback, wait for the v2 revisions' in-flight transactions to drain, and
+   verify no direct route can still reach a v2 writer. The legacy projection
+   has not yet been prepared, so requests may briefly be rejected.
+2. Run the stable-source rollback preflight for the exact affected
+   Customer/Course set. Verify authorization, current generations, open
+   interval references, the existing legacy schedule, pending requests,
+   and availability of the fallback image and Hosting version. Any mismatch
+   or unsupported Course blocks automatic rollback.
+3. Execute the rollback-preparation transaction per Course using the
+   prepared stable-source capability. Reconcile its receipt and audit
+   boundary; verify intervals are closed at the recorded boundary and all
+   request IDs/status/timestamps and pre-existing deployment records are
+   unchanged. Abort before traffic changes on any incomplete Course result.
+4. Verify 100% Receiver/Admin traffic remains on the pinned stable-source
+   fallback revisions; verify revision identity, image digests, health,
+   legacy request and COMPLETE/Cancel routes, Course authorization, and the
+   prior-day COMPLETE guard. Remove/verify no tags or direct revision paths
+   bypass the selected revisions.
+5. Restore the pinned previous production Hosting version (not a build made
+   during rollback). Verify `/`, `/admin`, `/index.html`, manifest, service
+   worker, bundle hash, and production project/API binding. Tell operators to
+   reload/reopen the app; do not ask them to clear unrelated browser data.
+6. Verify ON/OFF behavior according to the CPO-approved legacy rollback
+   semantics, request deduplication, same-day COMPLETE/Cancel, prior-day
+   COMPLETE rejection, Course isolation, request/history records, and
+   interval/audit evidence. Keep the feature gate closed for new v2 cutovers.
+   If the rollback capability or data checks fail, stop and retain the
+   last known serving revision; do not edit Firestore manually.
+
+Once prepared, the target is a controlled 5–15 minute release rollback after
+trigger for a rehearsed, bounded Course set; the route switch itself is
+expected to take minutes. This is an acceptance target, not measured
+production performance. Total time depends on Course count and transactional
+preflight. No interruption-free request at the exact switchover is promised.
+The previous Hosting version and independent stable-source fallback are
+currently not prepared, so this target is not yet executable.
+
+#### Required sandbox proof before production activation
+
+Use only unique synthetic Courses and the isolated sandbox. Build the
+rollback fallback from the stable-source revision, then simulate a PR #4
+code-defect trigger after both ON and OFF cutover and after real synthetic
+requests, completion, cancellation, retries, and service transitions. Prove:
+
+- The rollback target is the stable-source fallback artifact, not another
+  PR #4 image; deployment does not rebuild code during the rollback exercise.
+- Rollback preflight and transaction are idempotent, Course-scoped, generation
+  checked, and atomic for projection plus boundary evidence; failed audit or
+  integrity checks block traffic change.
+- Preserved legacy Course fields are restored or projected per the approved
+  rollback decision, while v2 intervals/events/receipts remain intact and
+  immutable. Coverage ends at the exact rollback boundary; legacy-mode time
+  is not counted. A later v2 return reports the interval gap as incomplete.
+- Requests accepted during v2, their duplicate retries, and existing
+  COMPLETE/Cancel operations retain IDs, lifecycle fields, attribution, and
+  counts. The prior-day COMPLETE guard remains server-enforced; Cancel remains
+  available.
+- Legacy ON/OFF and schedule expiry match the explicit CPO decision, including
+  whether service may reactivate without Resume. No false claim of persistent
+  v2 semantics or continuous active-hour coverage is displayed.
+- Stable frontend and API operation return within the target window, with no
+  production endpoint, account, or Course involved.
+
+The production Serving revisions and exact bundle have been observed, but
+there is currently no verified immutable production Hosting version ID and
+no independently built stable-source compatibility fallback. Therefore
+post-activation code-defect rollback is **not ready**. Keep production
+activation blocked until those prerequisites, the CPO semantics decision,
+Lead Architect review, and sandbox proof are complete.
 
 ### Sandbox rehearsal preparation record — 2026-10-21 (historical)
 

@@ -152,8 +152,10 @@ button requests do not initialize Courses. The activation gate must be enabled
 only after old backend revisions and write paths are fenced/drained. During
 staged rollout, uncutover Courses retain read-only schedule eligibility;
 requests transactionally read the Course so cutover and request acceptance
-serialize. After atomic cutover, the v2 service state is authoritative and
-schedule fields are removed. New Courses are initialized off.
+serialize. In the current branch implementation, atomic cutover makes v2
+service state authoritative and deletes legacy schedule fields. New Courses
+are initialized off. This deletion is the compatibility break addressed by
+the not-yet-implemented rollback proposal in the Deployment Guide.
 
 The Course document owns `service_schema_version`, `service_status`,
 `service_generation`, `service_coverage_started_at`, and the active interval
@@ -200,5 +202,7 @@ deployment and synthetic Course cutovers are recorded in the
 [Deployment Guide](DEPLOYMENT_GUIDE.md#operator-service-control-rollout-and-recovery);
 no production deployment or Course cutover is claimed. Local validation,
 remaining gaps, and the production rollout/recovery procedure are recorded
-there as well. Independent firmware lifecycle and power contracts remain
-unchanged.
+there as well. Safe return to the previous production application after a v2
+Course activation is not implemented; the Deployment Guide records the
+verified compatibility break and proposed stable-source rollback package.
+Independent firmware lifecycle and power contracts remain unchanged.
