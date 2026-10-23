@@ -852,6 +852,123 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Sandbox Increment: Independent Service Groups (2026-10-23)
+
+- **Source / dependency:** `c8028744d1c7cab952ae620389a3ce79ef6b76cc`
+  on `feat/independent-service-groups`, draft PR
+  [#9](https://github.com/josh-fairwayrefresh/fr-main/pull/9), stacked on
+  `feat/cart-request-selection` / PR #8's Architect-reviewed head
+  `d33f86091673149479148c9d44d6582c95d7e105`. PR #8's selection,
+  tab-visibility correction, and evidence below are retained. Receiver/Admin
+  were built from `af819b549b2863c91df3bb7c73d2f89d4c5412c8`; their
+  backend subtree is unchanged at the final source above. The later source
+  corrects On-premise-only empty-queue messaging and adds rendered coverage.
+- **Review:** https://fairway-refresh-sandbox-260930.web.app/?customer_id=CUST-0004&course_id=COURSE-0006.
+  This is the dedicated synthetic `CPO TEST Independent Service Groups
+  20261023` Course, not Monarch. New sandbox-only devices `FRB-0005` and
+  `FRB-0006` have explicit `CPO TEST SYNTHETIC ... NO PHYSICAL DEVICE`
+  comments and custom labels `CPO TEST Patio cart` / `CPO TEST Restaurant
+  runner`. These sandbox records do not identify or command production
+  devices with the same IDs. The first record deliberately omits
+  `service_group` to exercise legacy On-course behavior. Final review state:
+  both groups ON, with open requests `H9Ar1QubNUcENVnPmqUn` (On-course)
+  and `O5TzAKlvXxEsIchxRHVl` (On-premise). These are dated setup facts,
+  not a claim that later reviewer actions leave them unchanged.
+
+| Sandbox surface | Published identity |
+| --- | --- |
+| Receiver, 100% traffic / Ready | `fairway-button-receiver-sandbox-00024-nps`, image SHA-256 `25d0ece42b7294734ef85e6452b98a230eaaa362da9f3c1ddc0b676b186a2277` |
+| Admin, 100% traffic / Ready | `fairway-admin-sandbox-00017-kll`, image SHA-256 `500bc5640bda0780592aa00b945b52fc68af4d913711805fb016d2acf5b6747f` |
+| Hosting live | Version `620465e60c69ee7c`, release `1792790477648000`, released `2026-10-23T21:21:17.648Z` |
+| Served JS, matching local build | `assets/index-BExdrnC-.js`, SHA-256 `2179f621cc6c81dcfd1e7789c467ecb62f0b9c808c88101ef47b6c6873badee0` |
+| Served CSS, matching local build | `assets/index-rXYVsfdu.css`, SHA-256 `9a3ec395295c58e258c88f64feaa9ee2ebd2819b73761f3caeb925c55b38e45b` |
+
+Receiver source archive:
+`gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-button-receiver-sandbox/1792789827.092204-56b3dfb9dd974a0ca4ca4d13e35bee00.zip#1792789827326996`,
+build `385e945f-9ea0-4ac9-8cfb-8dcf99fcec6a`. Admin source archive:
+`gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792789827.219415-5377062345d04b8c9ce7cda6b065e8bf.zip#1792789827503265`,
+build `bd7372db-101d-4050-90dc-dd9eddbbf04f`. Both retained
+`fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com`.
+Admin's pre-existing pinned traffic was explicitly switched to its new Ready
+revision after source deployment; latest-revision creation alone did not
+activate it. No new infrastructure or notifier deployment was introduced.
+An initial Hosting republish invocation used the wrong configuration directory
+and stopped before publication; rerunning from the frontend directory with
+the existing explicit sandbox configuration succeeded.
+
+**Deployed eligibility:** real authenticated synthetic device calls supplied
+the opposite firmware `service_group`; only the authenticated stored group
+controlled eligibility. Every accepted press was immediately retried and
+returned the same request with `duplicate: true`.
+
+| On-course | On-premise | On-course call | On-premise call |
+| --- | --- | --- | --- |
+| OFF | OFF | 503 | 503 |
+| OFF | ON | 503 | 200 |
+| ON | OFF | 200 | 503 |
+| ON | ON | 200 | 200 |
+
+- **State / assignment:** first-time On-premise was OFF. Concurrent group
+  transitions persisted independently, including On-course actions omitting
+  the group. At the retry checkpoint, same-state retries and assignments left
+  event counts unchanged at 3 On-course / 4 On-premise. Moving the last
+  On-premise device away removed dual controls without resetting its state;
+  assigning it back restored that state. Cached Admin assignment payloads
+  omitting the group preserved it. The deployed Admin form saved each group
+  independently of the unchanged custom location. Reload and a second
+  authenticated browser app session read the persisted states; both sessions
+  used the same existing authorized account, not a newly created identity.
+- **Actions / shared history:** selected and completed the non-oldest
+  On-premise request `BmBLQQfa8BSeBW1dufob` after reassignment to On-course
+  while both groups were OFF. Only that request disappeared; the older
+  On-course request remained and was then cancelled through the UI while
+  OFF. The completed request retained its `on_premise` snapshot;
+  `devices/FRB-0006/commands/complete__BmBLQQfa8BSeBW1dufob` contains
+  that request/device correlation. The command exists only under the new
+  synthetic sandbox device; no physical device received a command. Shared
+  History showed both groups' completed/cancelled outcomes. No existing
+  non-synthetic requests or outcomes were changed.
+- **UI:** History computed `display: none` for the entire mounted Requests
+  layout; returning restored the selected non-oldest card. A subsequent new
+  arrival preserved selection. Both groups' status/actions and Complete/Cancel
+  stayed within 375, 430, 768, 1024, and 1440 CSS-pixel viewports, with
+  document scroll width equal to viewport width. The final served bundle's
+  empty queue correctly advertises incoming requests with only On-premise ON.
+  This is browser verification, not physical phone/Safari acceptance.
+- **Checks / limits:** frontend suite passed 65/65 before the final
+  empty-message correction; final focused operator checks passed 7/7,
+  rendered browser regression passed 1/1, and sandbox configuration/build
+  passed. The browser fixture retains PR #8's mounted selection, hidden
+  controls/focus, and completion regression and checks dual/single controls
+  plus On-premise-only empty state. New actual-handler service-group
+  contracts passed 4/4; the separately run access and migration checks passed
+  6/6 and 4/4. Existing backend suites preceding reporting passed, but the
+  complete backend command is not green: two reporting assertions also fail
+  unchanged on PR #8 (cross-day interval count expects 2, receives 1; the
+  zero-period expected shape omits existing summary fields). Reporting code
+  and definitions were not changed to conceal those baseline failures.
+  Existing bundle-size/dependency advisories remain. Browser push permission
+  was blocked; push delivery and physical firmware were not exercised.
+- **Reporting decision:** shared History and existing request outcome KPIs
+  remain Course-wide. Active Cart Hours uses only On-course events;
+  On-premise-only Resume left its displayed 0.02 hours unchanged while
+  On-course stayed OFF. CPO/Architect still owns whether future request KPIs
+  are On-course-only, per-group, or combined, and how Requests per Hour
+  relates to a cart-only denominator. See the UX owner; no redefinition was
+  made here.
+- **Retained recovery / scope:** prior sandbox Receiver
+  `fairway-button-receiver-sandbox-00023-rcx`, Admin
+  `fairway-admin-sandbox-00016-jwv`, and Hosting version
+  `f45300a90dc8e073` remain recorded. Ordinary recovery is explicit sandbox
+  Cloud Run `services update-traffic --to-revisions=<revision>=100` with
+  `--project=fairway-refresh-sandbox-260930 --region=us-central1`, plus the
+  retained Hosting Release history rollback. These older backends ignore
+  service groups and gate every device by On-course state; this is not
+  equivalent recovery of independent controls and requires an operating
+  decision. No rollback was performed. No merge, production deployment,
+  production/Monarch inspection or change, firmware change, or physical-device
+  command occurred.
+
 ### Sandbox Correction: Requests/History Visibility (2026-10-23)
 
 - **Source**: `fb7b295f4ba03da90977d5f5c0db9742b38d082c` on `feat/cart-request-selection`, PR [#8](https://github.com/josh-fairwayrefresh/fr-main/pull/8). Added `.op-layout[hidden] { display: none; }` so the grid display rule cannot expose the mounted Requests view during History. Selection remains mounted and unchanged.
