@@ -90,11 +90,14 @@ Each physical marker has a permanent device identity and unique credential. The 
 The `feat/independent-service-groups` increment is based on PR #8's
 Architect-reviewed head `d33f86091673149479148c9d44d6582c95d7e105`, rather
 than merged main, by explicit CPO authorization. It retains queue selection,
-tab visibility, and their verification evidence. Neither prerequisite nor
-dependent increment is merge/production authorized.
+tab visibility, and their verification evidence. On 2026-10-23 the CPO accepted
+the queue/category update and authorized merging PRs #7, #8, and #9 in
+dependency order and production deployment after the Amenity Areas refinement.
+Production verification is read-only; no request generation, reassignment,
+service toggle, firmware, or physical-device action is authorized.
 
 The existing `lib/course_service.js` owner resolves both groups. On-course
-retains Course `service_suspension` and `service_events`; Driving Range uses
+retains Course `service_suspension` and `service_events`; Amenity Areas uses
 Course `on_premise_service.active` (missing means OFF) and a separate
 `on_premise_service_events` stream under the same Course. The existing
 operator Resume/Suspend endpoints accept optional `service_group`, defaulting
@@ -103,7 +106,7 @@ state and record actual state changes; retried same-state actions do not add
 events. This preserves independent concurrent toggles without modifying
 reporting's On-course event queries or prior-event boundary.
 
-Driving Range replaces the former On-premise display name throughout Admin,
+Amenity Areas replaces the former On-premise / Driving Range display names throughout Admin,
 Cart Operator, accessible labels, and confirmation prompts. Existing
 `on_premise` identifiers remain unchanged; this is a presentation change,
 not a data/API migration. Each category's short Suspend/Resume action and

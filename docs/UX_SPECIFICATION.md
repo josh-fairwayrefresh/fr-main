@@ -268,8 +268,8 @@ and [open defects](feature_backlog.md#material-readiness-items).
    controls. Returning to Requests restores the prior active selection.
 - **Sandbox increment dependent on PR #8:** Admin Device assignment includes
    `service_group`, either `on_course` (On-course) or `on_premise`
-   (Driving Range). The CPO renamed the displayed category from On-premise
-   to Driving Range on 2026-10-23; existing stored/API identifiers remain
+   (Amenity Areas). The CPO refined the displayed category from On-premise
+   through Driving Range to Amenity Areas on 2026-10-23; existing stored/API identifiers remain
    `on_premise` without migration or service-state changes.
    Category wording is defined only in the shared
    `fairway_backend/cloudrun_receiver/lib/service_categories.json` owner.
@@ -280,19 +280,19 @@ and [open defects](feature_backlog.md#material-readiness-items).
    Missing fields on existing devices mean On-course. Group is
    independent of hole/custom location; changing it does not change the label.
    Cached Admin saves that omit the field preserve an existing assignment.
-- Courses without assigned Driving Range devices retain the single Cart service
-   presentation. When any Course-associated device is Driving Range, show
+- Courses without assigned Amenity Areas devices retain the single Cart service
+   presentation. When any Course-associated device is Amenity Areas, show
    separately labeled status and Suspend/Resume controls for both groups,
    regardless of queue contents. Each group stays ON/OFF until an explicit
    operator transition. Each category has an adjacent, visually bounded control
    set with its status and short Suspend/Resume button aligned beneath the
-   On-course or Driving Range headline. Visible buttons do not repeat category
+   On-course or Amenity Areas headline. Visible buttons do not repeat category
    names; accessible button names and confirmation prompts identify the group.
-   First-time Driving Range state is OFF. Reassignment uses
+   First-time Amenity Areas state is OFF. Reassignment uses
    the destination state and does not resume either group. States persist even
    when no devices remain assigned and controls disappear.
    The empty shared queue advertises incoming requests when either displayed
-   group is ON, including Driving Range-only service.
+   group is ON, including Amenity Areas-only service.
 - Request eligibility uses the authenticated device registry group, not a
    firmware-provided value. Newly created requests retain that group as a
    snapshot; reassignment never rewrites requests. Both groups share the same
@@ -304,7 +304,7 @@ and [open defects](feature_backlog.md#material-readiness-items).
    of service group; cancelled requests do not contribute to completion
    totals. The shared queue and History include both groups. Retain the
    existing calculations: Active Cart Hours uses only the On-course event
-   stream, and Driving Range transitions contribute no cart hours. The CPO
+   stream, and Amenity Areas transitions contribute no cart hours. The CPO
    explicitly accepts combined completion counts against that On-course-only
    denominator for Requests per Hour. Do not add group filters, separate KPIs,
    or reporting UI.
