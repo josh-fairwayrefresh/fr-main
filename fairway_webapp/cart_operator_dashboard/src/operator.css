@@ -67,12 +67,14 @@
 .op-up-next { margin-top: 25px; }
 .op-up-next > div { margin-bottom: 9px; display: flex; justify-content: space-between; }
 .op-up-next > div strong { color: var(--op-muted); font-size: 10px; }
-.op-up-next article { min-height: 62px; padding: 0 17px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 20px; align-items: center; gap: 11px; border-bottom: 1px solid var(--op-line); background: #fff; }
-.op-up-next article > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #edf1ee; color: var(--op-muted); font-size: 10px; font-weight: 900; }
-.op-up-next article div strong, .op-up-next article div small { display: block; }
-.op-up-next article div strong { font: 700 15px/1.1 Georgia, serif; }
-.op-up-next article div small { margin-top: 3px; color: var(--op-muted); font-size: 9px; }
-.op-up-next article > b { color: var(--op-muted); font-size: 10px; }
+.op-queue-row { width: 100%; min-height: 62px; padding: 8px 17px; border: 0; border-bottom: 1px solid var(--op-line); display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 20px; align-items: center; gap: 11px; background: #fff; color: var(--op-ink); text-align: left; cursor: pointer; }
+.op-queue-row:hover { background: #f1f5f2; }
+.op-queue-row:disabled { opacity: .65; cursor: wait; }
+.op-queue-row > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #edf1ee; color: var(--op-muted); font-size: 10px; font-weight: 900; }
+.op-queue-row div strong, .op-queue-row div small { display: block; }
+.op-queue-row div strong { font: 700 15px/1.1 Georgia, serif; overflow-wrap: anywhere; }
+.op-queue-row div small { margin-top: 3px; color: var(--op-muted); font-size: 9px; }
+.op-queue-row > b { color: var(--op-muted); font-size: 10px; white-space: nowrap; }
 .op-summary { padding: 28px 22px; border-left: 1px solid var(--op-line); background: #edf1ee; }
 .op-summary > section { padding-bottom: 25px; }
 .op-performance { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; border-bottom: 1px solid #d3dad5; }
