@@ -184,6 +184,30 @@ authorized read-only UI inspection above. The synthetic Course and its open
 request were not modified. Production and Monarch were not accessed or
 changed; no Admin deployment, merge, or production release occurred.
 
+### Complete selected-period History correction — 2026-10-22
+
+Feature commit `e206818cdbd65e8bd80eec29b47e4ec0b6379e0b` removes silent
+History truncation from the existing reporting path. Receiver revision
+`fairway-button-receiver-sandbox-00023-rcx` is Ready and serves 100% of traffic
+in `fairway-refresh-sandbox-260930`; its image digest is
+`sha256:66e58f19c7f59a86e4b0eab6b21057a3e472ff787a15df5f86e942e17af7dbd0`.
+No Hosting deployment was needed because the Cart UI rendering did not change.
+
+`historyRequestsInRange` and `aggregateCourseReports` now return every
+selected-period History row without a 100-row slice. The backend Course
+request query no longer caps its candidate input at 5,000, ensuring older
+cancellations are not omitted before period filtering. KPI counting remains
+unchanged and continues to count all in-period completions. No pagination
+mechanism is used or required for this response. Browser inspection of the
+existing synthetic Course after deployment showed its current History rows
+and KPIs loading from the new Receiver revision; no review data was changed.
+
+A focused regression test now covers Course and aggregate History with more
+than 100 rows. It was not run, consistent with the CPO-first test instruction.
+JavaScript syntax checks and `git diff --check` passed. No tests, synthetic
+requests, database changes, production or Monarch access, Admin deployment,
+merge, or production release occurred.
+
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
 Under explicit CPO authorization, the one-time cleanup in production project
