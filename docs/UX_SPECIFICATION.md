@@ -305,13 +305,16 @@ authorization.
 
 - Resume turns service ON until Suspend; Suspend turns service OFF until
   Resume. Schedules, midnight, and elapsed time do not change that state.
+  Suspension has no expiry; only an explicit Resume turns service ON.
   One operational owner supplies current service state and records operator
   transitions. Request eligibility reads that state directly. Reporting
   consumes transition/request records and is never a prerequisite for
   accepting requests.
 - Remove the Beverage Service Schedule from active control/configuration UI.
-  Preserve existing stored schedule fields for backward compatibility; do not
-  delete them or introduce PR #4 migration/cutover machinery.
+  Course create/edit operations do not validate, expose, or write schedule
+  fields. Ignore schedule fields sent by older cached Admin clients. Existing
+  stored schedule data is left untouched and has no operational effect; do not
+  delete it or introduce PR #4 migration/cutover machinery.
 - Preserve request handling, COMPLETE/Cancel, notifications, permissions,
   device protocol, and firmware contracts.
 - **Active Cart Hours** are calculated from existing operator Resume/Suspend

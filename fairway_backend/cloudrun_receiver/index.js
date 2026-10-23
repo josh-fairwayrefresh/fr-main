@@ -965,11 +965,10 @@ function createFairwayHandlers(db, {
           course_id: courseSnap.id,
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
-          service_schedule: courseSource.service_schedule ?? null,
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_suspension', 'comments']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -1018,23 +1017,21 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule']);
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(200).json(course);

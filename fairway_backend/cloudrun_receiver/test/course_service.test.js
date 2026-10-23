@@ -1,10 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const {
-  isValidServiceSchedule,
-  resolveCourseServiceState,
-} = require('../lib/course_service');
+const { resolveCourseServiceState } = require('../lib/course_service');
 
 const course = {
   timezone: 'America/Los_Angeles',
@@ -12,9 +9,14 @@ const course = {
   service_suspension: null,
 };
 
-assert.strictEqual(isValidServiceSchedule(course.service_schedule), true);
-assert.strictEqual(isValidServiceSchedule({ days: [1], start: '17:00', end: '09:00' }), false);
 assert.deepStrictEqual(resolveCourseServiceState(course), {
+  active: true,
+  suspended: false,
+});
+assert.deepStrictEqual(resolveCourseServiceState({
+  ...course,
+  service_schedule: { malformed: true },
+}), {
   active: true,
   suspended: false,
 });
@@ -31,4 +33,12 @@ assert.deepStrictEqual(resolveCourseServiceState(suspendedCourse), {
   suspended: true,
 });
 
-console.log('PASS: Course service state is controlled by persistent operator suspension, not schedule');
+assert.deepStrictEqual(resolveCourseServiceState({
+  ...course,
+  service_suspension: { until: new Date('2000-01-01T00:00:00.000Z') },
+}), {
+  active: false,
+  suspended: true,
+});
+
+console.log('PASS: Course service state is persistent and independent of schedule or expiry');

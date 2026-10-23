@@ -443,11 +443,20 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema Course',
       timezone: 'America/Los_Angeles',
+      service_schedule: { days: 'stale-cache-payload' },
+      comments: null,
     },
   });
   assert.strictEqual(course.statusCode, 201);
   assert.match(course.body.course_id, /^COURSE-\d{4}$/);
   assert.strictEqual(course.body.service_schedule, undefined);
+  const courseRef = db.collection('customers').doc(customer.body.customer_id)
+    .collection('courses').doc(course.body.course_id);
+  const createdCourse = await courseRef.get();
+  assert.strictEqual(createdCourse.data().service_schedule, undefined);
+  await courseRef.update({
+    service_schedule: { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' },
+  });
 
   await db.collection('devices').doc('FRB-0099').set({
     customer_id: customer.body.customer_id,
@@ -469,11 +478,18 @@ test('customer and Course routes allocate backend IDs, validate configuration, a
     body: {
       course_name: 'Tony Lema',
       timezone: 'UTC',
-      service_schedule: { days: [1, 2, 3, 4, 5], start: '08:00', end: '18:00' },
+      service_schedule: { invalid: 'older cached Admin payload' },
       comments: 'winter schedule',
     },
   });
   assert.strictEqual(courseUpdate.statusCode, 200);
+  const updatedCourse = await courseRef.get();
+  assert.deepStrictEqual(updatedCourse.data().service_schedule, {
+    days: [1, 2, 3, 4, 5],
+    start: '09:00',
+    end: '17:00',
+  });
+  assert.strictEqual(courseUpdate.body.service_schedule, undefined);
 
   const device = await db.collection('devices').doc('FRB-0099').get();
   assert.strictEqual(device.data().customer_name, 'Monarch Bay Golf Club');

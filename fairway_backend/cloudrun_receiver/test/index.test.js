@@ -569,6 +569,8 @@ test('authenticated COMPLETE atomically creates one deterministic correlated com
 test('authenticated CANCEL closes an assigned request without creating a Device command', async () => {
   const db = new FakeFirestore();
   await setUpOperatorAssignment(db);
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .update({ service_suspension: { suspended_at: new Date('2026-10-01T18:00:00.000Z') } });
   await db.collection('requests').doc('request-a').set({
     customer_id: 'CUST-0001',
     course_id: 'COURSE-0001',

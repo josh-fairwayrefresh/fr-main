@@ -66,19 +66,22 @@ Stop on mismatched identity, failed acceptance/safety checks, unexpected
 mutations, or incompatible recovery. Publication/merge does not authorize
 deployment, credentials, device operations, or production-data changes.
 
-### CPO_stats_fix service-state rollback limitation
+### CPO_stats_fix service-state behavior difference
 
-The CPO_stats_fix candidate makes Resume/Suspend the persistent ON/OFF owner
-and removes schedules from active Admin configuration. The stable release
-instead uses Course schedules and temporary suspension expiry for request
-eligibility. Returning to that stable backend therefore does not preserve the
-candidate's persistent service state: it ignores the candidate's suspension
-shape, re-applies schedule gating, and cannot accept requests for candidate-
-created Courses that have no legacy schedule. Reverting Hosting alone does not
-restore the backend contract. No data conversion or compatibility layer is
-authorized by the increment; a production release must have a separately
-reviewed recovery decision and must not be described as behavior-preserving
-rollback to the stable release.
+The CPO_stats_fix candidate uses persistent Resume/Suspend ON/OFF state,
+ignores legacy Course schedule fields, and does not expire a suspension. The
+accepted stable backend gates request eligibility by Course schedule and
+applies its prior timed-suspension semantics. Returning to that backend would
+therefore restore schedule-based behavior: a candidate Course with no stored
+schedule would not be service-eligible under the stable implementation, while
+a candidate persistent suspension without the stable `until` value would not
+remain an active timed suspension there. An older valid stored schedule may
+also allow service during its configured hours after rollback. Hosting rollback
+alone does not change backend service-state semantics. Historical Course
+schedule fields are left untouched by the candidate; no data conversion or
+compatibility layer is introduced. Treat any production return to the stable
+application as a behavior change requiring an explicitly reviewed operating
+decision, not as restoration of identical ON/OFF behavior.
 
 ### CPO_stats_fix sandbox review publication — 2026-10-22
 
@@ -207,6 +210,31 @@ than 100 rows. It was not run, consistent with the CPO-first test instruction.
 JavaScript syntax checks and `git diff --check` passed. No tests, synthetic
 requests, database changes, production or Monarch access, Admin deployment,
 merge, or production release occurred.
+
+### Persistent service-state and schedule-free Course correction — 2026-10-22
+
+Sandbox Admin revision `fairway-admin-sandbox-00016-jwv` was built from the
+CPO_stats_fix candidate and is Ready at 100% traffic in
+`fairway-refresh-sandbox-260930`. Its image digest is
+`sha256:ac1d3eac3949e4d996cf60f7a2ccc59ae22f6472d7c4fd86cb06e7c7d30277ca`.
+The existing sandbox service account was retained. The Receiver remained at
+`fairway-button-receiver-sandbox-00023-rcx`; Hosting was not redeployed.
+
+Authenticated sandbox Admin UI verification created and edited
+`CUST-0004/COURSE-0005` with only Course name, timezone, and comments; neither
+form exposed schedule controls. The stored legacy schedule of existing Courses
+was not changed by the Admin update path. Cart Operator verification suspended
+and resumed `CUST-0004/COURSE-0003`; OFF remained displayed after page reload
+and reauthentication, and Resume returned it to ON. The existing open review
+request remained available with Complete and Cancel controls while OFF; those
+actions were not activated, and no synthetic request was generated.
+
+Focused backend checks passed: Admin API (29), service-state unit checks, and
+Receiver request handling (39), including request rejection while OFF and
+COMPLETE/CANCEL behavior while OFF. These checks used isolated test handlers;
+no sandbox request outcome or Device command was generated. Production and
+Monarch were not accessed or changed. No merge or production deployment
+occurred.
 
 ## Pilot Test-Data Cleanup Execution — 2026-10-20
 
