@@ -266,6 +266,48 @@ and [open defects](feature_backlog.md#material-readiness-items).
    subsequent refreshes.
 - History hides the entire Requests view, including Complete and Cancel
    controls. Returning to Requests restores the prior active selection.
+- **Sandbox increment dependent on PR #8:** Admin Device assignment includes
+   `service_group`, either `on_course` (On-course) or `on_premise`
+   (Amenity Areas). The CPO refined the displayed category from On-premise
+   through Driving Range to Amenity Areas on 2026-10-23; existing stored/API identifiers remain
+   `on_premise` without migration or service-state changes.
+   Category wording is defined only in the shared
+   `fairway_backend/cloudrun_receiver/lib/service_categories.json` owner.
+   Admin options, Cart headings, confirmation prompts, and accessible names
+   consume that definition, never independent label maps. Editing its
+   `display_name` changes wording only, not the stable category identity or
+   individual marker location labels.
+   Missing fields on existing devices mean On-course. Group is
+   independent of hole/custom location; changing it does not change the label.
+   Cached Admin saves that omit the field preserve an existing assignment.
+- Courses without assigned Amenity Areas devices retain the single Cart service
+   presentation. When any Course-associated device is Amenity Areas, show
+   separately labeled status and Suspend/Resume controls for both groups,
+   regardless of queue contents. Each group stays ON/OFF until an explicit
+   operator transition. Each category has an adjacent, visually bounded control
+   set with its status and short Suspend/Resume button aligned beneath the
+   On-course or Amenity Areas headline. Visible buttons do not repeat category
+   names; accessible button names and confirmation prompts identify the group.
+   First-time Amenity Areas state is OFF. Reassignment uses
+   the destination state and does not resume either group. States persist even
+   when no devices remain assigned and controls disappear.
+   The empty shared queue advertises incoming requests when either displayed
+   group is ON, including Amenity Areas-only service.
+- Request eligibility uses the authenticated device registry group, not a
+   firmware-provided value. Newly created requests retain that group as a
+   snapshot; reassignment never rewrites requests. Both groups share the same
+   queue, History, age order, permissions, labels, selection, and actions.
+   Suspension/reassignment does not prevent Complete or Cancel of existing
+   requests.
+- **CPO-accepted reporting decision (2026-10-23, PR #9):** all completed
+   requests count equally in the existing Course-wide KPI totals, regardless
+   of service group; cancelled requests do not contribute to completion
+   totals. The shared queue and History include both groups. Retain the
+   existing calculations: Active Cart Hours uses only the On-course event
+   stream, and Amenity Areas transitions contribute no cart hours. The CPO
+   explicitly accepts combined completion counts against that On-course-only
+   denominator for Requests per Hour. Do not add group filters, separate KPIs,
+   or reporting UI.
 - While a request action is in flight, queue selection and duplicate request
    actions are disabled. Action errors remain associated with the request that
    produced them. Completion continues to use the selected request's existing

@@ -85,6 +85,57 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ## Change and Validation Discipline
 
+### Independent service groups sandbox increment
+
+The `feat/independent-service-groups` increment is based on PR #8's
+Architect-reviewed head `d33f86091673149479148c9d44d6582c95d7e105`, rather
+than merged main, by explicit CPO authorization. It retains queue selection,
+tab visibility, and their verification evidence. On 2026-10-23 the CPO accepted
+the queue/category update and authorized merging PRs #7, #8, and #9 in
+dependency order and production deployment after the Amenity Areas refinement.
+Production verification is read-only; no request generation, reassignment,
+service toggle, firmware, or physical-device action is authorized.
+
+The existing `lib/course_service.js` owner resolves both groups. On-course
+retains Course `service_suspension` and `service_events`; Amenity Areas uses
+Course `on_premise_service.active` (missing means OFF) and a separate
+`on_premise_service_events` stream under the same Course. The existing
+operator Resume/Suspend endpoints accept optional `service_group`, defaulting
+to `on_course` for cached clients. Transactions update only the chosen group's
+state and record actual state changes; retried same-state actions do not add
+events. This preserves independent concurrent toggles without modifying
+reporting's On-course event queries or prior-event boundary.
+
+Amenity Areas replaces the former On-premise / Driving Range display names throughout Admin,
+Cart Operator, accessible labels, and confirmation prompts. Existing
+`on_premise` identifiers remain unchanged; this is a presentation change,
+not a data/API migration. Each category's short Suspend/Resume action and
+status align beneath its headline in adjacent bounded control sets.
+
+`fairway_backend/cloudrun_receiver/lib/service_categories.json` is the single
+authoritative category definition and shared data interface. It separates
+stable `id` from editable `display_name` for the two existing categories.
+Backend service validation derives its identity constants from this file;
+the frontend `src/lib/serviceCategories.mjs` exposes the same definitions to
+Admin options and all generated Cart category text. Do not add parallel label
+maps or category-name conditionals. Change display wording only in this owner
+and rebuild/publish affected consumers; stored IDs, service fields/events,
+assignments, and request snapshots are not renamed. No management screen,
+runtime category configuration, additional categories, or framework is added.
+
+Admin assignment/state APIs validate the device `service_group` enum; missing
+device fields resolve to `on_course`. The Receiver uses only the authenticated
+stored group for eligibility and snapshots it on new requests. Existing
+requests and COMPLETE correlation are unaffected by reassignment. Assigned
+devices, not requests, determine the dual-control read model. No schedules,
+expiry, state migration, or firmware changes are introduced. The CPO's
+2026-10-23 reporting decision for PR #9, owned by the UX specification,
+accepts equal counting of both groups' completed requests in the existing
+Course-wide KPIs against On-course-only Active Cart Hours. Cancelled requests
+do not count as completions; the shared queue and History include both
+groups. Calculations remain unchanged; no group filters, separate KPIs, or
+reporting UI are introduced.
+
 Follow the Fidelity Mandate above and the engineering workflow in `docs/README.md`. Inspect current source and the owning SoT before changing behavior. Preserve accepted tablet/desktop and device behavior unless an explicitly authorized change requires otherwise. Keep changes within scope, update the owner document, and validate both the changed behavior and adjacent accepted behavior. Stop for CPO/Lead Architect direction when evidence or authority is insufficient.
 
 ### Isolated development and remote review

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,11 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { createServer } from 'vite';
 
-test('rendered tabs hide Requests controls and preserve non-oldest selection', { timeout: 60000 }, async () => {
+const categoryOwner = fileURLToPath(new URL('../../../fairway_backend/cloudrun_receiver/lib/service_categories.json', import.meta.url));
+const categories = JSON.parse(await readFile(categoryOwner, 'utf8'));
+
+for (const displayName of [categories.ON_PREMISE.display_name, 'Practice Area Review']) {
+test(`rendered queue and category surfaces use the shared owner: ${displayName}`, { timeout: 60000 }, async () => {
   const candidates = process.env.BROWSER_BIN
     ? [process.env.BROWSER_BIN]
     : ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'];
@@ -28,6 +32,17 @@ test('rendered tabs hide Requests controls and preserve non-oldest selection', {
     root: fileURLToPath(new URL('..', import.meta.url)),
     configFile: false,
     appType: 'custom',
+    plugins: [{
+      name: 'review-category-owner',
+      enforce: 'pre',
+      load(id) {
+        if (id !== categoryOwner) return null;
+        return JSON.stringify({
+          ...categories,
+          ON_PREMISE: { ...categories.ON_PREMISE, display_name: displayName },
+        });
+      },
+    }],
     server: { host: '127.0.0.1', port: 0 },
   });
   server.middlewares.use('/__tab-test', async (_request, response, next) => {
@@ -45,7 +60,7 @@ test('rendered tabs hide Requests controls and preserve non-oldest selection', {
     const { stdout } = await promisify(execFile)(browser, [
       '--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
       `--user-data-dir=${profile}`, '--dump-dom', '--virtual-time-budget=10000',
-      `http://127.0.0.1:${port}/__tab-test`,
+      `http://127.0.0.1:${port}/__tab-test?category=${encodeURIComponent(displayName)}`,
     ], { timeout: 45000, maxBuffer: 2 * 1024 * 1024 });
     assert.match(stdout, /<pre id="result">PASS<\/pre>/, stdout);
   } finally {
@@ -53,3 +68,4 @@ test('rendered tabs hide Requests controls and preserve non-oldest selection', {
     await rm(profile, { recursive: true, force: true });
   }
 });
+}

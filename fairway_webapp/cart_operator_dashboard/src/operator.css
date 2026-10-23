@@ -45,6 +45,11 @@
 .op-notifications p { margin: 8px 0 0; padding: 10px; background: #fff1ee; color: #8c382b; font-size: 11px; }
 .op-layout { min-height: calc(100vh - 82px); display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
 .op-layout[hidden] { display: none; }
+.op-service-groups { display: flex; flex: 0 0 auto; align-items: stretch; gap: 8px; order: 5; }
+.op-service-group { display: grid; justify-items: center; gap: 8px; padding: 10px; border: 1px solid var(--op-line); border-radius: 5px; background: var(--op-paper); }
+.op-service-group > h2 { margin: 0; font-size: 12px; font-weight: 800; }
+.op-service-group > .op-status, .op-service-group > .op-suspend { order: initial; }
+.op-service-group > .op-suspend { justify-content: center; width: 100%; }
 .op-focus { max-width: 900px; width: 100%; margin: 0 auto; padding: 34px 32px; }
 .op-queue-summary { margin-bottom: 22px; display: flex; justify-content: flex-end; }
 .op-place > span, .op-up-next > div span, .op-performance > span, .op-recent > div > span, .op-history-view header span { color: var(--op-green); font-size: 9px; font-weight: 900; letter-spacing: .13em; }

@@ -14,6 +14,7 @@ import {
   selectedCourseFromLocation,
 } from './lib/courseContext.mjs';
 import { requestLocationLabel } from './lib/requestLocation.mjs';
+import { serviceCategories, serviceCategory } from './lib/serviceCategories.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -55,8 +56,22 @@ function ServiceStatus({ course }) {
   return <div className={`op-status ${state?.active ? 'active' : ''}`}><i />{label}</div>;
 }
 
+function GroupServiceControls({ group, state, pending, onToggle }) {
+  const label = serviceCategory(group).display_name;
+  const action = state?.active ? 'Suspend' : 'Resume';
+  return <div className="op-service-group" role="group" aria-label={`${label} service`}>
+    <h2>{label}</h2>
+    <ServiceStatus course={{ service_state: state }} />
+    <button className="op-suspend" type="button" disabled={pending} onClick={() => onToggle(group)}
+      aria-label={`${action} ${label} service`}>
+      {state?.active ? <Pause size={17} /> : <Play size={17} />}
+      <span>{action}</span>
+    </button>
+  </div>;
+}
+
 function EmptyQueue({ serviceActive }) {
-  return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New golfer requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
+  return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
 }
 
 function RequestFocus({ request, queueLength, onAction, pending, actionBlocked, actioned }) {
@@ -181,6 +196,8 @@ export default function OperatorApp({
   const [tab, setTab] = useState('requests');
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState('');
+  const [serviceError, setServiceError] = useState('');
+  const serviceActionInFlight = useRef(false);
   const [selectedCourseKey, setSelectedCourseKey] = useState(() => {
     const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
     return selected ? courseKey(selected) : '';
@@ -315,26 +332,35 @@ export default function OperatorApp({
     }
   }
 
-  async function toggleService() {
-    if (!course || requestActionInFlight.current || pending) return;
-    const action = course.service_state?.suspended ? 'resume' : 'suspend';
+  async function toggleService(group = 'on_course') {
+    if (!course || requestActionInFlight.current || serviceActionInFlight.current || pending) return;
+    const state = group === 'on_premise' ? course.on_premise_service_state : course.service_state;
+    const action = state?.suspended ? 'resume' : 'suspend';
+    const groupLabel = course.has_on_premise_devices ? `${serviceCategory(group).display_name} service` : 'service';
     const prompt = action === 'suspend'
-      ? `Turn service OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
-      : `Turn service ON for ${course.course_name} until an operator suspends it?`;
+      ? `Turn ${groupLabel} OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
+      : `Turn ${groupLabel} ON for ${course.course_name} until an operator suspends it?`;
     if (!window.confirm(prompt)) return;
     setPending('service');
+    serviceActionInFlight.current = true;
+    setServiceError('');
     try {
       await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${action}`, {
-        method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id },
+        method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id, service_group: group },
       });
       scheduleDashboardRefresh();
+    } catch (error) {
+      setServiceError(error.message);
     } finally {
+      serviceActionInFlight.current = false;
       setPending('');
     }
   }
 
   const serviceAction = course?.service_state?.suspended ? 'resume' : 'suspend';
   const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
+  const requestServiceActive = course?.service_state?.active ||
+    (course?.has_on_premise_devices && course?.on_premise_service_state?.active);
 
   return <main className="operator-app"><header className="op-header">
     <div className="op-header-main">
@@ -354,13 +380,14 @@ export default function OperatorApp({
         {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
-        <ServiceStatus course={course} />
-        <button className="op-suspend" type="button" onClick={toggleService} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
+        {course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
+        <button className="op-suspend" type="button" onClick={() => toggleService()} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
           <span>{serviceActionLabel}</span>
-        </button>
+        </button></>}
+        {serviceError && <p role="alert">{serviceError}</p>}
         <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} hidden={tab !== 'requests'} />{tab === 'history' && <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} />{tab === 'history' && <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

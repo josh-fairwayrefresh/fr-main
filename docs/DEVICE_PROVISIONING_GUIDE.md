@@ -107,6 +107,19 @@ The hierarchy is Customer → Course → Device:
 - A Device has a permanent identity as the Firestore document ID `devices/{FRB-XXXX}`.
 - IDs use `CUST-XXXX`, `COURSE-XXXX`, and `FRB-XXXX` formats. Backend allocation is centralized and transaction-backed; clients do not guess IDs.
 - Active assignment is represented by `customer_id`/`customer_name`, `course_id`/`course_name`, and one `location`. A device in `in_inventory` has all assignment fields null. Do not duplicate device identity, hole, label, or active status in separate fields.
+- The independent-service-groups sandbox increment adds validated assignment
+  `service_group`: `on_course` (On-course) or `on_premise` (Amenity Areas);
+  the CPO's display-name replacement does not rename stored/API values or
+  migrate devices, requests, or service state. An absent field means
+  `on_course`. This is independent of `location`, never inferred from a custom
+  label. Admin's option names and values come from the shared
+  `lib/service_categories.json` backend owner, also consumed by Cart Operator;
+  edit `display_name`, not `id`, when changing category wording.
+  Omitted fields in cached assignment edits preserve the stored group.
+  Deployment writes the chosen group atomically with assignment; returning to
+  inventory resets the unassigned device preference to `on_course`, not either
+  Course's service state. Reassignment does not mutate historical requests or
+  Course state. See the UX owner for independent service-control behavior.
 
 The deployed backend implementation is in `fairway_backend/cloudrun_receiver/lib/fleet/`.
 
