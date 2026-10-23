@@ -61,6 +61,7 @@ try {
   check(groups[0].querySelector('button').textContent === 'Suspend', 'Visible On-course action must not repeat the category');
   check(groups[1].querySelector('button').textContent === 'Resume', 'Visible Driving Range action must not repeat the category');
   check(groups[0].getBoundingClientRect().right <= groups[1].getBoundingClientRect().left, 'Category control sets must be adjacent, not interleaved');
+  check(groups[1].getBoundingClientRect().right <= document.querySelector('.op-service-groups').getBoundingClientRect().right, 'Control sets must fit their wrapper without overlapping neighboring navigation');
   for (const group of groups) {
     const heading = group.querySelector('h2').getBoundingClientRect();
     const button = group.querySelector('button').getBoundingClientRect();
