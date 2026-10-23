@@ -30,16 +30,16 @@ recoveries and one-time exceptions must not be repeated from this history.
 
 ## Latest-known alignment — not a live-status claim
 
-This October 21 documentation reconciliation reuses established evidence only;
-it performs no new production/device inspection. Resolve apparently competing
-revisions by service and evidence date, not by selecting an older "stable"
-label or assuming accepted source was deployed.
+This summary reuses established evidence only; it performs no new
+production/device inspection. Resolve apparently competing revisions by
+service and evidence date, not by selecting an older "stable" label or
+assuming accepted source was deployed.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
-| Accepted repository baseline | `11feb67696e69e504592908a8ffafcdcb7271bd0`, the October 21 documentation merge; the opening-weekend service/reporting targets remain unimplemented. |
+| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix is the unimplemented reporting-only successor; it preserves existing operations. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
 | Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
-| Hosting | October 17 inspection: `index-B_OqSsPI.js`, predating the accepted custom-location correction. That correction is source-validated, not shown deployed. Exact Hosting version was unavailable (403). |
+| Hosting | The Alignment Register records production Hosting version `995c6b063a9af3c5`, release `1792037695879000`, and assets `index-B_OqSsPI.js` (SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`) / `index-CSksNdOy.css` (SHA-256 `6557df96a561960ec6ee7100aa484c3c85b4b7f1e16bc9d25d20c99f98cba6a0`). The October 17 check returned 403 for Hosting management, so present version availability was not established; no new cloud inspection was performed. The custom-location correction was not shown deployed by that evidence. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
 | Firmware / commissioning | Per-device recovery manifests and execution records establish artifacts, not inconsistent registry `firmware_generation` labels. FRB-0001 through FRB-0005 physical validation complete; FRB-0006 reliability acceptance pending. One-time debug-key recoveries do not resolve production signing. |
 | Field power | V25/V50/V75 VBUS architecture supersedes external 6106/5580/LiPo. Current field-idle consumption and autonomy are not measured; solar sufficiency is an operating assumption. |
@@ -77,10 +77,18 @@ descendants were enumerated independently of parent existence.
 
 Selection was valid `received_at` strictly before
 `2026-10-17T16:39:35.270Z`, with no tenant or status filter and explicit
-protection of request `bUgIybnJz0Xv7YMdz2Pm`. That historical FRB-0003 / Hole 12 request marks
-October 17 at 9:39:35.270 a.m. PDT (`America/Los_Angeles`); it and all
-at-or-after-cutoff requests were retained regardless of incomplete historical
-operator on/off evidence.
+protection of request `bUgIybnJz0Xv7YMdz2Pm`. Monarch Bay is Customer
+`CUST-0001`; its retained deployment records begin at this established
+boundary: October 17, 2026 at 9:39:35.270 a.m. PDT
+(`2026-10-17T16:39:35.270Z`, `America/Los_Angeles`). The protected
+FRB-0003 / Hole 12 request marks this boundary. These are Monarch deployment
+records, not a separate “pilot history” dataset. The protected request and
+all at-or-after-cutoff requests were retained regardless of incomplete
+historical operator on/off evidence.
+
+Existing database records may be read for the CPO_stats_fix reporting
+requirements; no conversion or transfer into Git is needed or authorized.
+The completed cleanup remains a one-time operation. No rerun is authorized.
 
 Preflight snapshot `2026-10-20T20:59:41.016Z` matched the approved inventory.
 Synthetic guards passed; expired demand windows, notifier delivery horizon,
@@ -136,8 +144,11 @@ The public Cart Operator HTML referenced JavaScript asset
 the asset from a clean production build of baseline commit
 `97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38`. The validated custom-location
 correction in this worktree was not part of that build and was not deployed.
-The Firebase Hosting management API returned 403, so an immutable Hosting
-version ID could not be verified. No production deployment was performed.
+The Firebase Hosting management API returned 403, preventing verification of
+present Hosting availability. The Alignment Register records finalized
+production version `995c6b063a9af3c5` and the associated release and asset
+hashes; that historical identity is not a live-availability claim. No
+production deployment was performed.
 
 Read-only Firestore inspection confirmed all six device records remained in
 state `deployed`; no record was changed. Existing `firmware_generation`

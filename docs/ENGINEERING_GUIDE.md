@@ -138,17 +138,19 @@ authorization remain separate. Release-specific rollout, observation, stop
 conditions, and compatible recovery are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
 
-### Approved service/reporting architecture — not yet implemented
+### CPO_stats_fix reporting architecture — not yet implemented
 
-The [opening-weekend targets](UX_SPECIFICATION.md#approved-opening-weekend-targets--not-yet-implemented)
-require one backend-owned course-service capability for current state,
-authoritative transitions/accounting, and request eligibility. State and audit
-must stay consistent under concurrency, retries, response loss, and failures;
-frontends operate explicit authorized interfaces rather than duplicate owners.
-Reporting is a read-only consumer: its failure cannot block service controls
-or actions on existing requests. Keep shared request/authentication,
-notification, and correlated COMPLETE contracts compatible with fielded
-devices; removal of schedule control must not change independent firmware
-power/lifecycle behavior. No source implementation or production cutover is
-established by this target. See [the backlog](feature_backlog.md) for blockers
-and genuinely unresolved rate/coverage decisions.
+CPO_stats_fix adds reporting over existing operator actions and request
+records. The existing operational service controls and their source of truth
+remain authoritative; reporting observes existing Resume/Suspend actions and
+request timestamps without introducing a second service-state owner or
+changing request eligibility. Keep reporting read-only with respect to
+operational records and isolated from request actions.
+
+The Cart UI presents the reporting capability; one authoritative reporting
+path owns the calculations and aggregation. Preserve existing schedules,
+ON/OFF and Suspend/Resume behavior, request actions, permissions, notifications,
+device protocol, firmware, and Course schema. No schedule removal, Course
+conversion, migration, or operational cutover is a prerequisite. The
+[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented)
+is authoritative for current behavior and the detailed reporting requirements.

@@ -55,11 +55,27 @@ Production release and deployment records remain in `DEPLOYMENT_GUIDE.md`.
   every registration rejection.
 - Fleet commissioning confirms functional operation, not endurance,
   VXX-pack autonomy, or PPK2 power characterization.
-- The unaccepted opening-weekend service/reporting implementation was rejected
-  and restored out of the working baseline. It is not current architecture or
-  a compatibility path. Its approved product targets are recorded separately
-  in `UX_SPECIFICATION.md`; future implementation must follow current readiness
-  and review discipline rather than revive the rejected design.
+- The unaccepted opening-weekend service/reporting approach was rejected and
+  restored out of the working baseline. It is not current architecture or a
+  compatibility path. The CPO's CPO_stats_fix reporting-only scope supersedes
+  it; current requirements are owned by `UX_SPECIFICATION.md`.
+
+## CPO-rejected Operator Service Control approach — 2026-10-22
+
+PR #4, [`Implement Operator Service Control and Authoritative Intervals`](https://github.com/josh-fairwayrefresh/fr-main/pull/4),
+was closed unmerged after the CPO rejected the combined service-control,
+authoritative-interval, Course-conversion, cutover, rollback, and reporting
+approach. It is superseded by CPO_stats_fix. No implementation carryover is
+approved: do not merge, cherry-pick, copy, or reuse its source, tests,
+migrations, projections, reporting design, or rollback proposal.
+
+The final rejected commit is `b62a6e59c35c0a792d64a2e5349a728ed638260d`,
+preserved by the pushed annotated tag
+`archive/rejected-operator-service-intervals-20261022`. The PR branch and
+commit history remain as archived evidence. Its worktree was clean at the
+verified final commit; no uncommitted work needed preservation. Sandbox
+resources and synthetic records associated with the rejected work remain
+untouched. No cloud cleanup or credential revocation was performed.
 
 ## Current owner documents
 

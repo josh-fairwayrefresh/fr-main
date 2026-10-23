@@ -291,51 +291,46 @@ full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
-## Approved opening-weekend targets — NOT YET IMPLEMENTED
+## CPO Stats Fix Reporting Requirements (NOT YET IMPLEMENTED)
 
-These CPO-approved targets supersede legacy schedule/reporting behavior as
-future requirements, not as a claim of current implementation or deployment.
-The rejected implementation was discarded; no temporary compatibility workflow
-or reconstructed historical service sessions are accepted.
+The current Cart Operator behavior is described above, including recurring
+schedule-based service availability and the existing rolling summary periods.
+CPO Stats Fix adds reporting while preserving that operational baseline; it
+is not a service-control replacement.
 
-- Resume turns service on; Suspend turns service off. State persists until an
-  authorized operator explicitly changes it. Midnight, a scheduled opening,
-  reload, restart, or elapsed time cannot resume service. Remove obsolete
-  schedule-based control, configuration, and UI coherently; retain course
-  timezone. Keep existing requests actionable while off.
-- Use the [single backend service capability](ENGINEERING_GUIDE.md#approved-servicereporting-architecture--not-yet-implemented).
-  Controls and existing-request actions remain usable if reporting fails.
-  Preserve course authorization, notification behavior, request handling,
-  and deployed-device request/COMPLETE contracts.
-- Active Cart Hours, Cart Hours, and Operating Hours mean elapsed time between
-  authoritative Resume/Suspend transitions, not scheduled hours. Allocate
-  ongoing and cross-midnight intervals to local days using actual elapsed
-  instants; handle duplicate/retried actions, concurrent operators, and DST.
-  Do not invent historical sessions or represent uncertain hours as measured.
-- History uses course-local calendar Day, Monday-through-Sunday Week, and
-  calendar Month, with historical navigation and complete retrieval. Filter
-  the entire `Outcome | Request | Received | Duration` Service History tally
-  by `received_at` within the selected course-local calendar period,
-  regardless of current status; include open, completed, and cancelled
-  requests. A request received Monday and completed Tuesday remains in
-  Monday's History tally with its updated outcome.
-- Replace "Transactions" with "Completed Requests"; exclude cancelled
-  requests. Fairway completions are not total cart sales, orders, or
-  transactions. Attribute Completed Requests to completion time: that Monday
-  request completed Tuesday counts toward Tuesday's Completed Requests. A
-  request accepted while service was active still qualifies when completed
-  after suspension; do not require completion itself to fall inside an on
-  interval.
-- Preserve official pilot request history/counts as-is, beginning at protected
-  request `bUgIybnJz0Xv7YMdz2Pm` at `2026-10-17T16:39:35.270Z`.
-  Incomplete historical operator evidence must not exclude retained pilot
-  requests or reduce their factual counts. The completed test-data deletion
-  is recorded in [the Deployment Guide](DEPLOYMENT_GUIDE.md#pilot-test-data-cleanup-execution--2026-10-20);
-  it is not authorization for further cleanup.
-- Rates and unknown/partial service-coverage semantics remain genuine CPO
-  decisions in [the backlog](feature_backlog.md#reporting-decisions).
-  Do not silently choose a denominator, fabricate historical hours, or
-  reinterpret acceptance-time qualification for uncertain legacy intervals.
+- Preserve existing ON/OFF, Suspend/Resume, request eligibility,
+  COMPLETE/Cancel, notifications, permissions, device protocol, and firmware.
+  Do not redesign service controls, remove schedules, or convert the Course
+  schema.
+- **Active Cart Hours** are calculated from existing operator Resume/Suspend
+  actions. Include ongoing active time through the present and allocate elapsed
+  time across course-local days. Sum duration and round it to the nearest
+  minute for reporting; display hours with at most two decimal places.
+- **Completed Requests** are counted by completion timestamp within the
+  course-local calendar day. Exclude open and cancelled requests.
+- **Average Completion Time** is receipt-to-completion elapsed time averaged
+  over those completed requests. Refresh it after each completion.
+- **Requests per Hour** equals Completed Requests divided by Active Cart Hours.
+- Show these four KPIs on the Cart UI's calendar Day, Week, and Month tabs.
+  Weeks begin Monday. Weekly and monthly Requests per Hour use total
+  completions divided by total active hours. Average Completion Time for a
+  multi-day period is total completion duration divided by the total completed
+  request count, not an unweighted average of daily averages.
+- Started periods with no activity display 0. Zero Active Cart Hours produces
+  0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
+  display.
+- Do not fabricate historical operating hours. Missing operating evidence
+  must not erase factual request counts or be described as measured activity.
+- Monarch Bay is Customer `CUST-0001`. Preserve its deployment records,
+  beginning at the established October 17, 2026, 9:39:35.270 a.m. Pacific
+  boundary. Existing database records may be read for reporting; they need no
+  conversion or transfer into Git.
+- For this increment, the CPO tests first. Neither agent runs tests until the
+  CPO has completed testing. This is increment-specific and does not change
+  Kaizen or the general verification workflow.
+- Production remains unchanged until CPO acceptance and explicit release
+  authorization. Prompt return to the stable application is a release
+  requirement. No destructive data conversion is authorized.
 
 ## Responsive Cart Operator acceptance boundary
 

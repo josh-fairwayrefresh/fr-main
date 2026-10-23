@@ -19,10 +19,8 @@ change.
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
-| Opening-weekend service/history targets | CPO-approved requirements, NOT YET IMPLEMENTED. See [UX owner](UX_SPECIFICATION.md#approved-opening-weekend-targets--not-yet-implemented) and [architecture owner](ENGINEERING_GUIDE.md#approved-servicereporting-architecture--not-yet-implemented); sequencing/prioritization and remaining rate/coverage decisions are pending. |
+| CPO_stats_fix reporting | CPO-approved reporting-only successor scope; not yet implemented. Preserve existing operational behavior and use the detailed [UX owner requirements](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented). Rejected service-control, schedule-removal, schema-conversion, cutover, and rollback work is not a dependency. |
 | Active queue truncation | Confirmed source defect; older open work can disappear behind newer closed requests. Blocks complete-queue acceptance; [details](#active-queue-truncation). |
-| Control/reporting coupling and non-atomic service audit | Confirmed source mechanisms; affected field-safe service increment must resolve and failure-test them, not route around them. [Details](#service-controls-and-accounting). |
-| Reporting completeness and attribution | Confirmed caps, rolling periods, received-time completion selection, and unfiltered tally do not meet the approved targets. [Details and CPO decisions](#reporting-decisions). |
 | Notifier source/deployment and sandbox-delivery gap | Established deployment divergence; do not claim delivery-time entitlement/preference enforcement or sandbox delivery acceptance. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
 | Provisioning policy and automation | Transactional allocation and prepared rotations exist; manufacturing, compromise/revocation, secret delivery, and end-to-end automation remain incomplete. [Details](#provisioning-policy-and-automation). |
@@ -32,10 +30,9 @@ change.
 Evidence below is accepted source at
 `11feb67696e69e504592908a8ffafcdcb7271bd0` or explicitly dated evidence in
 the linked owner. No new production/device investigation was performed.
-These form a queue for CPO prioritization, not implementation authorization:
-opening-weekend requirements are approved, but relative priority and increment
-sequencing for the following work await CPO direction. "Blocks" identifies an
-affected acceptance/release claim, not a newly asserted whole-product shutdown.
+These form a queue for prioritization, not implementation authorization.
+"Blocks" identifies an affected acceptance/release claim, not a newly asserted
+whole-product shutdown.
 
 ### Active queue truncation
 
@@ -54,62 +51,18 @@ affected acceptance/release claim, not a newly asserted whole-product shutdown.
   multi-course selection, deep links, and COMPLETE/Cancel with live updates.
   No client-side re-sort or larger arbitrary cap is an accepted fix.
 
-### Service controls and accounting
+### CPO_stats_fix reporting
 
-- **Evidence/mechanism:** [OperatorApp.jsx](../fairway_webapp/cart_operator_dashboard/src/OperatorApp.jsx)
-  obtains service state from the dashboard, clears it during refresh, and
-  refreshes reporting after actions. In
-  [index.js](../fairway_backend/cloudrun_receiver/index.js), service routes
-  mutate the course, append `service_events` separately, then construct a
-  response through `courseServiceReadModel`, which queries events.
-  Thus event/report reads can fail after a successful state write.
-- **Impact/blocking:** Controls/state labels depend on reporting-derived data;
-  partial failure can leave changed state without corresponding audit or an
-  apparently failed action. Concurrent state/event writes are not atomic.
-  These mechanisms are confirmed; a particular field failure or exact race
-  frequency is not established. Blocks authoritative persistent service
-  control and interval accounting acceptance.
-- **Durable outcome/dependencies/acceptance:** Implement the single backend
-  owner defined in Engineering Guide, atomic/idempotent transitions, explicit
-  responses and independently available controls/request actions. Depend on
-  service contract/schedule-removal design and deployed-client compatibility,
-  not a new reporting-owned control API. Validate concurrent Resume/Suspend,
-  duplicate retry, response loss, failed event write/read, reporting outage,
-  reload, and existing-request actions while off; prove coherent state/audit.
-
-### Reporting decisions
-
-- **Evidence/mechanism:** [index.js](../fairway_backend/cloudrun_receiver/index.js)
-  limits requests to 5,000 per course and recent service events to 500;
-  summarizes rolling 24-hour/7-day/30-day periods by `received_at`, including
-  completed totals, and returns only 100 closed history rows.
-  [OperatorApp.jsx](../fairway_webapp/cart_operator_dashboard/src/OperatorApp.jsx)
-  changes summary period but not the history tally. Scheduled minutes minus
-  suspension overlap, not authoritative on/off intervals, supply current hours.
-- **Impact/blocking:** Incomplete data can look complete; completion-time
-  attribution, local calendars, full tally, and operating-hours targets are
-  unmet. Blocks accurate target reporting, not independent request actions.
-- **Durable outcome/dependencies/acceptance:** Complete authorized retrieval
-  or accountable aggregation with explicit coverage; course-local calendar
-  day/week/month and Monday weeks. Service History selects requests by
-  `received_at` within the selected course-local calendar period regardless
-  of current status, including open/completed/cancelled outcomes. A request
-  received Monday and completed Tuesday stays in Monday's tally with its
-  updated outcome; its Completed Requests count belongs to Tuesday by
-  completion time. Retain qualification for requests accepted while service
-  was active then completed after suspension. Preserve official
-  pilot counts/history; never fabricate earlier service intervals.
-  Depend on authoritative service transitions, timezone and explicit CPO
-  decisions below. Validate cap-exceeding datasets, boundary/DST transitions,
-  historical navigation, Monday-received/Tuesday-completed attribution,
-  cross-shutdown completions, ongoing intervals,
-  retries/concurrency, and partial/unknown coverage without blocking controls.
-- **CPO decisions still required:** Exact rate numerators/denominators and
-  display/rounding/zero-hour behavior; how rates represent unknown or partial
-  historical service coverage without reducing official pilot counts; how
-  uncertainty is presented.
-  No numeric default, inferred historical hours, or new coverage cutoff is
-  authorized here. Approved target intent does not settle these semantics.
+- **Scope:** Deliver the reporting requirements in the
+  [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented)
+  while preserving current service controls, schedules, request handling,
+  permissions, notifications, device protocol, firmware, and Course schema.
+- **Boundary:** Observe existing operator Resume/Suspend actions and request
+  records. The rejected service-control architecture, schedule removal,
+  Course conversion, cutover, and rollback design are not dependencies.
+- **Separate deferred work:** Active queue truncation and other unrelated
+  backlog items remain separately prioritized; they are not added to this
+  reporting increment.
 
 ### Notification release gap
 
