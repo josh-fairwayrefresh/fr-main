@@ -22,8 +22,9 @@ CPO_stats_fix was accepted, merged, and deployed on 2026-10-22. Its production
 release record below documents the corrected custom-domain Auth configuration.
 The CPO-accepted queue selection and independent On-course / Amenity Areas
 update was merged and deployed on 2026-10-23. Authenticated production Admin
-and Cart read-only checks are recorded in that release entry; physical-device
-reassignment/press verification remains with the CPO.
+and Cart read-only checks are recorded in that release entry. On 2026-10-23,
+the CPO confirmed the production FRB-0006 test passed and accepted the released
+queue selection and independent Amenity Areas controls.
 
 Deployment and release entries below are retained as audit history. Historical
 entries describe the state at the time of each release and do not supersede
@@ -213,9 +214,23 @@ before any recovery. Older pre-CPO_stats_fix schedule-driven revisions have
 the different semantics documented in the October 22 record below. No
 migration or compatibility machinery is introduced.
 
-The CPO owns the post-release FRB-0006 category reassignment and physical press.
-No live dual-group toggle, production completion/cancel, firmware/Safari/
-physical-phone or push-delivery acceptance is claimed by this release.
+#### CPO production acceptance and closeout — 2026-10-23
+
+The CPO confirms the production FRB-0006 test passed and accepts the released
+queue-selection and independent Amenity Areas controls. This CPO-confirmed
+production evidence closes the release's outstanding FRB-0006 validation and
+product-acceptance handoff; it is not a claim of additional agent-run testing.
+The queue-selection/category increment and its prerequisite reporting/service
+control work are complete, not open backlog work. The stale CPO_stats_fix
+backlog entry was removed; current behavior remains owned by the UX
+Specification and exact publication evidence remains in this release record.
+
+This closeout changes documentation only. No further testing, deployment,
+device assignment, service-state action, request action, or history change
+was performed. Deployed source and publication identities above remain
+unchanged. Unrelated queue-volume truncation, physical-phone/Safari,
+push-delivery, and sustained network-reliability work remain open; this
+acceptance does not establish those separate claims.
 
 ### CPO_stats_fix production release — 2026-10-22
 
@@ -1076,6 +1091,10 @@ The Alignment Register is the canonical record mapping release milestones across
 
 ### Queue Selection / Amenity Areas Production Release (2026-10-23)
 
+- **CPO closeout:** production FRB-0006 test passed; the CPO accepts the released
+  queue selection and independent Amenity Areas controls. Release acceptance
+  and its FRB-0006 validation handoff are complete. Documentation-only closeout;
+  no further tests, deployment, or production-data/device operations.
 - **Accepted source:** PRs #7, #8, #9 merged in dependency order; deployed main
   `b3e1a53c47f5ffc52389666517876c5b1634e07d` retains the reviewed queue/tab
   regressions, independent category contracts, shared naming owner, combined
