@@ -4,11 +4,12 @@ require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
+const { resolveCourseServiceState } = require('./lib/course_service');
 const {
-  activeServiceMinutes,
-  nextScheduledStart,
-  resolveCourseServiceState,
-} = require('./lib/course_service');
+  aggregateCourseReports,
+  periodBounds,
+  reportCoursePeriods,
+} = require('./lib/service_reporting');
 const {
   authenticateDeviceCredential,
   updateDeviceAssignment,
@@ -716,24 +717,62 @@ function createFairwayHandlers(db, {
     return getCourseForCustomer(db, assignment.customer_id, assignment.course_id);
   }
 
-  async function courseServiceReadModel(course, requestTime) {
-    const eventsSnap = await coursesCollection(db, course.customer_id).doc(course.course_id)
-      .collection('service_events').orderBy('recorded_at', 'desc').limit(500).get();
-    const events = eventsSnap.docs.map((event) => event.data());
+  async function courseServiceReadModel(course) {
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
-      service_schedule: course.service_schedule,
-      service_state: resolveCourseServiceState(course, requestTime),
-      service_events: events,
+      service_state: resolveCourseServiceState(course),
     };
   }
 
   function operatorCourseServiceModel(course) {
     const { service_events: _serviceEvents, ...model } = course;
     return model;
+  }
+
+  async function courseReportingSummary(course, requestTime, historyRequests) {
+    const bounds = periodBounds(requestTime, course.timezone);
+    const summaryRangeStart = bounds.weekly.start < bounds.monthly.start
+      ? bounds.weekly.start
+      : bounds.monthly.start;
+    const serviceEvents = coursesCollection(db, course.customer_id).doc(course.course_id)
+      .collection('service_events');
+    const [priorEventSnapshot, periodEventSnapshot, completedRequestSnapshot] = await Promise.all([
+      serviceEvents.where('recorded_at', '<', summaryRangeStart)
+        .orderBy('recorded_at', 'desc').limit(1).get(),
+      serviceEvents.where('recorded_at', '>=', summaryRangeStart)
+        .where('recorded_at', '<=', requestTime)
+        .orderBy('recorded_at', 'asc').get(),
+      db.collection('requests')
+        .where('customer_id', '==', course.customer_id)
+        .where('course_id', '==', course.course_id)
+        .where('completed_at', '>=', summaryRangeStart)
+        .where('completed_at', '<=', requestTime)
+        .orderBy('completed_at', 'asc')
+        .get(),
+    ]);
+    const events = [
+      ...priorEventSnapshot.docs,
+      ...periodEventSnapshot.docs,
+    ].map((document) => document.data());
+    const requests = completedRequestSnapshot.docs.map((document) => document.data());
+    const completedHistory = completedRequestSnapshot.docs.map((document) => ({
+      request_id: document.id,
+      ...document.data(),
+    }));
+    const historyById = new Map([
+      ...historyRequests.map((request) => [request.request_id, request]),
+      ...completedHistory.map((request) => [request.request_id, request]),
+    ]);
+    return reportCoursePeriods(
+      course,
+      events,
+      requests,
+      [...historyById.values()],
+      requestTime,
+    );
   }
 
   async function getOperatorDashboard(req, res) {
@@ -757,61 +796,27 @@ function createFairwayHandlers(db, {
     const courses = (await Promise.all(assignedCourses.map((assignment) =>
       getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
       .filter(Boolean);
-    const serviceCourses = await Promise.all(courses.map((course) =>
-      courseServiceReadModel(course, requestTime)));
-    const requestSnapshots = await Promise.all(courses.map((course) => (
-      db.collection('requests')
+    const [serviceCourses, requestSnapshots] = await Promise.all([
+      Promise.all(courses.map((course) =>
+        courseServiceReadModel(course))),
+      Promise.all(courses.map((course) => db.collection('requests')
         .where('customer_id', '==', course.customer_id)
         .where('course_id', '==', course.course_id)
-        .limit(5000)
-        .get()
-    )));
-    const requests = requestSnapshots.flatMap((snapshot) => (
+        .get())),
+    ]);
+    const courseRequests = requestSnapshots.map((snapshot) => (
       snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
     ));
-    const periods = [
-      ['daily', 24 * 60],
-      ['weekly', 7 * 24 * 60],
-      ['monthly', 30 * 24 * 60],
-    ];
-    const summaries = Object.fromEntries(periods.map(([period, durationMinutes]) => {
-      const start = new Date(requestTime.getTime() - durationMinutes * 60000);
-      const periodRequests = requests.filter((request) => {
-        const receivedAt = toDate(request.received_at);
-        return receivedAt && receivedAt >= start && receivedAt <= requestTime;
-      });
-      const completed = periodRequests.filter((request) => request.status === 'completed');
-      const cancelled = periodRequests.filter((request) => request.status === 'cancelled');
-      const activeMinutes = courses.reduce((total, course) => {
-        const service = serviceCourses.find((item) => item.course_id === course.course_id);
-        return total + activeServiceMinutes(course, service.service_events, start, requestTime);
-      }, 0);
-      const activeHours = activeMinutes / 60;
-      const completionMinutes = completed.map((request) => {
-        const receivedAt = toDate(request.received_at);
-        const completedAt = toDate(request.completed_at);
-        return receivedAt && completedAt ? (completedAt - receivedAt) / 60000 : null;
-      }).filter((value) => value !== null);
-      return [period, {
-        requests: periodRequests.length,
-        completed_transactions: completed.length,
-        cancelled_requests: cancelled.length,
-        active_cart_hours: Number(activeHours.toFixed(2)),
-        transactions_per_cart_hour: activeHours > 0 ? Number((completed.length / activeHours).toFixed(1)) : 0,
-        requests_per_hour: activeHours > 0 ? Number((periodRequests.length / activeHours).toFixed(1)) : 0,
-        average_completion_minutes: completionMinutes.length > 0
-          ? Number((completionMinutes.reduce((sum, value) => sum + value, 0) / completionMinutes.length).toFixed(1))
-          : null,
-      }];
-    }));
-    const history = requests
-      .filter((request) => ['completed', 'cancelled'].includes(request.status))
-      .sort((left, right) => toDate(right.received_at) - toDate(left.received_at))
-      .slice(0, 100);
+    const courseReports = await Promise.all(courses.map((course, index) =>
+      courseReportingSummary(course, requestTime, courseRequests[index])));
+    const reports = aggregateCourseReports(courseReports);
+    const summaries = Object.fromEntries(Object.entries(reports)
+      .map(([period, report]) => [period, report.summary]));
     return res.status(200).json({
       courses: serviceCourses.map(operatorCourseServiceModel),
+      reports,
       summaries,
-      history,
+      history: reports.daily.history,
     });
   }
 
@@ -823,25 +828,26 @@ function createFairwayHandlers(db, {
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
     const requestTime = now();
     const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
-    if (action === 'suspend') {
-      const until = nextScheduledStart(course, requestTime);
-      if (!until) return res.status(409).send('Course service schedule is not configured\n');
-      await courseRef.update({
-        service_suspension: { suspended_at: requestTime, until, suspended_by: operator.identity.uid },
+    const suspended = action === 'suspend';
+    const eventRef = courseRef.collection('service_events').doc();
+    await db.runTransaction(async (transaction) => {
+      const courseSnapshot = await transaction.get(courseRef);
+      if (!courseSnapshot.exists) throw new Error('Course disappeared during service update');
+      transaction.update(courseRef, {
+        service_suspension: suspended
+          ? { suspended_at: requestTime, suspended_by: operator.identity.uid }
+          : null,
         updated_at: requestTime,
       });
-      await courseRef.collection('service_events').add({
-        type: 'suspended', recorded_at: requestTime, operator_id: operator.identity.uid, until,
+      transaction.set(eventRef, {
+        type: suspended ? 'suspended' : 'resumed',
+        recorded_at: requestTime,
+        operator_id: operator.identity.uid,
       });
-    } else {
-      await courseRef.update({ service_suspension: null, updated_at: requestTime });
-      await courseRef.collection('service_events').add({
-        type: 'resumed', recorded_at: requestTime, operator_id: operator.identity.uid,
-      });
-    }
+    });
     const updated = await getCourseForCustomer(db, course.customer_id, course.course_id);
     return res.status(200).json(operatorCourseServiceModel(
-      await courseServiceReadModel(updated, requestTime)
+      await courseServiceReadModel(updated)
     ));
   }
 
@@ -959,11 +965,10 @@ function createFairwayHandlers(db, {
           course_id: courseSnap.id,
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
-          service_schedule: courseSource.service_schedule ?? null,
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_suspension', 'comments']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -1012,23 +1017,21 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule']);
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
     });
     return res.status(200).json(course);

@@ -29,11 +29,17 @@ Current accepted source describes implementation, not proof of deployment.
 Use the Deployment Guide's latest-known alignment summary for dated runtime
 evidence; older release records are historical, not competing current states
 or standing authorizations. The CPO_stats_fix reporting scope is the successor
-to the rejected combined service-control/reporting approach and is **not yet
-implemented**. Its authoritative requirements are in the
-[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements-not-yet-implemented).
-It preserves current operational behavior; the rejected targets are not active
-instructions. Unknown measurements, incomplete
+to the rejected combined service-control/reporting approach. Its source
+implementation is in a feature branch and is published only to the sandbox
+for CPO review; it is not accepted or production-deployed. The CPO has
+clarified that the candidate's Resume/Suspend state is
+persistent and schedule-independent, and that schedule controls leave the
+active Admin UI while stored fields remain intact. The stable production
+application still has its accepted schedule-driven behavior until a separately
+authorized release. Detailed candidate requirements are in the
+[UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements).
+The rejected PR #4 architecture remains retired; its migration/cutover machinery
+is not active guidance. Unknown measurements, incomplete
 acceptance, and unresolved product decisions remain explicit in the backlog.
 The October 20 test-data cleanup and October 21 CPO acceptance are complete;
 the concise deployment record is authoritative for that operation, with

@@ -291,17 +291,32 @@ full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
-## CPO Stats Fix Reporting Requirements (NOT YET IMPLEMENTED)
+## CPO Stats Fix Reporting Requirements
 
-The current Cart Operator behavior is described above, including recurring
-schedule-based service availability and the existing rolling summary periods.
-CPO Stats Fix adds reporting while preserving that operational baseline; it
-is not a service-control replacement.
+The preceding section records the CPO-accepted production behavior, including
+schedule-driven service availability and schedule controls. The CPO clarified
+the candidate behavior for CPO_stats_fix: Resume/Suspend is the persistent
+operational control, independent of schedules, midnight, and elapsed time, and
+the Beverage Service Schedule is removed from active Admin configuration UI.
+The existing stored schedule fields are retained. This candidate is in a
+feature branch pending CPO hands-on review; production remains on its accepted
+schedule-driven behavior until review, acceptance, and explicit release
+authorization.
 
-- Preserve existing ON/OFF, Suspend/Resume, request eligibility,
-  COMPLETE/Cancel, notifications, permissions, device protocol, and firmware.
-  Do not redesign service controls, remove schedules, or convert the Course
-  schema.
+- Resume turns service ON until Suspend; Suspend turns service OFF until
+  Resume. Schedules, midnight, and elapsed time do not change that state.
+  Suspension has no expiry; only an explicit Resume turns service ON.
+  One operational owner supplies current service state and records operator
+  transitions. Request eligibility reads that state directly. Reporting
+  consumes transition/request records and is never a prerequisite for
+  accepting requests.
+- Remove the Beverage Service Schedule from active control/configuration UI.
+  Course create/edit operations do not validate, expose, or write schedule
+  fields. Ignore schedule fields sent by older cached Admin clients. Existing
+  stored schedule data is left untouched and has no operational effect; do not
+  delete it or introduce PR #4 migration/cutover machinery.
+- Preserve request handling, COMPLETE/Cancel, notifications, permissions,
+  device protocol, and firmware contracts.
 - **Active Cart Hours** are calculated from existing operator Resume/Suspend
   actions. Include ongoing active time through the present and allocate elapsed
   time across course-local days. Sum duration and round it to the nearest
@@ -316,6 +331,14 @@ is not a service-control replacement.
   completions divided by total active hours. Average Completion Time for a
   multi-day period is total completion duration divided by the total completed
   request count, not an unweighted average of daily averages.
+- History rows use the same selected Course and calendar period as the KPIs:
+  completed rows are selected by completion time and cancelled rows by
+  cancellation time. Refresh reporting when request outcomes change, including
+  changes made by another operator, and at minute-level intervals so ongoing
+  active time and local calendar-period boundaries become current. Return every
+  matching outcome for the selected period; do not silently truncate History.
+  If pagination is introduced later, it must expose the total and provide access
+  to every matching row.
 - Started periods with no activity display 0. Zero Active Cart Hours produces
   0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
   display.

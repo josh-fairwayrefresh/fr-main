@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3, Check, CheckCircle2, ChevronRight, Clock3, Coffee,
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
@@ -51,7 +51,7 @@ function Brand() {
 
 function ServiceStatus({ course }) {
   const state = course?.service_state;
-  const label = state?.suspended ? 'Service Suspended' : state?.active ? 'Service Active' : 'Outside Service Hours';
+  const label = state?.active ? 'Service ON' : 'Service OFF';
   return <div className={`op-status ${state?.active ? 'active' : ''}`}><i />{label}</div>;
 }
 
@@ -78,8 +78,21 @@ function RequestFocus({ request, queueLength, onAction, pending }) {
   </article>;
 }
 
+function formatHours(value) {
+  return Number(value || 0).toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatAverageCompletion(value) {
+  return value == null ? '-' : `${value} min`;
+}
+
 function Performance({ summary }) {
-  return <section className="op-performance"><span>CURRENT PERFORMANCE</span><div><strong>{summary?.completed_transactions ?? 0}</strong><small>Transactions</small></div><div><strong>{summary?.transactions_per_cart_hour ?? 0}</strong><small>Transactions per hour</small></div><div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests / cart hour</small></div></section>;
+  return <section className="op-performance"><span>CURRENT PERFORMANCE - DAY</span>
+    <div><strong>{summary?.completed_requests ?? 0}</strong><small>Completed Requests</small></div>
+    <div><strong>{formatHours(summary?.active_cart_hours)}</strong><small>Active Cart Hours</small></div>
+    <div><strong>{formatAverageCompletion(summary?.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong><small>Average Completion Time</small></div>
+    <div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests per Hour</small></div>
+  </section>;
 }
 
 function RecentHistory({ history, onOpen }) {
@@ -103,9 +116,15 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
 
 function HistoryView({ dashboard }) {
   const [period, setPeriod] = useState('daily');
-  const summary = dashboard?.summaries?.[period] || {};
-  const history = dashboard?.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Transactions</span><strong>{summary.completed_transactions ?? 0}</strong></div><div><Clock3 size={18} /><span>Active cart hours</span><strong>{summary.active_cart_hours ?? 0}</strong></div><div><CheckCircle2 size={18} /><span>Transactions per hour</span><strong>{summary.transactions_per_cart_hour ?? 0}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${summary.average_completion_minutes} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  const report = dashboard?.reports?.[period] || {};
+  const summary = report.summary || {};
+  const history = report.history || [];
+  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics">
+    <div><BarChart3 size={18} aria-hidden="true" /><span>Completed Requests</span><strong>{summary.completed_requests ?? 0}</strong></div>
+    <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
+    <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
+    <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
+  </div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
 }
 
 export default function OperatorApp({
@@ -121,27 +140,104 @@ export default function OperatorApp({
   });
   const [pending, setPending] = useState('');
   const [celebration, setCelebration] = useState('');
-
-  async function refreshDashboard(selectedCourse = course) {
-    setDashboard(null);
-    const query = selectedCourse
-      ? `?customer_id=${encodeURIComponent(selectedCourse.customer_id)}&course_id=${encodeURIComponent(selectedCourse.course_id)}`
-      : '';
-    try {
-      setDashboard(await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`));
-      setDashboardError('');
-    } catch (reason) {
-      setDashboardError(reason.message);
-    }
-  }
+  const refreshSequence = useRef(0);
+  const refreshTimer = useRef(null);
+  const refreshInFlight = useRef(false);
+  const refreshQueued = useRef(false);
+  const mounted = useRef(true);
+  const selectedCourseRef = useRef(null);
+  const selectedCourseKeyRef = useRef('');
 
   const selectedCourse = operatorConfig.courses.find((item) => courseKey(item) === selectedCourseKey)
     || selectedCourseFromLocation(operatorConfig.courses, window.location.search);
+  const selectedCourseKeyValue = selectedCourse ? courseKey(selectedCourse) : '';
+  selectedCourseRef.current = selectedCourse;
+  selectedCourseKeyRef.current = selectedCourseKeyValue;
   const course = mergeDashboardCourse(selectedCourse, dashboard?.courses);
-  useEffect(() => { refreshDashboard(course); }, [user, apiBaseUrl, course?.customer_id, course?.course_id]);
-  const selectedRequests = requests.filter((request) => (
+  const selectedRequests = useMemo(() => requests.filter((request) => (
     !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
-  ));
+  )), [requests, course?.customer_id, course?.course_id]);
+  const outcomeSignature = useMemo(() => selectedRequests
+    .filter((request) => ['completed', 'cancelled'].includes(request.status))
+    .map((request) => [
+      request.id,
+      request.status,
+      request.completed_at?.toMillis?.() ?? request.completed_at ?? '',
+      request.cancelled_at?.toMillis?.() ?? request.cancelled_at ?? '',
+    ].join(':'))
+    .sort()
+    .join('|'), [selectedRequests]);
+
+  const scheduleDashboardRefresh = useCallback(() => {
+    if (!mounted.current) return;
+    const sequence = ++refreshSequence.current;
+    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(async () => {
+      refreshTimer.current = null;
+      if (!user || sequence !== refreshSequence.current) return;
+      if (refreshInFlight.current) {
+        refreshQueued.current = true;
+        return;
+      }
+      const targetCourse = selectedCourseRef.current;
+      const targetKey = selectedCourseKeyRef.current;
+      const query = targetCourse
+        ? `?customer_id=${encodeURIComponent(targetCourse.customer_id)}&course_id=${encodeURIComponent(targetCourse.course_id)}`
+        : '';
+      refreshInFlight.current = true;
+      try {
+        const result = await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`);
+        if (sequence === refreshSequence.current && targetKey === selectedCourseKeyRef.current) {
+          setDashboard(result);
+          setDashboardError('');
+        }
+      } catch (reason) {
+        if (sequence === refreshSequence.current && targetKey === selectedCourseKeyRef.current) {
+          setDashboardError(reason.message);
+        }
+      } finally {
+        refreshInFlight.current = false;
+        if (refreshQueued.current && mounted.current) {
+          refreshQueued.current = false;
+          scheduleDashboardRefresh();
+        }
+      }
+    }, 120);
+  }, [user, apiBaseUrl]);
+
+  useEffect(() => {
+    refreshSequence.current += 1;
+    setDashboard(null);
+    scheduleDashboardRefresh();
+    return () => {
+      refreshSequence.current += 1;
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+      refreshTimer.current = null;
+    };
+  }, [user, apiBaseUrl, selectedCourseKeyValue, scheduleDashboardRefresh]);
+
+  useEffect(() => {
+    scheduleDashboardRefresh();
+  }, [outcomeSignature, scheduleDashboardRefresh]);
+
+  useEffect(() => {
+    let timer;
+    function refreshOnMinute() {
+      scheduleDashboardRefresh();
+      timer = window.setTimeout(refreshOnMinute, 60000 - (Date.now() % 60000));
+    }
+    timer = window.setTimeout(refreshOnMinute, 60000 - (Date.now() % 60000));
+    return () => window.clearTimeout(timer);
+  }, [user, apiBaseUrl, selectedCourseKeyValue, scheduleDashboardRefresh]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      refreshSequence.current += 1;
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+    };
+  }, []);
 
   async function actOnRequest(request, action) {
     setPending(request.id);
@@ -151,7 +247,7 @@ export default function OperatorApp({
         setCelebration(`${requestLocationLabel(request)} complete`);
         window.setTimeout(() => setCelebration(''), 1800);
       }
-      await refreshDashboard();
+      scheduleDashboardRefresh();
     } finally {
       setPending('');
     }
@@ -161,15 +257,15 @@ export default function OperatorApp({
     if (!course) return;
     const action = course.service_state?.suspended ? 'resume' : 'suspend';
     const prompt = action === 'suspend'
-      ? `Suspend new beverage requests for ${course.course_name} until the next scheduled service start? Existing requests remain actionable.`
-      : `Resume beverage requests for ${course.course_name}?`;
+      ? `Turn service OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
+      : `Turn service ON for ${course.course_name} until an operator suspends it?`;
     if (!window.confirm(prompt)) return;
     setPending('service');
     try {
       await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${action}`, {
         method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id },
       });
-      await refreshDashboard();
+      scheduleDashboardRefresh();
     } finally {
       setPending('');
     }
@@ -193,7 +289,7 @@ export default function OperatorApp({
     <div className="op-header-context">
       <div className="op-course-context">
         <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); setDashboard(null); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
         <ServiceStatus course={course} />
@@ -204,5 +300,5 @@ export default function OperatorApp({
         <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }
