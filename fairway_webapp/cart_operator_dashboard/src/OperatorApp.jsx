@@ -59,22 +59,22 @@ function EmptyQueue({ serviceActive }) {
   return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New golfer requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
 }
 
-function RequestFocus({ request, queueLength, onAction, pending }) {
-  const [error, setError] = useState('');
+function RequestFocus({ request, queueLength, onAction, pending, actionBlocked, actioned }) {
+  const [error, setError] = useState(null);
   async function act(action) {
     if (action === 'cancel' && !window.confirm(`Cancel the request for ${requestLocationLabel(request)}?`)) return;
-    setError('');
+    setError(null);
     try {
       await onAction(request, action);
     } catch (reason) {
-      setError(reason.message);
+      setError({ requestId: request.id, message: reason?.message || `Unable to ${action} request.` });
     }
   }
   return <article id={`request-${request.id}`} className="op-priority">
     <div className="op-time"><Clock3 size={20} /><span>Waiting</span><strong>{requestAge(request.received_at)}</strong></div>
-    <div className="op-place"><span>OLDEST ACTIVE REQUEST</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
-    <div className="op-actions"><button className="op-complete" type="button" disabled={pending} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={pending} onClick={() => act('cancel')}>Cancel request</button></div>
-    <footer><CheckCircle2 size={18} /><span>{queueLength > 1 ? 'On completion, the next oldest request moves into focus.' : 'Completing this request clears the active queue.'}</span>{error && <strong role="alert">{error}</strong>}</footer>
+    <div className="op-place" aria-live="polite"><span>Selected request</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
+    <div className="op-actions"><button className="op-complete" type="button" disabled={actionBlocked || actioned} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : actioned ? 'Submitted' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={actionBlocked || actioned} onClick={() => act('cancel')}>Cancel request</button></div>
+    <footer><CheckCircle2 size={18} /><span>{queueLength > 1 ? 'On completion, the oldest remaining request becomes selected.' : 'Completing this request clears the active queue.'}</span>{error?.requestId === request.id && <strong role="alert">{error.message}</strong>}</footer>
   </article>;
 }
 
@@ -100,17 +100,64 @@ function RecentHistory({ history, onOpen }) {
   return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>{requestLocationLabel(item)}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
 }
 
-function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, summary, history, onOpenHistory, serviceActive }) {
+function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, actionPending, requestActionInFlight, actionedRequestIds, summary, history, onOpenHistory, serviceActive, hidden }) {
+  const [selectedRequestId, setSelectedRequestId] = useState('');
+  const selectedRequestIdRef = useRef('');
+  const manualSelectionVersion = useRef(0);
+  const lastFocusedRequestId = useRef('');
+  const pendingNotificationSelection = useRef(null);
+  const selectedRequest = requests.find((request) => request.id === selectedRequestId) || requests[0] || null;
+  const otherRequests = requests.filter((request) => request.id !== selectedRequest?.id);
+
   useEffect(() => {
-    if (focusedRequestId) document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
-  }, [focusedRequestId, requests]);
-  const next = requests[0];
-  return <div className="op-layout"><section className="op-focus"><div className="op-queue-summary"><strong className="op-queue-total"><b>{requests.length}</b><small>{requests.length === 1 ? 'request' : 'requests'} in queue</small></strong></div>
+    if (focusedRequestId && focusedRequestId !== lastFocusedRequestId.current) {
+      lastFocusedRequestId.current = focusedRequestId;
+      pendingNotificationSelection.current = {
+        requestId: focusedRequestId,
+        selectionVersion: manualSelectionVersion.current,
+      };
+    }
+
+    const notificationSelection = pendingNotificationSelection.current;
+    if (notificationSelection) {
+      if (notificationSelection.selectionVersion !== manualSelectionVersion.current) {
+        pendingNotificationSelection.current = null;
+      } else if (!actionPending && requests.some((request) => request.id === notificationSelection.requestId)) {
+        selectedRequestIdRef.current = notificationSelection.requestId;
+        setSelectedRequestId(notificationSelection.requestId);
+        pendingNotificationSelection.current = null;
+        return;
+      } else if (!actionPending && loadState === 'ready') {
+        pendingNotificationSelection.current = null;
+      }
+    }
+
+    if (!requests.some((request) => request.id === selectedRequestIdRef.current)) {
+      const oldestRequestId = requests[0]?.id || '';
+      selectedRequestIdRef.current = oldestRequestId;
+      setSelectedRequestId(oldestRequestId);
+    }
+  }, [actionPending, focusedRequestId, loadState, requests]);
+
+  function selectRequest(requestId) {
+    if (actionPending || requestActionInFlight.current) return;
+    manualSelectionVersion.current += 1;
+    pendingNotificationSelection.current = null;
+    selectedRequestIdRef.current = requestId;
+    setSelectedRequestId(requestId);
+  }
+
+  useEffect(() => {
+    if (focusedRequestId && selectedRequest?.id === focusedRequestId) {
+      document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
+    }
+  }, [focusedRequestId, requests, selectedRequest?.id]);
+  return <div className="op-layout" hidden={hidden}><section className="op-focus"><div className="op-queue-summary"><strong className="op-queue-total"><b>{requests.length}</b><small>{requests.length === 1 ? 'request' : 'requests'} in queue</small></strong></div>
     {loadState === 'loading' && <div className="op-message">Loading requests...</div>}
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
-    {loadState === 'ready' && !next && <EmptyQueue serviceActive={serviceActive} />}
-    {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending === next.id} />}
-    {requests.length > 1 && <section className="op-up-next"><div><span>UP NEXT</span><strong>{requests.length - 1} more {requests.length === 2 ? 'request' : 'requests'}</strong></div>{requests.slice(1).map((request, index) => <article key={request.id}><span>{index + 2}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} /></article>)}</section>}
+    {loadState === 'ready' && !selectedRequest && <EmptyQueue serviceActive={serviceActive} />}
+    {selectedRequest && <RequestFocus request={selectedRequest} queueLength={requests.length} onAction={onAction} pending={pending === selectedRequest.id} actionBlocked={Boolean(pending)} actioned={actionedRequestIds.has(selectedRequest.id)} />}
+    {otherRequests.length > 0 && <section className="op-up-next" aria-labelledby="other-active-requests-heading"><div><span id="other-active-requests-heading">Other active requests</span><strong>{otherRequests.length} more {otherRequests.length === 1 ? 'request' : 'requests'}</strong></div>{otherRequests.map((request, index) => <button className="op-queue-row" type="button" key={request.id} disabled={actionPending} aria-label={`Select request ${requestLocationLabel(request)}`} onClick={() => selectRequest(request.id)}><span>{index + 1}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} aria-hidden="true" /></button>)}</section>}
   </section><aside className="op-summary"><Performance summary={summary} /><RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
 
@@ -139,7 +186,10 @@ export default function OperatorApp({
     return selected ? courseKey(selected) : '';
   });
   const [pending, setPending] = useState('');
+  const [actionedRequestIds, setActionedRequestIds] = useState(() => new Set());
   const [celebration, setCelebration] = useState('');
+  const requestActionInFlight = useRef(false);
+  const actionedRequestIdsRef = useRef(new Set());
   const refreshSequence = useRef(0);
   const refreshTimer = useRef(null);
   const refreshInFlight = useRef(false);
@@ -157,6 +207,13 @@ export default function OperatorApp({
   const selectedRequests = useMemo(() => requests.filter((request) => (
     !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
   )), [requests, course?.customer_id, course?.course_id]);
+  useEffect(() => {
+    const activeRequestIds = new Set(selectedRequests.map((request) => request.id));
+    for (const requestId of actionedRequestIdsRef.current) {
+      if (!activeRequestIds.has(requestId)) actionedRequestIdsRef.current.delete(requestId);
+    }
+    setActionedRequestIds(new Set(actionedRequestIdsRef.current));
+  }, [selectedRequests]);
   const outcomeSignature = useMemo(() => selectedRequests
     .filter((request) => ['completed', 'cancelled'].includes(request.status))
     .map((request) => [
@@ -240,21 +297,26 @@ export default function OperatorApp({
   }, []);
 
   async function actOnRequest(request, action) {
+    if (pending || requestActionInFlight.current || actionedRequestIdsRef.current.has(request.id)) return;
+    requestActionInFlight.current = true;
     setPending(request.id);
     try {
       await onRequestAction(request, action);
+      actionedRequestIdsRef.current.add(request.id);
+      setActionedRequestIds(new Set(actionedRequestIdsRef.current));
       if (action === 'complete') {
         setCelebration(`${requestLocationLabel(request)} complete`);
         window.setTimeout(() => setCelebration(''), 1800);
       }
       scheduleDashboardRefresh();
     } finally {
+      requestActionInFlight.current = false;
       setPending('');
     }
   }
 
   async function toggleService() {
-    if (!course) return;
+    if (!course || requestActionInFlight.current || pending) return;
     const action = course.service_state?.suspended ? 'resume' : 'suspend';
     const prompt = action === 'suspend'
       ? `Turn service OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
@@ -289,16 +351,16 @@ export default function OperatorApp({
     <div className="op-header-context">
       <div className="op-course-context">
         <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
         <ServiceStatus course={course} />
-        <button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
+        <button className="op-suspend" type="button" onClick={toggleService} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
           <span>{serviceActionLabel}</span>
         </button>
         <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} hidden={tab !== 'requests'} />{tab === 'history' && <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

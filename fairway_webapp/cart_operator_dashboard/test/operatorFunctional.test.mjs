@@ -9,7 +9,10 @@ const entrySource = await readFile(new URL('../src/main.jsx', import.meta.url), 
 const operatorStyles = await readFile(new URL('../src/operator.css', import.meta.url), 'utf8');
 
 test('functional Option C operator surface keeps the approved workflow contract', () => {
-  assert.match(source, /OLDEST ACTIVE REQUEST/);
+  assert.match(source, /Selected request/);
+  assert.match(source, /Other active requests/);
+  assert.match(source, /aria-label=\{`Select request \$\{requestLocationLabel\(request\)\}`\}/);
+  assert.match(source, /onRequestAction\(request, action\)/);
   assert.match(source, /Complete service/);
   assert.match(source, /Cancel request/);
   assert.match(source, /operator\/service\/\$\{action\}/);
@@ -18,6 +21,17 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.doesNotMatch(source, /NEXT REQUEST/);
   assert.doesNotMatch(source, /op-intro/);
   assert.doesNotMatch(source, />CONFIRM</);
+});
+
+test('request selection remains stable and notification focus is one-shot', () => {
+  assert.match(source, /requests\.find\(\(request\) => request\.id === selectedRequestId\) \|\| requests\[0\]/);
+  assert.match(source, /pendingNotificationSelection\.current = \{\s*requestId: focusedRequestId/);
+  assert.match(source, /notificationSelection\.selectionVersion !== manualSelectionVersion\.current/);
+  assert.match(source, /selectedRequestIdRef\.current = oldestRequestId/);
+  assert.match(source, /key=\{selectedCourseKeyValue\}/);
+  assert.match(source, /disabled=\{actionPending\}/);
+  assert.match(source, /requestActionInFlight\.current \|\| actionedRequestIdsRef\.current\.has\(request\.id\)/);
+  assert.match(source, /requestLocationLabel\(request\)/);
 });
 
 test('Assigned customer users have an Inventory link into the shared authenticated session', () => {

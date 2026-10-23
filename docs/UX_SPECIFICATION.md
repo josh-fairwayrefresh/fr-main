@@ -252,20 +252,38 @@ and [open defects](feature_backlog.md#material-readiness-items).
    name is unavailable, the UI shows an explicit unavailable label rather
    than `null` or `undefined`.
 - The application is a full-surface, landscape-iPad-first responsive workspace. The responsive phone-layout release is live; authenticated physical-phone/Safari usability and CPO mobile acceptance remain pending as recorded in `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
-- The intended active queue is oldest first, with the oldest request receiving
-   strongest focus. Current retrieval first takes the latest 100 requests
+- The active queue remains ordered by request age, oldest first. Initially the
+   oldest active request is selected in the action card. Each other row is an
+   accessible selection button under “Other active requests”; choosing one
+   displays it in the “Selected request” card with its existing Complete and
+   Cancel actions. The list continues to include the former oldest request
+   when a newer request is selected, and retains age order.
+- A selected request remains selected across refreshes and new arrivals. If it
+   is completed, cancelled, or otherwise leaves the active queue, selection
+   falls back to the oldest remaining request. Changing Courses resets the
+   selection to that Course's oldest active request. A notification targeting
+   an active request selects it; a later manual selection is not overridden by
+   subsequent refreshes.
+- History hides the entire Requests view, including Complete and Cancel
+   controls. Returning to Requests restores the prior active selection.
+- While a request action is in flight, queue selection and duplicate request
+   actions are disabled. Action errors remain associated with the request that
+   produced them. Completion continues to use the selected request's existing
+   request-specific action, preserving request/device correlation.
+- The intended active queue is oldest first. Current retrieval first takes the latest 100 requests
    before active filtering, so older open requests can be omitted. Complete
    visibility is a known defect, not established behavior at all volumes.
 - Each request displays its configured location: numbered locations use the
    `Hole N` label, and custom locations use the configured text unchanged.
    Older requests without a display label fall back to their valid numbered
    hole; requests without valid location data use `Location unknown`.
-- The queue summary shows the active-request count without repeating the oldest
-   request's location above its card; the focused card is the single location
-   display.
-- COMPLETE is the primary request action. It closes the request, preserves the
-   existing request-correlated marker command behavior, and shows a brief,
-   nonblocking confirmation before the next oldest request moves into focus.
+- The queue summary shows the active-request count. The selected request card
+   displays its request location; all other rows display their own configured
+   location using the same numbered/custom/unknown labels.
+- COMPLETE is the primary request action. It closes the selected request,
+   preserves the existing request-correlated marker command behavior, and
+   shows a brief, nonblocking confirmation before selection falls back to the
+   oldest remaining request if the selected request leaves the queue.
 - Cancel Request is subordinate and requires operator confirmation. It closes
    the request without creating a marker command.
 - There is no Cart Operator CONFIRM interaction.
