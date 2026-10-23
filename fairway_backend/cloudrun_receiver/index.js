@@ -4,7 +4,7 @@ require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
-const { resolveCourseServiceState } = require('./lib/course_service');
+const { resolveCourseServiceState, resolveServiceGroup } = require('./lib/course_service');
 const {
   aggregateCourseReports,
   periodBounds,
@@ -214,6 +214,7 @@ function createFairwayHandlers(db, {
       course_name: device.course_name || null,
       device_id: deviceId,
       device_label: deriveDisplayLabelFromLocation(device.location),
+      service_group: resolveServiceGroup(device.service_group),
       hole: deriveHoleFromLocation(device.location),
       event_type: eventType,
       status: 'new',
@@ -313,7 +314,14 @@ function createFairwayHandlers(db, {
       return res.status(400).send('Unknown event\n');
     }
 
-    if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, requestTime).active) {
+    let serviceGroup;
+    try {
+      serviceGroup = resolveServiceGroup(device.service_group);
+    } catch (error) {
+      console.warn('Rejected device request with invalid stored service group:', { device_id: deviceId });
+      return res.status(422).send(`${error.message}\n`);
+    }
+    if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, serviceGroup).active) {
       console.log('Rejected golfer request because Course service is unavailable:', {
         device_id: deviceId,
         course_id: device.course_id,
@@ -718,12 +726,19 @@ function createFairwayHandlers(db, {
   }
 
   async function courseServiceReadModel(course) {
+    const assignedDevices = await db.collection('devices')
+      .where('customer_id', '==', course.customer_id)
+      .where('course_id', '==', course.course_id).get();
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
       service_state: resolveCourseServiceState(course),
+      on_premise_service_state: resolveCourseServiceState(course, 'on_premise'),
+      has_on_premise_devices: assignedDevices.docs.some((document) => (
+        document.data().service_group === 'on_premise'
+      )),
     };
   }
 
@@ -823,23 +838,36 @@ function createFairwayHandlers(db, {
   async function updateCourseService(req, res, action) {
     const operator = await authorizeOperator(req, res);
     if (!operator) return res;
+    let group;
+    try {
+      group = resolveServiceGroup(req.body?.service_group);
+    } catch (error) {
+      return res.status(400).send(`${error.message}\n`);
+    }
     const courseId = req.body?.course_id;
     const course = await authorizedCourse(operator, courseId, req.body?.customer_id);
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
     const requestTime = now();
     const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
     const suspended = action === 'suspend';
-    const eventRef = courseRef.collection('service_events').doc();
+    const eventRef = courseRef.collection(group === 'on_course' ? 'service_events' : 'on_premise_service_events').doc();
     await db.runTransaction(async (transaction) => {
       const courseSnapshot = await transaction.get(courseRef);
       if (!courseSnapshot.exists) throw new Error('Course disappeared during service update');
-      transaction.update(courseRef, {
+      if (resolveCourseServiceState(courseSnapshot.data(), group).suspended === suspended) return;
+      const stateUpdate = group === 'on_course' ? {
         service_suspension: suspended
           ? { suspended_at: requestTime, suspended_by: operator.identity.uid }
           : null,
+      } : {
+        on_premise_service: { active: !suspended, updated_at: requestTime, updated_by: operator.identity.uid },
+      };
+      transaction.update(courseRef, {
+        ...stateUpdate,
         updated_at: requestTime,
       });
       transaction.set(eventRef, {
+        service_group: group,
         type: suspended ? 'suspended' : 'resumed',
         recorded_at: requestTime,
         operator_id: operator.identity.uid,
@@ -922,6 +950,7 @@ function createFairwayHandlers(db, {
       course_id: device.course_id ?? null,
       course_name: course?.course_name ?? null,
       location: device.location ?? null,
+      service_group: resolveServiceGroup(device.service_group),
       comments: device.comments ?? null,
       sim_iccid: device.sim_iccid ?? null,
       hardware_revision: device.hardware_revision ?? null,
@@ -1062,21 +1091,23 @@ function createFairwayHandlers(db, {
   }
 
   async function patchAdminDeviceAssignment(req, res, deviceId) {
-    requireBodyFields(req.body, ['customer_id', 'course_id', 'location']);
+    requireBodyFields(req.body, ['customer_id', 'course_id', 'location', 'service_group']);
     const device = await updateDeviceAssignment(db, deviceId, {
       customerId: req.body.customer_id,
       courseId: req.body.course_id,
       location: req.body.location,
+      serviceGroup: req.body.service_group,
     });
     return res.status(200).json(redactDeviceResult(device));
   }
 
   async function patchAdminDeviceState(req, res, deviceId) {
-    requireBodyFields(req.body, ['state', 'customer_id', 'course_id', 'location']);
+    requireBodyFields(req.body, ['state', 'customer_id', 'course_id', 'location', 'service_group']);
     const device = await updateDeviceState(db, deviceId, req.body.state, {
       customerId: req.body.customer_id,
       courseId: req.body.course_id,
       location: req.body.location,
+      serviceGroup: req.body.service_group,
     });
     return res.status(200).json(redactDeviceResult(device));
   }

@@ -15,6 +15,7 @@ const { getCourseForCustomer } = require('./courses');
 const { generateDeviceCredential, verifyDeviceCredential } = require('./credentials');
 
 const DEVICES_COLLECTION = 'devices';
+const { resolveServiceGroup } = require('../course_service');
 
 function nextCredentialGeneration(device) {
   const current = device.credential_generation ?? 0;
@@ -171,8 +172,10 @@ async function updateDeviceAssignment(db, deviceId, {
   customerId,
   courseId,
   location,
+  serviceGroup,
 } = {}) {
   const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
+  if (serviceGroup !== undefined) resolveServiceGroup(serviceGroup);
 
   if (location !== undefined && location !== null && !isValidMarkerLocation(location)) {
     throw new Error('Invalid marker location');
@@ -186,6 +189,12 @@ async function updateDeviceAssignment(db, deviceId, {
 
     const current = deviceSnap.data();
     const update = { updated_at: new Date() };
+    if (serviceGroup !== undefined) {
+      if (!(courseId === undefined ? current.course_id : courseId)) {
+        throw new Error('Service group requires a Course assignment');
+      }
+      update.service_group = serviceGroup;
+    }
 
     if (current.state === DEVICE_STATES.IN_INVENTORY
         && (customerId !== undefined && customerId !== null
@@ -264,7 +273,9 @@ async function updateDeviceState(db, deviceId, nextState, {
   customerId,
   courseId,
   location,
+  serviceGroup,
 } = {}) {
+  if (serviceGroup !== undefined) resolveServiceGroup(serviceGroup);
   if (!isValidDeviceState(nextState)) {
     throw new Error(`Invalid device state: ${nextState}`);
   }
@@ -289,6 +300,7 @@ async function updateDeviceState(db, deviceId, nextState, {
       update.course_id = null;
       update.course_name = null;
       update.location = null;
+      update.service_group = 'on_course';
     } else if (nextState === DEVICE_STATES.DEPLOYED) {
       const effectiveCustomerId = customerId === undefined ? current.customer_id : customerId;
       const effectiveCourseId = courseId === undefined ? current.course_id : courseId;
@@ -315,6 +327,7 @@ async function updateDeviceState(db, deviceId, nextState, {
       update.course_id = effectiveCourseId;
       update.course_name = courseSnap.data().course_name;
       update.location = effectiveLocation;
+      update.service_group = resolveServiceGroup(serviceGroup === undefined ? current.service_group : serviceGroup);
     }
 
     transaction.update(deviceRef, update);

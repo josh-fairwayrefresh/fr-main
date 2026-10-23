@@ -50,6 +50,16 @@ try {
   click(layout.querySelector('.op-complete'));
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(JSON.stringify(actions) === JSON.stringify([['newest', 'complete']]), 'Complete must target the selected non-oldest request exactly once');
+  check(!document.querySelector('[aria-label="On-premise service"]'), 'Legacy course must retain single controls');
+  course.has_on_premise_devices = true;
+  course.on_premise_service_state = { active: false, suspended: true };
+  render();
+  check(document.querySelector('[aria-label="On-course service"]')?.textContent.includes('Service ON'), 'On-course state must remain independent');
+  check(document.querySelector('[aria-label="On-premise service"]')?.textContent.includes('Service OFF'), 'First On-premise state must display OFF');
+  check(document.querySelector('[aria-label="Resume On-premise service"]'), 'On-premise must have separately labeled Resume');
+  course.has_on_premise_devices = false;
+  render();
+  check(!document.querySelector('[aria-label="On-premise service"]'), 'No assigned On-premise devices must restore single controls');
   document.getElementById('result').textContent = 'PASS';
 } catch (error) {
   document.getElementById('result').textContent = `FAIL: ${error.stack}`;

@@ -266,6 +266,32 @@ and [open defects](feature_backlog.md#material-readiness-items).
    subsequent refreshes.
 - History hides the entire Requests view, including Complete and Cancel
    controls. Returning to Requests restores the prior active selection.
+- **Sandbox increment dependent on PR #8:** Admin Device assignment includes
+   `service_group`, either `on_course` (On-course) or `on_premise`
+   (On-premise). Missing fields on existing devices mean On-course. Group is
+   independent of hole/custom location; changing it does not change the label.
+   Cached Admin saves that omit the field preserve an existing assignment.
+- Courses without assigned On-premise devices retain the single Cart service
+   presentation. When any Course-associated device is On-premise, show
+   separately labeled status and Suspend/Resume controls for both groups,
+   regardless of queue contents. Each group stays ON/OFF until an explicit
+   operator transition. First-time On-premise state is OFF. Reassignment uses
+   the destination state and does not resume either group. States persist even
+   when no devices remain assigned and controls disappear.
+- Request eligibility uses the authenticated device registry group, not a
+   firmware-provided value. Newly created requests retain that group as a
+   snapshot; reassignment never rewrites requests. Both groups share the same
+   queue, History, age order, permissions, labels, selection, and actions.
+   Suspension/reassignment does not prevent Complete or Cancel of existing
+   requests.
+- **Reporting decision still open:** this increment does not redefine the
+   existing four KPIs. History and request outcome metrics remain Course-wide,
+   including both groups. Active Cart Hours continues to use only the existing
+   On-course event stream; On-premise transitions contribute no cart hours.
+   CPO/Architect must decide whether future request KPIs should be On-course
+   only, split by group, or remain combined (including how Requests per Hour
+   relates to a cart-only denominator). No such filtering or redefinition is
+   authorized by this increment.
 - While a request action is in flight, queue selection and duplicate request
    actions are disabled. Action errors remain associated with the request that
    produced them. Completion continues to use the selected request's existing

@@ -85,6 +85,32 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ## Change and Validation Discipline
 
+### Independent service groups sandbox increment
+
+The `feat/independent-service-groups` increment is based on PR #8's
+Architect-reviewed head `d33f86091673149479148c9d44d6582c95d7e105`, rather
+than merged main, by explicit CPO authorization. It retains queue selection,
+tab visibility, and their verification evidence. Neither prerequisite nor
+dependent increment is merge/production authorized.
+
+The existing `lib/course_service.js` owner resolves both groups. On-course
+retains Course `service_suspension` and `service_events`; On-premise uses
+Course `on_premise_service.active` (missing means OFF) and a separate
+`on_premise_service_events` stream under the same Course. The existing
+operator Resume/Suspend endpoints accept optional `service_group`, defaulting
+to `on_course` for cached clients. Transactions update only the chosen group's
+state and record actual state changes; retried same-state actions do not add
+events. This preserves independent concurrent toggles without modifying
+reporting's On-course event queries or prior-event boundary.
+
+Admin assignment/state APIs validate the device `service_group` enum; missing
+device fields resolve to `on_course`. The Receiver uses only the authenticated
+stored group for eligibility and snapshots it on new requests. Existing
+requests and COMPLETE correlation are unaffected by reassignment. Assigned
+devices, not requests, determine the dual-control read model. No schedules,
+expiry, state migration, or firmware changes are introduced. UX owns the
+remaining reporting-scope decision; KPI definitions are unchanged.
+
 Follow the Fidelity Mandate above and the engineering workflow in `docs/README.md`. Inspect current source and the owning SoT before changing behavior. Preserve accepted tablet/desktop and device behavior unless an explicitly authorized change requires otherwise. Keep changes within scope, update the owner document, and validate both the changed behavior and adjacent accepted behavior. Stop for CPO/Lead Architect direction when evidence or authority is insufficient.
 
 ### Isolated development and remote review
