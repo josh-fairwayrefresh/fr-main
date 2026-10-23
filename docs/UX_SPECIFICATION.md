@@ -266,7 +266,8 @@ and [open defects](feature_backlog.md#material-readiness-items).
    subsequent refreshes.
 - History hides the entire Requests view, including Complete and Cancel
    controls. Returning to Requests restores the prior active selection.
-- **Sandbox increment dependent on PR #8:** Admin Device assignment includes
+- **CPO-accepted, production-deployed increment (2026-10-23, PRs #8/#9):**
+   Admin Device assignment includes
    `service_group`, either `on_course` (On-course) or `on_premise`
    (Amenity Areas). The CPO refined the displayed category from On-premise
    through Driving Range to Amenity Areas on 2026-10-23; existing stored/API identifiers remain
@@ -353,15 +354,15 @@ independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
 ## CPO Stats Fix Reporting Requirements
 
-The preceding section records the CPO-accepted production behavior, including
-schedule-driven service availability and schedule controls. The CPO clarified
-the candidate behavior for CPO_stats_fix: Resume/Suspend is the persistent
+The preceding Option C acceptance record describes its historical
+schedule-driven behavior. CPO_stats_fix supersedes those schedule controls:
+Resume/Suspend is the persistent
 operational control, independent of schedules, midnight, and elapsed time, and
 the Beverage Service Schedule is removed from active Admin configuration UI.
-The existing stored schedule fields are retained. This candidate is in a
-feature branch pending CPO hands-on review; production remains on its accepted
-schedule-driven behavior until review, acceptance, and explicit release
-authorization.
+The existing stored schedule fields are retained. The CPO accepted this
+behavior and authorized its production release on 2026-10-22; it remains in
+the 2026-10-23 queue/category release. Dated runtime evidence is owned by the
+Deployment Guide.
 
 - Resume turns service ON until Suspend; Suspend turns service OFF until
   Resume. Schedules, midnight, and elapsed time do not change that state.

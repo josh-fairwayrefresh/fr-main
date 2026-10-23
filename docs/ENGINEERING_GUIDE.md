@@ -93,8 +93,11 @@ than merged main, by explicit CPO authorization. It retains queue selection,
 tab visibility, and their verification evidence. On 2026-10-23 the CPO accepted
 the queue/category update and authorized merging PRs #7, #8, and #9 in
 dependency order and production deployment after the Amenity Areas refinement.
-Production verification is read-only; no request generation, reassignment,
-service toggle, firmware, or physical-device action is authorized.
+PRs #7, #8, and #9 were merged in that order and published from merged main
+`b3e1a53c47f5ffc52389666517876c5b1634e07d` on 2026-10-23; exact runtime
+identities and verification are owned by the Deployment Guide. Production
+verification is read-only; no request generation, reassignment, service
+toggle, firmware, or physical-device action is authorized.
 
 The existing `lib/course_service.js` owner resolves both groups. On-course
 retains Course `service_suspension` and `service_events`; Amenity Areas uses

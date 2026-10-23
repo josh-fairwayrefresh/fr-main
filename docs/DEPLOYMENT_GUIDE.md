@@ -19,8 +19,11 @@ The Cart Operator responsive-layout release is live in production as recorded
 below. Its deployment/build checks passed, but the authenticated physical
 phone/Safari usability check remains pending; see `docs/feature_backlog.md`.
 CPO_stats_fix was accepted, merged, and deployed on 2026-10-22. Its production
-release record below documents the corrected custom-domain Auth configuration
-and the remaining authenticated UI verification limit.
+release record below documents the corrected custom-domain Auth configuration.
+The CPO-accepted queue selection and independent On-course / Amenity Areas
+update was merged and deployed on 2026-10-23. Authenticated production Admin
+and Cart read-only checks are recorded in that release entry; physical-device
+reassignment/press verification remains with the CPO.
 
 Deployment and release entries below are retained as audit history. Historical
 entries describe the state at the time of each release and do not supersede
@@ -29,22 +32,21 @@ current owner documents. Dated records, including statements written as
 stage only; they cannot grant present operational authorization. Completed
 recoveries and one-time exceptions must not be repeated from this history.
 
-## Latest verified production alignment — 2026-10-22
+## Latest verified production alignment — 2026-10-23
 
 This summary reflects the production release and read-only checks recorded
 below; it is not a claim of later live status. Resolve apparently competing
 revisions by service and evidence date, not by selecting an older "stable"
 label or assuming accepted source was deployed.
-The Hosting row's October 17 observations are retained as dated evidence;
-the later production release identity and served artifacts are recorded in
-the CPO_stats_fix section below.
+Earlier release identities remain in their dated records below. The latest
+queue/category release retains persistent service control, combined KPIs,
+and On-course-only Active Cart Hours.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
-| Accepted repository baseline | Merged `main` `dd1b905ebb1d322df9f21809899f7214588dbe81`, containing reviewed feature SHA `4b879f714e3170f8fe521be030a3da29158768be`. CPO_stats_fix is accepted and production-deployed; detailed behavior is owned by `docs/UX_SPECIFICATION.md`. |
-| Receiver / Admin | Receiver `fairway-button-receiver-00027-z7l` (100% traffic, image `sha256:f2c3e57e914f1025cda52f0bd030a49a8c4d81bd1c6f2afc2aa6c79a947d6fc4`) / Admin `fairway-admin-00018-76r` (100% traffic, image `sha256:9363ba0b414d1bb08dbe2efdcdce56e08c6a2ffc896876ac22c2a7ba963310ab`). |
-| Hosting | The Alignment Register records production Hosting version `995c6b063a9af3c5`, release `1792037695879000`, and assets `index-B_OqSsPI.js` (SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`) / `index-CSksNdOy.css` (SHA-256 `6557df96a561960ec6ee7100aa484c3c85b4b7f1e16bc9d25d20c99f98cba6a0`). The October 17 check returned 403 for Hosting management, so present version availability was not established; no new cloud inspection was performed. The custom-location correction was not shown deployed by that evidence. |
-| Current Hosting release | Version `a4ac0d25fe2b84b6`, release `1792728841214000`; serves the verified production JS/CSS assets documented in the CPO_stats_fix release record below. The October 17 Hosting version above is a recorded prior identity, not the latest release. |
+| Accepted repository baseline | Merged `main` `b3e1a53c47f5ffc52389666517876c5b1634e07d`, containing PRs #7/#8/#9 and the authorized Amenity Areas single-owner refinement. |
+| Receiver / Admin | Receiver `fairway-button-receiver-00028-827` / Admin `fairway-admin-00019-5hm`, both Ready with 100% traffic; exact digests/builds/source archives below. |
+| Current Hosting release | Version `79e31c865a6025cc`, release `1792797232817000`; custom domain and default Hosting serve byte-identical merged-main build assets below. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
 | Firmware / commissioning | Per-device recovery manifests and execution records establish artifacts, not inconsistent registry `firmware_generation` labels. FRB-0001 through FRB-0005 physical validation complete; FRB-0006 reliability acceptance pending. One-time debug-key recoveries do not resolve production signing. |
 | Field power | V25/V50/V75 VBUS architecture supersedes external 6106/5580/LiPo. Current field-idle consumption and autonomy are not measured; solar sufficiency is an operating assumption. |
@@ -70,6 +72,150 @@ in recovery reasoning; reverting code alone may not restore compatibility.
 Stop on mismatched identity, failed acceptance/safety checks, unexpected
 mutations, or incompatible recovery. Publication/merge does not authorize
 deployment, credentials, device operations, or production-data changes.
+
+### Queue selection and Amenity Areas production release — 2026-10-23
+
+The CPO accepted the queue/category increment after the final display-name
+refinement and explicitly authorized production release. Stable category IDs
+remain `on_course` and `on_premise`; only the latter's single-owner
+`display_name` changed from Driving Range to Amenity Areas. Admin options,
+Cart headings, confirmation prompts, and accessible names inherit it.
+Individual marker locations remain independent.
+
+#### Reviewed source and merge provenance
+
+- PR #7 documentation head `a2b72931b2fce183aef5c547b05728e94ad8611d`
+  merged as `b2637efd300e8887d8edb9f482ad86331ff0ef3b`.
+- PR #8 Architect-reviewed head
+  `d33f86091673149479148c9d44d6582c95d7e105` merged as
+  `8468053efb7a2e762c578f24bc01b3427ac37957`.
+- PR #9 reviewed head `e2ba61f57e71d6b498f5fe205bdf7ecdbdb09311`;
+  authorized single-owner refinement `0cf6b6a` and PR #7 documentation
+  reconciliation produced head `5097ba56c80c8f657261d4535362ca6a9dca68ec`.
+  PR #9 was retargeted to main after its prerequisites merged.
+- **Merged/deployed main:** `b3e1a53c47f5ffc52389666517876c5b1634e07d`.
+  Its tree exactly matches reconciled PR #9. All three PRs are merged.
+  Subsequent release-evidence commits are documentation only, not a different
+  deployed application.
+
+#### Production publication identities
+
+Project `savvy-kit-496703-r5`, region `us-central1`. The documented source
+deployment commands were run from an isolated worktree at merged main,
+Receiver/Admin first, then production Hosting. Existing production runtime
+accounts and environment values were preserved exactly. Both services had
+pinned old traffic: source deployment created Ready but inactive revisions,
+so traffic was explicitly routed to the exact new revisions and re-read.
+
+| Surface | Previous retained identity | Published identity |
+| --- | --- | --- |
+| Receiver | `fairway-button-receiver-00027-z7l` | `fairway-button-receiver-00028-827`, Ready / 100%; image `sha256:c83ca43dbfda1c3eb395afc808634b78f0a62e6acf9a7260c4f229862815406a` |
+| Admin | `fairway-admin-00018-76r` | `fairway-admin-00019-5hm`, Ready / 100%; image `sha256:a8bb3fccbee139ed40fc48060b4d221dfe044eeeb5d982022b3f42f47d2375dc` |
+| Hosting | Version `a4ac0d25fe2b84b6`, release `1792728841214000` | Version `79e31c865a6025cc`, release `1792797232817000`, `2026-10-23T23:13:52.817Z` |
+
+Receiver build `c9218315-2413-470d-9b18-656641d85b82`, source archive:
+`gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-button-receiver/1792797096.373179-52061c6221e24ef6a5db4de953628003.zip#1792797096674671`.
+
+Admin build `598240ae-c952-4358-81ca-849843d04d07`, source archive:
+`gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-admin/1792797098.298116-90007c5bcc8d42e984e9853a5d2db3ed.zip#1792797098589132`.
+
+Downloaded deployed archives each matched 47 tracked backend files byte for
+byte, including the shared Amenity Areas owner. Receiver retains
+`936892386735-compute@developer.gserviceaccount.com`; Admin retains
+`fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`.
+
+The production build used the existing registered Firebase web-app config,
+with all six Firebase values checked against the previous served bundle and
+the established production Receiver/Admin URLs. No Auth configuration changed.
+Both `https://app.fairwayrefresh.com/` and
+`https://savvy-kit-496703-r5.web.app/` served exact build HTML and:
+
+- `assets/index-CYpCzFE_.js`, SHA-256
+  `201d9fa50cee7cbe65c3b1a84d6342eb79c11f307fc469ba6baee6e434678ef5`;
+- `assets/index-Ct0ENonq.css`, SHA-256
+  `c0774bd2d456dc1c8887d72e557272126d44a242345a5f51c33c9d0fc1f4c569`.
+
+The served entry bundle contains Amenity Areas, not the former Driving Range
+category name. Both protected backend routes returned 401 without credentials,
+not a missing-route response.
+
+#### Verification and production preservation
+
+Reused the recorded sandbox service-combination/reassignment/retry/command
+checks below. From merged main, the full backend `npm test` suite, frontend
+65/65, rendered browser name/queue/tab variants 2/2, and validated production
+build passed. The rendered variants use Amenity Areas and a test-only alternate
+name to verify all naming consumers without changing IDs or marker labels.
+The isolated worktree initially lacked dependencies; restored locked
+dependencies after those explicit missing-module failures and reran green.
+Existing dependency audit, Node engine, and bundle-size advisories remain;
+no dependency manifest or application calculation was changed.
+
+Production observations were read-only. Before/after fingerprints of all six
+Courses' service/schedule fields, all six devices' assignment/group/location
+fields, 58 On-course service events, and zero additional-category events were
+identical. Monarch remained ON (`service_suspension: null`); additional-group
+state was not initialized or reset. All 62 pre-existing requests, including
+their full historical fields/outcomes, retained their exact fingerprint
+`b158c91a4761ed8fa3f17b19dd57a7b8611ae4b83bccb28e5c1f965c44136482`.
+
+An initial total-request comparison detected 63 rather than 62 documents;
+closeout paused for read-only diagnosis. The sole addition was legitimate
+device traffic: FRB-0006 request `TSOkS44iX2tzaBkVPqNa`, source `nrf9151`,
+received `2026-10-23T23:12:45.521Z` on old Receiver `00027-z7l`, before
+traffic activation. Logs confirm its HTTP 200 button request. Excluding this
+new arrival exactly restores the 62-document baseline fingerprint. It was
+preserved, not completed/cancelled or backfilled with a category snapshot.
+This observation does not identify the person pressing the device or claim
+acceptance of the new category path.
+
+An existing authorized production session became available during verification.
+Authenticated Admin loaded the six-device fleet and FRB-0006 detail with
+On-course / Amenity Areas options using stable values; no form was saved.
+Cart loaded Monarch with Service ON, its two existing requests, and existing
+Day KPI/History data. Selecting non-oldest Hole 2 updated the card; History
+computed the entire Requests layout as `display: none`, with actions hidden.
+Returning to Requests retained Hole 2. History and the refreshed KPI panel
+showed one completion, 216.6 min average, 0.5 requests/hour and 1.85 active
+hours at that observation (active hours advance while service remains ON).
+At 375/430/768/1024/1440 px, production document width did not exceed viewport
+width and both request actions stayed within its horizontal bounds. No
+Complete, Cancel, Suspend or Resume action was invoked. All production device
+groups still defaulted to On-course, so live dual headings/prompts were not
+forced; rendered two-group name propagation is covered by the green tests.
+Push permission was blocked; no delivery claim is made.
+
+No production requests were generated by the release agent. No assignment,
+service toggle, historical-field change, outcome change, credential rotation,
+firmware operation, or physical-device command was performed. No fixtures,
+rules/index migrations, notifier, or unrelated services were deployed.
+
+#### Recovery and remaining limits
+
+Retained revisions exist as the pre-release recovery identities. Ordinary
+traffic recovery, if separately required:
+
+```sh
+gcloud run services update-traffic fairway-button-receiver \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=fairway-button-receiver-00027-z7l=100
+gcloud run services update-traffic fairway-admin \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=fairway-admin-00018-76r=100
+```
+
+Hosting recovery uses Console **Release history -> Roll back**, after
+verifying retained version `a4ac0d25fe2b84b6`. These previous backends already
+use persistent, schedule-independent On-course service control, but do not
+understand independent Amenity Areas eligibility/assignment. Do not treat them
+as category-compatible after reassignment; evaluate current assignments/state
+before any recovery. Older pre-CPO_stats_fix schedule-driven revisions have
+the different semantics documented in the October 22 record below. No
+migration or compatibility machinery is introduced.
+
+The CPO owns the post-release FRB-0006 category reassignment and physical press.
+No live dual-group toggle, production completion/cancel, firmware/Safari/
+physical-phone or push-delivery acceptance is claimed by this release.
 
 ### CPO_stats_fix production release — 2026-10-22
 
@@ -927,6 +1073,21 @@ FRB-0003 sequence and failure handling are owned by
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Queue Selection / Amenity Areas Production Release (2026-10-23)
+
+- **Accepted source:** PRs #7, #8, #9 merged in dependency order; deployed main
+  `b3e1a53c47f5ffc52389666517876c5b1634e07d` retains the reviewed queue/tab
+  regressions, independent category contracts, shared naming owner, combined
+  completion KPIs and On-course-only Active Cart Hours.
+- **Runtime:** Receiver `fairway-button-receiver-00028-827`, Admin
+  `fairway-admin-00019-5hm`, both Ready/100%. Hosting version
+  `79e31c865a6025cc`, release `1792797232817000`. Exact digests, build/source
+  archives, served hashes, preservation findings, recovery commands and limits
+  are in the production release record above.
+- **Boundary:** final Amenity Areas display wording only; stable category IDs,
+  marker locations, assignments, independent state and existing history
+  preserved. No production data/device actions authorized or performed.
 
 ### PR #9 Shared Category Owner and Driving Range Presentation (2026-10-23)
 

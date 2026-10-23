@@ -30,11 +30,13 @@ Use the Deployment Guide's latest verified production alignment for dated
 runtime evidence; older release records are historical, not competing current
 states or standing authorizations. The CPO_stats_fix reporting and persistent
 Resume/Suspend behavior was CPO-accepted, merged, and deployed to production
-on 2026-10-22. Detailed operator behavior is owned by the
+on 2026-10-22. The CPO-accepted select-any-request queue and independent
+On-course / Amenity Areas categories were merged and deployed on 2026-10-23.
+Detailed operator behavior is owned by the
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements); deployed
-release identities, custom-domain Auth correction, and remaining authenticated
-UI verification limit are owned by the
-[Deployment Guide](DEPLOYMENT_GUIDE.md#cpo_stats_fix-production-release-2026-10-22).
+release identities, custom-domain Auth correction, verification, and remaining
+physical-device limits are owned by the
+[Deployment Guide](DEPLOYMENT_GUIDE.md#queue-selection-and-amenity-areas-production-release--2026-10-23).
 The rejected PR #4 architecture remains retired; its migration/cutover machinery
 is not active guidance. Unknown measurements, incomplete
 acceptance, and unresolved product decisions remain explicit in the backlog.
