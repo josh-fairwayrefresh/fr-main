@@ -44,6 +44,7 @@
 .op-notifications .notification-ok { display: none; }
 .op-notifications p { margin: 8px 0 0; padding: 10px; background: #fff1ee; color: #8c382b; font-size: 11px; }
 .op-layout { min-height: calc(100vh - 82px); display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+.op-layout[hidden] { display: none; }
 .op-focus { max-width: 900px; width: 100%; margin: 0 auto; padding: 34px 32px; }
 .op-queue-summary { margin-bottom: 22px; display: flex; justify-content: flex-end; }
 .op-place > span, .op-up-next > div span, .op-performance > span, .op-recent > div > span, .op-history-view header span { color: var(--op-green); font-size: 9px; font-weight: 900; letter-spacing: .13em; }

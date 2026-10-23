@@ -264,6 +264,8 @@ and [open defects](feature_backlog.md#material-readiness-items).
    selection to that Course's oldest active request. A notification targeting
    an active request selects it; a later manual selection is not overridden by
    subsequent refreshes.
+- History hides the entire Requests view, including Complete and Cancel
+   controls. Returning to Requests restores the prior active selection.
 - While a request action is in flight, queue selection and duplicate request
    actions are disabled. Action errors remain associated with the request that
    produced them. Completion continues to use the selected request's existing
