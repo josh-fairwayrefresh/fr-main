@@ -108,8 +108,13 @@ device fields resolve to `on_course`. The Receiver uses only the authenticated
 stored group for eligibility and snapshots it on new requests. Existing
 requests and COMPLETE correlation are unaffected by reassignment. Assigned
 devices, not requests, determine the dual-control read model. No schedules,
-expiry, state migration, or firmware changes are introduced. UX owns the
-remaining reporting-scope decision; KPI definitions are unchanged.
+expiry, state migration, or firmware changes are introduced. The CPO's
+2026-10-23 reporting decision for PR #9, owned by the UX specification,
+accepts equal counting of both groups' completed requests in the existing
+Course-wide KPIs against On-course-only Active Cart Hours. Cancelled requests
+do not count as completions; the shared queue and History include both
+groups. Calculations remain unchanged; no group filters, separate KPIs, or
+reporting UI are introduced.
 
 Follow the Fidelity Mandate above and the engineering workflow in `docs/README.md`. Inspect current source and the owning SoT before changing behavior. Preserve accepted tablet/desktop and device behavior unless an explicitly authorized change requires otherwise. Keep changes within scope, update the owner document, and validate both the changed behavior and adjacent accepted behavior. Stop for CPO/Lead Architect direction when evidence or authority is insufficient.
 

@@ -286,14 +286,15 @@ and [open defects](feature_backlog.md#material-readiness-items).
    queue, History, age order, permissions, labels, selection, and actions.
    Suspension/reassignment does not prevent Complete or Cancel of existing
    requests.
-- **Reporting decision still open:** this increment does not redefine the
-   existing four KPIs. History and request outcome metrics remain Course-wide,
-   including both groups. Active Cart Hours continues to use only the existing
-   On-course event stream; On-premise transitions contribute no cart hours.
-   CPO/Architect must decide whether future request KPIs should be On-course
-   only, split by group, or remain combined (including how Requests per Hour
-   relates to a cart-only denominator). No such filtering or redefinition is
-   authorized by this increment.
+- **CPO-accepted reporting decision (2026-10-23, PR #9):** all completed
+   requests count equally in the existing Course-wide KPI totals, regardless
+   of service group; cancelled requests do not contribute to completion
+   totals. The shared queue and History include both groups. Retain the
+   existing calculations: Active Cart Hours uses only the On-course event
+   stream, and On-premise transitions contribute no cart hours. The CPO
+   explicitly accepts combined completion counts against that On-course-only
+   denominator for Requests per Hour. Do not add group filters, separate KPIs,
+   or reporting UI.
 - While a request action is in flight, queue selection and duplicate request
    actions are disabled. Action errors remain associated with the request that
    produced them. Completion continues to use the selected request's existing

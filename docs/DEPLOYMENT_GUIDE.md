@@ -852,6 +852,34 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### PR #9 Reporting Decision and Test Correction (2026-10-23)
+
+- **CPO decision:** both groups' completed requests count equally in the
+  existing Course-wide KPI totals. Shared queue and History include both
+  groups. Active Cart Hours remains On-course-only; the CPO accepts combined
+  completion counts against that denominator. No filters, separate KPIs,
+  reporting UI, or calculation changes. Current requirements are recorded in
+  the UX owner and summarized in the Engineering Guide.
+- **Test-only correction:** the cross-midnight fixture allocates one hour
+  after local midnight to the new day, while Week/Month remain four hours.
+  Zero-activity expectations now include the existing `active_cart_minutes`,
+  `completed_transactions`, and `transactions_per_cart_hour` fields.
+  The added mixed-group reporting check verifies one completion per group,
+  cancellation exclusion from both groups, combined count/rate/duration
+  totals, and shared History across Day/Week/Month and the aggregate result.
+- **Validation:** the complete backend `npm test` command passed, including
+  reporting 10/10 and independent-service-group contracts 4/4. Relevant
+  frontend operator/Course regressions passed 16/16; the rendered browser
+  regression passed 1/1, retaining PR #8 selection/tab visibility and dual
+  service controls. This supersedes the stale-expectation failures recorded
+  at initial sandbox publication below.
+- **Publication scope:** only owner documentation and the reporting test
+  changed from review head `5b21251e1cc322a7c03ec95b40e2a9f6437aed8c`.
+  Application/calculation source is unchanged, so no sandbox build or
+  republication was required or performed. The sandbox identities below
+  remain the last published evidence. No merge, production deployment,
+  service-state action, or request/data change was performed.
+
 ### Sandbox Increment: Independent Service Groups (2026-10-23)
 
 - **Source / dependency:** `c8028744d1c7cab952ae620389a3ce79ef6b76cc`
@@ -943,19 +971,21 @@ returned the same request with `duplicate: true`.
   plus On-premise-only empty state. New actual-handler service-group
   contracts passed 4/4; the separately run access and migration checks passed
   6/6 and 4/4. Existing backend suites preceding reporting passed, but the
-  complete backend command is not green: two reporting assertions also fail
-  unchanged on PR #8 (cross-day interval count expects 2, receives 1; the
+  initial complete backend command was not green: two reporting assertions
+  also failed unchanged on PR #8 (cross-day interval count expects 2, receives 1; the
   zero-period expected shape omits existing summary fields). Reporting code
   and definitions were not changed to conceal those baseline failures.
+  The later test-only correction and green suite are recorded above.
   Existing bundle-size/dependency advisories remain. Browser push permission
   was blocked; push delivery and physical firmware were not exercised.
-- **Reporting decision:** shared History and existing request outcome KPIs
-  remain Course-wide. Active Cart Hours uses only On-course events;
+- **Accepted reporting decision (CPO, 2026-10-23):** shared queue and History
+  include both groups, and all completed requests count equally in the
+  existing Course-wide KPI totals; cancellations do not count as completions.
+  Active Cart Hours uses only On-course events. The CPO accepts combined
+  completion counts against that denominator for Requests per Hour. Retain
+  current calculations, with no group filters, separate KPIs, or reporting UI.
   On-premise-only Resume left its displayed 0.02 hours unchanged while
-  On-course stayed OFF. CPO/Architect still owns whether future request KPIs
-  are On-course-only, per-group, or combined, and how Requests per Hour
-  relates to a cart-only denominator. See the UX owner; no redefinition was
-  made here.
+  On-course stayed OFF. See the UX owner.
 - **Retained recovery / scope:** prior sandbox Receiver
   `fairway-button-receiver-sandbox-00023-rcx`, Admin
   `fairway-admin-sandbox-00016-jwv`, and Hosting version
