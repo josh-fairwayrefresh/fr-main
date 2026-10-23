@@ -332,7 +332,10 @@ authorization.
   completed rows are selected by completion time and cancelled rows by
   cancellation time. Refresh reporting when request outcomes change, including
   changes made by another operator, and at minute-level intervals so ongoing
-  active time and local calendar-period boundaries become current.
+  active time and local calendar-period boundaries become current. Return every
+  matching outcome for the selected period; do not silently truncate History.
+  If pagination is introduced later, it must expose the total and provide access
+  to every matching row.
 - Started periods with no activity display 0. Zero Active Cart Hours produces
   0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
   display.

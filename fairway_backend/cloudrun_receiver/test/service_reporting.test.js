@@ -124,6 +124,24 @@ test('History rows use the same Course-local period and outcome timestamps', () 
     .map((request) => request.request_id), reports.daily.history.map((request) => request.request_id));
 });
 
+test('Course and aggregate History retain every matching outcome beyond 100 rows', () => {
+  const course = { timezone: 'America/Los_Angeles' };
+  const asOf = new Date('2026-10-22T20:00:00.000Z');
+  const requests = Array.from({ length: 125 }, (_, index) => ({
+    request_id: `completed-${index}`,
+    status: 'completed',
+    received_at: new Date('2026-10-22T18:00:00.000Z'),
+    completed_at: new Date('2026-10-22T18:10:00.000Z'),
+  }));
+  const courseReport = reportCoursePeriods(course, [], requests, requests, asOf);
+  const aggregateReport = aggregateCourseReports([courseReport, courseReport]);
+
+  assert.strictEqual(courseReport.daily.summary.completed_requests, 125);
+  assert.strictEqual(courseReport.daily.history.length, 125);
+  assert.strictEqual(aggregateReport.daily.summary.completed_requests, 250);
+  assert.strictEqual(aggregateReport.daily.history.length, 250);
+});
+
 test('aggregated Course reports share period summaries and scope History rows', () => {
   const course = { timezone: 'America/Los_Angeles' };
   const asOf = new Date('2026-10-22T20:00:00.000Z');

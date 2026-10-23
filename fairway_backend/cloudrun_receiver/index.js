@@ -802,7 +802,6 @@ function createFairwayHandlers(db, {
       Promise.all(courses.map((course) => db.collection('requests')
         .where('customer_id', '==', course.customer_id)
         .where('course_id', '==', course.course_id)
-        .limit(5000)
         .get())),
     ]);
     const courseRequests = requestSnapshots.map((snapshot) => (

@@ -137,8 +137,7 @@ function historyRequestsInRange(requests, range) {
       const timestamp = outcomeTime(request);
       return timestamp && timestamp >= range.start && timestamp <= range.end;
     })
-    .sort((left, right) => outcomeTime(right) - outcomeTime(left))
-    .slice(0, 100);
+    .sort((left, right) => outcomeTime(right) - outcomeTime(left));
 }
 
 function totalCompletionDurationMs(requests) {
@@ -255,8 +254,7 @@ function aggregateCourseReports(reportsByCourse) {
   return Object.fromEntries(SUMMARY_PERIODS.map((period) => [period, {
     summary: summaries[period],
     history: reportsByCourse.flatMap((reports) => reports[period].history)
-      .sort((left, right) => outcomeTime(right) - outcomeTime(left))
-      .slice(0, 100),
+      .sort((left, right) => outcomeTime(right) - outcomeTime(left)),
   }]));
 }
 
