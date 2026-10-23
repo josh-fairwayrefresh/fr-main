@@ -17,9 +17,10 @@ source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`; incorporated
 
 The Cart Operator responsive-layout release is live in production as recorded
 below. Its deployment/build checks passed, but the authenticated physical
-phone/Safari usability check and CPO mobile acceptance were not performed in
-that release record. Do not treat the release as proof of completed mobile
-acceptance; see `docs/feature_backlog.md`.
+phone/Safari usability check remains pending; see `docs/feature_backlog.md`.
+CPO_stats_fix was accepted, merged, and deployed on 2026-10-22. Its production
+release record below documents the corrected custom-domain Auth configuration
+and the remaining authenticated UI verification limit.
 
 Deployment and release entries below are retained as audit history. Historical
 entries describe the state at the time of each release and do not supersede
@@ -28,18 +29,22 @@ current owner documents. Dated records, including statements written as
 stage only; they cannot grant present operational authorization. Completed
 recoveries and one-time exceptions must not be repeated from this history.
 
-## Latest-known alignment — not a live-status claim
+## Latest verified production alignment — 2026-10-22
 
-This summary reuses established evidence only; it performs no new
-production/device inspection. Resolve apparently competing revisions by
-service and evidence date, not by selecting an older "stable" label or
-assuming accepted source was deployed.
+This summary reflects the production release and read-only checks recorded
+below; it is not a claim of later live status. Resolve apparently competing
+revisions by service and evidence date, not by selecting an older "stable"
+label or assuming accepted source was deployed.
+The Hosting row's October 17 observations are retained as dated evidence;
+the later production release identity and served artifacts are recorded in
+the CPO_stats_fix section below.
 
 | Surface | Latest established evidence / remaining limit |
 | --- | --- |
-| Accepted repository baseline | `229c27ce6b5920aaef5f6c1488dcdb3d477f4168`. CPO_stats_fix has a separate source implementation published only to the sandbox for CPO review; it is not accepted or production-deployed. The candidate changes operator service control to persistent Resume/Suspend state while preserving request, notification, authorization, device-protocol, and firmware contracts. Detailed requirements are owned by `docs/UX_SPECIFICATION.md`. |
-| Receiver / Admin | October 17 read-only alignment below: `fairway-button-receiver-00026-kg5` / `fairway-admin-00017-dvk`. Older revision tables are release history, not current targets. |
+| Accepted repository baseline | Merged `main` `dd1b905ebb1d322df9f21809899f7214588dbe81`, containing reviewed feature SHA `4b879f714e3170f8fe521be030a3da29158768be`. CPO_stats_fix is accepted and production-deployed; detailed behavior is owned by `docs/UX_SPECIFICATION.md`. |
+| Receiver / Admin | Receiver `fairway-button-receiver-00027-z7l` (100% traffic, image `sha256:f2c3e57e914f1025cda52f0bd030a49a8c4d81bd1c6f2afc2aa6c79a947d6fc4`) / Admin `fairway-admin-00018-76r` (100% traffic, image `sha256:9363ba0b414d1bb08dbe2efdcdce56e08c6a2ffc896876ac22c2a7ba963310ab`). |
 | Hosting | The Alignment Register records production Hosting version `995c6b063a9af3c5`, release `1792037695879000`, and assets `index-B_OqSsPI.js` (SHA-256 `53f740897566d54a9b293cd9933fd0918f04eeaef89f07d53db368d0c87cd41f`) / `index-CSksNdOy.css` (SHA-256 `6557df96a561960ec6ee7100aa484c3c85b4b7f1e16bc9d25d20c99f98cba6a0`). The October 17 check returned 403 for Hosting management, so present version availability was not established; no new cloud inspection was performed. The custom-location correction was not shown deployed by that evidence. |
+| Current Hosting release | Version `a4ac0d25fe2b84b6`, release `1792728841214000`; serves the verified production JS/CSS assets documented in the CPO_stats_fix release record below. The October 17 Hosting version above is a recorded prior identity, not the latest release. |
 | Notifier | Last-inspected production revision `fairway-request-notifier-00003-mah`, source archive generation `1790840128801876`; delivery-time entitlement/preference checks in accepted source were absent. No sandbox notifier/VAPID delivery deployment. |
 | Firmware / commissioning | Per-device recovery manifests and execution records establish artifacts, not inconsistent registry `firmware_generation` labels. FRB-0001 through FRB-0005 physical validation complete; FRB-0006 reliability acceptance pending. One-time debug-key recoveries do not resolve production signing. |
 | Field power | V25/V50/V75 VBUS architecture supersedes external 6106/5580/LiPo. Current field-idle consumption and autonomy are not measured; solar sufficiency is an operating assumption. |
@@ -66,22 +71,93 @@ Stop on mismatched identity, failed acceptance/safety checks, unexpected
 mutations, or incompatible recovery. Publication/merge does not authorize
 deployment, credentials, device operations, or production-data changes.
 
-### CPO_stats_fix service-state behavior difference
+### CPO_stats_fix production release — 2026-10-22
 
-The CPO_stats_fix candidate uses persistent Resume/Suspend ON/OFF state,
-ignores legacy Course schedule fields, and does not expire a suspension. The
-accepted stable backend gates request eligibility by Course schedule and
-applies its prior timed-suspension semantics. Returning to that backend would
-therefore restore schedule-based behavior: a candidate Course with no stored
-schedule would not be service-eligible under the stable implementation, while
-a candidate persistent suspension without the stable `until` value would not
-remain an active timed suspension there. An older valid stored schedule may
-also allow service during its configured hours after rollback. Hosting rollback
-alone does not change backend service-state semantics. Historical Course
-schedule fields are left untouched by the candidate; no data conversion or
-compatibility layer is introduced. Treat any production return to the stable
-application as a behavior change requiring an explicitly reviewed operating
-decision, not as restoration of identical ON/OFF behavior.
+The CPO accepted CPO_stats_fix, including persistent Resume/Suspend state and
+reporting, and authorized production release. PR #5 and PR #6 were merged in
+order. Reviewed feature SHA
+`4b879f714e3170f8fe521be030a3da29158768be` is contained in merged `main`
+`dd1b905ebb1d322df9f21809899f7214588dbe81`.
+
+The existing production indexes were inspected first. Only the missing
+`requests` composite index on `customer_id`, `course_id`, and `completed_at`
+was created; it is READY as `CICAgJim14AK`. No Firestore documents, requests,
+or service events were changed by this release.
+
+Production services and identities:
+
+| Service | Previous retained identity | Deployed identity |
+| --- | --- | --- |
+| Receiver | `fairway-button-receiver-00026-kg5` | `fairway-button-receiver-00027-z7l`, 100% traffic; image `sha256:f2c3e57e914f1025cda52f0bd030a49a8c4d81bd1c6f2afc2aa6c79a947d6fc4` |
+| Admin | `fairway-admin-00017-dvk` | `fairway-admin-00018-76r`, 100% traffic; image `sha256:9363ba0b414d1bb08dbe2efdcdce56e08c6a2ffc896876ac22c2a7ba963310ab` |
+| Hosting | Version `995c6b063a9af3c5` (recorded in the Alignment Register) | Version `a4ac0d25fe2b84b6`, release `1792728841214000` |
+
+The deployed Hosting version serves JS asset `index-BId3qvO1.js` (SHA-256
+`bed2a8f6789298658d183880ae60e9a5533f6341bba7d21ed49f59190e84d786`) and CSS
+asset `index-CemshsGK.css` (SHA-256
+`3940050eaffd32e84aa7ba18d1e78dce6169673c7549b026c229a37f9a88b042`).
+Both `https://app.fairwayrefresh.com/` and
+`https://savvy-kit-496703-r5.web.app/` served the same hashes as the production
+build from merged `main`. Unauthenticated backend routes returned 401 rather
+than 404.
+
+#### Custom-domain sign-in correction and verification
+
+In production project `savvy-kit-496703-r5`, Firebase Auth's
+`authorizedDomains` was updated with the single additional entry
+`app.fairwayrefresh.com`. The three pre-existing entries
+(`localhost`, `savvy-kit-496703-r5.firebaseapp.com`, and
+`savvy-kit-496703-r5.web.app`) were preserved. A subsequent read confirmed
+the complete four-domain list; no provider, user, permission, or other Auth
+setting was changed.
+
+After reloading `https://app.fairwayrefresh.com/`, selecting Google sign-in
+reached Google's OAuth authorization endpoint (HTTP 302) and returned through
+the Firebase Auth handler (HTTP 200). The browser observed no
+`auth/unauthorized-domain` error. No credentials were entered. The application
+remained at its signed-out Cart access screen, so authenticated production
+Cart, History, and KPI verification is still incomplete; no authorized Cart
+Operator account/session was available in this browser session to complete
+that verification.
+
+#### Monarch preservation and current state observation
+
+Monarch (`CUST-0001/COURSE-0001`) requests, service events, schedules, and
+other records were preserved. No service-state action was issued by the
+release agent. The CPO confirmed that a concurrent test caused the observed
+state change and directed its preservation. A subsequent read-only
+read found a `service_suspension` record with `suspended_at`
+`2026-10-23T04:17:03.484Z` and no `until` field; the record was not normalized
+or overwritten. No
+synthetic production requests were generated and no existing outcomes were
+changed.
+
+#### Recovery behavior
+
+The previous Hosting version `995c6b063a9af3c5` is recorded as the release
+identity in the Alignment Register; that recorded identity is distinct from
+present availability, which was not separately established here. Firebase
+Hosting recovery is through Console **Release history → Roll back** after
+verifying the retained version. Cloud Run traffic can be returned to retained
+revisions using the established command form:
+
+```sh
+gcloud run services update-traffic fairway-button-receiver \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=fairway-button-receiver-00026-kg5=100
+gcloud run services update-traffic fairway-admin \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=fairway-admin-00017-dvk=100
+```
+
+These are retained identities, not a rollback recommendation. The previous
+backend gates request eligibility by stored Course schedules and expires
+suspensions using its legacy timed semantics. The deployed application
+preserves operator Resume/Suspend state independently of schedules and elapsed
+time. Returning to the older backend therefore changes operating behavior;
+in particular, a persistent suspension without the former `until` value is
+not equivalent to a legacy timed suspension. Hosting-only rollback does not
+change backend state semantics. No rollback was performed.
 
 ### CPO_stats_fix sandbox review publication — 2026-10-22
 

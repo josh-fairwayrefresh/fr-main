@@ -189,7 +189,7 @@ authorization remain separate. Release-specific rollout, observation, stop
 conditions, and compatible recovery are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
 
-### CPO_stats_fix architecture — pending CPO hands-on review
+### CPO_stats_fix architecture — accepted and deployed
 
 CPO_stats_fix keeps one operational owner for Course service state and
 operator transitions. Resume sets service ON and Suspend sets it OFF; this
@@ -200,13 +200,16 @@ accepting requests.
 
 The Cart UI presents the reporting capability;
 [the reporting module](../fairway_backend/cloudrun_receiver/lib/service_reporting.js)
-owns KPI calculation and period aggregation. The candidate removes Beverage
-Service Schedule from active Admin controls and Course configuration APIs.
-New Admin code ignores schedule fields in older cached payloads and does not
-read or write legacy schedule fields; existing stored values remain untouched.
+owns KPI calculation and period aggregation. The production Admin
+implementation removes Beverage Service Schedule from active Admin controls
+and Course configuration APIs. It ignores schedule fields in older cached
+payloads and does not read or write legacy schedule fields; existing stored
+values remain untouched.
 No schedule migration or PR #4 cutover machinery is introduced. Existing
 request actions, permissions, notifications, device protocol, and firmware
-remain unchanged. The stable production application continues its accepted
-schedule-driven behavior until a separately authorized release. The
+remain unchanged. CPO_stats_fix was accepted and deployed to production on
+2026-10-22; the release record documents retained pre-release identities,
+the rollback behavior difference, and the custom-domain sign-in limitation.
+The
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements) owns
 detailed behavior and acceptance requirements.
