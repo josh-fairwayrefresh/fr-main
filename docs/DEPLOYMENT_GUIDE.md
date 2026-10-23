@@ -852,6 +852,79 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### PR #9 Shared Category Owner and Driving Range Presentation (2026-10-23)
+
+- **Published source:** `0d8d8e1d805f78103928077b305efbf0ad55f66d`,
+  `feat/independent-service-groups`, draft PR #9 dependent on reviewed PR #8.
+  This replaces the intermediate scattered-label implementations
+  `e99f39ae99fcdc0796327ed40c4a840571d31fc8` /
+  `987da48bd063f8e4979c17c9cf5c071861776ab8`, retaining their adjacent
+  category cards, short Suspend/Resume buttons, and navigation-spacing fix.
+- **Single owner:** `fairway_backend/cloudrun_receiver/lib/service_categories.json`
+  defines stable IDs and editable display names once. Backend validation
+  derives category identity constants from it; frontend
+  `src/lib/serviceCategories.mjs` exposes the same definition to Admin options,
+  Cart headings, confirmation text, accessible names, and category iteration.
+  The additional category displays Driving Range but keeps `on_premise`.
+  No independent frontend/backend label maps, state/data migration,
+  management UI, categories, or framework were added. Marker location labels,
+  assignments, request snapshots, historical records, service state, and
+  accepted Course-wide reporting calculations remain unchanged.
+
+| Sandbox surface | Published identity |
+| --- | --- |
+| Receiver, Ready / 100% traffic | `fairway-button-receiver-sandbox-00025-9lr`, image SHA-256 `b0b514f573a849db347beeaf6929baade1fc504e6793dd9189e8a3355ed2174b` |
+| Admin, Ready / 100% traffic | `fairway-admin-sandbox-00018-c4f`, image SHA-256 `803752eabf94856efcbe8387d9489622b269b1f5ebf521fbe4d1e04c32105144` |
+| Hosting live | Version `cfb9fe3042d64a62`, release `1792795920303000`, released `2026-10-23T22:52:00.303Z` |
+| Served JS, matching local build | `assets/index-DtTuJlkC.js`, SHA-256 `57d248226cb46ca5cdab026b13139490995e2d752cba5b6ed5ec9132020ddd8b` |
+| Served CSS, matching local build | `assets/index-Ct0ENonq.css`, SHA-256 `c0774bd2d456dc1c8887d72e557272126d44a242345a5f51c33c9d0fc1f4c569` |
+
+Receiver source archive:
+`gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-button-receiver-sandbox/1792795804.72363-06b82668549c4d8ea762eceab9fbbe9f.zip#1792795805020462`,
+build `08ddb118-acb3-4425-96a5-386bfc56f828`. Admin source archive:
+`gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792795804.650325-e37a035e5f6f4e79aa71e47bd29984d0.zip#1792795804950351`,
+build `bbc7cde7-80f0-420e-8828-67a24879d1fb`. Both services retain the existing
+sandbox service account. As before, Admin's pinned traffic required explicit
+activation of its newly created Ready revision; both final traffic identities
+were verified.
+
+- **Rename proof:** the rendered browser check runs twice, with the owner's
+  actual Driving Range name and a test-only `Practice Area Review` name
+  substituted at the same JSON module boundary. It changes no tracked owner,
+  sandbox data, or production configuration. Actual Admin DeviceDetail options,
+  Cart category headings, Resume/Suspend confirmation prompts and accessible
+  labels all follow the owner, while option values remain `on_premise`,
+  marker location stays independent, and buttons remain short. A backend
+  owner-only rename test verifies unchanged IDs, validation, default states,
+  all four service-state combinations, and no mutation of Course state.
+- **Checks:** full backend suite passed, including rename invariance 1/1,
+  independent service contracts 4/4, and accepted combined reporting 10/10.
+  Frontend suite passed 65/65; rendered browser variants passed 2/2, retaining
+  select-any-request, non-oldest completion callback, History visibility,
+  preserved selection, dual/single controls, and empty-queue behavior.
+  Sandbox config/build passed; the existing large-bundle advisory remains.
+- **Deployed UI:** refreshed Admin shows Driving Range selected for the
+  existing synthetic `on_premise` assignment with unchanged custom location.
+  Cart shows adjacent On-course and Driving Range control cards, short
+  Suspend buttons, and category-specific accessible names. Measurements at
+  375, 430, 768, 1024, 1181, 1280, and 1440 CSS pixels verified heading/action
+  alignment without horizontal overflow or overlap with navigation.
+  Selecting the non-oldest synthetic request, opening History, and returning
+  preserved selection; the hidden Requests layout had no rendered controls.
+  Both original open review requests remain available at
+  https://fairway-refresh-sandbox-260930.web.app/?customer_id=CUST-0004&course_id=COURSE-0006.
+- **Recovery / scope:** prior Receiver `fairway-button-receiver-sandbox-00024-nps`,
+  Admin `fairway-admin-sandbox-00017-kll`, and Hosting version
+  `8154766958147e16` are retained identities. The prior backend supports the
+  same stable category IDs/state semantics; prior Hosting has equivalent
+  Driving Range labels but lacks the single-owner implementation. Ordinary
+  explicit sandbox traffic selection / Hosting release-history recovery
+  applies; no rollback occurred. No service-state actions, request outcome or
+  historical-data changes, physical-device commands, firmware changes,
+  merge, production deployment, or Monarch changes were made in this naming
+  follow-up. Physical phone/Safari and push delivery remain outside its
+  verification.
+
 ### PR #9 Reporting Decision and Test Correction (2026-10-23)
 
 - **CPO decision:** both groups' completed requests count equally in the
