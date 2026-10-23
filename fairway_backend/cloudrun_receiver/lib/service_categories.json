@@ -1,0 +1,10 @@
+{
+  "ON_COURSE": {
+    "id": "on_course",
+    "display_name": "On-course"
+  },
+  "ON_PREMISE": {
+    "id": "on_premise",
+    "display_name": "Driving Range"
+  }
+}

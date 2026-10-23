@@ -1,6 +1,9 @@
 'use strict';
 
-const SERVICE_GROUPS = Object.freeze({ ON_COURSE: 'on_course', ON_PREMISE: 'on_premise' });
+const categories = require('./service_categories.json');
+const SERVICE_GROUPS = Object.freeze(Object.fromEntries(
+  Object.entries(categories).map(([key, category]) => [key, category.id]),
+));
 
 function resolveServiceGroup(value = SERVICE_GROUPS.ON_COURSE) {
   if (!Object.values(SERVICE_GROUPS).includes(value)) throw new Error('Invalid service group');

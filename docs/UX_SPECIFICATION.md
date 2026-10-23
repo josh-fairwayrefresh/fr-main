@@ -271,6 +271,12 @@ and [open defects](feature_backlog.md#material-readiness-items).
    (Driving Range). The CPO renamed the displayed category from On-premise
    to Driving Range on 2026-10-23; existing stored/API identifiers remain
    `on_premise` without migration or service-state changes.
+   Category wording is defined only in the shared
+   `fairway_backend/cloudrun_receiver/lib/service_categories.json` owner.
+   Admin options, Cart headings, confirmation prompts, and accessible names
+   consume that definition, never independent label maps. Editing its
+   `display_name` changes wording only, not the stable category identity or
+   individual marker location labels.
    Missing fields on existing devices mean On-course. Group is
    independent of hole/custom location; changing it does not change the label.
    Cached Admin saves that omit the field preserve an existing assignment.

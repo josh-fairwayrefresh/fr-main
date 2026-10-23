@@ -109,6 +109,17 @@ Cart Operator, accessible labels, and confirmation prompts. Existing
 not a data/API migration. Each category's short Suspend/Resume action and
 status align beneath its headline in adjacent bounded control sets.
 
+`fairway_backend/cloudrun_receiver/lib/service_categories.json` is the single
+authoritative category definition and shared data interface. It separates
+stable `id` from editable `display_name` for the two existing categories.
+Backend service validation derives its identity constants from this file;
+the frontend `src/lib/serviceCategories.mjs` exposes the same definitions to
+Admin options and all generated Cart category text. Do not add parallel label
+maps or category-name conditionals. Change display wording only in this owner
+and rebuild/publish affected consumers; stored IDs, service fields/events,
+assignments, and request snapshots are not renamed. No management screen,
+runtime category configuration, additional categories, or framework is added.
+
 Admin assignment/state APIs validate the device `service_group` enum; missing
 device fields resolve to `on_course`. The Receiver uses only the authenticated
 stored group for eligibility and snapshots it on new requests. Existing

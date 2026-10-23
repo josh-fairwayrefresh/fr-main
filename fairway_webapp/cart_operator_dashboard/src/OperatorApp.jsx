@@ -14,6 +14,7 @@ import {
   selectedCourseFromLocation,
 } from './lib/courseContext.mjs';
 import { requestLocationLabel } from './lib/requestLocation.mjs';
+import { serviceCategories, serviceCategory } from './lib/serviceCategories.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -56,7 +57,7 @@ function ServiceStatus({ course }) {
 }
 
 function GroupServiceControls({ group, state, pending, onToggle }) {
-  const label = group === 'on_course' ? 'On-course' : 'Driving Range';
+  const label = serviceCategory(group).display_name;
   const action = state?.active ? 'Suspend' : 'Resume';
   return <div className="op-service-group" role="group" aria-label={`${label} service`}>
     <h2>{label}</h2>
@@ -335,7 +336,7 @@ export default function OperatorApp({
     if (!course || requestActionInFlight.current || serviceActionInFlight.current || pending) return;
     const state = group === 'on_premise' ? course.on_premise_service_state : course.service_state;
     const action = state?.suspended ? 'resume' : 'suspend';
-    const groupLabel = course.has_on_premise_devices ? `${group === 'on_course' ? 'On-course' : 'Driving Range'} service` : 'service';
+    const groupLabel = course.has_on_premise_devices ? `${serviceCategory(group).display_name} service` : 'service';
     const prompt = action === 'suspend'
       ? `Turn ${groupLabel} OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
       : `Turn ${groupLabel} ON for ${course.course_name} until an operator suspends it?`;
@@ -379,7 +380,7 @@ export default function OperatorApp({
         {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
-        {course?.has_on_premise_devices ? <div className="op-service-groups">{['on_course', 'on_premise'].map((group) => <GroupServiceControls key={group} group={group} state={group === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
+        {course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
         <button className="op-suspend" type="button" onClick={() => toggleService()} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
           <span>{serviceActionLabel}</span>

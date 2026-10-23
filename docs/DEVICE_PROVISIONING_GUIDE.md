@@ -112,7 +112,10 @@ The hierarchy is Customer → Course → Device:
   the CPO's display-name replacement does not rename stored/API values or
   migrate devices, requests, or service state. An absent field means
   `on_course`. This is independent of `location`, never inferred from a custom
-  label. Omitted fields in cached assignment edits preserve the stored group.
+  label. Admin's option names and values come from the shared
+  `lib/service_categories.json` backend owner, also consumed by Cart Operator;
+  edit `display_name`, not `id`, when changing category wording.
+  Omitted fields in cached assignment edits preserve the stored group.
   Deployment writes the chosen group atomically with assignment; returning to
   inventory resets the unassigned device preference to `on_course`, not either
   Course's service state. Reassignment does not mutate historical requests or
