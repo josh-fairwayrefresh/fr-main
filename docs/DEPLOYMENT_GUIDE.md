@@ -217,7 +217,9 @@ Sandbox Admin revision `fairway-admin-sandbox-00016-jwv` was built from the
 CPO_stats_fix candidate and is Ready at 100% traffic in
 `fairway-refresh-sandbox-260930`. Its image digest is
 `sha256:ac1d3eac3949e4d996cf60f7a2ccc59ae22f6472d7c4fd86cb06e7c7d30277ca`.
-The existing sandbox service account was retained. The Receiver remained at
+The deployed backend source is represented by feature commit
+`85ebf1ea1a502a776a54d8b2ee1334e8bf10b163`. The existing sandbox service
+account was retained. The Receiver remained at
 `fairway-button-receiver-sandbox-00023-rcx`; Hosting was not redeployed.
 
 Authenticated sandbox Admin UI verification created and edited
