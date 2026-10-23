@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import OperatorApp from '../src/OperatorApp.jsx';
 
 const course = { customer_id: 'TEST', course_id: 'TEST', course_name: 'Browser test', service_state: { active: true } };
-const requests = ['oldest', 'newest'].map((id, index) => ({
+let requests = ['oldest', 'newest'].map((id, index) => ({
   ...course, id, device_label: `Browser test ${id}`,
   received_at: new Date(Date.now() - (2 - index) * 60000).toISOString(),
 }));
@@ -57,9 +57,19 @@ try {
   check(document.querySelector('[aria-label="On-course service"]')?.textContent.includes('Service ON'), 'On-course state must remain independent');
   check(document.querySelector('[aria-label="On-premise service"]')?.textContent.includes('Service OFF'), 'First On-premise state must display OFF');
   check(document.querySelector('[aria-label="Resume On-premise service"]'), 'On-premise must have separately labeled Resume');
+  requests = [];
+  course.service_state = { active: false, suspended: true };
+  course.on_premise_service_state = { active: true, suspended: false };
+  render();
+  check(document.querySelector('.op-empty p').textContent.includes('New requests will appear here'), 'On-premise-only service must show an accepting empty queue');
+  course.on_premise_service_state = { active: false, suspended: true };
+  render();
+  check(document.querySelector('.op-empty p').textContent.includes('when service resumes'), 'Both groups OFF must show the suspended empty queue');
+  course.on_premise_service_state = { active: true, suspended: false };
   course.has_on_premise_devices = false;
   render();
   check(!document.querySelector('[aria-label="On-premise service"]'), 'No assigned On-premise devices must restore single controls');
+  check(document.querySelector('.op-empty p').textContent.includes('when service resumes'), 'Unassigned On-premise state must not change single-control empty queue');
   document.getElementById('result').textContent = 'PASS';
 } catch (error) {
   document.getElementById('result').textContent = `FAIL: ${error.stack}`;

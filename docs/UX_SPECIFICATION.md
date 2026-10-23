@@ -278,6 +278,8 @@ and [open defects](feature_backlog.md#material-readiness-items).
    operator transition. First-time On-premise state is OFF. Reassignment uses
    the destination state and does not resume either group. States persist even
    when no devices remain assigned and controls disappear.
+   The empty shared queue advertises incoming requests when either displayed
+   group is ON, including On-premise-only service.
 - Request eligibility uses the authenticated device registry group, not a
    firmware-provided value. Newly created requests retain that group as a
    snapshot; reassignment never rewrites requests. Both groups share the same

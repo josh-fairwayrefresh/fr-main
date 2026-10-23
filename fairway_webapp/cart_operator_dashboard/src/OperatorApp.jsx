@@ -70,7 +70,7 @@ function GroupServiceControls({ group, state, pending, onToggle }) {
 }
 
 function EmptyQueue({ serviceActive }) {
-  return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New golfer requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
+  return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
 }
 
 function RequestFocus({ request, queueLength, onAction, pending, actionBlocked, actioned }) {
@@ -358,6 +358,8 @@ export default function OperatorApp({
 
   const serviceAction = course?.service_state?.suspended ? 'resume' : 'suspend';
   const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
+  const requestServiceActive = course?.service_state?.active ||
+    (course?.has_on_premise_devices && course?.on_premise_service_state?.active);
 
   return <main className="operator-app"><header className="op-header">
     <div className="op-header-main">
@@ -386,5 +388,5 @@ export default function OperatorApp({
         <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} hidden={tab !== 'requests'} />{tab === 'history' && <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} />{tab === 'history' && <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }
