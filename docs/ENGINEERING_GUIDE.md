@@ -94,7 +94,7 @@ tab visibility, and their verification evidence. Neither prerequisite nor
 dependent increment is merge/production authorized.
 
 The existing `lib/course_service.js` owner resolves both groups. On-course
-retains Course `service_suspension` and `service_events`; On-premise uses
+retains Course `service_suspension` and `service_events`; Driving Range uses
 Course `on_premise_service.active` (missing means OFF) and a separate
 `on_premise_service_events` stream under the same Course. The existing
 operator Resume/Suspend endpoints accept optional `service_group`, defaulting
@@ -102,6 +102,12 @@ to `on_course` for cached clients. Transactions update only the chosen group's
 state and record actual state changes; retried same-state actions do not add
 events. This preserves independent concurrent toggles without modifying
 reporting's On-course event queries or prior-event boundary.
+
+Driving Range replaces the former On-premise display name throughout Admin,
+Cart Operator, accessible labels, and confirmation prompts. Existing
+`on_premise` identifiers remain unchanged; this is a presentation change,
+not a data/API migration. Each category's short Suspend/Resume action and
+status align beneath its headline in adjacent bounded control sets.
 
 Admin assignment/state APIs validate the device `service_group` enum; missing
 device fields resolve to `on_course`. The Receiver uses only the authenticated

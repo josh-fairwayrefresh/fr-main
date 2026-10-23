@@ -50,26 +50,36 @@ try {
   click(layout.querySelector('.op-complete'));
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(JSON.stringify(actions) === JSON.stringify([['newest', 'complete']]), 'Complete must target the selected non-oldest request exactly once');
-  check(!document.querySelector('[aria-label="On-premise service"]'), 'Legacy course must retain single controls');
+  check(!document.querySelector('[aria-label="Driving Range service"]'), 'Legacy course must retain single controls');
   course.has_on_premise_devices = true;
   course.on_premise_service_state = { active: false, suspended: true };
   render();
   check(document.querySelector('[aria-label="On-course service"]')?.textContent.includes('Service ON'), 'On-course state must remain independent');
-  check(document.querySelector('[aria-label="On-premise service"]')?.textContent.includes('Service OFF'), 'First On-premise state must display OFF');
-  check(document.querySelector('[aria-label="Resume On-premise service"]'), 'On-premise must have separately labeled Resume');
+  check(document.querySelector('[aria-label="Driving Range service"]')?.textContent.includes('Service OFF'), 'First Driving Range state must display OFF');
+  check(document.querySelector('[aria-label="Resume Driving Range service"]'), 'Driving Range must have separately labeled Resume');
+  const groups = [...document.querySelectorAll('.op-service-group')];
+  check(groups[0].querySelector('button').textContent === 'Suspend', 'Visible On-course action must not repeat the category');
+  check(groups[1].querySelector('button').textContent === 'Resume', 'Visible Driving Range action must not repeat the category');
+  check(groups[0].getBoundingClientRect().right <= groups[1].getBoundingClientRect().left, 'Category control sets must be adjacent, not interleaved');
+  for (const group of groups) {
+    const heading = group.querySelector('h2').getBoundingClientRect();
+    const button = group.querySelector('button').getBoundingClientRect();
+    check(heading.bottom <= button.top && Math.abs((heading.left + heading.width / 2) - (button.left + button.width / 2)) < 1, 'Each action must align beneath its category headline');
+  }
+  check(!document.querySelector('.operator-app').textContent.includes('On-premise'), 'Replaced category must not remain visible');
   requests = [];
   course.service_state = { active: false, suspended: true };
   course.on_premise_service_state = { active: true, suspended: false };
   render();
-  check(document.querySelector('.op-empty p').textContent.includes('New requests will appear here'), 'On-premise-only service must show an accepting empty queue');
+  check(document.querySelector('.op-empty p').textContent.includes('New requests will appear here'), 'Driving Range-only service must show an accepting empty queue');
   course.on_premise_service_state = { active: false, suspended: true };
   render();
   check(document.querySelector('.op-empty p').textContent.includes('when service resumes'), 'Both groups OFF must show the suspended empty queue');
   course.on_premise_service_state = { active: true, suspended: false };
   course.has_on_premise_devices = false;
   render();
-  check(!document.querySelector('[aria-label="On-premise service"]'), 'No assigned On-premise devices must restore single controls');
-  check(document.querySelector('.op-empty p').textContent.includes('when service resumes'), 'Unassigned On-premise state must not change single-control empty queue');
+  check(!document.querySelector('[aria-label="Driving Range service"]'), 'No assigned Driving Range devices must restore single controls');
+  check(document.querySelector('.op-empty p').textContent.includes('when service resumes'), 'Unassigned Driving Range state must not change single-control empty queue');
   document.getElementById('result').textContent = 'PASS';
 } catch (error) {
   document.getElementById('result').textContent = `FAIL: ${error.stack}`;
