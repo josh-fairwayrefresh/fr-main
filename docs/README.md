@@ -32,6 +32,9 @@ states or standing authorizations. The CPO_stats_fix reporting and persistent
 Resume/Suspend behavior was CPO-accepted, merged, and deployed to production
 on 2026-10-22. The CPO-accepted select-any-request queue and independent
 On-course / Amenity Areas categories were merged and deployed on 2026-10-23.
+The CPO subsequently confirmed the production FRB-0006 test passed and accepted
+the released queue-selection and independent controls; that release handoff
+is closed.
 Detailed operator behavior is owned by the
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements); deployed
 release identities, custom-domain Auth correction, verification, and remaining

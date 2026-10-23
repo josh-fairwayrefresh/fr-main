@@ -5,6 +5,14 @@ owned by its subsystem document; superseded and abandoned work is summarized in
 `docs/archive.md`. Backlog entries do not authorize implementation or a product
 change.
 
+The CPO confirmed the production FRB-0006 test passed and accepted the released
+queue selection and independent Amenity Areas controls on 2026-10-23.
+That increment and its reporting/service-control prerequisite are closed;
+acceptance and publication evidence are retained in the
+[existing release record](DEPLOYMENT_GUIDE.md#cpo-production-acceptance-and-closeout--2026-10-23),
+not as open backlog items. This does not close the separate queue-volume,
+physical-phone/Safari, notification, or network-reliability work below.
+
 ## Open and deferred work
 
 | Item | Status / boundary |
@@ -19,7 +27,6 @@ change.
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
-| CPO_stats_fix | CPO-approved reporting increment; source implementation is in a feature branch and published only to the sandbox for CPO review. It is not accepted or production-deployed. Its clarified persistent Resume/Suspend state and removal of schedule controls from active Admin UI are defined only in the [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements). Preserve stored schedule fields and avoid PR #4 migration/cutover machinery. |
 | Active queue truncation | Confirmed source defect; older open work can disappear behind newer closed requests. Blocks complete-queue acceptance; [details](#active-queue-truncation). |
 | Notifier source/deployment and sandbox-delivery gap | Established deployment divergence; do not claim delivery-time entitlement/preference enforcement or sandbox delivery acceptance. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
@@ -50,20 +57,6 @@ whole-product shutdown.
   newer closed rows hiding an old open row, more than 100 active rows,
   multi-course selection, deep links, and COMPLETE/Cancel with live updates.
   No client-side re-sort or larger arbitrary cap is an accepted fix.
-
-### CPO_stats_fix
-
-- **Scope:** Deliver the reporting and operator service-state requirements in the
-  [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements)
-  while preserving request handling, permissions, notifications, device
-  protocol, firmware, and existing stored schedule fields. Resume/Suspend is
-  the single operational state owner; schedules do not change service state.
-- **Boundary:** Reporting consumes operator transition and request records;
-  it does not gate request acceptance. Do not introduce PR #4's Course
-  conversion, migration, or cutover design.
-- **Separate deferred work:** Active queue truncation and other unrelated
-  backlog items remain separately prioritized; they are not added to this
-  reporting increment.
 
 ### Notification release gap
 
