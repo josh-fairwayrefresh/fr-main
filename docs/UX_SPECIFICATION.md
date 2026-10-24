@@ -220,6 +220,12 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
   not a tracked restaurant stock balance. Manual Sold Out availability likewise
   does not invent a quantity adjustment. Loading either state into On Cart
   requires a positive Quantity and explicit confirmation, committed together.
+  Both drag-and-drop and the availability selector support On Cart to In
+  Inventory, without a Quantity prompt. If operator selection is needed, resume
+  the same move after selection. Record an attributed availability event with
+  unchanged quantity; remove the product from cart totals and later cart audits.
+  The state and quantity survive reload. Adjusting an In Inventory product to
+  zero must leave it In Inventory, not move it to Sold Out.
 - A sale icon opens positive whole units sold, default one, and Confirm. Server
   transactions validate against current On Cart stock. An excessive sale is
   rejected without deduction or successful sale event, explaining that the
@@ -228,11 +234,27 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
   A sale/quantity edit that makes an On Cart balance zero moves it to Sold Out;
   replenishing Sold Out above zero restores On Cart. Initialization alone does
   not apply those transition rules.
+- Sales, adjustments and cart-loading Quantity dialogs share visible minus/plus
+  controls with at least 44 by 44 CSS-pixel targets and spacing, accessible names
+  and direct numeric entry. Minimum is zero for adjustments and one for sales
+  and loading. Buttons never submit a transaction; explicit Confirm remains
+  required.
 - The compact Course-local daily tally shows products and units sold across all
   sessions. Individual sales/adjustments remain beyond the day. Connectivity is
   required; failed/uncertain submissions never appear confirmed. Retried intended
   operations cannot duplicate deductions or durable records. Stale absolute
   edits require fresh review; metadata autosaves cannot overwrite stock/state.
+- Export downloads a UTF-8 CSV of the confirmed displayed inventory view:
+  selected Customer/Course, explicit category/subcategory filters, displayed
+  product names/availability/quantities, selected operator if any, revision,
+  and export time in the configured Course timezone. Filtered reports are
+  prominently marked as not the complete inventory. If the archived section
+  is expanded, include those displayed rows and mark their separate scope.
+  Include the displayed Course-wide daily product/unit sales tally and full
+  On Cart total, explicitly not narrowed by product filters. Unsubmitted edits
+  are excluded; export is unavailable during pending/unresolved submissions or
+  failed inventory loading. Export does not require operator selection, make
+  shift activity, mutate stock, confirm an audit or publish a menu.
 - Admin's Customer register contains a staff directory with stable person IDs,
   free-text names, and Cart Operator / F&B Management roles. Both roles have
   equal operational rights through one policy. These are operational identities,

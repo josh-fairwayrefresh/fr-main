@@ -1,4 +1,9 @@
 export const INVENTORY_STATES = Object.freeze(['on_cart', 'sold_out', 'in_inventory']);
+export const INVENTORY_STATE_LABELS = Object.freeze({
+  on_cart: 'On Cart',
+  sold_out: 'Sold Out',
+  in_inventory: 'In Inventory',
+});
 export const PRODUCT_DRAFT_FIELDS = Object.freeze([
   'name',
   'category_name',

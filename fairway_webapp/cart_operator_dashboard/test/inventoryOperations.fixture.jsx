@@ -4,11 +4,11 @@ import { flushSync } from 'react-dom';
 import InventoryApp from '../src/InventoryApp';
 import CustomerStaff from '../src/admin/CustomerStaff';
 
-const course = { customer_id: 'TEST-C', course_id: 'TEST-U', customer_name: 'Inventory Test', course_name: 'Stock Course' };
+const course = { customer_id: 'TEST-C', course_id: 'TEST-U', customer_name: 'Inventory Test', course_name: 'Stock Course', timezone: 'America/Los_Angeles' };
 const user = { uid: 'inventory-test', email: 'test@example.invalid', getIdToken: async () => 'fixture-token' };
 const catalog = [
   { product_id: 'p1', name: 'Water', category_name: 'Drinks', category_id: 'drinks', state: 'on_cart' },
-  { product_id: 'p2', name: 'Juice', category_name: 'Drinks', category_id: 'drinks', state: 'in_inventory', quantity: 7 },
+  { product_id: 'p2', name: 'Juice', category_name: 'Food', category_id: 'food', state: 'in_inventory', quantity: 7 },
   { product_id: 'p3', name: 'Tea', category_name: 'Drinks', category_id: 'drinks', state: 'sold_out', quantity: 0 },
 ];
 let staff = [{ staff_id: 'manager', name: 'Test Manager', role: 'fnb_management', active: true }];
@@ -22,6 +22,10 @@ let loseSaleResponse = true;
 let loseCloseResponse = true;
 const committed = new Map();
 const calls = [];
+const downloads = [];
+URL.createObjectURL = blob => { downloads.push(blob); return 'blob:inventory-export'; };
+URL.revokeObjectURL = () => {};
+HTMLAnchorElement.prototype.click = () => {};
 const check = (value, message) => { if (!value) throw new Error(message); };
 const wait = async predicate => {
   for (let i = 0; i < 200; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 10)); }
@@ -71,7 +75,11 @@ window.fetch = async (url, options = {}) => {
       if (body.quantity !== undefined) product.quantity = body.quantity;
       if (body.state) product.state = body.state;
     }
-    if (body.kind !== 'availability' || body.state === 'on_cart') product.state = product.quantity > 0 ? 'on_cart' : 'sold_out';
+    if (body.kind === 'sale' && product.quantity === 0) product.state = 'sold_out';
+    if (body.kind === 'adjustment') {
+      if (product.quantity === 0 && product.state === 'on_cart') product.state = 'sold_out';
+      else if (product.quantity > 0 && product.state === 'sold_out') product.state = 'on_cart';
+    }
     product.stock_revision = (product.stock_revision ?? 0) + 1;
     revision++; shift.has_activity = true;
     const result = { ...product };
@@ -86,7 +94,8 @@ window.fetch = async (url, options = {}) => {
     return response({ audit_id: 'audit1' });
   }
   if (route.endsWith('/TEST-U') && method === 'GET') return response({
-    products: catalog, categories: [{ category_id: 'drinks', name: 'Drinks', subcategories: [] }],
+    ...course,
+    products: catalog, categories: [{ category_id: 'drinks', name: 'Drinks', subcategories: [] }, { category_id: 'food', name: 'Food', subcategories: [] }],
     inventory_revision: revision, daily_sales: { local_date: '2026-10-23', total_units: unitsSold, products: unitsSold ? [{ product_id: 'p1', name: 'Water', units: unitsSold }] : [] },
   });
   throw new Error(`Unexpected fixture request ${method} ${route}`);
@@ -95,38 +104,86 @@ const root = createRoot(document.getElementById('root'));
 try {
   flushSync(() => root.render(<InventoryApp user={user} apiBaseUrl={location.origin} courses={[course]} onSignOut={() => {}} />));
   await wait(() => document.querySelector('[aria-label="Edit quantity for Water"]'));
+  await wait(() => !button('Export').disabled);
+  const beforeExport = calls.length;
+  click(button('Export'));
+  check(calls.length === beforeExport && shift === null, 'Export must not select an operator or make a request');
+  check((await downloads[0].text()).includes('"Selected operator","Not selected"'), 'Export supports no selected operator');
   check(catalog[0].state === 'on_cart', 'Zero initialization must not move existing tiles');
-  click(document.querySelector('[aria-label="Edit quantity for Water"]'));
-  input(document.querySelector('#inv-stock-title').closest('section').querySelector('input'), '5');
-  click(button('Confirm'));
+  const transfer = new DataTransfer();
+  const tile = document.querySelector('[aria-label="Water state"]').closest('article');
+  flushSync(() => tile.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer })));
+  flushSync(() => document.querySelector('.inv-column-in_inventory').dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer })));
   await wait(() => document.querySelector('#inventory-session-title'));
   input(document.querySelector('.inventory-session-overlay select'), 'custom');
   input(document.querySelector('.inventory-session-overlay input'), 'Test Operator');
   click(button('Confirm operator'));
+  await wait(() => catalog[0].state === 'in_inventory' && !document.querySelector('[aria-label="Water state"]').disabled);
+  check((catalog[0].quantity ?? 0) === 0 && !document.querySelector('#inv-stock-title'), 'First return resumes after Custom selection without Quantity prompt');
+  input(document.querySelector('[aria-label="Water state"]'), 'on_cart');
+  await wait(() => document.querySelector('#inv-stock-title'));
+  const loadInput = document.querySelector('#inv-stock-title').closest('section').querySelector('input');
+  check(loadInput.value === '1', 'Loading zero stock starts at one');
+  for (const node of document.querySelectorAll('.inv-quantity-input button')) {
+    const bounds = node.getBoundingClientRect();
+    check(bounds.width >= 44 && bounds.height >= 44, 'Touch steppers must be at least 44 by 44');
+  }
+  click(document.querySelector('[aria-label="Increase quantity"]'));
+  check(loadInput.value === '2' && catalog[0].state === 'in_inventory', 'Plus does not submit a load');
+  input(loadInput, '5');
+  click(button('Confirm'));
   await wait(() => !document.querySelector('#inv-stock-title'));
-  check(catalog[0].quantity === 5, 'First intended action must resume after Custom selection');
+  check(catalog[0].quantity === 5, 'Confirmed loading resumes cart operation');
   check(document.querySelector('.inventory-session').textContent.includes('Test Operator'), 'Banner must display selected name');
+  click(document.querySelector('[aria-label="Edit quantity for Juice"]'));
+  const adjustment = document.querySelector('#inv-stock-title').closest('section');
+  input(adjustment.querySelector('input'), '0');
+  check(document.querySelector('[aria-label="Decrease quantity"]').disabled, 'Adjustments stop at zero');
+  click(document.querySelector('[aria-label="Increase quantity"]'));
+  click(document.querySelector('[aria-label="Decrease quantity"]'));
+  check(catalog[1].quantity === 7, 'Adjustment steppers do not submit');
+  click(button('Confirm'));
+  await wait(() => !document.querySelector('#inv-stock-title'));
+  check(catalog[1].state === 'in_inventory' && catalog[1].quantity === 0, 'Zero adjustment must leave restaurant-held product In Inventory');
   click(document.querySelector('[aria-label="Record sale for Water"]'));
   check(document.querySelector('#inv-stock-title').closest('section').querySelector('input').value === '1', 'Sale defaults to one');
+  check(document.querySelector('[aria-label="Decrease units sold"]').disabled, 'Sales cannot step below one');
+  click(document.querySelector('[aria-label="Increase units sold"]'));
+  click(document.querySelector('[aria-label="Decrease units sold"]'));
+  check(sales === 0, 'Sale step controls do not submit');
   click(button('Confirm'));
   await wait(() => document.querySelector('[role="alert"]')?.textContent.includes('not confirmed'));
+  check(button('Export').disabled, 'Unresolved submissions must not be exported as saved');
   check(catalog[0].quantity === 4 && sales === 1, 'One committed sale despite lost response');
   click(button('Confirm'));
   await wait(() => !document.querySelector('#inv-stock-title'));
   check(catalog[0].quantity === 4 && sales === 1, 'Retry must not deduct twice');
+  click([...document.querySelectorAll('.inv-category-filter')].find(node => node.textContent.startsWith('Drinks')));
+  const beforeFilteredExport = calls.length;
+  click(button('Export'));
+  const filteredCsv = await downloads.at(-1).text();
+  check(filteredCsv.includes('FILTERED VIEW - NOT THE COMPLETE INVENTORY') && filteredCsv.includes('"Category filter","Drinks"'), 'Filtered exports identify active scope');
+  check(!filteredCsv.includes('"Juice"') && filteredCsv.includes('"Total units sold","1"') && filteredCsv.includes('Test Operator'), 'Export uses displayed products and full displayed tally with operator');
+  check(calls.length === beforeFilteredExport, 'Filtered export remains read-only');
+  click([...document.querySelectorAll('.inv-category-filter')].find(node => node.textContent.startsWith('All Products')));
   click(document.querySelector('[aria-label="Record sale for Water"]'));
   input(document.querySelector('#inv-stock-title').closest('section').querySelector('input'), '5');
   click(button('Confirm'));
   await wait(() => document.querySelector('[role="alert"]')?.textContent.includes('Correct the quantity first'));
   check(sales === 1 && catalog[0].quantity === 4, 'Excessive sale must not mutate stock');
-  click(document.querySelector('#inv-stock-title').closest('section').querySelector('button[type="button"]'));
+  click(document.querySelector('#inv-stock-title').closest('section').querySelector('footer button[type="button"]'));
   input(document.querySelector('[aria-label="Water state"]'), 'in_inventory');
   await wait(() => {
     const select = document.querySelector('[aria-label="Water state"]');
     return select.value === 'in_inventory' && !select.disabled;
   });
   check(catalog[0].quantity === 4, 'Moving to In Inventory preserves quantity');
-  check(calls.filter(call => call.body.kind === 'availability').every(call => call.body.quantity === undefined), 'Moving off cart must not manufacture a quantity adjustment');
+  check(calls.filter(call => call.body.kind === 'availability' && call.body.state !== 'on_cart').every(call => call.body.quantity === undefined), 'Moving off cart must not manufacture a quantity adjustment');
+  click(button('Confirm inventory audit'));
+  check(!document.querySelector('#inv-audit-title').closest('section').textContent.includes('Water'), 'Returned stock is excluded from subsequent cart audit');
+  click(document.querySelector('#inv-audit-title').closest('section').querySelector('footer button[type="button"]'));
+  flushSync(() => root.render(<InventoryApp key="return-reload" user={user} apiBaseUrl={location.origin} courses={[course]} onSignOut={() => {}} />));
+  await wait(() => document.querySelector('[aria-label="Water state"]')?.value === 'in_inventory');
   input(document.querySelector('[aria-label="Water state"]'), 'on_cart');
   await wait(() => document.querySelector('#inv-stock-title')?.textContent === 'Load onto cart');
   check(catalog[0].state === 'in_inventory', 'Loading must wait for Quantity confirmation');

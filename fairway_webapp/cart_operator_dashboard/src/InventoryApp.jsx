@@ -4,19 +4,15 @@ import {
   Send, Settings, ShoppingCart, Trash2, X,
 } from 'lucide-react';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
+import { downloadBlob } from './admin/adminApi';
+import { inventoryViewCsv } from './lib/inventoryExport.mjs';
 import { InventorySessionControls, useInventorySession } from './InventorySession';
 import { AuditDialog, StockDialog } from './InventoryOperations';
 import { courseContextUrl, courseKey, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
-import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
+import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, INVENTORY_STATE_LABELS as STATE_LABELS, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
 import { presentationForCourse } from './lib/courseMenuConfig';
 import fairwayRefreshStackedLogo from '../../../docs/logo_source_files/fairway-refresh/fairway-refresh-stacked-transparent.png';
 import './inventory.css';
-
-const STATE_LABELS = Object.freeze({
-  on_cart: 'On Cart',
-  sold_out: 'Sold Out',
-  in_inventory: 'In Inventory',
-});
 
 function coursePath(course, suffix = '') {
   return `/api/v1/inventory/courses/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.course_id)}${suffix}`;
@@ -284,7 +280,7 @@ function ProductTile({ product, busy, onStateChange, onEdit, onArchive, onDragSt
 
 function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArchive, onDrop, onDragStart, onStock }) {
   const [dragOver, setDragOver] = useState(false);
-  return <section className={`inv-column inv-column-${state} ${dragOver ? 'drag-over' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragOver(true); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false); }} onDrop={(event) => { event.preventDefault(); setDragOver(false); onDrop(event, state); }}>
+  return <section aria-label={`${STATE_LABELS[state]} products`} className={`inv-column inv-column-${state} ${dragOver ? 'drag-over' : ''}`} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDragOver(true); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false); }} onDrop={(event) => { event.preventDefault(); setDragOver(false); onDrop(event, state); }}>
     <header><div><h2>{STATE_LABELS[state]}</h2><span>{products.length}</span></div></header>
     <div className="inv-column-products">{products.map((product) => <ProductTile key={product.product_id} product={product} busy={busyId === product.product_id} onStateChange={onStateChange} onEdit={onEdit} onArchive={onArchive} onDragStart={onDragStart} onStock={onStock} />)}{products.length === 0 && <p className="inv-empty-column">No products</p>}</div>
   </section>;
@@ -337,7 +333,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     if (product.subcategory_name) counts[product.subcategory_name] = (counts[product.subcategory_name] || 0) + 1;
     return counts;
   }, {}), [categoryFilteredProducts]);
-  const localTimeZone = coursePresentation?.timeZone;
+  const localTimeZone = inventory?.timezone || course?.timezone || coursePresentation?.timeZone;
+  const canExport = inventory?.customer_id === course?.customer_id && inventory?.course_id === course?.course_id
+    && loadStatus === 'ready' && !session.unresolved && !session.submitting && !busyId && !publishing;
 
   function selectCategory(categoryName) {
     setSelectedCategory(categoryName);
@@ -400,6 +398,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   }
 
   async function changeState(product, state) {
+    if (busyId) return;
     if (product.state === state) return;
     if (state === 'on_cart') {
       setStockAction({ product, kind: 'availability', state });
@@ -415,6 +414,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       setNotice(`${product.name} saved as ${STATE_LABELS[state]}.`);
     } catch (error) {
       setNotice(`Unable to save ${product.name}: ${error.message}`);
+      if (error.status === 409) await refreshInventory(true);
     } finally {
       setBusyId('');
     }
@@ -442,8 +442,28 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   }
 
   function startProductDrag(event, productId) {
+    if (busyId || event.target.closest('button, select, input, a')) {
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', productId);
+  }
+
+  function exportView() {
+    if (!canExport) {
+      setNotice('Export is unavailable until inventory is loaded and pending submissions are resolved.');
+      return;
+    }
+    try {
+      const csv = inventoryViewCsv({
+        course, inventory, products: columnStates.flatMap(state => visibleProducts.filter(product => product.state === state)),
+        archivedProducts: showArchived ? inventory.archived_products || [] : [],
+        category: selectedCategory, subcategory: selectedSubcategory, operator: session.shift?.staff_name,
+      });
+      downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `inventory-${course.customer_id}-${course.course_id}-view.csv`);
+      setNotice('Displayed inventory view exported as CSV. Unsubmitted edits are excluded.');
+    } catch (error) { setNotice(`Unable to export inventory: ${error.message}`); }
   }
 
   async function loadPreview() {
@@ -486,6 +506,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     <div className="inv-main">
       <section className="inv-title-row"><div><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div><div className="inv-title-actions"><div className="inv-edit-actions"><button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />+ Category</button><button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}>+ Add Product</button></div><div className="inv-publication-actions"><button className="inv-secondary" type="button" onClick={loadPreview}><Eye size={16} />Preview Draft</button><button className="inv-publish" type="button" onClick={publishMenu} disabled={publishing || loadStatus !== 'ready'}><Send size={16} />{publishing ? 'Publishing…' : 'Publish Menu'}</button></div></div></section>
       <section className={`inv-revision ${inventory?.has_unpublished_changes ? 'is-dirty' : ''}`} role="status"><span className="inv-revision-dot" /><strong>{inventory?.has_unpublished_changes ? 'Unpublished changes' : inventory?.published_version ? 'Published menu is current' : 'No menu published yet'}</strong><span>Revision {inventory?.inventory_revision ?? '—'}</span>{inventory?.published_version > 0 && <span>Published version {inventory.published_version}</span>}</section>
+      <div className="inv-export-note"><button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport} aria-describedby="inv-export-help">Export</button><p id="inv-export-help">CSV of the confirmed displayed view and Course-wide daily sales. Active filters are identified. Resolve pending submissions before exporting.</p></div>
       {loadError && <div className="inv-alert" role="alert"><CircleAlert size={17} /><span>{loadError}</span><button type="button" onClick={() => refreshInventory(false)}>Retry</button></div>}
       {notice && <div className="inv-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
       {loadStatus === 'loading' && <div className="inv-loading" role="status">Loading course inventory…</div>}

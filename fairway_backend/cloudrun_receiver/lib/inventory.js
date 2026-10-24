@@ -140,14 +140,18 @@ async function requireCourseAccess(db, uid, customerId, courseId) {
 async function getInventoryBootstrap(db, uid) {
   const assignments = await getCustomerCourses(db, uid);
   const courses = await Promise.all(assignments.map(async (assignment) => {
-    const snapshot = await courseRef(db, assignment.customer_id, assignment.course_id).get();
+    const [snapshot, customer] = await Promise.all([
+      courseRef(db, assignment.customer_id, assignment.course_id).get(),
+      db.collection('customers').doc(assignment.customer_id).get(),
+    ]);
     if (!snapshot.exists) return null;
     const data = snapshot.data();
     return {
       customer_id: assignment.customer_id,
       course_id: assignment.course_id,
-      customer_name: data.customer_name || null,
+      customer_name: customer.data()?.customer_name || data.customer_name || null,
       course_name: data.course_name || null,
+      timezone: data.timezone || null,
     };
   }));
   return { courses: courses.filter(Boolean) };
@@ -181,11 +185,12 @@ function toPublicMenu(products) {
 }
 
 async function listInventory(db, customerId, courseId) {
-  const [courseSnapshot, stateSnapshot, productsSnapshot, categoriesSnapshot] = await db.runTransaction((transaction) => Promise.all([
+  const [courseSnapshot, stateSnapshot, productsSnapshot, categoriesSnapshot, customerSnapshot] = await db.runTransaction((transaction) => Promise.all([
     transaction.get(courseRef(db, customerId, courseId)),
     transaction.get(inventoryStateRef(db, customerId, courseId)),
     transaction.get(productsCollection(db, customerId, courseId)),
     transaction.get(categoriesCollection(db, customerId, courseId)),
+    transaction.get(db.collection('customers').doc(customerId)),
   ]));
   if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
 
@@ -212,7 +217,9 @@ async function listInventory(db, customerId, courseId) {
   return {
     customer_id: customerId,
     course_id: courseId,
+    customer_name: customerSnapshot.data()?.customer_name || null,
     course_name: courseSnapshot.data().course_name || null,
+    timezone: courseSnapshot.data().timezone || null,
     inventory_revision: state.inventory_revision || 0,
     published_version: state.published_version || 0,
     published_revision: state.published_revision ?? null,
@@ -621,8 +628,8 @@ async function updateStock(db, customerId, courseId, productId, body, actorUid) 
       }
       if (body.kind === 'adjustment') {
         quantity = nonnegativeInteger(body.quantity, 'quantity');
-        if (quantity === 0) availability = 'sold_out';
-        else if (availability === 'sold_out') availability = 'on_cart';
+        if (quantity === 0 && availability === 'on_cart') availability = 'sold_out';
+        else if (quantity > 0 && availability === 'sold_out') availability = 'on_cart';
       } else {
         if (!INVENTORY_STATES.has(body.state)) fail(400, 'invalid_state', 'Invalid availability');
         availability = body.state;

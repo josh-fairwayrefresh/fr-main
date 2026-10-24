@@ -323,6 +323,33 @@ test('availability-only moves preserve quantity and loading explicitly confirms 
   assert.equal((await f.ok('GET', '')).operations.daily_sales.total_units, 0);
 });
 
+test('restaurant returns preserve quantity, zero adjustments stay In Inventory, and audits exclude returned stock', async () => {
+  const f = await fixture();
+  const id = await f.seedProduct('Returned stock', 'on_cart', 9);
+  await f.stock(id, { kind: 'availability', state: 'in_inventory', expected_stock_revision: 0 });
+  let current = (await f.ok('GET', '')).products.find(product => product.product_id === id);
+  assert.equal(current.state, 'in_inventory');
+  assert.equal(current.quantity, 9);
+  const events = await f.course.collection('inventory_events').get();
+  const returned = events.docs.map(doc => doc.data()).find(event => event.action === 'stock_availability');
+  assert.equal(returned.delta, 0);
+  assert.equal(returned.before_state, 'on_cart');
+  assert.equal(returned.after_state, 'in_inventory');
+  assert.ok(returned.staff_id && returned.shift_id && returned.actor_uid);
+  const audit = await f.ok('POST', '/audits', {
+    ...f.context(), authorized: true, inventory_revision: 1, approver_staff_id: f.manager.staff_id,
+  });
+  assert.ok(audit.products.every(product => product.product_id !== id));
+  const zero = await f.stock(id, { kind: 'adjustment', quantity: 0, expected_stock_revision: 1 });
+  assert.equal(zero.state, 'in_inventory');
+  assert.equal(zero.quantity, 0);
+  const positive = await f.stock(id, { kind: 'adjustment', quantity: 4, expected_stock_revision: 2 });
+  assert.equal(positive.state, 'in_inventory');
+  current = await f.stock(id, { kind: 'availability', state: 'on_cart', quantity: 6, expected_stock_revision: 3 });
+  assert.equal(current.state, 'on_cart');
+  assert.equal(current.quantity, 6);
+});
+
 test('cached metadata never overwrites stock or availability, including simultaneous sale', async () => {
   const f = await fixture();
   const id = await f.seedProduct('Cached', 'on_cart', 1);

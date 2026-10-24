@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import QuantityInput from './QuantityInput';
 
 export function StockDialog({ action, session, onSaved, onClose }) {
   const { product, kind, state } = action;
-  const [amount, setAmount] = useState(kind === 'sale' ? '1' : String(product.quantity ?? 0));
+  const minimum = kind === 'sale' || state === 'on_cart' ? 1 : 0;
+  const [amount, setAmount] = useState(kind === 'sale' ? '1' : String(Math.max(minimum, product.quantity ?? 0)));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   async function submit(event) {
@@ -30,7 +32,7 @@ export function StockDialog({ action, session, onSaved, onClose }) {
   return <div className="inv-overlay"><section className="inv-dialog inv-small-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-stock-title">
     <header><h2 id="inv-stock-title">{title}</h2></header>
     <form onSubmit={submit}><p>{product.name}</p><p>Recorded quantity: {product.quantity ?? 0}</p>
-      <label>{kind === 'sale' ? 'Units sold' : 'Quantity'}<input autoFocus type="number" min={kind === 'sale' || state === 'on_cart' ? '1' : '0'} step="1" required value={amount} onChange={event => setAmount(event.target.value)} disabled={pending} /></label>
+      <QuantityInput label={kind === 'sale' ? 'Units sold' : 'Quantity'} min={minimum} value={amount} onChange={setAmount} disabled={pending} />
       {kind === 'sale' && <p>Sales cannot exceed current On Cart stock. Correct the quantity first if the count is inaccurate.</p>}
       {error && <p className="inv-form-error" role="alert">{error}</p>}
       <footer><button type="button" className="inv-secondary" disabled={pending} onClick={onClose}>Cancel</button><button className="inv-primary" disabled={pending} type="submit">{pending ? 'Submitting…' : 'Confirm'}</button></footer>

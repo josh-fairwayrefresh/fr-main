@@ -1091,6 +1091,22 @@ The Alignment Register is the canonical record mapping release milestones across
 
 ### Persistent Cart Inventory / Staff / Audits / Shift Close Sandbox Increment (2026-10-24 UTC)
 
+- **CPO feedback follow-up:** PR #12 retains all prior work and adds confirmed
+  current-view CSV export and shared 48 by 48 CSS-pixel quantity controls.
+  On Cart-to-In Inventory uses the same attributed availability operation from
+  drag-and-drop and selector, with no quantity payload/prompt. A prepublication
+  live positive-quantity selector return succeeded (HTTP 200, unchanged
+  quantity); a blanket route failure was not reproduced. Confirmed defects:
+  zero adjustment incorrectly forced restaurant-held products to Sold Out,
+  and conflicted moves did not refresh the stale view. Both are corrected.
+  Backend full suite: 151 passed; real-emulator inventory scenarios: 17 passed,
+  one unit-only rollback scenario skipped. Frontend: 68 unit checks and three
+  rendered regressions passed; sandbox configuration/build passed.
+  New rendered evidence covers drag return with first-action Custom selection,
+  no off-cart Quantity prompt, excluded audit stock, reload/loading, zero
+  restaurant quantity, step minima/no-submit/target sizes, filtered read-only
+  export, and export disabled during unresolved operations. Exact replacement
+  publication and live follow-up evidence are recorded after publication.
 - **Authority/source:** CPO-approved readiness and implementation on isolated
   `feat/persistent-cart-inventory`, based on verified canonical main
   `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. No merge or production

@@ -110,6 +110,19 @@ Metadata autosaves cannot carry stale availability into this contract. Movement
 to In Inventory preserves quantity; no restaurant balance or automatic-zeroing
 adjustment exists. Stock totals count On Cart only. Audits cover On Cart and
 Sold Out, binding confirmed immutable data to a coherent inventory revision.
+An adjustment to zero only applies the On Cart-to-Sold Out transition for
+On Cart products; restaurant-held stock remains In Inventory. Drag-and-drop
+and selectors share the same attributed stock endpoint, including staff
+selection/resumption and expected revisions. Conflicted moves refresh the
+confirmed view before retry, rather than leaving an unrepeatable stale card.
+
+The browser's current-view CSV exporter consumes the same confirmed inventory
+snapshot, visible-product filters and displayed Course-wide tally as the UI;
+it has no mutation/shift API. Bootstrap/snapshot responses expose canonical
+Customer names and Course timezone for report context. Exports explicitly name
+their filter scope; pending or unresolved writes disable them. One reusable
+quantity input supplies direct entry and 48-pixel minus/plus buttons to stock
+dialogs; stepping changes only the draft, never confirms a transaction.
 
 Operational context is scoped to authenticated UID, browser operator session,
 Customer and Course. One open shift per session/Course allows staff correction
