@@ -1089,7 +1089,7 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
-### Persistent Cart Inventory / Staff / Audits / Shift Close Sandbox Increment (2026-10-23)
+### Persistent Cart Inventory / Staff / Audits / Shift Close Sandbox Increment (2026-10-24 UTC)
 
 - **Authority/source:** CPO-approved readiness and implementation on isolated
   `feat/persistent-cart-inventory`, based on verified canonical main
@@ -1110,9 +1110,21 @@ The Alignment Register is the canonical record mapping release milestones across
   explicit publication; internal quantities, staff and operation records are
   omitted by the public field allowlist. Request queue, service categories,
   device protocol and request KPIs are not changed.
-- **Evidence/publication:** exact source, focused verification and sandbox
-  identities are added here after publication. Prior sandbox evidence below
-  remains dated history, not a claim that this increment was already deployed.
+- **Published application source:** `9c240333983a9e9971334e9df2b58672f75b7b6b`,
+  draft PR #12, targeting main. Subsequent evidence-only documentation commits
+  do not change the published application. Prior sandbox evidence below remains
+  dated history, not an alternative identity for this increment.
+- **Sandbox publication:** project/site `fairway-refresh-sandbox-260930`;
+  Admin `fairway-admin-sandbox-00019-r29`, Ready/Active at 100% traffic.
+  Source deployment retained the previous pinned revision initially; traffic
+  was explicitly moved to the verified new revision. Image digest
+  `sha256:58f004cddb47ca18aa83b8cdcf24776cd65307e8c1babb7340b1386319a0cd55`,
+  build `ed8f6179-4409-47b6-9e00-37badc1b12b2`, source archive
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792804858.954006-1deb6733a4aa4c68a0dda5d732f36aaf.zip#1792804859249405`.
+  Hosting version `d5a3a7ac740a9958`, release `1792804928794000`
+  (`2026-10-24T01:22:08.794Z`).
+  Receiver remained `fairway-button-receiver-sandbox-00025-9lr` at 100%;
+  no Receiver publication was necessary.
 - **Frontend evidence:** 65/65 unit checks, 3/3 rendered browser regressions,
   sandbox configuration validation and build pass. New rendered checks cover
   first-action Custom attribution/resumption, sale response-loss replay without
@@ -1138,6 +1150,45 @@ The Alignment Register is the canonical record mapping release milestones across
   at inventory revision 4 and publication version 0. This provides a real legacy
   initialization baseline; no devices, requests, service state or production
   records were changed.
+- **Live sandbox verification:** legacy quantities read zero with all three
+  original states, descriptions and prices preserved. Actual UI Custom
+  selection resumed a pending adjustment. Sale default one and excessive-sale
+  rejection worked. Concurrent two-unit sales plus duplicate replay deducted
+  four units once; stale absolute edits and audit confirmations returned 409.
+  A cached full metadata payload could not overwrite stock/state. Confirmed
+  loading, quantity-preserving In Inventory moves, zero-to-Sold-Out and
+  Sold-Out replenishment all passed. Admin created a separate F&B Management
+  staff entry; free pre-activity name correction, Course switching and shared
+  Cart/Inventory banner context passed.
+- **Durable evidence:** four sale records total eight units (Water five, Tea
+  three), with staff/shift/authenticated-account attribution. Audit
+  `fB8D7xeKRVSAneI1OJy1` confirmed revision 13, Water seven and Sold Out Tea
+  zero, excluding In Inventory Juice. A later Water adjustment to eight did
+  not change that audit baseline. Two session-specific closes persisted once
+  each: `9Quqj8r5gsYBxbk1PF0s` ($12.34) and
+  `wByuZtbsnZBYTZcEZcpO` ($24.50). The latter was committed with an intercepted,
+  interrupted response; reload retained name/$24.50 despite the server having
+  no active shift, and exact retry cleared only that session. Closing the
+  second session left the first active; replay after close did not deduct again.
+  Final review stock: Water eight On Cart, Tea zero Sold Out, Juice five In
+  Inventory; inventory revision 15, eight units sold, publication version zero.
+- **Responsive/served evidence:** deployed Cart and Inventory checked at 375,
+  430, 768, 1024 and 1440 CSS pixels without document overflow or clipped new
+  stock/session actions. Served JS SHA-256 matched the committed build:
+  `index-CzMm4Q55.js` =
+  `7947f456a77821abccf133e45ad153f15a74508f0ec4e32ec589caf898c35f95`;
+  `InventoryApp-CjE5UqhL.js` =
+  `0a790a88bd81f9f496f250430f277846e3e13186e739ce90406c2d567a9814fb`.
+  An already-open Admin page initially reused old cached HTML; a fresh
+  cache-busting navigation loaded the verified publication and staff controls.
+- **Review URL:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=9c240333`.
+  Sign in with an account authorized for this synthetic Course (or global
+  Admin); new staff names do not create login/access accounts.
+- **Limits:** CPO acceptance remains pending. Browser evidence is desktop
+  Chromium with responsive viewports, not physical Safari/phone testing.
+  No cross-day waiting test was performed; Course-local midnight is covered
+  deterministically. No production deployment/data changes, merge, firmware,
+  physical-device actions, service toggles or generated requests occurred.
 
 ### Queue Selection / Amenity Areas Production Release (2026-10-23)
 

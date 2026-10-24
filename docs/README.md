@@ -35,6 +35,11 @@ On-course / Amenity Areas categories were merged and deployed on 2026-10-23.
 The CPO subsequently confirmed the production FRB-0006 test passed and accepted
 the released queue-selection and independent controls; that release handoff
 is closed.
+The next persistent cart inventory, Customer staff, audits and shift-close
+increment is published only to the authorized sandbox in draft PR #12.
+It is not merged, production-deployed or CPO-accepted. Its current review
+identity and verification are in the Deployment Guide's latest Alignment
+Register entry; accepted behavior is owned by the UX specification.
 Detailed operator behavior is owned by the
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements); deployed
 release identities, custom-domain Auth correction, verification, and remaining
