@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowLeft, Check, ChevronDown, CircleAlert, Eye, LogOut, PackagePlus,
-  Send, Settings, ShoppingCart, Trash2, X,
+  Send, Settings, ShieldCheck, ShoppingCart, Trash2, X,
 } from 'lucide-react';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
 import { downloadBlob } from './admin/adminApi';
@@ -10,8 +10,7 @@ import { InventoryDragFeedback, useInventoryDrag } from './InventoryDrag';
 import { InventorySessionControls, useInventorySession } from './InventorySession';
 import { AuditDialog, StockDialog } from './InventoryOperations';
 import { courseContextUrl, courseKey, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
-import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, INVENTORY_STATE_LABELS as STATE_LABELS, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
-import { presentationForCourse } from './lib/courseMenuConfig';
+import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, groupPublishedProducts, INVENTORY_STATES, INVENTORY_STATE_LABELS as STATE_LABELS, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
 import fairwayRefreshStackedLogo from '../../../docs/logo_source_files/fairway-refresh/fairway-refresh-stacked-transparent.png';
 import './inventory.css';
 
@@ -304,14 +303,12 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const [categoryManager, setCategoryManager] = useState(null);
   const [preview, setPreview] = useState(null);
   const [publishing, setPublishing] = useState(false);
-  const [publication, setPublication] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [stockAction, setStockAction] = useState(null);
   const [auditing, setAuditing] = useState(false);
   const refreshRef = useRef(async () => {});
   const course = courses.find((item) => courseKey(item) === selectedKey)
     || selectedCourseFromLocation(courses, window.location.search);
-  const coursePresentation = course && presentationForCourse(course);
   const session = useInventorySession(user, apiBaseUrl, course);
   const categories = inventory?.categories || [];
   const products = (inventory?.products || []).filter((product) => product.archived !== true);
@@ -334,7 +331,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     if (product.subcategory_name) counts[product.subcategory_name] = (counts[product.subcategory_name] || 0) + 1;
     return counts;
   }, {}), [categoryFilteredProducts]);
-  const localTimeZone = inventory?.timezone || course?.timezone || coursePresentation?.timeZone;
   const canExport = inventory?.customer_id === course?.customer_id && inventory?.course_id === course?.course_id
     && loadStatus === 'ready' && !session.unresolved && !session.submitting && !busyId && !publishing;
   const movement = useInventoryDrag({
@@ -353,7 +349,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     let active = true;
     setInventory(null);
     setPreview(null);
-    setPublication(null);
     setSelectedCategory('all');
     setSelectedSubcategory('all');
     setLoadError('');
@@ -422,7 +417,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         kind: 'availability', state, expected_stock_revision: product.stock_revision ?? 0,
       });
       await refreshInventory(true);
-      setNotice(`${product.name} saved as ${STATE_LABELS[state]}.`);
     } catch (error) {
       setNotice(`Unable to save ${product.name}: ${error.message}`);
       if (error.status === 409) await refreshInventory(true);
@@ -438,7 +432,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     try {
       await session.request(`/products/${encodeURIComponent(product.product_id)}/archive`);
       await refreshInventory(true);
-      setNotice(`${product.name} archived.`);
     } catch (error) {
       setNotice(`Unable to archive ${product.name}: ${error.message}`);
     } finally {
@@ -451,6 +444,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       setNotice('Export is unavailable until inventory is loaded and pending submissions are resolved.');
       return;
     }
+    setNotice('');
     try {
       const csv = inventoryViewCsv({
         course, inventory, products: columnStates.flatMap(state => visibleProducts.filter(product => product.state === state)),
@@ -458,7 +452,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         category: selectedCategory, subcategory: selectedSubcategory, operator: session.shift?.staff_name,
       });
       downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `inventory-${course.customer_id}-${course.course_id}-view.csv`);
-      setNotice('Displayed inventory view exported as CSV. Unsubmitted edits are excluded.');
     } catch (error) { setNotice(`Unable to export inventory: ${error.message}`); }
   }
 
@@ -477,10 +470,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     setPublishing(true);
     setNotice('');
     try {
-      const result = await session.request('/publish');
-      setPublication(result);
+      await session.request('/publish');
       await refreshInventory(true);
-      setNotice(`Menu version ${result.version} published.`);
     } catch (error) {
       setNotice(`Menu was not published: ${error.message}`);
     } finally {
@@ -494,26 +485,38 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   return <main className="inventory-app">
     <header className="inv-header"><a href={courseContextUrl('/', course)} className="inv-brand" title="Return to Cart Operations"><img src={fairwayRefreshStackedLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
       <a className="inv-cart-link" href={courseContextUrl('/', course)} title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
-      {isAdmin && <button className="inv-cart-link" type="button" onClick={onOpenAdmin} title="Return to Admin">Admin</button>}
+      {isAdmin && <button className="inv-icon-button" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
+      <button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport}>Export</button>
       {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
-      <InventorySessionControls key={`${user.uid}:${selectedKey}`} session={session} />
     </div></header>
     <div className="inv-main">
-      <section className="inv-title-row"><div><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div><div className="inv-title-actions"><div className="inv-edit-actions"><button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />+ Category</button><button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}>+ Add Product</button></div><div className="inv-publication-actions"><button className="inv-secondary" type="button" onClick={loadPreview}><Eye size={16} />Preview Draft</button><button className="inv-publish" type="button" onClick={publishMenu} disabled={publishing || loadStatus !== 'ready'}><Send size={16} />{publishing ? 'Publishing…' : 'Publish Menu'}</button></div></div></section>
+      <section className="inv-title-row">
+        <div className="inv-title"><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div>
+        <section className="inv-daily-sales" aria-label="Today's inventory sales">
+          <div><strong>Sales today · {inventory?.daily_sales?.local_date || 'Course-local day'}</strong>
+            {inventory && <><span>{inventory.daily_sales?.total_units ?? 0} units sold · Cart stock {products.filter(product => product.state === 'on_cart').reduce((sum, product) => sum + (product.quantity ?? 0), 0)} units</span><ul>{(inventory.daily_sales?.products || []).map(product => <li key={product.product_id}>{product.name}: {product.units}</li>)}</ul></>}
+          </div>
+          <InventorySessionControls key={`${user.uid}:${selectedKey}`} session={session} />
+        </section>
+      </section>
       <section className={`inv-revision ${inventory?.has_unpublished_changes ? 'is-dirty' : ''}`} role="status"><span className="inv-revision-dot" /><strong>{inventory?.has_unpublished_changes ? 'Unpublished changes' : inventory?.published_version ? 'Published menu is current' : 'No menu published yet'}</strong><span>Revision {inventory?.inventory_revision ?? '—'}</span>{inventory?.published_version > 0 && <span>Published version {inventory.published_version}</span>}</section>
-      <div className="inv-export-note"><button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport} aria-describedby="inv-export-help">Export</button><p id="inv-export-help">CSV of the confirmed displayed view and Course-wide daily sales. Active filters are identified. Resolve pending submissions before exporting.</p></div>
       {loadError && <div className="inv-alert" role="alert"><CircleAlert size={17} /><span>{loadError}</span><button type="button" onClick={() => refreshInventory(false)}>Retry</button></div>}
-      {notice && <div className="inv-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
+      {notice && <div className="inv-notice" role="alert">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
       {loadStatus === 'loading' && <div className="inv-loading" role="status">Loading course inventory…</div>}
-      {inventory && <section className="inv-daily-sales" aria-label="Today's inventory sales"><div><strong>Sales today · {inventory.daily_sales?.local_date || 'Course-local day'}</strong><span>{inventory.daily_sales?.total_units ?? 0} units sold · Cart stock {products.filter(product => product.state === 'on_cart').reduce((sum, product) => sum + (product.quantity ?? 0), 0)} units</span><ul>{(inventory.daily_sales?.products || []).map(product => <li key={product.product_id}>{product.name}: {product.units}</li>)}</ul></div><button className="inv-secondary" type="button" onClick={() => setAuditing(true)}>Confirm inventory audit</button></section>}
-      {inventory && <nav className="inv-category-filters" aria-label="Filter inventory by category">
+      <div className="inv-catalog-actions" role="group" aria-label="Catalog and menu actions">
+        <button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />Add Category</button>
+        <button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}>+ Add Product</button>
+        <button className="inv-secondary" type="button" onClick={loadPreview}><Eye size={16} />Preview Draft</button>
+        <button className="inv-publish" type="button" onClick={publishMenu} disabled={publishing || loadStatus !== 'ready'}><Send size={16} />{publishing ? 'Publishing…' : 'Publish Menu'}</button>
+      </div>
+      {inventory && <div className="inv-filter-row"><nav className="inv-category-filters" aria-label="Filter inventory by category">
         <button className={`inv-category-filter ${selectedCategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === 'all'} onClick={() => selectCategory('all')}>All Products <span>{products.length}</span></button>
         {categories.map((category) => <div className="inv-category-filter-group" key={category.category_id}>
           <button className={`inv-category-filter ${selectedCategory === category.name ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === category.name} onClick={() => selectCategory(category.name)}>{category.name} <span>{categoryCounts[category.name] || 0}</span></button>
           <button className="inv-category-manage-trigger" type="button" onClick={() => setCategoryManager(category)} title={`Manage ${category.name}`} aria-label={`Manage ${category.name} category`}><Settings size={13} /></button>
         </div>)}
-      </nav>}
+      </nav><div className="inv-audit-action"><button className="inv-secondary" type="button" onClick={() => setAuditing(true)}>Confirm inventory audit</button></div></div>}
       {inventory && selectedCategory !== 'all' && subcategoryNames.length > 0 && <nav className="inv-subcategory-filters" aria-label="Filter inventory by subcategory">
         <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>
         {subcategoryNames.map((name) => <button className={`inv-subcategory-filter ${selectedSubcategory === name ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === name} key={name} onClick={() => setSelectedSubcategory(name)}>{name} <span>{subcategoryCounts[name] || 0}</span></button>)}
@@ -522,7 +525,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       {inventory && <div className="inv-board">{columnStates.map((state) => <InventoryColumn key={state} state={state} products={visibleProducts.filter((product) => product.state === state)} busyId={busyId} onStateChange={changeState} onEdit={(product) => setEditor({ product })} onArchive={archiveProduct} movement={movement} onStock={setStockAction} />)}</div>}
       <InventoryDragFeedback drag={movement.drag} />
       {inventory?.archived_products?.length > 0 && <section className="inv-archive"><button type="button" className="inv-archive-toggle" aria-expanded={showArchived} onClick={() => setShowArchived(!showArchived)}><Archive size={16} />Archived products <span>{inventory.archived_products.length}</span><ChevronDown size={16} /></button>{showArchived && <ul>{inventory.archived_products.map((product) => <li key={product.product_id}><strong>{product.name}</strong><span>{product.category_name}</span></li>)}</ul>}</section>}
-      {publication && <section className="inv-publication" role="status"><Check size={18} /><div><strong>Publication confirmed · Version {publication.version}</strong><span>{formatPublishedAt(publication.published_at, localTimeZone) || 'Course timezone not configured'} · Published by {user.email || user.uid}</span></div><button type="button" onClick={() => setPublication(null)} aria-label="Dismiss publication confirmation"><X size={16} /></button></section>}
       <p className="inv-sync-note">Inventory refreshes from the server while open. Your saved changes are shared with assigned staff.</p>
     </div>
     {editor && <ProductDialog key={editor.product?.product_id || 'new'} product={editor.product} categories={categories} onClose={() => setEditor(null)} onCreate={createProduct} onSave={saveProduct} />}
@@ -542,6 +544,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     />}
     {preview && <DraftPreviewDialog preview={preview} course={course} onClose={() => setPreview(null)} />}
     {stockAction && <StockDialog action={stockAction} session={session} onSaved={() => refreshInventory(true)} onRefresh={() => refreshInventory(true)} onClose={() => setStockAction(null)} />}
-    {auditing && <AuditDialog inventory={inventory} session={session} onSaved={async () => { await refreshInventory(true); setNotice('Inventory audit confirmed.'); }} onClose={() => setAuditing(false)} />}
+    {auditing && <AuditDialog inventory={inventory} session={session} onSaved={() => refreshInventory(true)} onClose={() => setAuditing(false)} />}
   </main>;
 }

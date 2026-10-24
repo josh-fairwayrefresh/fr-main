@@ -10,15 +10,16 @@
 .inv-stock-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .inv-stock-controls button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bac9bd; border-radius: 6px; padding: 8px; background: #fff; color: #183e2c; cursor: pointer; }
 .inv-stock-controls button:disabled { opacity: .5; cursor: not-allowed; }
-.inv-daily-sales { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; margin: 14px 0; border: 1px solid #bac9bd; border-radius: 10px; background: white; }
+.inv-daily-sales { min-width: 0; display: grid; gap: 12px; padding: 16px; border: 1px solid #bac9bd; border-radius: 10px; background: white; font-size: 12px; overflow-wrap: anywhere; }
 .inv-daily-sales strong, .inv-daily-sales span { display: block; }
-.inv-daily-sales ul { display: flex; flex-wrap: wrap; gap: 8px 20px; padding-left: 18px; }
-.inv-header-controls > .inventory-session { flex-basis: 100%; justify-content: flex-end; }
-.inv-header-controls { flex-wrap: wrap; min-width: 0; }
+.inv-daily-sales ul { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 18px; margin: 8px 0 0; }
+.inv-daily-sales ul:empty { display: none; }
+.inv-daily-sales .inventory-session { border-top: 1px solid #d9e0db; padding-top: 12px; }
+.inv-daily-sales .inventory-session > span:first-child { flex: 1 1 140px; }
+.inv-daily-sales .inventory-session button { min-height: 44px; }
 .inv-quantity-field { display: grid; gap: 8px; }
 .inv-quantity-input { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 12px; align-items: center; }
 .inv-quantity-input button { width: 48px; height: 48px; padding: 0; border: 1px solid #bac9bd; border-radius: 7px; background: #fff; color: #183e2c; font-size: 24px; cursor: pointer; }
 .inv-quantity-input button:disabled { opacity: .5; cursor: not-allowed; }
 .inv-quantity-input input { min-width: 0; min-height: 48px; text-align: center; appearance: textfield; -moz-appearance: textfield; }
 .inv-quantity-input input::-webkit-inner-spin-button, .inv-quantity-input input::-webkit-outer-spin-button { appearance: none; margin: 0; }
-.inv-export-note { font-size: 12px; color: #53655b; }

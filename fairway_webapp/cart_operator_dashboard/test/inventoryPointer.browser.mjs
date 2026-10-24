@@ -54,6 +54,55 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...p, button: 'left', clickCount: 1 });
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p, button: 'left', clickCount: 1 });
     }
+    await navigate('Page.navigate', { url });
+    for (const width of [1440, 1024, 768, 430, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 1024, deviceScaleFactor: 1, mobile: false });
+      await pause(50);
+      const layout = await evaluate(`(()=>{
+        const box=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+        const actions=document.querySelector('.inv-catalog-actions');
+        const panel=document.querySelector('.inv-daily-sales');
+        const admin=document.querySelector('[aria-label="Open Admin"]');
+        return {
+          title:box(document.querySelector('.inv-title')),panel:box(panel),
+          actionBoxes:[...actions.querySelectorAll('button')].map(box),
+          actionNames:[...actions.querySelectorAll('button')].map(e=>e.textContent),
+          aboveFilters:actions.nextElementSibling.classList.contains('inv-filter-row'),
+          auditOnFilters:Boolean(document.querySelector('.inv-filter-row .inv-audit-action button')),
+          exportInBanner:[...document.querySelectorAll('.inv-header button')].some(e=>e.textContent==='Export'),
+          exportHelp:Boolean(document.querySelector('#inv-export-help')),
+          adminIcon:Boolean(admin?.querySelector('svg')) && !admin.textContent,
+          logo:box(document.querySelector('.inv-brand img')),
+          operatorInPanel:Boolean(panel.querySelector('.inventory-session')),
+          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action button,.inv-category-filters button,.inv-header button,.inventory-session button')].map(box),
+          overflow:document.documentElement.scrollWidth>innerWidth
+        };
+      })()`);
+      assert.equal(layout.overflow, false, `${width}px: no document overflow`);
+      assert.equal(layout.aboveFilters, true);
+      assert.equal(layout.auditOnFilters, true);
+      assert.equal(layout.exportInBanner, true);
+      assert.equal(layout.exportHelp, false);
+      assert.equal(layout.adminIcon, true);
+      assert.equal(layout.operatorInPanel, true);
+      assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product', 'Preview Draft', 'Publish Menu']);
+      assert.equal(layout.logo.width, width <= 380 ? 90 : width <= 680 ? 108 : 156, 'Logo is 150% of its previous displayed width');
+      assert.equal(layout.logo.height, width <= 680 ? 72 : 96);
+      for (const box of layout.targets) {
+        assert.ok(box.height >= 44 && box.width >= 44, `${width}px: controls retain finger-sized targets`);
+        assert.ok(box.x >= 0 && box.right <= width, `${width}px: controls not clipped`);
+      }
+      if (width >= 768) {
+        assert.ok(layout.panel.x >= layout.title.right, `${width}px: Sales Today beside title`);
+        assert.ok(layout.panel.y < layout.title.bottom && layout.title.y < layout.panel.bottom);
+        assert.ok(layout.actionBoxes.every(b=>b.y === layout.actionBoxes[0].y), `${width}px: catalog actions share one row`);
+      } else {
+        assert.ok(layout.panel.y >= layout.title.bottom, `${width}px: title and sales wrap cleanly`);
+        assert.ok(layout.actionBoxes[2].y > layout.actionBoxes[0].y, `${width}px: action row wraps`);
+      }
+    }
+    await click('[aria-label="Open Admin"]');
+    assert.equal(await evaluate('globalThis.openedAdmin'), true, 'Accessible shield still opens Admin');
     for (const [pointerType, width] of [['mouse', 1024], ['touch', 768], ['touch', 375]]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: pointerType === 'touch' });
       await send('Emulation.setTouchEmulationEnabled', { enabled: pointerType === 'touch', maxTouchPoints: 5 });
@@ -115,6 +164,9 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       let data = await state();
       assert.equal(data.products[0].quantity, 5);
       assert.equal(data.products[0].state, 'in_inventory');
+      assert.equal(await evaluate('Boolean(document.querySelector(".inv-notice"))'), false, 'Routine success creates no commentary box');
+      assert.ok(await evaluate('document.querySelector(".inv-daily-sales .inventory-session").textContent.includes("Pointer Operator")'), 'Selected operator stays clear in Sales Today');
+      assert.ok(await evaluate('[...document.querySelectorAll(".inv-daily-sales .inventory-session button")].some(e=>e.textContent==="Close shift")'), 'Close shift is inside Sales Today');
       assert.equal(data.writes[0].quantity, undefined);
       assert.equal(data.writes[0].shift_id, 'pointer-shift');
       await navigate('Page.reload');
@@ -218,6 +270,6 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
   } finally {
     await browser?.close();
     await server.close();
-    await rm(profile, { recursive: true, force: true });
+    await rm(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });

@@ -204,6 +204,28 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
 The CPO authorized this coherent increment on 2026-10-23, from accepted main
 `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. It is not a production release.
+On 2026-10-24 the CPO accepted its current functionality and requested the
+presentation refinement below within PR #12; this does not authorize merge
+or production deployment.
+
+- The Inventory banner displays the Fairway Refresh logo at 150% of its prior
+  displayed dimensions at each responsive breakpoint, an accessible Admin
+  shield for entitled users, and Export without explanatory prose. Export
+  retains the same confirmed-view CSV contents, download and pending/unresolved
+  submission protection.
+- Sales Today sits horizontally beside Cart Inventory Management Dashboard
+  on iPad/desktop. The same compact panel clearly identifies the selected
+  operator and contains Select operator/Close shift and submission recovery.
+  Add Category, Add Product, Preview Draft and Publish Menu share one action
+  row immediately above the category filters. Confirm inventory audit sits on
+  the filter row, visually separated from filter controls. Preserve grouping
+  on iPad; wrap rows cleanly on phones with no document overflow or reduced
+  touch targets (44 CSS pixels minimum for these controls).
+- Routine success commentary boxes are omitted: confirmed tiles, quantities,
+  tally, shift identity and publication revision convey successful changes.
+  Actionable failures, stock conflicts, unknown submission outcomes and retry/
+  recovery controls remain visible. Explicit sale/loading/audit/publication
+  confirmations and all underlying operations are unchanged.
 
 - One shared cart inventory per Course uses the existing Course catalog.
   Inventory ownership remains bounded for a future Course-to-Cart hierarchy;
@@ -285,7 +307,7 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
   equal operational rights through one policy. These are operational identities,
   separate from Firebase users; adding a name grants no login or Admin access.
   Custom operator entry adds a Cart Operator to that Customer directory.
-- Cart and Inventory banners share a session/Course operator selection, isolated
+- Cart's banner and Inventory's Sales Today panel share a session/Course operator selection, isolated
   from other sessions/accounts and Customer/Course contexts. The first inventory
   action without a selection prompts and resumes that action. One shift is active
   per operator session and Course. Before inventory activity, the name can be

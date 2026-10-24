@@ -37,7 +37,9 @@ the released queue-selection and independent controls; that release handoff
 is closed.
 The next persistent cart inventory, Customer staff, audits and shift-close
 increment is published only to the authorized sandbox in draft PR #12.
-It is not merged, production-deployed or CPO-accepted. Its current review
+The CPO accepted its current functionality on 2026-10-24 and requested
+presentation refinement within the same PR. It is not merged or
+production-deployed; presentation review remains pending. Its current review
 identity and verification are in the Deployment Guide's latest Alignment
 Register entry; accepted behavior is owned by the UX specification.
 Detailed operator behavior is owned by the

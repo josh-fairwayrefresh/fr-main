@@ -57,5 +57,5 @@ window.fetch = async (url, options = {}) => {
 };
 createRoot(document.getElementById('root')).render(<InventoryApp
   user={{ uid: 'pointer-user', getIdToken: async () => 'pointer-token' }} apiBaseUrl={location.origin}
-  courses={[course]} onSignOut={() => {}}
+  courses={[course]} isAdmin onOpenAdmin={() => { globalThis.openedAdmin = true; }} onSignOut={() => {}}
 />);
