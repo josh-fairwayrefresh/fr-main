@@ -105,7 +105,14 @@ role policy initially permits both Cart Operator and F&B Management equally.
 Balance/availability changes and their immutable attributed historical record
 form one transaction. Missing quantities mean zero without moving legacy tiles.
 Sales apply deltas against current On Cart stock; excessive sales reject, never
-clamp or go negative. Absolute stock edits use expected stock revisions.
+clamp or go negative. On Cart-to-Sold Out with remaining stock confirms a sale
+of exactly the displayed units, using the same sale operation and idempotency
+owner, with an expected stock revision checked inside its transaction. Normal
+quick sales without this optional precondition retain concurrent delta semantics.
+Stale remaining-sale confirmations require explicit refresh/reconfirmation;
+positive On Cart stock cannot bypass the sale via availability-only writes.
+Zero On Cart stock can change availability without a zero-unit sale.
+Absolute stock edits use expected stock revisions.
 Metadata autosaves cannot carry stale availability into this contract. Movement
 to In Inventory preserves quantity; no restaurant balance or automatic-zeroing
 adjustment exists. Stock totals count On Cart only. Audits cover On Cart and
@@ -121,7 +128,10 @@ column hit testing handle nested targets consistently. Only the visible
 product-name/grip reserves touch gestures; other card areas retain scrolling.
 Viewport-edge scrolling supports stacked columns. Cancellation and scope
 changes clear the interaction; a completed drop calls the same availability
-owner as the selector. Browser-generated mouse/touch regression evidence is
+intent as the selector, including the remaining-sale confirmation. Adjacent
+columns stretch to the full grid-row height so lower-tile horizontal drops
+have a target even when the destination contains fewer products. Accepted
+mouse drag regions suppress competing native text dragging. Browser-generated mouse/touch regression evidence is
 distinct from synthetic handler tests and physical iPad/Safari acceptance.
 
 The browser's current-view CSV exporter consumes the same confirmed inventory

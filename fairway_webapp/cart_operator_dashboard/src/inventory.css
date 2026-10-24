@@ -64,7 +64,7 @@
 .inv-notice { justify-content: space-between; border-color: #c6ddce; background: #e8f3eb; color: #285d3c; }
 .inv-notice button { width: 28px; height: 28px; border: 0; display: grid; place-items: center; background: transparent; color: inherit; cursor: pointer; }
 .inv-loading { padding: 26px 8px; color: var(--inv-muted); font-size: 13px; }
-.inv-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 14px; }
+.inv-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 14px; }
 .inv-column { min-width: 0; min-height: 260px; border-top: 3px solid #35724f; transition: background-color .15s ease; }
 .inv-column-sold_out { border-top-color: #b58a35; }
 .inv-column-in_inventory { border-top-color: #91a399; }

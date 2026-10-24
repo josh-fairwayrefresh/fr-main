@@ -1,15 +1,34 @@
 import React, { useState } from 'react';
 import QuantityInput from './QuantityInput';
 
-export function StockDialog({ action, session, onSaved, onClose }) {
-  const { product, kind, state } = action;
+export function StockDialog({ action, session, onSaved, onRefresh, onClose }) {
+  const { kind, state, remaining = false } = action;
+  const [product, setProduct] = useState(action.product);
   const minimum = kind === 'sale' || state === 'on_cart' ? 1 : 0;
   const [amount, setAmount] = useState(kind === 'sale' ? '1' : String(Math.max(minimum, product.quantity ?? 0)));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  async function refreshConfirmation() {
+    setPending(true);
+    try {
+      const snapshot = await onRefresh();
+      if (!snapshot) throw new Error('Inventory could not be loaded. Retry refresh before confirming.');
+      const current = snapshot?.products.find(item => item.product_id === product.product_id);
+      if (!current || current.archived || current.state !== 'on_cart' || current.quantity <= 0) {
+        setError('No remaining On Cart stock is available to sell. Cancel and review the refreshed inventory.');
+        return;
+      }
+      setProduct(current);
+      setNeedsRefresh(false);
+      setError('Stock refreshed. Review the remaining units and confirm again.');
+    } catch (reason) { setError(`Unable to refresh confirmation: ${reason.message}`); }
+    finally { setPending(false); }
+  }
   async function submit(event) {
     event.preventDefault();
-    const quantity = Number(amount);
+    if (pending || needsRefresh) return;
+    const quantity = remaining ? product.quantity : Number(amount);
     if (!Number.isSafeInteger(quantity) || quantity < (kind === 'sale' || state === 'on_cart' ? 1 : 0)) {
       setError(kind === 'sale' || state === 'on_cart' ? 'Enter a positive whole-unit quantity.' : 'Enter a whole-unit quantity of zero or more.');
       return;
@@ -18,24 +37,29 @@ export function StockDialog({ action, session, onSaved, onClose }) {
     try {
       await session.request(`/products/${encodeURIComponent(product.product_id)}/stock`, {
         kind,
-        ...(kind === 'sale' ? { units: quantity } : {
+        ...(kind === 'sale' ? { units: quantity, ...(remaining ? { expected_stock_revision: product.stock_revision ?? 0 } : {}) } : {
           quantity, expected_stock_revision: product.stock_revision ?? 0,
           ...(state ? { state } : {}),
         }),
       });
       await onSaved();
       onClose();
-    } catch (reason) { setError(reason.message); }
+    } catch (reason) {
+      setError(reason.message);
+      if (remaining && reason.status === 409) setNeedsRefresh(true);
+    }
     finally { setPending(false); }
   }
-  const title = kind === 'sale' ? 'Record sale' : state === 'on_cart' ? 'Load onto cart' : 'Adjust quantity';
+  const title = remaining ? 'Confirm remaining sale' : kind === 'sale' ? 'Record sale' : state === 'on_cart' ? 'Load onto cart' : 'Adjust quantity';
   return <div className="inv-overlay"><section className="inv-dialog inv-small-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-stock-title">
     <header><h2 id="inv-stock-title">{title}</h2></header>
     <form onSubmit={submit}><p>{product.name}</p><p>Recorded quantity: {product.quantity ?? 0}</p>
-      <QuantityInput label={kind === 'sale' ? 'Units sold' : 'Quantity'} min={minimum} value={amount} onChange={setAmount} disabled={pending} />
-      {kind === 'sale' && <p>Sales cannot exceed current On Cart stock. Correct the quantity first if the count is inaccurate.</p>}
+      {remaining ? <p>Confirm that you sold the remaining {product.quantity} units of {product.name}.</p>
+        : <QuantityInput label={kind === 'sale' ? 'Units sold' : 'Quantity'} min={minimum} value={amount} onChange={setAmount} disabled={pending} />}
+      {kind === 'sale' && !remaining && <p>Sales cannot exceed current On Cart stock. Correct the quantity first if the count is inaccurate.</p>}
       {error && <p className="inv-form-error" role="alert">{error}</p>}
-      <footer><button type="button" className="inv-secondary" disabled={pending} onClick={onClose}>Cancel</button><button className="inv-primary" disabled={pending} type="submit">{pending ? 'Submitting…' : 'Confirm'}</button></footer>
+      {needsRefresh && <button type="button" className="inv-secondary" disabled={pending} onClick={refreshConfirmation}>Refresh confirmation</button>}
+      <footer><button type="button" className="inv-secondary" disabled={pending} onClick={onClose}>Cancel</button><button className="inv-primary" disabled={pending || needsRefresh} type="submit">{pending ? 'Submitting…' : 'Confirm'}</button></footer>
     </form>
   </section></div>;
 }

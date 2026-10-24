@@ -618,6 +618,10 @@ async function updateStock(db, customerId, courseId, productId, body, actorUid) 
     let availability = existing.state;
     if (body.kind === 'sale') {
       if (!Number.isSafeInteger(body.units) || body.units <= 0) fail(400, 'invalid_units', 'Sale units must be a positive integer');
+      if (body.expected_stock_revision !== undefined &&
+          (!Number.isSafeInteger(body.expected_stock_revision) || body.expected_stock_revision !== stockRevision)) {
+        fail(409, 'stock_revision_conflict', 'Stock changed. Refresh and confirm the quantity again.');
+      }
       if (body.units > before) fail(409, 'insufficient_stock', 'Not enough stock. Correct the quantity first, then record the sale.');
       if (availability !== 'on_cart') fail(409, 'product_not_on_cart', 'Only On Cart products can be sold');
       quantity -= body.units;
@@ -632,6 +636,9 @@ async function updateStock(db, customerId, courseId, productId, body, actorUid) 
         else if (quantity > 0 && availability === 'sold_out') availability = 'on_cart';
       } else {
         if (!INVENTORY_STATES.has(body.state)) fail(400, 'invalid_state', 'Invalid availability');
+        if (body.state === 'sold_out' && existing.state === 'on_cart' && before > 0) {
+          fail(409, 'sale_confirmation_required', 'Confirm a sale of the remaining units before moving On Cart stock to Sold Out.');
+        }
         availability = body.state;
         if (availability === 'on_cart' && existing.state !== 'on_cart') {
           quantity = nonnegativeInteger(body.quantity, 'quantity');

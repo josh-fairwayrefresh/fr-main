@@ -300,7 +300,7 @@ test('adjustments use expected stock revision and reject stale concurrent overwr
   }
 });
 
-test('availability-only moves preserve quantity and loading explicitly confirms positive stock', async () => {
+test('restaurant moves preserve quantity, Sold Out requires a sale, and loading confirms positive stock', async () => {
   const f = await fixture();
   const id = await f.seedProduct('Preserved', 'on_cart', 9);
   const moved = await f.stock(id, { kind: 'availability', state: 'in_inventory', expected_stock_revision: 0, quantity: 88 });
@@ -316,11 +316,68 @@ test('availability-only moves preserve quantity and loading explicitly confirms 
   }
   const loaded = await f.stock(id, { kind: 'availability', state: 'on_cart', expected_stock_revision: 1, quantity: 6 });
   assert.equal(loaded.quantity, 6);
-  const unavailable = await f.stock(id, { kind: 'availability', state: 'sold_out', expected_stock_revision: 2 });
-  assert.equal(unavailable.quantity, 6);
+  const rejected = await f.request('POST', `/products/${id}/stock`, {
+    ...f.context(), kind: 'availability', state: 'sold_out', expected_stock_revision: 2,
+  });
+  assert.equal(rejected.body.error, 'sale_confirmation_required');
+  const unavailable = await f.stock(id, { kind: 'sale', units: 6, expected_stock_revision: 2 });
+  assert.equal(unavailable.quantity, 0);
   const reloaded = await f.stock(id, { kind: 'availability', state: 'on_cart', expected_stock_revision: 3, quantity: 8 });
   assert.equal(reloaded.quantity, 8);
-  assert.equal((await f.ok('GET', '')).operations.daily_sales.total_units, 0);
+  assert.equal((await f.ok('GET', '')).operations.daily_sales.total_units, 6);
+});
+
+test('confirmed remaining sale is revision-bound, atomic, attributed and idempotent after retry', async () => {
+  const f = await fixture();
+  const id = await f.seedProduct('Remaining stock', 'on_cart', 4);
+  const body = { ...f.context(), kind: 'sale', units: 4, expected_stock_revision: 0 };
+  const results = await Promise.all([1, 2, 3].map(() => f.ok('POST', `/products/${id}/stock`, body)));
+  assert.deepEqual(results[0], results[1]);
+  assert.equal(results[0].quantity, 0);
+  assert.equal(results[0].state, 'sold_out');
+  const events = await f.course.collection('inventory_events').get();
+  assert.equal(events.size, 1);
+  const event = events.docs[0].data();
+  assert.equal(event.action, 'sale');
+  assert.equal(event.units, 4);
+  assert.equal(event.before_quantity, 4);
+  assert.equal(event.after_quantity, 0);
+  assert.equal(event.after_state, 'sold_out');
+  assert.equal(event.staff_id, f.staff.staff_id);
+  assert.equal(event.shift_id, f.shift.shift_id);
+  assert.equal(event.actor_uid, f.actors.operator.uid);
+  assert.equal((await f.ok('GET', '')).daily_sales.total_units, 4);
+});
+
+test('remaining confirmation rejects intervening sales and increases, including quantity restored to its original value', async () => {
+  const f = await fixture();
+  const id = await f.seedProduct('Changed stock', 'on_cart', 4);
+  const original = { ...f.context(), kind: 'sale', units: 4, expected_stock_revision: 0 };
+  await f.stock(id, { kind: 'sale', units: 1 });
+  assert.equal((await f.request('POST', `/products/${id}/stock`, original)).body.error, 'stock_revision_conflict');
+  await f.stock(id, { kind: 'adjustment', quantity: 6, expected_stock_revision: 1 });
+  assert.equal((await f.request('POST', `/products/${id}/stock`, original)).body.error, 'stock_revision_conflict');
+  await f.stock(id, { kind: 'adjustment', quantity: 4, expected_stock_revision: 2 });
+  assert.equal((await f.request('POST', `/products/${id}/stock`, original)).body.error, 'stock_revision_conflict');
+  assert.equal((await f.course.collection('inventory_events').get()).size, 3);
+  assert.equal((await f.ok('GET', '')).daily_sales.total_units, 1);
+  const sold = await f.stock(id, { kind: 'sale', units: 4, expected_stock_revision: 3 });
+  assert.equal(sold.quantity, 0);
+  assert.equal(sold.state, 'sold_out');
+  assert.equal((await f.ok('GET', '')).daily_sales.total_units, 5);
+});
+
+test('zero On Cart to Sold Out records availability only and no zero-unit sale', async () => {
+  const f = await fixture();
+  const id = await f.seedProduct('Legacy zero', 'on_cart', 0);
+  const result = await f.stock(id, { kind: 'availability', state: 'sold_out', expected_stock_revision: 0 });
+  assert.equal(result.quantity, 0);
+  assert.equal(result.state, 'sold_out');
+  const events = await f.course.collection('inventory_events').get();
+  assert.equal(events.size, 1);
+  assert.equal(events.docs[0].data().action, 'stock_availability');
+  assert.equal(events.docs[0].data().units, undefined);
+  assert.equal((await f.ok('GET', '')).daily_sales.total_units, 0);
 });
 
 test('restaurant returns preserve quantity, zero adjustments stay In Inventory, and audits exclude returned stock', async () => {

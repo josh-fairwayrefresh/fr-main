@@ -58,6 +58,7 @@ export function useInventoryDrag({ scope, disabled, onMove }) {
     if (disabled || !event.isPrimary || event.button !== 0 || pointer.current) return;
     const handle = event.target.closest('[data-inventory-drag-handle]');
     if (!handle && (event.pointerType !== 'mouse' || event.target.closest('button, select, input, a, label'))) return;
+    if (event.pointerType === 'mouse' && !handle) event.preventDefault();
     cancel();
     pointer.current = {
       id: event.pointerId, element: handle || event.currentTarget, product,
@@ -111,6 +112,7 @@ export function useInventoryDrag({ scope, disabled, onMove }) {
   return {
     drag, pick, drop, cancel,
     bindings: product => ({
+      onDragStart: event => event.preventDefault(),
       onPointerDown: event => start(event, product), onPointerMove: move, onPointerUp: finish,
       onPointerCancel: cancel, onLostPointerCapture: () => { if (pointer.current) cancel(); },
     }),

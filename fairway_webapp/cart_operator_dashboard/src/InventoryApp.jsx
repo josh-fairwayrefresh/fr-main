@@ -367,6 +367,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         setInventory(result);
         setLoadError('');
         setLoadStatus('ready');
+        return result;
       } catch (error) {
         if (!active) return;
         setLoadError(error.message);
@@ -389,7 +390,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   }, [apiBaseUrl, course?.customer_id, course?.course_id, user]);
 
   async function refreshInventory(silent = true) {
-    await refreshRef.current(silent);
+    return refreshRef.current(silent);
   }
 
   async function saveProduct(productId, body) {
@@ -406,6 +407,10 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   async function changeState(product, state) {
     if (busyId) return;
     if (product.state === state) return;
+    if (state === 'sold_out' && product.state === 'on_cart' && product.quantity > 0) {
+      setStockAction({ product, kind: 'sale', remaining: true });
+      return;
+    }
     if (state === 'on_cart') {
       setStockAction({ product, kind: 'availability', state });
       return;
@@ -536,7 +541,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       }}
     />}
     {preview && <DraftPreviewDialog preview={preview} course={course} onClose={() => setPreview(null)} />}
-    {stockAction && <StockDialog action={stockAction} session={session} onSaved={() => refreshInventory(true)} onClose={() => setStockAction(null)} />}
+    {stockAction && <StockDialog action={stockAction} session={session} onSaved={() => refreshInventory(true)} onRefresh={() => refreshInventory(true)} onClose={() => setStockAction(null)} />}
     {auditing && <AuditDialog inventory={inventory} session={session} onSaved={async () => { await refreshInventory(true); setNotice('Inventory audit confirmed.'); }} onClose={() => setAuditing(false)} />}
   </main>;
 }

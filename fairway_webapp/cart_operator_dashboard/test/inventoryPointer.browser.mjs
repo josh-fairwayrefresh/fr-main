@@ -44,6 +44,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
     }
     async function key(key, code, virtual) {
       await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: virtual });
+      if (key === 'Enter') await send('Input.dispatchKeyEvent', { type: 'char', text: '\r', unmodifiedText: '\r', key, code, windowsVirtualKeyCode: virtual });
       await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: virtual });
     }
     async function click(selector) {
@@ -71,14 +72,14 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         if (pointerType === 'touch') await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         else await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p, button: 'left', clickCount: 1 });
       }
-      async function drag(targetState) {
-        const source = button('Move Pointer Water');
+      async function drag(targetState, source = button('Move Pointer Water'), horizontal = false) {
+        const beforeWrites = (await writes()).length;
         await evaluate(`document.querySelector(${JSON.stringify(source)}).scrollIntoView({block:'center'})`);
         const start = await bounds(source);
         await down(start);
         await move({ x: start.x + 15, y: start.y + 4 });
         const targetSelector = `[data-inventory-drop="${targetState}"] > header`;
-        let target = await bounds(targetSelector);
+        let target = horizontal ? { x: (await bounds(targetSelector)).x, y: start.y } : await bounds(targetSelector);
         if (target.y > 850 || target.y < 40) {
           const edge = { x: start.x, y: target.y > 850 ? 890 : 10 };
           await move(edge);
@@ -87,8 +88,18 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         await move(target);
         await pause(80);
         assert.equal(await evaluate(`document.querySelector('[data-inventory-drop="${targetState}"]').classList.contains('drag-over')`), true);
-        assert.equal((await writes()).length, targetState === 'in_inventory' ? 0 : 1, 'Dragging alone never writes');
+        assert.equal((await writes()).length, beforeWrites, 'Dragging alone never writes');
         await up(target);
+      }
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await drag('sold_out', button('Move Pointer Water'), width > 680);
+        await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'first-attempt remaining sale confirmation');
+        assert.ok(await evaluate('document.querySelector(".inv-dialog").textContent.includes("Confirm that you sold the remaining 5 units of Pointer Water.")'));
+        assert.equal((await writes()).length, 0);
+        assert.equal((await state())?.shift || null, null, 'No shift activity before Confirm');
+        await click('.inv-dialog footer button[type="button"]');
+        await until(() => evaluate('!document.querySelector("#inv-stock-title")'), 'cancel closes confirmation');
+        assert.equal((await writes()).length, 0, 'Cancel preserves stock and sales');
       }
       await drag('in_inventory');
       await until(() => evaluate('Boolean(document.querySelector("#inventory-session-title"))'), 'staff prompt after drop');
@@ -143,15 +154,65 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         await evaluate(`document.querySelector(${JSON.stringify(detail)}).closest('article').scrollIntoView({block:'center'})`);
         const position = await bounds(detail);
         const beforeScroll = await evaluate('window.scrollY');
+        const direction = beforeScroll > 100 ? 1 : -1;
         // A noninteractive card edge keeps ordinary touch scrolling, rather than initiating a drag.
         const x = await evaluate(`document.querySelector(${JSON.stringify(detail)}).closest('article').getBoundingClientRect().right - 3`);
         await down({ x, y: position.y });
-        for (let delta = 20; delta <= 140; delta += 20) { await move({ x, y: position.y - delta }); await pause(20); }
-        await up({ x, y: position.y - 140 });
+        for (let delta = 20; delta <= 100; delta += 20) { await move({ x, y: position.y + direction * delta }); await pause(20); }
+        await up({ x, y: position.y + direction * 100 });
         await pause(100);
-        assert.ok(await evaluate('window.scrollY') > beforeScroll, 'Touch scrolling works outside grip');
+        assert.ok(Math.abs(await evaluate('window.scrollY') - beforeScroll) > 10, 'Touch scrolling works outside grip');
         assert.equal((await writes()).length, 2, 'Touch scrolling does not move stock');
       }
+      if (pointerType === 'mouse') {
+        await evaluate(`(()=>{const e=document.querySelector('[aria-label="Move Pointer Water"]').closest('article').querySelector('.inv-product-price');const r=document.createRange();r.selectNodeContents(e);getSelection().removeAllRanges();getSelection().addRange(r);})()`);
+        await drag('sold_out', '.inv-product-tile:has([aria-label="Move Pointer Water"]) .inv-product-price');
+        // Selected noninteractive text must not invoke competing native HTML dragging.
+        await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'non-grip mouse drop after text selection');
+        await click('.inv-dialog footer button[type="button"]');
+      }
+      await pause(550);
+      await evaluate('document.querySelector("[aria-label=\'Move Pointer Water\']").focus()');
+      await key('Enter', 'Enter', 13);
+      await until(() => evaluate('Boolean(document.querySelector(".inv-move-here"))'), 'keyboard picks product');
+      await evaluate(`document.querySelector('[data-inventory-drop="sold_out"] .inv-move-here').focus()`);
+      await key('Enter', 'Enter', 13);
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'keyboard Sold Out uses same confirmation');
+      await click('.inv-dialog footer button[type="button"]');
+      const selectState = value => evaluate(`(()=>{const select=document.querySelector('[aria-label="Pointer Water state"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,${JSON.stringify(value)});select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await selectState('sold_out');
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'selector uses same confirmation');
+      // Another session changes the confirmed count; the old 5-unit confirmation must never submit a new amount.
+      await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('pointer-data'));data.products[0].quantity=7;data.products[0].stock_revision++;data.revision++;localStorage.setItem('pointer-data',JSON.stringify(data));})()`);
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('Boolean(document.querySelector(".inv-dialog [role=alert]"))'), 'stale confirmation rejected');
+      assert.equal((await writes()).length, 2);
+      assert.equal(await evaluate('document.querySelector(".inv-dialog button[type=submit]").disabled'), true);
+      await click('.inv-dialog > form > button');
+      await until(() => evaluate('document.querySelector(".inv-dialog").textContent.includes("remaining 7 units")'), 'explicit refreshed confirmation');
+      assert.equal((await writes()).length, 2, 'Refresh does not sell');
+      await evaluate('globalThis.loseRemainingResponse=true');
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('document.querySelector(".inv-dialog [role=alert]")?.textContent.includes("not confirmed")'), 'lost response retains intended sale');
+      assert.equal((await writes()).length, 3);
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('!document.querySelector("#inv-stock-title")'), 'retry confirms exactly one remaining sale');
+      data = await state();
+      assert.equal(data.products[0].quantity, 0);
+      assert.equal(data.products[0].state, 'sold_out');
+      assert.equal(data.sales, 7);
+      assert.equal(data.writes.length, 3);
+      assert.equal(data.writes[2].kind, 'sale');
+      assert.equal(data.writes[2].units, 7);
+      assert.equal(data.writes[2].expected_stock_revision, 3);
+      assert.ok(await evaluate('document.querySelector(".inv-daily-sales").textContent.includes("7 units sold")'));
+      await evaluate(`(()=>{const data=JSON.parse(localStorage.getItem('pointer-data'));data.products[0].state='on_cart';data.products[0].stock_revision++;data.revision++;localStorage.setItem('pointer-data',JSON.stringify(data));window.dispatchEvent(new Event('inventory-updated'));})()`);
+      await until(() => evaluate('document.querySelector("[aria-label=\'Pointer Water state\']")?.value==="on_cart"'), 'legacy zero On Cart view');
+      await selectState('sold_out');
+      await until(async () => (await writes()).length === 4, 'zero-stock availability change');
+      assert.equal(await evaluate('Boolean(document.querySelector("#inv-stock-title"))'), false, 'Zero stock needs no sale confirmation');
+      assert.equal((await writes())[3].kind, 'availability');
+      assert.equal((await state()).sales, 7, 'No zero-unit sale');
       assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, 'No horizontal overflow');
     }
   } finally {

@@ -217,8 +217,7 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
 - Cart-stock totals select only On Cart products. Moving to In Inventory changes
   availability only: preserve the recorded quantity and do not manufacture an
   adjustment. In Inventory means restaurant-held products available to load,
-  not a tracked restaurant stock balance. Manual Sold Out availability likewise
-  does not invent a quantity adjustment. Loading either state into On Cart
+  not a tracked restaurant stock balance. Loading either state into On Cart
   requires a positive Quantity and explicit confirmation, committed together.
   Both drag-and-drop and the availability selector support On Cart to In
   Inventory, without a Quantity prompt. If operator selection is needed, resume
@@ -226,6 +225,20 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
   unchanged quantity; remove the product from cart totals and later cart audits.
   The state and quantity survive reload. Adjusting an In Inventory product to
   zero must leave it In Inventory, not move it to Sold Out.
+- Moving an On Cart product with positive quantity X to Sold Out, by dragging,
+  keyboard movement or availability selector, asks:
+  "Confirm that you sold the remaining X units of [product name]."
+  Confirm uses the existing attributed sale operation to sell exactly the
+  displayed remaining units, set quantity zero and move to Sold Out atomically;
+  the Course-local daily sales tally updates. Cancel changes no stock,
+  availability, sale history or shift activity. Bind the confirmation to the
+  displayed stock revision: intervening sales/adjustments require refreshed
+  quantities and another explicit confirmation, never a silent amount change.
+  Uncertain responses retain the exact intended operation for safe retry.
+  A zero-quantity On Cart product moves to Sold Out as availability only,
+  without creating a zero-unit sale. Other non-sale availability changes do not
+  invent adjustments; quantity-preserving In Inventory returns and confirmed
+  positive loading onto On Cart are unchanged.
 - Inventory dragging uses the visible product-name/grip control for mouse,
   touch and pen through one shared interaction. Touch scroll remains available
   outside that grip; sale, quantity, edit and selector controls do not initiate
@@ -235,6 +248,9 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
   Escape, browser cancellation and dropping outside columns do not mutate stock.
   The grip also supports selection followed by a labeled Move here button
   without requiring the availability selector. This is not a separate stock path.
+  Adjacent columns span the board's full row height so horizontal drops from
+  lower tiles land in the visible destination area, not a gap beneath a shorter
+  column. On stacked phones, viewport-edge scrolling reaches other columns.
 - A sale icon opens positive whole units sold, default one, and Confirm. Server
   transactions validate against current On Cart stock. An excessive sale is
   rejected without deduction or successful sale event, explaining that the
