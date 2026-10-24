@@ -1089,6 +1089,75 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Inventory organization refinement — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Acceptance/boundary:** the CPO accepts current inventory functionality and
+  requested presentation refinement in the existing draft PR #12. This is not
+  merge or production authorization. README/backlog now distinguish accepted
+  functionality from pending presentation review. Product layout requirements
+  are owned by the UX specification.
+- **Published source:** `3dcbf33ecaf397ad509204ca695ec31f96b40c41`,
+  branch `feat/persistent-cart-inventory`. Main grouping change
+  `178248595e807169bc075f0b2d63418ee4af2baa`; final source additionally bounds
+  the tablet account label so a multi-Course banner does not orphan Sign out.
+  The earlier intermediate Hosting version `e91674fbc7193a90` is superseded by
+  the final publication below.
+- **UI:** logo displayed dimensions increased exactly 50% at each breakpoint
+  (desktop/iPad 104x64->156x96; phones 72x48->108x72; smallest phone width
+  60->90 with 72-pixel height). Admin uses the familiar accessible shield.
+  Export is in the banner without explanatory wording; confirmed CSV data,
+  download and unresolved-submission gates are unchanged. Sales Today sits
+  beside the dashboard title at iPad/desktop widths, with selected operator,
+  Close shift and submission-recovery controls inside the same panel.
+  Add Category/Add Product/Preview Draft/Publish Menu form one action row
+  immediately above filters. Audit sits on the filter row, visually separated.
+  Routine move/archive/export/audit/publication success boxes are removed;
+  persisted tiles/quantities/tally/shift/publication revision convey success.
+  Failures/conflicts/unknown outcomes remain visible with alert semantics.
+- **Verification:** final frontend 68 unit checks and five browser checks pass,
+  sandbox config/build, diff checks and editor diagnostics pass. Browser
+  regression now measures actual layout at 1440/1024/768/430/375 CSS pixels,
+  including multi-Course/account context, accessible working shield, exact logo
+  dimensions, banner Export, adjacent title/sales panel, operator/Close shift
+  inside panel, catalog row ordering, separated audit, clean phone wrapping,
+  no clipped controls/document overflow and >=44x44 regrouped touch targets.
+  Existing real mouse/touch dragging, remaining-sale confirmation/stale refresh/
+  retry, return/load, staff, audit/shift-close failure recovery, CSV download/
+  contents, unresolved-export protection and queue/tab/category regressions pass.
+  An initial isolated browser run hit a profile-cleanup ENOTEMPTY race; bounded
+  removal retries on the exact temporary profile fix cleanup, and final runs
+  pass. Backend code unchanged: prior 154 backend / 20 emulator scenarios are
+  retained evidence, not represented as a new backend run.
+- **Final sandbox publication:** Hosting only, project/site
+  `fairway-refresh-sandbox-260930`, version `c22a708a990a6ab2`,
+  release `1792836258363000`, time `2026-10-24T10:04:18.363Z`.
+  Admin `fairway-admin-sandbox-00021-wbd` and Receiver
+  `fairway-button-receiver-sandbox-00025-9lr` remain unchanged at 100% traffic;
+  neither was redeployed.
+- **Served identities:** all built JS/CSS assets were fetched and SHA-256
+  matched. Main `index-CSOyOyeK.js`:
+  `b8dff5bc246cc792f7ba81b8cbf0f151b2a2b3975440d2716ca621ce51ed62f1`;
+  inventory `InventoryApp-ClrTJOO0.js`:
+  `eb1e399115947b9ab4d9db5307f788a2128f83b9bf5c267250551855c20f7006`;
+  inventory CSS `InventoryApp-BFYufh36.css`:
+  `699f63a4900094936af7d26518e8759aa2f5d2f7e52a57b4732f4ec5ad494a0c`;
+  shared CSS `index-Dy1gy2s_.css`:
+  `38d532de4f2dff50f80d3ecc9d4d8c00b772fb62972fa5b6e3d7365e1db32906`.
+- **Deployed rendered review:** authenticated sandbox at 1440x1000 desktop,
+  1024x768 iPad landscape, 768x1024 portrait, 430x932 and 375x812 phone.
+  Measured all new groupings, exact logo sizes, >=44x44 controls, no clipping
+  or horizontal document scroll. Catalog actions remain one row at 768 and
+  above and wrap into two on phones; title/Sales Today remain horizontal on
+  iPad/desktop and stack on phones. Actual screenshots inspected at desktop,
+  iPad portrait and small phone. Relocated Close shift and Audit dialogs opened
+  and cancelled normally, preserving selected manager; neither was submitted.
+  Revision 55 was observed from existing review data; this presentation
+  follow-up performed no stock/sale/staff/shift/audit/publication mutation.
+- **Review:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=3dcbf33`.
+  Refresh old tabs. Chromium rendered evidence does not substitute for physical
+  iPad/Safari review. No merge, production deployment/data, requests, service/
+  device changes, firmware or physical-device operations occurred.
+
 ### Remaining-sale confirmation and full-height drop targets — PR #12 Sandbox (2026-10-24 UTC)
 
 - **Authority/source:** CPO feedback supersedes positive On Cart-to-Sold Out
