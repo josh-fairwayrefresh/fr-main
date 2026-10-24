@@ -1105,8 +1105,58 @@ The Alignment Register is the canonical record mapping release milestones across
   New rendered evidence covers drag return with first-action Custom selection,
   no off-cart Quantity prompt, excluded audit stock, reload/loading, zero
   restaurant quantity, step minima/no-submit/target sizes, filtered read-only
-  export, and export disabled during unresolved operations. Exact replacement
-  publication and live follow-up evidence are recorded after publication.
+  export, export disabled during unresolved operations and stale-move recovery.
+  A fourth browser check saved an actual Chromium CSV file and verified its
+  filename/content (not just generated text). Final frontend totals: 68 unit
+  checks and four browser checks passed.
+- **Current feedback publication:** application source
+  `1cca8d7ea5766d040c05e6be8246623166e6a75c`, same draft PR #12.
+  Admin `fairway-admin-sandbox-00020-rkt`, Ready/100% after explicit traffic
+  activation; image
+  `sha256:3b6bc9773c047b91a1aed2afbe25d7de8feb31c8cf4271b9efb5a5abf2b403a6`,
+  build `b6efa178-b15e-4c5b-805a-4fa2ea20a36a`, source
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792806516.741978-ac79bb74a1df4c89adfc0e81ce5a7919.zip#1792806517110223`.
+  Hosting version `ba1ef0c48bc2f21a`, release `1792806518503000`,
+  released `2026-10-24T01:48:38.503Z`. Receiver unchanged at
+  `fairway-button-receiver-sandbox-00025-9lr`/100%. Later changes to tests and
+  publication evidence do not alter these served application artifacts.
+- **Feedback live verification:** isolated fresh browser session in the same
+  synthetic Course, with new product `G9NzFbmSsUZtLJ4uZvab`
+  (`CPO TEST Return Cycle`, category `CPO TEST Returns`). Rendered HTML
+  dragstart/drop events reached the actual backend, prompted for staff, resumed
+  the move without Quantity confirmation and preserved five units. Reload,
+  subsequent audit exclusion and zero restaurant adjustment/reload passed.
+  Loading with plus controls required Confirm; selector returns also preserved
+  quantities and resumed after staff selection. Durable return events
+  `bTPTRb5AIFYITzrV5nlD` (5->5), `xgJ4m9GTqKKujd2Gd6aO` (3->3), and
+  `WDStFzqFl9A4jnGYbwg1` (4->4) contain staff, shift and authenticated UID.
+  Each path excludes returned stock from totals/audits until explicitly loaded.
+  At 768 CSS pixels, sale/loading/adjustment step buttons measured 48 by 48;
+  minima, direct entry and draft-only stepping passed.
+- **Feedback export/retry evidence:** fresh-session export succeeded with
+  operator Not selected and without inventory writes. Filtered live CSV names
+  Customer/Course, `CPO TEST Returns`, Course-local time in
+  `America/Los_Angeles`, operator, revision, sole displayed product and the
+  explicitly Course-wide tally. Unsubmitted quantity 99 was excluded in favor
+  of confirmed three. A synthetic committed sale response loss disabled Export;
+  unchanged retry produced exactly one successful one-unit sale record. The
+  Course had 24 units sold before this follow-up sale and 25 afterward; existing
+  CPO sandbox activity was preserved. Revision 36, publication version zero/no
+  slug, no menu publication or audit confirmation by this follow-up.
+- **Current served hashes:** main `index-v1GxKmK1.js` SHA-256
+  `f8d48d38392075f768059e93a31ff60574da5b18ac074b3d78470a3e6e4a65a8`;
+  inventory `InventoryApp-D-ogljpK.js`
+  `b083772025d50f93660989a42a3407f260c744b0486573939bbdfab199818408`;
+  shared CSS `index-3jx2LLq3.css`
+  `84b2e92aeaf71fa67366d9458db4bddc7278dc1609993c84a96b8b85a4df8556`.
+  All three served hashes match local build bytes.
+- **Current review URL:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=1cca8d7`.
+  Physical iPad/Safari drag gestures and its native download UI remain CPO
+  device checks: integrated-browser pointer drag automation did not land on the
+  intended column, so live drag-route evidence uses rendered DragEvents. The
+  integrated browser also did not emit a download event; generated deployed
+  Blob contents were inspected and a separate real Chromium file-download
+  regression passed. These limits are not claims of physical-device validation.
 - **Authority/source:** CPO-approved readiness and implementation on isolated
   `feat/persistent-cart-inventory`, based on verified canonical main
   `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. No merge or production
@@ -1126,11 +1176,11 @@ The Alignment Register is the canonical record mapping release milestones across
   explicit publication; internal quantities, staff and operation records are
   omitted by the public field allowlist. Request queue, service categories,
   device protocol and request KPIs are not changed.
-- **Published application source:** `9c240333983a9e9971334e9df2b58672f75b7b6b`,
+- **Initial application source (superseded above):** `9c240333983a9e9971334e9df2b58672f75b7b6b`,
   draft PR #12, targeting main. Subsequent evidence-only documentation commits
   do not change the published application. Prior sandbox evidence below remains
   dated history, not an alternative identity for this increment.
-- **Sandbox publication:** project/site `fairway-refresh-sandbox-260930`;
+- **Initial sandbox publication (superseded above):** project/site `fairway-refresh-sandbox-260930`;
   Admin `fairway-admin-sandbox-00019-r29`, Ready/Active at 100% traffic.
   Source deployment retained the previous pinned revision initially; traffic
   was explicitly moved to the verified new revision. Image digest

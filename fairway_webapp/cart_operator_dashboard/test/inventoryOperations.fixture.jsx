@@ -172,6 +172,11 @@ try {
   await wait(() => document.querySelector('[role="alert"]')?.textContent.includes('Correct the quantity first'));
   check(sales === 1 && catalog[0].quantity === 4, 'Excessive sale must not mutate stock');
   click(document.querySelector('#inv-stock-title').closest('section').querySelector('footer button[type="button"]'));
+  catalog[0].stock_revision++;
+  input(document.querySelector('[aria-label="Water state"]'), 'in_inventory');
+  await wait(() => document.querySelector('.inv-notice')?.textContent.includes('Stock changed'));
+  await wait(() => !document.querySelector('[aria-label="Water state"]').disabled);
+  check(catalog[0].state === 'on_cart', 'Conflicted return must not report success');
   input(document.querySelector('[aria-label="Water state"]'), 'in_inventory');
   await wait(() => {
     const select = document.querySelector('[aria-label="Water state"]');
