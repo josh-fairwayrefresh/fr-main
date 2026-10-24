@@ -1089,6 +1089,96 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Open/reload menu and Excel inventory report — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority:** CPO refinement within existing draft PR #12, superseding the
+  prior public polling/focus behavior and CSV format. No merge, production,
+  firmware or physical-device authority. The existing committed-inventory API,
+  field allowlist, stable links and accepted operational transactions remain
+  unchanged. Prior entries below are dated evidence, not current UI guidance.
+- **Published application source:** `67076f0b0de0d48b1bba5a9011878ecb3eaeb6fa`,
+  branch `feat/persistent-cart-inventory`, based on main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Subsequent documentation-only
+  evidence commits do not change deployed assets.
+- **Changes:** the golfer menu fetches on open/manual reload or explicit
+  initial-error retry, not on a timer or focus. All categories start collapsed,
+  including Canned Cocktails. View Menu opens the selected Course in a new tab,
+  stacked directly above Confirm Inventory Audit on the right of the filters,
+  with matching typography and 44-pixel targets. Excel replaces CSV without
+  changing export scope or introducing an operational API.
+- **Workbook:** genuine zipped OOXML `.xlsx`, ExcelJS 4.4.0 loaded only when
+  Export is used, patched scoped UUID 11.1.1 dependency. Customer/Course names
+  and IDs, Course-local export time/timezone, operator, explicit filters/archive
+  scope and confirmed revision precede two side-by-side inventory tables.
+  Literal string cells cannot become formulas; quantities and sales units are
+  numeric whole units. The Course-wide daily product/unit tally and full
+  On Cart total remain included. Print area, landscape Letter, quarter-inch
+  margins and fit-to-one-page are explicit. Pending/unresolved writes disable
+  Export; a changed confirmed/submission/filter context during generation
+  rejects the download with an actionable error.
+- **Checks:** frontend **69 passed**, browser **6 passed**, sandbox
+  configuration/build, editor diagnostics and `git diff --check` passed.
+  Browser regressions retain trusted mouse/touch/keyboard/selector movement,
+  remaining-sale confirmation/cancel, stock conflicts, staff resumption,
+  sales/audit/shift retries, numeric controls, read-only export and queue/category
+  behavior. New checks cover real `.xlsx` download/readback, literal formula-like
+  names, typed numbers, filters, print configuration, no focus/interval fetch,
+  collapsed categories and manual-reload freshness. Changed filter context
+  during generation correctly prevents a stale download without an API request.
+  Backend source was unchanged; earlier backend/emulator evidence remains
+  retained, not claimed as rerun for this presentation/export refinement.
+- **Rendered and live evidence:** local rendered Inventory and deployed DOM
+  geometry at **1440/1024/768/430/375 px** have no horizontal overflow or clipped
+  actions; View Menu remains above Audit, with identical computed font and
+  targets at least 44 pixels high. Live legacy Monarch menu began with all six
+  populated categories collapsed, including Canned Cocktails; a browser-generated
+  mouse click expanded it. Focus plus **16.5 seconds** produced no extra public
+  fetch; manual reload fetched once and restored collapsed categories.
+- **Actual workbook/print evidence:** a real Chromium pointer-triggered file
+  download used the byte-verified deployed workbook module and representative
+  inputs: 57 existing catalog names/categories plus one representative product,
+  varied availability/quantities, and seven daily sales rows (28 units).
+  LibreOffice **26.8.1.1** opened the downloaded workbook and rendered
+  **one 792 x 612 pt landscape Letter page**. Text extraction retained all
+  **58 product names** and the sales summary; visual PDF inspection found
+  readable tables and no cropped names, quantities or headings. Worksheet body
+  text is 10 pt before one-page scaling. This is spreadsheet-engine print
+  evidence, not merely OOXML page flags or a physical printer/Excel acceptance.
+  The actual authenticated sandbox Export additionally generated an inspected
+  7,906-byte `.xlsx` payload: Customer CUST-0005 / Course COURSE-0007,
+  America/Los_Angeles, operator Not selected, all five products, revision63,
+  daily seven units and cart stock two. It also rendered one Letter page;
+  tile/session text remained unchanged. The integrated VS Code browser did not
+  expose a native download event, so its exact Blob payload was captured at
+  the download boundary; filesystem download was verified separately in Chrome.
+- **Sandbox publication:** project/site `fairway-refresh-sandbox-260930`,
+  Hosting version **`8a1ddec5ac14bb5a`**, release **`1792843432480000`**,
+  **`2026-10-24T12:03:52.480Z`**. Hosting only; all served JS/CSS and index bytes
+  matched the sandbox build.
+  - `index-BDo7btIQ.js` SHA-256:
+    `5eb9127eb5412d12b8a3ca39953671ad4669401a4b3ae3d85fc974015627666e`
+  - `InventoryApp-DdVpy77A.js`:
+    `ce0c0c345bb60f977e7760e4dddf1eadd73fe12071add1fbdbcd232cf7a99cad`
+  - `PublicMenuApp-BhC69WXt.js`:
+    `f910dcd810bb351978066bfb58996e39cf5ae0efcf45664d68a61acf06df8330`
+  - `inventoryExport-BoKso6Gb.js`:
+    `6a8f2d1c83a29525bd81292e44472bfbc6590ab588c411913084e81f4b70dba5`
+- **Unchanged services/data:** Admin `fairway-admin-sandbox-00022-9gn` and
+  Receiver `fairway-button-receiver-sandbox-00025-9lr` remain at100% traffic,
+  read back after Hosting publication. New and legacy public APIs returned
+  200/no-store; recursive inspection found no quantity, staff, sales, shifts,
+  audits or actor fields. The existing public version counter remains part
+  of its accepted response, not a quantity. Synthetic review Course stayed at
+  revision63 with one public On Cart product; no stock, staff, shift, audit,
+  assignment, request or service mutation was needed for this follow-up.
+- **Review:** [Inventory](https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=67076f0)
+  and [golfer menu](https://fairway-refresh-sandbox-260930.web.app/cartmenus/cpo-test-persistent-inventory).
+  Physical iPad/Safari and native Microsoft Excel/physical-printer acceptance
+  remain CPO checks. Existing Firebase dependency advisories remain unchanged;
+  the added ExcelJS UUID advisory was eliminated by the scoped override.
+  The lazy export chunk adds a nonblocking build size warning without adding
+  that download to the initial Inventory/public-menu load.
+
 ### Automatic current On Cart menu and compact sales — PR #12 Sandbox (2026-10-24 UTC)
 
 - **Authority/current requirement:** the CPO superseded the explicit
