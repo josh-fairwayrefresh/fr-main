@@ -105,18 +105,23 @@ role policy initially permits both Cart Operator and F&B Management equally.
 Balance/availability changes and their immutable attributed historical record
 form one transaction. Missing quantities mean zero without moving legacy tiles.
 Sales apply deltas against current On Cart stock; excessive sales reject, never
-clamp or go negative. On Cart-to-Sold Out with remaining stock confirms a sale
+clamp or go negative. Sold Out always has zero quantity. Moving either On Cart
+or In Inventory to Sold Out with remaining stock confirms a sale
 of exactly the displayed units, using the same sale operation and idempotency
 owner, with an expected stock revision checked inside its transaction. Normal
 quick sales without this optional precondition retain concurrent delta semantics.
 Stale remaining-sale confirmations require explicit refresh/reconfirmation;
-positive On Cart stock cannot bypass the sale via availability-only writes.
-Zero On Cart stock can change availability without a zero-unit sale.
+positive stock in either source cannot bypass the sale via availability-only
+writes. The shared sale operation accepts a Sold Out target only with an exact
+remaining-unit count and expected stock revision; that bounded intent also permits
+In Inventory as a source without allowing ordinary quick sales off cart.
+Zero stock can change availability without a zero-unit sale.
 Absolute stock edits use expected stock revisions.
 Metadata autosaves cannot carry stale availability into this contract. Movement
 to In Inventory preserves quantity; no restaurant balance or automatic-zeroing
-adjustment exists. Stock totals count On Cart only. Audits cover On Cart and
-Sold Out, binding confirmed immutable data to a coherent inventory revision.
+adjustment exists. Stock totals and new audit snapshots select On Cart only,
+binding confirmed immutable data to a coherent inventory revision. Historical
+audits retain their original scope and contents.
 An adjustment to zero only applies the On Cart-to-Sold Out transition for
 On Cart products; restaurant-held stock remains In Inventory. Drag-and-drop
 and selectors share the same attributed stock endpoint, including staff
@@ -155,6 +160,12 @@ and closes only with a durable submitted USD total. Both selected staff
 snapshots and authenticated UID are recorded. Stock/history commit together;
 stable operation identities make lost-response retries and shift close
 idempotent. Uncertain outcomes remain explicit and recoverable, not success.
+Completed stock/audit submissions keep a synchronous intent guard until their
+dialog closes, including post-commit refresh; late/repeated submit callbacks
+cannot start a new attribution request. Session forms ignore submission when
+neither selection nor close is open. A successful close clears chooser/context
+and invalidates older in-flight session reads so they cannot resurrect the
+closed identity. No new name prompt occurs until a subsequent attributed action.
 The CPO's 2026-10-24 follow-up supersedes manual publication: the anonymous
 menu transactionally reads the same committed Course inventory, selecting only
 active On Cart products through one public-product allowlist (including nested

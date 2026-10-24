@@ -1,6 +1,7 @@
 .inventory-session { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .inventory-session button { padding: 7px 10px; border: 1px solid #bac9bd; border-radius: 7px; background: #fff; color: #183e2c; cursor: pointer; }
 .inventory-session button:disabled { opacity: .6; cursor: wait; }
+.inventory-session-actions { display: grid; gap: 8px; }
 .inventory-session-overlay { position: fixed; inset: 0; z-index: 150; background: #102c26a8; display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
 .inventory-session-overlay section { background: white; color: #183e2c; border-radius: 14px; padding: 24px; width: min(440px, 100%); max-height: 90vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 16px 50px #0003; }
 .inventory-session-overlay label { display: grid; gap: 8px; margin: 14px 0; }

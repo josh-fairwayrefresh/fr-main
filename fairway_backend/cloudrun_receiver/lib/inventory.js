@@ -604,12 +604,22 @@ async function updateStock(db, customerId, courseId, productId, body, actorUid) 
     let availability = existing.state;
     if (body.kind === 'sale') {
       if (!Number.isSafeInteger(body.units) || body.units <= 0) fail(400, 'invalid_units', 'Sale units must be a positive integer');
+      const remainingSale = body.state === 'sold_out';
+      if (body.state !== undefined && !remainingSale) fail(400, 'invalid_state', 'A sale availability target must be Sold Out');
+      if (remainingSale && !Number.isSafeInteger(body.expected_stock_revision)) {
+        fail(409, 'stock_revision_conflict', 'Stock changed. Refresh and confirm the quantity again.');
+      }
       if (body.expected_stock_revision !== undefined &&
           (!Number.isSafeInteger(body.expected_stock_revision) || body.expected_stock_revision !== stockRevision)) {
         fail(409, 'stock_revision_conflict', 'Stock changed. Refresh and confirm the quantity again.');
       }
       if (body.units > before) fail(409, 'insufficient_stock', 'Not enough stock. Correct the quantity first, then record the sale.');
-      if (availability !== 'on_cart') fail(409, 'product_not_on_cart', 'Only On Cart products can be sold');
+      if (availability !== 'on_cart' && !(remainingSale && availability === 'in_inventory')) {
+        fail(409, 'product_not_on_cart', 'Only On Cart products can be sold outside a confirmed remaining-units move to Sold Out');
+      }
+      if (remainingSale && body.units !== before) {
+        fail(409, 'remaining_quantity_conflict', 'Confirm all remaining units before moving to Sold Out. Refresh and confirm the quantity again.');
+      }
       quantity -= body.units;
       if (quantity === 0) availability = 'sold_out';
     } else if (['adjustment', 'availability'].includes(body.kind)) {
@@ -622,8 +632,8 @@ async function updateStock(db, customerId, courseId, productId, body, actorUid) 
         else if (quantity > 0 && availability === 'sold_out') availability = 'on_cart';
       } else {
         if (!INVENTORY_STATES.has(body.state)) fail(400, 'invalid_state', 'Invalid availability');
-        if (body.state === 'sold_out' && existing.state === 'on_cart' && before > 0) {
-          fail(409, 'sale_confirmation_required', 'Confirm a sale of the remaining units before moving On Cart stock to Sold Out.');
+        if (body.state === 'sold_out' && before > 0) {
+          fail(409, 'sale_confirmation_required', 'Confirm a sale of the remaining units before moving stock to Sold Out.');
         }
         availability = body.state;
         if (availability === 'on_cart' && existing.state !== 'on_cart') {
@@ -633,6 +643,9 @@ async function updateStock(db, customerId, courseId, productId, body, actorUid) 
       }
     } else {
       fail(400, 'invalid_stock_kind', 'kind must be sale, adjustment, or availability');
+    }
+    if (availability === 'sold_out' && quantity !== 0) {
+      fail(409, 'sold_out_quantity_conflict', 'Sold Out must have zero quantity. Correct the quantity with an adjustment.');
     }
     const next = {
       ...existing, quantity, state: availability, stock_revision: stockRevision + 1,
@@ -670,7 +683,7 @@ async function createAudit(db, customerId, courseId, body, actorUid) {
     }
     if (!approver.exists || !canOperateInventory(approver.data())) fail(409, 'staff_unavailable', 'Select an active audit approver');
     const snapshot = products.docs.map((product) => ({ product_id: product.id, ...product.data() }))
-      .filter((product) => product.archived !== true && ['on_cart', 'sold_out'].includes(product.state))
+      .filter((product) => product.archived !== true && product.state === 'on_cart')
       .sort((a, b) => a.product_id.localeCompare(b.product_id))
       .map((product) => ({
         product_id: product.product_id, name: product.name, category_name: product.category_name,
@@ -751,6 +764,10 @@ async function dailySales(db, customerId, courseId, course, now = new Date()) {
 async function createProduct(db, customerId, courseId, body, actorUid) {
   return runMutation(db, customerId, courseId, actorUid, body, 'product_create', body, async (transaction) => {
     const product = validateProduct(body, { defaultState: true });
+    const quantity = nonnegativeInteger(body.quantity ?? 0, 'quantity');
+    if (product.state === 'sold_out' && quantity !== 0) {
+      fail(409, 'sold_out_quantity_conflict', 'Sold Out must have zero quantity.');
+    }
     const courseDocument = courseRef(db, customerId, courseId);
     const stateDocument = inventoryStateRef(db, customerId, courseId);
     const products = productsCollection(db, customerId, courseId);
@@ -784,7 +801,7 @@ async function createProduct(db, customerId, courseId, body, actorUid) {
       (subcategorySnapshot?.exists ? subcategorySnapshot.data().name : product.subcategory_name);
     const storedProduct = {
       ...product,
-      quantity: nonnegativeInteger(body.quantity ?? 0, 'quantity'),
+      quantity,
       stock_revision: 0,
       category_id: categoryId,
       category_name: categoryName,

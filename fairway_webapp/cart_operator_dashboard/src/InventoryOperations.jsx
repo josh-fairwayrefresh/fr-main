@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import QuantityInput from './QuantityInput';
 
 export function StockDialog({ action, session, onSaved, onRefresh, onClose }) {
@@ -9,14 +9,15 @@ export function StockDialog({ action, session, onSaved, onRefresh, onClose }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [needsRefresh, setNeedsRefresh] = useState(false);
+  const submitting = useRef(false);
   async function refreshConfirmation() {
     setPending(true);
     try {
       const snapshot = await onRefresh();
       if (!snapshot) throw new Error('Inventory could not be loaded. Retry refresh before confirming.');
       const current = snapshot?.products.find(item => item.product_id === product.product_id);
-      if (!current || current.archived || current.state !== 'on_cart' || current.quantity <= 0) {
-        setError('No remaining On Cart stock is available to sell. Cancel and review the refreshed inventory.');
+      if (!current || current.archived || !['on_cart', 'in_inventory'].includes(current.state) || current.quantity <= 0) {
+        setError('No remaining stock is available to sell. Cancel and review the refreshed inventory.');
         return;
       }
       setProduct(current);
@@ -27,17 +28,18 @@ export function StockDialog({ action, session, onSaved, onRefresh, onClose }) {
   }
   async function submit(event) {
     event.preventDefault();
-    if (pending || needsRefresh) return;
+    if (submitting.current || needsRefresh) return;
     const quantity = remaining ? product.quantity : Number(amount);
     if (!Number.isSafeInteger(quantity) || quantity < (kind === 'sale' || state === 'on_cart' ? 1 : 0)) {
       setError(kind === 'sale' || state === 'on_cart' ? 'Enter a positive whole-unit quantity.' : 'Enter a whole-unit quantity of zero or more.');
       return;
     }
+    submitting.current = true;
     setPending(true); setError('');
     try {
       await session.request(`/products/${encodeURIComponent(product.product_id)}/stock`, {
         kind,
-        ...(kind === 'sale' ? { units: quantity, ...(remaining ? { expected_stock_revision: product.stock_revision ?? 0 } : {}) } : {
+        ...(kind === 'sale' ? { units: quantity, ...(remaining ? { state: 'sold_out', expected_stock_revision: product.stock_revision ?? 0 } : {}) } : {
           quantity, expected_stock_revision: product.stock_revision ?? 0,
           ...(state ? { state } : {}),
         }),
@@ -45,6 +47,7 @@ export function StockDialog({ action, session, onSaved, onRefresh, onClose }) {
       await onSaved();
       onClose();
     } catch (reason) {
+      submitting.current = false;
       setError(reason.message);
       if (remaining && reason.status === 409) setNeedsRefresh(true);
     }
@@ -69,23 +72,27 @@ export function AuditDialog({ inventory, session, onSaved, onClose }) {
   const [authorized, setAuthorized] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const submitting = useRef(false);
   const [snapshot] = useState(() => ({
     revision: inventory.inventory_revision,
-    products: inventory.products.filter(product => !product.archived && ['on_cart', 'sold_out'].includes(product.state)),
+    products: inventory.products.filter(product => !product.archived && product.state === 'on_cart'),
   }));
   async function submit(event) {
-    event.preventDefault(); setPending(true); setError('');
+    event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
+    setPending(true); setError('');
     try {
       await session.request('/audits', { inventory_revision: snapshot.revision, approver_staff_id: approver, authorized });
       await onSaved(); onClose();
-    } catch (reason) { setError(reason.message); }
+    } catch (reason) { submitting.current = false; setError(reason.message); }
     finally { setPending(false); }
   }
   return <div className="inv-overlay"><section className="inv-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-audit-title">
     <header><h2 id="inv-audit-title">Confirm cart inventory audit</h2></header>
     <form onSubmit={submit}>
-      <p>Entire cart at revision {snapshot.revision}. In Inventory and archived products are excluded.</p>
-      <ul>{snapshot.products.map(product => <li key={product.product_id}>{product.name} · {product.state === 'sold_out' ? 'Sold Out' : 'On Cart'} · Quantity {product.quantity ?? 0}</li>)}</ul>
+      <p>Record your cart inventory at the start and end of a shift.</p>
+      <ul>{snapshot.products.map(product => <li key={product.product_id}>{product.name} · On Cart · Quantity {product.quantity ?? 0}</li>)}</ul>
       <label>Approver<select required value={approver} onChange={event => setApprover(event.target.value)} disabled={pending}><option value="">Select approver</option>{session.staff.filter(person => person.active !== false).map(person => <option key={person.staff_id} value={person.staff_id}>{person.name}</option>)}</select></label>
       <label><input type="checkbox" required checked={authorized} onChange={event => setAuthorized(event.target.checked)} disabled={pending} />Confirm you are authorized to approve this inventory count audit.</label>
       {error && <p className="inv-form-error" role="alert">{error}</p>}

@@ -365,6 +365,80 @@ test('remaining confirmation rejects intervening sales and increases, including 
   assert.equal((await f.ok('GET', '')).daily_sales.total_units, 5);
 });
 
+for (const source of ['on_cart', 'in_inventory']) {
+  test(`${source} to Sold Out requires exact revision-bound remaining sale and cannot bypass the invariant`, async () => {
+    const f = await fixture();
+    const id = await f.seedProduct(`Remaining ${source}`, source, 4);
+    const path = `/products/${id}/stock`;
+    const before = await f.ok('GET', '');
+    const denied = async (body, error) => {
+      assert.equal((await f.request('POST', path, { ...f.context(), ...body })).body.error, error);
+      assert.deepEqual(await f.ok('GET', ''), before);
+      assert.equal((await f.course.collection('inventory_events').get()).size, 0);
+    };
+    await denied({ kind: 'availability', state: 'sold_out', quantity: 0, expected_stock_revision: 0 }, 'sale_confirmation_required');
+    await denied({ kind: 'sale', state: 'sold_out', units: 4 }, 'stock_revision_conflict');
+    await denied({ kind: 'sale', state: 'sold_out', units: 3, expected_stock_revision: 0 }, 'remaining_quantity_conflict');
+    await denied({ kind: 'sale', state: 'sold_out', units: 4, expected_stock_revision: 1 }, 'stock_revision_conflict');
+    await denied({ kind: 'sale', state: 'sold_out', units: 5, expected_stock_revision: 0 }, 'insufficient_stock');
+    if (source === 'in_inventory') {
+      await denied({ kind: 'sale', units: 4, expected_stock_revision: 0 }, 'product_not_on_cart');
+    }
+    const body = { ...f.context(), kind: 'sale', state: 'sold_out', units: 4, expected_stock_revision: 0 };
+    const results = await Promise.all([1, 2, 3].map(() => f.ok('POST', path, body)));
+    assert.deepEqual(results[0], results[1]);
+    assert.equal(results[0].quantity, 0);
+    assert.equal(results[0].state, 'sold_out');
+    const events = await f.course.collection('inventory_events').get();
+    assert.equal(events.size, 1);
+    const event = events.docs[0].data();
+    assert.equal(event.action, 'sale');
+    assert.equal(event.units, 4);
+    assert.equal(event.before_state, source);
+    assert.equal(event.after_state, 'sold_out');
+    assert.equal(event.staff_id, f.staff.staff_id);
+    assert.equal(event.actor_uid, f.actors.operator.uid);
+    assert.equal((await f.ok('GET', '')).daily_sales.total_units, 4);
+    await f.stock(id, { kind: 'availability', state: 'on_cart', quantity: 2, expected_stock_revision: 1 });
+    await f.ok('POST', path, body);
+    const current = await f.ok('GET', '');
+    assert.equal(current.products[0].quantity, 2, 'Replay cannot overwrite a newer loaded balance');
+    assert.equal(current.daily_sales.total_units, 4);
+  });
+}
+
+test('legacy positive Sold Out is not silently repaired; explicit zero adjustment records no historical sale', async () => {
+  const f = await fixture();
+  const id = await f.seedProduct('Legacy invalid test record', 'sold_out', 4);
+  assert.equal((await f.ok('GET', '')).products[0].quantity, 4);
+  assert.equal((await f.request('POST', `/products/${id}/stock`, {
+    ...f.context(), kind: 'availability', state: 'sold_out', expected_stock_revision: 0,
+  })).body.error, 'sale_confirmation_required');
+  const adjusted = await f.stock(id, { kind: 'adjustment', quantity: 0, expected_stock_revision: 0 });
+  assert.equal(adjusted.quantity, 0);
+  assert.equal(adjusted.state, 'sold_out');
+  const event = (await f.course.collection('inventory_events').get()).docs[0].data();
+  assert.equal(event.action, 'stock_adjustment');
+  assert.equal(event.delta, -4);
+  assert.equal(event.units, undefined);
+  assert.equal((await f.ok('GET', '')).daily_sales.total_units, 0);
+});
+
+test('product creation cannot introduce positive Sold Out quantities', async () => {
+  const f = await fixture();
+  const result = await f.request('POST', '/products', {
+    ...f.context(), ...f.metadata('Invalid Sold Out'), state: 'sold_out', quantity: 3,
+  });
+  assert.equal(result.body.error, 'sold_out_quantity_conflict');
+  assert.equal((await f.course.collection('inventory_products').get()).size, 0);
+  assert.equal((await f.course.collection('inventory_events').get()).size, 0);
+  const created = await f.ok('POST', '/products', {
+    ...f.context(), ...f.metadata('Empty Sold Out'), state: 'sold_out', quantity: 0,
+  });
+  assert.equal(created.state, 'sold_out');
+  assert.equal(created.quantity, 0);
+});
+
 test('zero On Cart to Sold Out records availability only and no zero-unit sale', async () => {
   const f = await fixture();
   const id = await f.seedProduct('Legacy zero', 'on_cart', 0);
@@ -455,9 +529,9 @@ test('audit requires exact authorization, active approver, and the confirmed rev
   }
   assert.equal((await f.request('POST', '/audits', { ...body, inventory_revision: 99 })).body.error, 'inventory_revision_conflict');
   const audit = await f.ok('POST', '/audits', body);
-  assert.equal(audit.products.length, 2);
+  assert.equal(audit.products.length, 1);
   assert.equal(audit.products.find((p) => p.product_id === id).quantity, 4);
-  assert.equal(audit.products.find((p) => p.state === 'sold_out').quantity, 0);
+  assert.ok(audit.products.every((p) => p.state === 'on_cart'));
   assert.equal(audit.approver_staff_name, 'Test Manager');
   assert.equal(audit.authorized, true);
   assert.equal(audit.attestation, inventory.AUDIT_ATTESTATION);

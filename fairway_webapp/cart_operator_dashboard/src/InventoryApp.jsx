@@ -392,7 +392,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   async function changeState(product, state) {
     if (busyId) return;
     if (product.state === state) return;
-    if (state === 'sold_out' && product.state === 'on_cart' && product.quantity > 0) {
+    if (state === 'sold_out' && product.quantity > 0) {
       setStockAction({ product, kind: 'sale', remaining: true });
       return;
     }
@@ -469,7 +469,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
           <div className="inv-sales-total"><strong>Sales Today</strong>
             <span>{inventory ? `${inventory.daily_sales?.total_units ?? 0} units sold` : 'Loading…'}</span>
           </div>
-          <InventorySessionControls key={`${user.uid}:${selectedKey}`} session={session} />
+          <InventorySessionControls key={`${user.uid}:${selectedKey}`} session={session}
+            actions={<button className="inv-secondary" type="button" disabled={!hasCurrentInventory || loadStatus !== 'ready' || session.submitting || session.unresolved} onClick={() => setAuditing(true)}>Confirm Inventory Audit</button>} />
         </section>
       </section>
       {loadError && <div className="inv-alert" role="alert"><CircleAlert size={17} /><span>{loadError}</span><button type="button" onClick={() => refreshInventory(false)}>Retry</button></div>}
@@ -487,9 +488,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         </div>)}
       </nav><div className="inv-audit-action">
         {hasCurrentInventory && inventory?.public_menu_slug
-          ? <a className="inv-secondary inv-menu-link" href={publicMenuPath(inventory.public_menu_slug)} target="_blank" rel="noopener noreferrer">View Menu</a>
+          ? <a className="inv-secondary inv-menu-link" href={publicMenuPath(inventory.public_menu_slug)} target="_blank" rel="noopener noreferrer">Golfer-View Menu</a>
           : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">Public menu link not configured for this Course. Contact Admin.</span>}
-        <button className="inv-secondary" type="button" onClick={() => setAuditing(true)}>Confirm Inventory Audit</button>
       </div></div>}
       {inventory && selectedCategory !== 'all' && subcategoryNames.length > 0 && <nav className="inv-subcategory-filters" aria-label="Filter inventory by subcategory">
         <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>

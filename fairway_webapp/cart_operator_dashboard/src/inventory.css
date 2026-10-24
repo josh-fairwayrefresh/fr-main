@@ -36,7 +36,7 @@
 .inv-catalog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
 .inv-catalog-actions button, .inv-audit-action .inv-secondary, .inv-header-controls > .inv-secondary { min-height: 44px; }
 .inv-menu-link { text-decoration: none; }
-.inv-audit-action .inv-menu-link { font: inherit; }
+.inv-audit-action .inv-menu-link, .inventory-session-actions > .inv-secondary { font-family: inherit; font-size: 13px; font-weight: 800; }
 .inv-menu-link:hover, .inv-menu-link:focus-visible { text-decoration: underline; }
 .inv-menu-unconfigured { color: #883d35; font-size: 12px; }
 .inv-primary, .inv-secondary { min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
@@ -147,6 +147,7 @@
 @media (max-width: 900px) {
   .inv-header { padding-inline: 16px; }
   .inv-user-label { max-width: 96px; }
+  .inv-course-picker select { max-width: 200px; }
   .inv-main { padding: 24px 16px 48px; }
   .inv-board { gap: 10px; }
   .inv-product-tile { padding: 8px; }

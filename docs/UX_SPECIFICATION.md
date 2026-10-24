@@ -180,9 +180,10 @@ The current implementation and deployment status are owned by
    inventory data. Switching categories resets the subcategory selection to
    All.
 - Catalog actions pair **Add Category** with **+ Add Product**. A clearly
-   labeled **View Menu** link for the selected Course opens in a new tab and
-   sits directly above **Confirm Inventory Audit** on the right of the filters,
-   matching the audit button's font and text size.
+   labeled **Golfer-View Menu** link for the selected Course opens in a new tab
+   on the right of the filters, matching the audit button's font and text size.
+   **Confirm Inventory Audit** sits directly beneath Close out / Enter final
+   sales inside the same bounded Sales Today/operator panel.
    If no slug is configured, explain that Admin must configure the link
    rather than link to a different Course. The three state
    columns remain the sole product organization; subcategory remains product
@@ -232,8 +233,9 @@ deployment.
   "Close out" / "Enter final sales". Final-sales entry, attribution, safe
   retry, failure retention and successful-close clearing are unchanged.
   Add Category and Add Product share one action row immediately above the
-  category filters. View Menu is stacked directly above Confirm Inventory Audit
-  on the right of the filter row, visually separated from filter controls.
+  category filters. Golfer-View Menu remains on the right of the filter row.
+  Confirm Inventory Audit is directly below the close-out control inside
+  the same bounded panel, not on the filter row.
   Preserve grouping
   on iPad; wrap rows cleanly on phones with no document overflow or reduced
   touch targets (44 CSS pixels minimum for these controls).
@@ -264,7 +266,8 @@ deployment.
   unchanged quantity; remove the product from cart totals and later cart audits.
   The state and quantity survive reload. Adjusting an In Inventory product to
   zero must leave it In Inventory, not move it to Sold Out.
-- Moving an On Cart product with positive quantity X to Sold Out, by dragging,
+- Sold Out always means quantity zero. Moving either an On Cart or In Inventory
+  product with positive quantity X to Sold Out, by dragging,
   keyboard movement or availability selector, asks:
   "Confirm that you sold the remaining X units of [product name]."
   Confirm uses the existing attributed sale operation to sell exactly the
@@ -274,10 +277,17 @@ deployment.
   displayed stock revision: intervening sales/adjustments require refreshed
   quantities and another explicit confirmation, never a silent amount change.
   Uncertain responses retain the exact intended operation for safe retry.
-  A zero-quantity On Cart product moves to Sold Out as availability only,
+  A zero-quantity product moves to Sold Out as availability only,
   without creating a zero-unit sale. Other non-sale availability changes do not
   invent adjustments; quantity-preserving In Inventory returns and confirmed
   positive loading onto On Cart are unchanged.
+  Enforce this on the server as well as all movement controls. Ordinary quick
+  sales remain restricted to On Cart; only an explicitly targeted, exact
+  remaining-units, revision-bound sale permits In Inventory as the source.
+  Existing positive Sold Out records are identified, never silently repaired.
+  Authorized corrections of labeled sandbox test records are attributed
+  adjustments to zero, not invented historical sales. No production repair
+  is authorized by this increment.
 - Inventory dragging uses the visible product-name/grip control for mouse,
   touch and pen through one shared interaction. Touch scroll remains available
   outside that grip; sale, quantity, edit and selector controls do not initiate
@@ -341,17 +351,25 @@ deployment.
   corrected freely; after activity, selecting a different person requires
   successful shift close. Operational records preserve selected staff snapshots
   and the authenticated submitting UID.
-- An explicit audit presents the entire On Cart/Sold Out set, independent of
-  filters, excluding In Inventory and archives. Select a Customer staff approver
+- An explicit audit says "Record your cart inventory at the start and end of a shift."
+  Its backcheck displays and snapshots only current On Cart products, independent
+  of filters, excluding Sold Out, In Inventory and archives. Revision details
+  remain internal to stale-confirmation protection, not the explanation.
+  Select a Customer staff approver
   and require: "Confirm you are authorized to approve this inventory count audit."
   Commit a coherent immutable snapshot, approver and submitting account, revision
   and authoritative timestamp. Concurrent changes invalidate the reviewed
   revision and require reconfirmation. Later product/staff edits cannot rewrite it.
+  Historical audits are not rewritten to the new scope. Successful audit
+  submission closes the dialog without triggering operator selection.
 - Shift close accepts a nonnegative USD total in dollars, stores exact cents and
   attribution, and supports multiple shifts per Course/local day. Only confirmed
   success closes that session's shift and clears its name. Failure or uncertainty
   preserves the name and amount, with idempotent retry/recovery. Stock, daily
-  sales, other sessions and history are unaffected.
+  sales, other sessions and history are unaffected. Successful close leaves
+  Not selected and no dialog, including after delayed refresh or repeated
+  completion callbacks. Only a subsequent user-initiated attributed action
+  prompts for a name; completed work never resumes a new action implicitly.
 - Successful confirmed changes into/out of On Cart automatically change the
   golfer menu, including a sale/adjustment that moves zero stock to Sold Out.
   Saved public-facing metadata for On Cart products also appears automatically.

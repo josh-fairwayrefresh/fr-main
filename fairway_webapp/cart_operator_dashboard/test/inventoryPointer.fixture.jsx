@@ -26,6 +26,18 @@ window.fetch = async (url, options = {}) => {
     localStorage.setItem('pointer-data', JSON.stringify(data));
     return response({ shift: data.shift });
   }
+  if (route.endsWith('/close')) {
+    data.shift = null;
+    localStorage.setItem('pointer-data', JSON.stringify(data));
+    return response({ closed: true });
+  }
+  if (route.endsWith('/audits')) {
+    if (body.inventory_revision !== data.revision) return response({ message: 'Inventory changed' }, 409);
+    data.audits = [...(data.audits || []), data.products.filter(p => p.state === 'on_cart' && !p.archived)];
+    data.revision++;
+    localStorage.setItem('pointer-data', JSON.stringify(data));
+    return response({ audit_id: 'pointer-audit' });
+  }
   if (route.endsWith('/stock')) {
     if (!data.shift || body.shift_id !== data.shift.shift_id) return response({ message: 'Missing attribution' }, 400);
     const product = data.products.find(p => route.includes(`/products/${p.product_id}/`));

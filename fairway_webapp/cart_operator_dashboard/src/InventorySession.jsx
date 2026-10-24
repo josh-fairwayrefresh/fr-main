@@ -15,6 +15,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
   const [submitting, setSubmitting] = useState(false);
   const continuation = useRef(null);
   const requestInFlight = useRef(false);
+  const loadVersion = useRef(0);
   const currentKey = useRef(key);
   currentKey.current = key;
   const stored = key ? JSON.parse(sessionStorage.getItem(key) || 'null') : null;
@@ -31,12 +32,13 @@ export function useInventorySession(user, apiBaseUrl, course) {
 
   async function load() {
     if (!key) return;
+    const version = ++loadVersion.current;
     const session = storeSession();
     const [directory, selected] = await Promise.all([
       inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, '/staff')),
       inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, `/shifts/session?session_id=${encodeURIComponent(session.session_id)}`)),
     ]);
-    if (currentKey.current !== key) return;
+    if (currentKey.current !== key || version !== loadVersion.current) return;
     const latest = storeSession();
     const closingUncertain = Object.keys(latest.pending || {}).some(signature => JSON.parse(signature)[1].endsWith('/close'));
     const shift = selected.shift || (closingUncertain ? latest.shift : null);
@@ -143,7 +145,13 @@ export function useInventorySession(user, apiBaseUrl, course) {
     closedSession.shift = null;
     closedSession.close_amount = '';
     sessionStorage.setItem(key, JSON.stringify(closedSession));
-    if (currentKey.current === key) setState(previous => ({ ...previous, shift: null }));
+    if (currentKey.current === key) {
+      loadVersion.current++;
+      setChoosing(false);
+      if (continuation.current) continuation.current.reject(new Error('Shift closed. Start a new action to select an operator.'));
+      continuation.current = null;
+      setState(previous => ({ ...previous, shift: null }));
+    }
   }
 
   async function resolvePending() {
@@ -197,13 +205,14 @@ export function useInventorySession(user, apiBaseUrl, course) {
   };
 }
 
-export function InventorySessionControls({ session }) {
+export function InventorySessionControls({ session, actions }) {
   const [staffId, setStaffId] = useState('');
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [closing, setClosing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const submitting = useRef(false);
   useEffect(() => {
     if (session.pendingCloseAmount !== null && session.shift) {
       setClosing(true);
@@ -212,20 +221,23 @@ export function InventorySessionControls({ session }) {
   }, [session.pendingCloseAmount, session.shift?.shift_id]);
   async function submit(event) {
     event.preventDefault();
+    if (submitting.current || (!closing && !session.choosing)) return;
+    submitting.current = true;
     setPending(true); setError('');
     try {
       if (closing) { await session.close(amount); setClosing(false); setAmount(''); }
       else await session.select(staffId, name);
     } catch (reason) { setError(reason.message); }
-    finally { setPending(false); }
+    finally { submitting.current = false; setPending(false); }
   }
   return <div className="inventory-session">
     <span>Operator: <strong>{session.shift?.staff_name || 'Not selected'}</strong></span>
-    <button className={session.shift?.has_activity ? 'inventory-close-out' : undefined} type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
+    <div className="inventory-session-actions"><button className={session.shift?.has_activity ? 'inventory-close-out' : undefined} type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
       setError(''); setClosing(Boolean(session.shift?.has_activity));
       setAmount(session.closeDraft);
       if (!session.shift?.has_activity) session.choose();
     }}>{session.shift?.has_activity ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
+    {actions}</div>
     {session.unresolved && <button type="button" disabled={pending} onClick={async () => {
       setPending(true); setError('');
       try { await session.resolvePending(); setClosing(false); setAmount(''); }

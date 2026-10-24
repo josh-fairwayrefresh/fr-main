@@ -41,8 +41,10 @@ The CPO accepted its current functionality on 2026-10-24 and requested
 presentation refinement within the same PR, followed by an automatic current
 On Cart golfer-menu requirement superseding manual publication. The latest
 refinement reads that menu only on open/reload with collapsed categories,
-places View Menu above the audit action and replaces CSV with a formatted
-one-page-print Excel report. It is not
+uses a formatted one-page-print Excel report, enforces zero-quantity Sold Out,
+limits new audits to On Cart and leaves successful close-out idle. Audit sits
+below Close out in the bounded operator panel; Golfer-View Menu remains on the
+right of the filters. It is not
 merged or production-deployed; follow-up review remains pending. Its current review
 identity and verification are in the Deployment Guide's latest Alignment
 Register entry; accepted behavior is owned by the UX specification.

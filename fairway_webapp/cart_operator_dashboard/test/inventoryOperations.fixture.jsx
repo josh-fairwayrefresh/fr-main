@@ -20,6 +20,11 @@ let unitsSold = 0;
 let sales = 0;
 let closes = 0;
 let audit = null;
+let audits = 0;
+let holdAuditRefresh = false;
+let releaseAuditRefresh;
+let holdSessionRefresh = false;
+let releaseSessionRefresh;
 let loseSaleResponse = true;
 let loseCloseResponse = true;
 const committed = new Map();
@@ -58,7 +63,11 @@ window.fetch = async (url, options = {}) => {
     staff = [...staff.filter(item => item.staff_id !== person.staff_id), person];
     return response(person);
   }
-  if (route.endsWith('/shifts/session')) return response({ shift });
+  if (route.endsWith('/shifts/session')) {
+    const result = response({ shift });
+    if (holdSessionRefresh) return new Promise(resolve => { releaseSessionRefresh = () => resolve(result); });
+    return result;
+  }
   if (route.endsWith('/shifts/select')) {
     const person = staff.find(item => item.staff_id === body.staff_id);
     shift = { shift_id: 'shift1', staff_id: person.staff_id, staff_name: person.name, has_activity: false };
@@ -96,11 +105,13 @@ window.fetch = async (url, options = {}) => {
   }
   if (route.endsWith('/audits')) {
     if (body.inventory_revision !== revision) return response({ message: 'Inventory changed. Review and confirm again.' }, 409);
-    audit = structuredClone(catalog.filter(product => product.state !== 'in_inventory'));
+    audit = structuredClone(catalog.filter(product => product.state === 'on_cart' && !product.archived));
+    audits++;
     committed.set(body.operation_id, { audit_id: 'audit1' });
     return response({ audit_id: 'audit1' });
   }
   if (route.endsWith('/TEST-U') && method === 'GET') {
+    if (holdAuditRefresh) await new Promise(resolve => { releaseAuditRefresh = resolve; });
     loadedRevision = revision;
     return response({
     ...course,
@@ -223,13 +234,23 @@ try {
   await wait(() => loadedRevision === revision);
   flushSync(() => {});
   click(button('Confirm Inventory Audit'));
-  await wait(() => document.querySelector('#inv-audit-title')?.closest('section').textContent.includes(`revision ${revision}`));
+  await wait(() => document.querySelector('#inv-audit-title'));
   const freshAudit = document.querySelector('#inv-audit-title').closest('section');
+  check(freshAudit.textContent.includes('Record your cart inventory at the start and end of a shift.') && !freshAudit.textContent.includes('revision'), 'Audit explanation excludes revision internals');
+  check(!freshAudit.textContent.includes('Tea') && !freshAudit.textContent.includes('Juice'), 'Audit displays only On Cart products');
   input(freshAudit.querySelector('select'), 'manager');
   click(freshAudit.querySelector('input[type="checkbox"]'));
+  holdAuditRefresh = true;
   click(button('Confirm audit'));
+  await wait(() => releaseAuditRefresh);
+  flushSync(() => freshAudit.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await new Promise(resolve => setTimeout(resolve, 50));
+  check(audits === 1, 'Completed audit intent cannot submit again while its post-save refresh is pending');
+  holdAuditRefresh = false; releaseAuditRefresh();
   await wait(() => !document.querySelector('#inv-audit-title'));
-  check(audit.length === 2, 'Audit includes all On Cart and Sold Out');
+  check(audit.length === 1 && audit[0].name === 'Water', 'Audit snapshots only current On Cart');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  check(!document.querySelector('[role="dialog"]'), 'Successful audit leaves no operator-selection prompt');
   click(document.querySelector('.inventory-close-out'));
   input(document.querySelector('.inventory-session-overlay input'), '12.34');
   click(button('Submit shift total'));
@@ -242,6 +263,26 @@ try {
   click(button('Submit shift total'));
   await wait(() => !document.querySelector('.inventory-session-overlay'));
   check(closes === 1 && document.querySelector('.inventory-session').textContent.includes('Not selected'), 'One successful close clears only current name');
+  window.dispatchEvent(new Event('focus'));
+  await new Promise(resolve => setTimeout(resolve, 50));
+  check(!document.querySelector('[role="dialog"]'), 'Recovered successful close stays idle after focus refresh');
+  click(document.querySelector('[aria-label="Edit quantity for Water"]'));
+  click(button('Confirm'));
+  await wait(() => document.querySelector('#inventory-session-title')?.textContent === 'Select operator');
+  input(document.querySelector('.inventory-session-overlay select'), 'manager');
+  click(button('Confirm operator'));
+  await wait(() => !document.querySelector('#inv-stock-title'));
+  holdSessionRefresh = true;
+  window.dispatchEvent(new Event('focus'));
+  await wait(() => releaseSessionRefresh);
+  click(document.querySelector('.inventory-close-out'));
+  input(document.querySelector('.inventory-session-overlay input'), '0.00');
+  click(button('Submit shift total'));
+  await wait(() => document.querySelector('.inventory-session').textContent.includes('Not selected') && !document.querySelector('[role="dialog"]'));
+  holdSessionRefresh = false; releaseSessionRefresh();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  check(!document.querySelector('[role="dialog"]') && document.querySelector('.inventory-session').textContent.includes('Not selected'), 'Late pre-close session refresh cannot resurrect a closed shift or open a dialog');
+  check(closes === 2, 'Next user action alone selects a new shift, which closes once');
   check(catalog[0].quantity === 4 && unitsSold === 1, 'Shift close preserves stock and daily sales');
   check(document.documentElement.scrollWidth <= innerWidth, 'Inventory must not overflow viewport');
   for (const control of document.querySelectorAll('.inv-stock-controls button')) {

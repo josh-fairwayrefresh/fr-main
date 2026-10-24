@@ -67,11 +67,12 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           title:box(document.querySelector('.inv-title')),panel:box(panel),
           actionBoxes:[...actions.querySelectorAll('button,a')].map(box),
           actionNames:[...actions.querySelectorAll('button,a')].map(e=>e.textContent),
-          publicLink:(()=>{const a=document.querySelector('.inv-audit-action a'),audit=document.querySelector('.inv-audit-action button');return {href:a?.getAttribute('href'),target:a?.target,text:a?.textContent,font:getComputedStyle(a).fontFamily===getComputedStyle(audit).fontFamily&&getComputedStyle(a).fontSize===getComputedStyle(audit).fontSize,stacked:a.getBoundingClientRect().bottom<=audit.getBoundingClientRect().top};})(),
+          publicLink:(()=>{const a=document.querySelector('.inv-audit-action a'),audit=document.querySelector('.inventory-session-actions .inv-secondary');return {href:a?.getAttribute('href'),target:a?.target,text:a?.textContent,font:getComputedStyle(a).fontFamily===getComputedStyle(audit).fontFamily&&getComputedStyle(a).fontSize===getComputedStyle(audit).fontSize};})(),
           compactTotal:panel.querySelector('.inv-sales-total').textContent,
           detailedTally:Boolean(panel.querySelector('ul')),
           aboveFilters:actions.nextElementSibling.classList.contains('inv-filter-row'),
-          auditOnFilters:Boolean(document.querySelector('.inv-filter-row .inv-audit-action button')),
+          auditInPanel:Boolean(panel.querySelector('.inventory-session-actions .inv-secondary')),
+          auditBelowClose:(()=>{const buttons=panel.querySelectorAll('.inventory-session-actions > button');return buttons[0].getBoundingClientRect().bottom<=buttons[1].getBoundingClientRect().top;})(),
           exportInBanner:[...document.querySelectorAll('.inv-header button')].some(e=>e.textContent==='Export'),
           exportHelp:Boolean(document.querySelector('#inv-export-help')),
           adminIcon:Boolean(admin?.querySelector('svg')) && !admin.textContent,
@@ -84,13 +85,14 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       })()`);
       assert.equal(layout.overflow, false, `${width}px: no document overflow`);
       assert.equal(layout.aboveFilters, true);
-      assert.equal(layout.auditOnFilters, true);
+      assert.equal(layout.auditInPanel, true);
+      assert.equal(layout.auditBelowClose, true);
       assert.equal(layout.exportInBanner, true);
       assert.equal(layout.exportHelp, false);
       assert.equal(layout.adminIcon, true);
       assert.equal(layout.operatorInPanel, true);
       assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product']);
-      assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank', text: 'View Menu', font: true, stacked: true });
+      assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank', text: 'Golfer-View Menu', font: true });
       assert.equal(layout.compactTotal, 'Sales Today0 units sold');
       assert.equal(layout.detailedTally, false);
       assert.equal(layout.logo.width, width <= 380 ? 90 : width <= 680 ? 108 : 156, 'Logo is 150% of its previous displayed width');
@@ -100,7 +102,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         assert.ok(box.x >= 0 && box.right <= width, `${width}px: controls not clipped`);
       }
       if (width >= 768) {
-        assert.ok(layout.headerActions.every(b=>b.y === layout.headerActions[0].y), `${width}px: banner actions have no orphaned sign-out row`);
+        assert.ok(layout.headerActions.every(b=>Math.abs(b.y - layout.headerActions[0].y) < 1), `${width}px: banner actions have no orphaned sign-out row: ${JSON.stringify(layout.headerActions)}`);
         assert.ok(layout.panel.x >= layout.title.right, `${width}px: Sales Today beside title`);
         assert.ok(layout.panel.y < layout.title.bottom && layout.title.y < layout.panel.bottom);
         assert.ok(layout.actionBoxes.every(b=>b.y === layout.actionBoxes[0].y), `${width}px: catalog actions share one row`);
@@ -131,6 +133,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       async function drag(targetState, source = button('Move Pointer Water'), horizontal = false) {
         const beforeWrites = (await writes()).length;
         await evaluate(`document.querySelector(${JSON.stringify(source)}).scrollIntoView({block:'center'})`);
+        await pause(50);
         const start = await bounds(source);
         await down(start);
         await move({ x: start.x + 15, y: start.y + 4 });
@@ -142,8 +145,12 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           await until(async () => { target = await bounds(targetSelector); return target.y > 80 && target.y < 820; }, 'drag edge scrolling');
         }
         await move(target);
-        await pause(80);
-        assert.equal(await evaluate(`document.querySelector('[data-inventory-drop="${targetState}"]').classList.contains('drag-over')`), true);
+        await until(async () => {
+          if (await evaluate(`document.querySelector('[data-inventory-drop="${targetState}"]').classList.contains('drag-over')`)) return true;
+          target = horizontal ? { x: (await bounds(targetSelector)).x, y: start.y } : await bounds(targetSelector);
+          await move(target);
+          return false;
+        }, `${pointerType} first-gesture ${targetState} drop target`);
         assert.equal((await writes()).length, beforeWrites, 'Dragging alone never writes');
         await up(target);
       }
@@ -272,6 +279,61 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.equal(await evaluate('Boolean(document.querySelector("#inv-stock-title"))'), false, 'Zero stock needs no sale confirmation');
       assert.equal((await writes())[3].kind, 'availability');
       assert.equal((await state()).sales, 7, 'No zero-unit sale');
+      await drag('on_cart');
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Load onto cart"'));
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(async () => (await writes()).length === 5);
+      await until(() => evaluate('!document.querySelector("#inv-stock-title")'));
+      await drag('in_inventory');
+      await until(async () => (await writes()).length === 6);
+      await until(() => evaluate('!document.querySelector("[aria-label=\'Pointer Water state\']").disabled'));
+      await drag('sold_out');
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'restaurant drag opens same confirmation on first attempt');
+      assert.ok(await evaluate('document.querySelector(".inv-dialog").textContent.includes("remaining 1 units")'));
+      await click('.inv-dialog footer button[type="button"]');
+      assert.equal((await writes()).length, 6, 'Restaurant Cancel changes nothing');
+      await pause(550);
+      await evaluate('document.querySelector("[aria-label=\'Move Pointer Water\']").focus()');
+      await key('Enter', 'Enter', 13);
+      await until(() => evaluate('Boolean(document.querySelector(".inv-move-here"))'));
+      await evaluate('document.querySelector(\'[data-inventory-drop="sold_out"] .inv-move-here\').focus()');
+      await key('Enter', 'Enter', 13);
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'restaurant keyboard confirmation');
+      await click('.inv-dialog footer button[type="button"]');
+      await selectState('sold_out');
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Confirm remaining sale"'), 'restaurant selector confirmation');
+      await evaluate('globalThis.loseRemainingResponse=true');
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('document.querySelector(".inv-dialog [role=alert]")?.textContent.includes("not confirmed")'));
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('!document.querySelector("#inv-stock-title")'));
+      data = await state();
+      assert.equal(data.writes.length, 7);
+      assert.equal(data.sales, 8);
+      assert.equal(data.products[0].quantity, 0);
+      assert.equal(data.products[0].state, 'sold_out');
+      assert.equal(data.writes[6].state, 'sold_out');
+      assert.equal(data.writes[6].kind, 'sale');
+      await click('.inventory-session-actions .inv-secondary');
+      await until(() => evaluate('Boolean(document.querySelector("#inv-audit-title"))'));
+      assert.ok(await evaluate('document.querySelector(".inv-dialog").textContent.includes("Record your cart inventory at the start and end of a shift.")'));
+      assert.equal(await evaluate('document.querySelector(".inv-dialog").textContent.includes("Pointer Water")'), false, 'Sold Out is absent from audit backcheck');
+      await evaluate(`(()=>{const s=document.querySelector('.inv-dialog select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'operator');s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await click('.inv-dialog input[type="checkbox"]');
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('!document.querySelector("#inv-audit-title")'));
+      assert.equal(await evaluate('Boolean(document.querySelector("[role=dialog]"))'), false, 'Audit completion leaves no follow-on prompt');
+      assert.equal((await state()).audits[0].length, 5);
+      await click('.inventory-close-out');
+      await evaluate(`(()=>{const input=document.querySelector('.inventory-session-overlay input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'0.00');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await click('.inventory-session-overlay button[type="submit"]');
+      await until(() => evaluate('!document.querySelector("[role=dialog]")'));
+      await pause(150);
+      assert.ok(await evaluate('document.querySelector(".inventory-session").textContent.includes("Not selected")'));
+      assert.equal(await evaluate('Boolean(document.querySelector("[role=dialog]"))'), false, 'Successful close remains idle');
+      await click(button('Edit quantity for Pointer Water'));
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(() => evaluate('document.querySelector("#inventory-session-title")?.textContent==="Select operator"'), 'Only next attributed action prompts for a name');
       assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, 'No horizontal overflow');
     }
   } finally {
