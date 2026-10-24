@@ -67,7 +67,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           title:box(document.querySelector('.inv-title')),panel:box(panel),
           actionBoxes:[...actions.querySelectorAll('button,a')].map(box),
           actionNames:[...actions.querySelectorAll('button,a')].map(e=>e.textContent),
-          publicLink:{href:actions.querySelector('a')?.getAttribute('href'),target:actions.querySelector('a')?.target},
+          publicLink:(()=>{const a=document.querySelector('.inv-audit-action a'),audit=document.querySelector('.inv-audit-action button');return {href:a?.getAttribute('href'),target:a?.target,text:a?.textContent,font:getComputedStyle(a).fontFamily===getComputedStyle(audit).fontFamily&&getComputedStyle(a).fontSize===getComputedStyle(audit).fontSize,stacked:a.getBoundingClientRect().bottom<=audit.getBoundingClientRect().top};})(),
           compactTotal:panel.querySelector('.inv-sales-total').textContent,
           detailedTally:Boolean(panel.querySelector('ul')),
           aboveFilters:actions.nextElementSibling.classList.contains('inv-filter-row'),
@@ -78,7 +78,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           logo:box(document.querySelector('.inv-brand img')),
           operatorInPanel:Boolean(panel.querySelector('.inventory-session')),
           headerActions:[...document.querySelectorAll('.inv-header button,.inv-header .inv-cart-link,.inv-course-picker select')].map(box),
-          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-catalog-actions a,.inv-audit-action button,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
+          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action .inv-secondary,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
           overflow:document.documentElement.scrollWidth>innerWidth
         };
       })()`);
@@ -89,8 +89,8 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.equal(layout.exportHelp, false);
       assert.equal(layout.adminIcon, true);
       assert.equal(layout.operatorInPanel, true);
-      assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product', 'View golfer menu']);
-      assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank' });
+      assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product']);
+      assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank', text: 'View Menu', font: true, stacked: true });
       assert.equal(layout.compactTotal, 'Sales Today0 units sold');
       assert.equal(layout.detailedTally, false);
       assert.equal(layout.logo.width, width <= 380 ? 90 : width <= 680 ? 108 : 156, 'Logo is 150% of its previous displayed width');
@@ -106,7 +106,6 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         assert.ok(layout.actionBoxes.every(b=>b.y === layout.actionBoxes[0].y), `${width}px: catalog actions share one row`);
       } else {
         assert.ok(layout.panel.y >= layout.title.bottom, `${width}px: title and sales wrap cleanly`);
-        assert.ok(layout.actionBoxes[2].y > layout.actionBoxes[0].y, `${width}px: action row wraps`);
       }
     }
     await click('[aria-label="Open Admin"]');

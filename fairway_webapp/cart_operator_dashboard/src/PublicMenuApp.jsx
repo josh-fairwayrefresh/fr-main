@@ -85,7 +85,7 @@ export default function PublicMenuApp({ apiBaseUrl, slug }) {
   const [status, setStatus] = useState('loading');
   const [menu, setMenu] = useState(null);
   const [error, setError] = useState('');
-  const [expandedCategory, setExpandedCategory] = useState(0);
+  const [expandedCategory, setExpandedCategory] = useState(-1);
   const requestRef = useRef(null);
   const categories = useMemo(() => groupPublishedProducts(menu?.products), [menu]);
 
@@ -109,13 +109,9 @@ export default function PublicMenuApp({ apiBaseUrl, slug }) {
   useEffect(() => {
     setMenu(null);
     setStatus('loading');
-    setExpandedCategory(0);
+    setExpandedCategory(-1);
     loadMenu();
-    const interval = window.setInterval(loadMenu, 15000);
-    window.addEventListener('focus', loadMenu);
     return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('focus', loadMenu);
       requestRef.current?.abort();
     };
   }, [loadMenu]);

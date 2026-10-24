@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import InventoryApp from '../src/InventoryApp';
 import CustomerStaff from '../src/admin/CustomerStaff';
+import ExcelJS from 'exceljs';
 
 const course = { customer_id: 'TEST-C', course_id: 'TEST-U', customer_name: 'Inventory Test', course_name: 'Stock Course', timezone: 'America/Los_Angeles' };
 const user = { uid: 'inventory-test', email: 'test@example.invalid', getIdToken: async () => 'fixture-token' };
@@ -24,6 +25,11 @@ let loseCloseResponse = true;
 const committed = new Map();
 const calls = [];
 const downloads = [];
+async function reportText(blob) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await blob.arrayBuffer());
+  return JSON.stringify(workbook.getWorksheet('Inventory Report').getSheetValues());
+}
 URL.createObjectURL = blob => { downloads.push(blob); return 'blob:inventory-export'; };
 URL.revokeObjectURL = () => {};
 HTMLAnchorElement.prototype.click = () => {};
@@ -112,7 +118,8 @@ try {
   const beforeExport = calls.length;
   click(button('Export'));
   check(calls.length === beforeExport && shift === null, 'Export must not select an operator or make a request');
-  check((await downloads[0].text()).includes('"Selected operator","Not selected"'), 'Export supports no selected operator');
+  await wait(() => downloads.length === 1);
+  check((await reportText(downloads[0])).includes('Operator: Not selected'), 'Export supports no selected operator');
   check(catalog[0].state === 'on_cart', 'Zero initialization must not move existing tiles');
   click(document.querySelector('[aria-label="Move Water"]'));
   click(button('Move here: In Inventory'));
@@ -163,11 +170,16 @@ try {
   click([...document.querySelectorAll('.inv-category-filter')].find(node => node.textContent.startsWith('Drinks')));
   const beforeFilteredExport = calls.length;
   click(button('Export'));
-  const filteredCsv = await downloads.at(-1).text();
-  check(filteredCsv.includes('FILTERED VIEW - NOT THE COMPLETE INVENTORY') && filteredCsv.includes('"Category filter","Drinks"'), 'Filtered exports identify active scope');
-  check(!filteredCsv.includes('"Juice"') && filteredCsv.includes('"Total units sold","1"') && filteredCsv.includes('Test Operator'), 'Export uses displayed products and full displayed tally with operator');
+  await wait(() => downloads.length === 2);
+  const filteredReport = await reportText(downloads.at(-1));
+  check(filteredReport.includes('FILTERED VIEW - NOT THE COMPLETE INVENTORY') && filteredReport.includes('Category filter: Drinks'), 'Filtered exports identify active scope');
+  check(!filteredReport.includes('"Juice"') && filteredReport.includes('Total units sold: 1') && filteredReport.includes('Test Operator'), 'Export uses displayed products and full displayed tally with operator');
   check(calls.length === beforeFilteredExport, 'Filtered export remains read-only');
+  click(button('Export'));
   click([...document.querySelectorAll('.inv-category-filter')].find(node => node.textContent.startsWith('All Products')));
+  await wait(() => document.querySelector('.inv-notice')?.textContent.includes('changed while preparing the report'));
+  check(downloads.length === 2 && calls.length === beforeFilteredExport, 'Changed export scope must reject the in-flight download without a request');
+  click(document.querySelector('[aria-label="Dismiss message"]'));
   click(document.querySelector('[aria-label="Record sale for Water"]'));
   input(document.querySelector('#inv-stock-title').closest('section').querySelector('input'), '5');
   click(button('Confirm'));
@@ -186,7 +198,7 @@ try {
   });
   check(catalog[0].quantity === 4, 'Moving to In Inventory preserves quantity');
   check(calls.filter(call => call.body.kind === 'availability' && call.body.state !== 'on_cart').every(call => call.body.quantity === undefined), 'Moving off cart must not manufacture a quantity adjustment');
-  click(button('Confirm inventory audit'));
+  click(button('Confirm Inventory Audit'));
   check(!document.querySelector('#inv-audit-title').closest('section').textContent.includes('Water'), 'Returned stock is excluded from subsequent cart audit');
   click(document.querySelector('#inv-audit-title').closest('section').querySelector('footer button[type="button"]'));
   flushSync(() => root.render(<InventoryApp key="return-reload" user={user} apiBaseUrl={location.origin} courses={[course]} onSignOut={() => {}} />));
@@ -197,7 +209,7 @@ try {
   click(button('Confirm'));
   await wait(() => !document.querySelector('#inv-stock-title'));
   check(catalog[0].state === 'on_cart' && catalog[0].quantity === 4, 'Confirmed load records availability and quantity');
-  click(button('Confirm inventory audit'));
+  click(button('Confirm Inventory Audit'));
   const auditSection = document.querySelector('#inv-audit-title').closest('section');
   check(!auditSection.textContent.includes('Juice'), 'Audit excludes In Inventory despite retained balance');
   input(auditSection.querySelector('select'), 'manager');
@@ -210,7 +222,7 @@ try {
   window.dispatchEvent(new Event('inventory-updated'));
   await wait(() => loadedRevision === revision);
   flushSync(() => {});
-  click(button('Confirm inventory audit'));
+  click(button('Confirm Inventory Audit'));
   await wait(() => document.querySelector('#inv-audit-title')?.closest('section').textContent.includes(`revision ${revision}`));
   const freshAudit = document.querySelector('#inv-audit-title').closest('section');
   input(freshAudit.querySelector('select'), 'manager');

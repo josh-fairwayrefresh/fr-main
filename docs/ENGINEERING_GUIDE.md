@@ -134,11 +134,17 @@ have a target even when the destination contains fewer products. Accepted
 mouse drag regions suppress competing native text dragging. Browser-generated mouse/touch regression evidence is
 distinct from synthetic handler tests and physical iPad/Safari acceptance.
 
-The browser's current-view CSV exporter consumes the same confirmed inventory
+The browser's current-view Excel (.xlsx) exporter consumes the same confirmed inventory
 snapshot, visible-product filters and displayed Course-wide tally as the UI;
 it has no mutation/shift API. Bootstrap/snapshot responses expose canonical
 Customer names and Course timezone for report context. Exports explicitly name
-their filter scope; pending or unresolved writes disable them. One reusable
+their filter scope; pending or unresolved writes disable them, and changed
+snapshot/submission context during generation rejects the download explicitly.
+The ExcelJS writer is loaded only for export, writes untrusted text as literal
+string cells and whole units as numbers, and owns readable report styling and
+one-page landscape print settings. Its scoped UUID override uses the patched
+CommonJS-compatible version; unrelated Firebase dependencies are unchanged.
+One reusable
 quantity input supplies direct entry and 48-pixel minus/plus buttons to stock
 dialogs; stepping changes only the draft, never confirms a transaction.
 
@@ -156,8 +162,10 @@ price projection). There is no second mutable menu projection or publication
 pointer. Old published snapshots/metadata remain historical and unmodified,
 not a serving source. Existing slug mappings and branded URLs are preserved;
 other configured Course slugs use the same public route. Anonymous responses
-are no-store; the public UI refreshes every 15 seconds/on focus and aborts
-superseded requests so older responses cannot replace current state. Retired
+are no-store; the public UI fetches only on page open/manual reload (or explicit
+error retry), with no interval/focus refresh. Categories initially collapse and
+expand only by selection. Scope-change/unmount cleanup aborts superseded
+requests so older responses cannot replace current state. Retired
 preview/publish endpoints explicitly return 410 without mutation or shift
 activity, directing cached clients to refresh. This changes sandbox source,
 not production release authority. No internal stock/staff/shift/audit data

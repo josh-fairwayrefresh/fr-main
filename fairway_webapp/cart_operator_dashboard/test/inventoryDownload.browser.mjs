@@ -6,8 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createServer } from 'vite';
+import ExcelJS from 'exceljs';
 
-test('inventory CSV creates a real browser download with the reported filename and contents', { timeout: 45000 }, async () => {
+test('inventory XLSX creates a real browser download with numeric data and one-page print settings', { timeout: 45000 }, async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'fairway-inventory-download-'));
   const server = await createServer({
     root: fileURLToPath(new URL('..', import.meta.url)), configFile: false, appType: 'custom',
@@ -18,15 +19,15 @@ test('inventory CSV creates a real browser download with the reported filename a
       res.setHeader('Content-Type', 'text/html');
       res.end(await server.transformIndexHtml('/__download-test', `<button id="export">Export</button><script type="module">
         import { downloadBlob } from '/src/admin/adminApi.js';
-        import { inventoryViewCsv } from '/src/lib/inventoryExport.mjs';
-        const csv = inventoryViewCsv({
+        import { inventoryViewWorkbook, INVENTORY_WORKBOOK_TYPE } from '/src/lib/inventoryExport.mjs';
+        const options = {
           course: {customer_id:'C',course_id:'U'}, category:'Drinks', subcategory:'all', operator:'Test operator',
           products:[{name:'Water',category_name:'Drinks',state:'on_cart',quantity:4}], archivedProducts:[],
           inventory:{timezone:'America/Los_Angeles',customer_name:'Test Customer',course_name:'Test Course',
             inventory_revision:3, products:[], daily_sales:{local_date:'2026-10-23',total_units:2,products:[{name:'Water',units:2}]}},
           exportedAt:new Date('2026-10-24T01:00:00Z')
-        });
-        document.querySelector('#export').onclick = () => downloadBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}),'inventory-C-U-view.csv');
+        };
+        document.querySelector('#export').onclick = async () => downloadBlob(new Blob([await inventoryViewWorkbook(options)],{type:INVENTORY_WORKBOOK_TYPE}),'inventory-C-U-view.xlsx');
         globalThis.ready = true;
       </script>`));
     } catch (error) { next(error); }
@@ -68,13 +69,21 @@ test('inventory CSV creates a real browser download with the reported filename a
     await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/__download-test` });
     await until(async () => (await send('Runtime.evaluate', { expression: 'globalThis.ready === true' })).result.value);
     await send('Runtime.evaluate', { expression: 'document.querySelector("#export").click()' });
-    await until(async () => (await readdir(profile)).includes('inventory-C-U-view.csv'));
-    const csv = await readFile(path.join(profile, 'inventory-C-U-view.csv'), 'utf8');
-    assert.ok(csv.includes('FILTERED VIEW - NOT THE COMPLETE INVENTORY'));
-    assert.ok(csv.includes('"Water","Drinks","","On Cart","4"'));
-    assert.ok(csv.includes('"Total units sold","2"'));
-    assert.ok(csv.includes('Test operator'));
-    assert.ok(csv.includes('10/23/2026 6:00 PM PDT'));
+    await until(async () => (await readdir(profile)).includes('inventory-C-U-view.xlsx'));
+    const bytes = await readFile(path.join(profile, 'inventory-C-U-view.xlsx'));
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes);
+    const sheet = workbook.getWorksheet('Inventory Report');
+    const text = JSON.stringify(sheet.getSheetValues());
+    assert.ok(text.includes('FILTERED VIEW - NOT THE COMPLETE INVENTORY'));
+    assert.equal(sheet.getCell('A7').value, 'Water');
+    assert.equal(sheet.getCell('C7').value, 'On Cart');
+    assert.equal(sheet.getCell('D7').value, 4);
+    assert.ok(text.includes('Total units sold: 2'));
+    assert.ok(text.includes('Test operator'));
+    assert.ok(text.includes('10/23/2026 6:00 PM PDT'));
+    assert.equal(sheet.pageSetup.fitToHeight, 1);
+    assert.equal(sheet.pageSetup.fitToWidth, 1);
   } finally {
     socket?.close();
     if (chrome && chrome.exitCode === null) {
@@ -82,6 +91,6 @@ test('inventory CSV creates a real browser download with the reported filename a
       chrome.kill(); await exited;
     }
     await server.close();
-    await rm(profile, { recursive: true, force: true });
+    await rm(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });

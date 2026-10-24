@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
 import { downloadBlob } from './admin/adminApi';
-import { inventoryViewCsv } from './lib/inventoryExport.mjs';
 import { InventoryDragFeedback, useInventoryDrag } from './InventoryDrag';
 import { InventorySessionControls, useInventorySession } from './InventorySession';
 import { AuditDialog, StockDialog } from './InventoryOperations';
@@ -293,6 +292,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const [showArchived, setShowArchived] = useState(false);
   const [stockAction, setStockAction] = useState(null);
   const [auditing, setAuditing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportStateRef = useRef(null);
   const refreshRef = useRef(async () => {});
   const course = courses.find((item) => courseKey(item) === selectedKey)
     || selectedCourseFromLocation(courses, window.location.search);
@@ -321,6 +322,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const hasCurrentInventory = inventory?.customer_id === course?.customer_id && inventory?.course_id === course?.course_id;
   const canExport = hasCurrentInventory
     && loadStatus === 'ready' && !session.unresolved && !session.submitting && !busyId;
+  const exportSignature = JSON.stringify([selectedKey, inventory?.inventory_revision, inventory?.daily_sales, selectedCategory, selectedSubcategory, showArchived, session.shift?.staff_name]);
+  exportStateRef.current = { canExport, signature: exportSignature };
   const movement = useInventoryDrag({
     scope: `${user?.uid}:${course?.customer_id}:${course?.course_id}:${selectedCategory}:${selectedSubcategory}`,
     disabled: Boolean(busyId || session.submitting || session.unresolved || session.choosing || stockAction || editor || auditing),
@@ -426,20 +429,26 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     }
   }
 
-  function exportView() {
-    if (!canExport) {
+  async function exportView() {
+    if (!canExport || exporting) {
       setNotice('Export is unavailable until inventory is loaded and pending submissions are resolved.');
       return;
     }
     setNotice('');
+    setExporting(true);
     try {
-      const csv = inventoryViewCsv({
+      const { inventoryViewWorkbook, INVENTORY_WORKBOOK_TYPE } = await import('./lib/inventoryExport.mjs');
+      const buffer = await inventoryViewWorkbook({
         course, inventory, products: columnStates.flatMap(state => visibleProducts.filter(product => product.state === state)),
         archivedProducts: showArchived ? inventory.archived_products || [] : [],
         category: selectedCategory, subcategory: selectedSubcategory, operator: session.shift?.staff_name,
       });
-      downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `inventory-${course.customer_id}-${course.course_id}-view.csv`);
+      if (!exportStateRef.current.canExport || exportStateRef.current.signature !== exportSignature) {
+        throw new Error('Inventory or submission state changed while preparing the report. Resolve pending submissions and export again.');
+      }
+      downloadBlob(new Blob([buffer], { type: INVENTORY_WORKBOOK_TYPE }), `inventory-${course.customer_id}-${course.course_id}-view.xlsx`);
     } catch (error) { setNotice(`Unable to export inventory: ${error.message}`); }
+    finally { setExporting(false); }
   }
 
   const columnStates = ['on_cart', 'sold_out', 'in_inventory'];
@@ -449,7 +458,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     <header className="inv-header"><a href={courseContextUrl('/', course)} className="inv-brand" title="Return to Cart Operations"><img src={fairwayRefreshStackedLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
       <a className="inv-cart-link" href={courseContextUrl('/', course)} title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
       {isAdmin && <button className="inv-icon-button" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
-      <button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport}>Export</button>
+      <button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport || exporting}>{exporting ? 'Preparing export…' : 'Export'}</button>
       {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
     </div></header>
@@ -469,9 +478,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       <div className="inv-catalog-actions" role="group" aria-label="Catalog and menu actions">
         <button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />Add Category</button>
         <button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}>+ Add Product</button>
-        {hasCurrentInventory && inventory?.public_menu_slug
-          ? <a className="inv-secondary inv-menu-link" href={publicMenuPath(inventory.public_menu_slug)} target="_blank" rel="noopener noreferrer">View golfer menu</a>
-          : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">Public menu link not configured for this Course. Contact Admin.</span>}
       </div>
       {inventory && <div className="inv-filter-row"><nav className="inv-category-filters" aria-label="Filter inventory by category">
         <button className={`inv-category-filter ${selectedCategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === 'all'} onClick={() => selectCategory('all')}>All Products <span>{products.length}</span></button>
@@ -479,7 +485,12 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
           <button className={`inv-category-filter ${selectedCategory === category.name ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === category.name} onClick={() => selectCategory(category.name)}>{category.name} <span>{categoryCounts[category.name] || 0}</span></button>
           <button className="inv-category-manage-trigger" type="button" onClick={() => setCategoryManager(category)} title={`Manage ${category.name}`} aria-label={`Manage ${category.name} category`}><Settings size={13} /></button>
         </div>)}
-      </nav><div className="inv-audit-action"><button className="inv-secondary" type="button" onClick={() => setAuditing(true)}>Confirm inventory audit</button></div></div>}
+      </nav><div className="inv-audit-action">
+        {hasCurrentInventory && inventory?.public_menu_slug
+          ? <a className="inv-secondary inv-menu-link" href={publicMenuPath(inventory.public_menu_slug)} target="_blank" rel="noopener noreferrer">View Menu</a>
+          : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">Public menu link not configured for this Course. Contact Admin.</span>}
+        <button className="inv-secondary" type="button" onClick={() => setAuditing(true)}>Confirm Inventory Audit</button>
+      </div></div>}
       {inventory && selectedCategory !== 'all' && subcategoryNames.length > 0 && <nav className="inv-subcategory-filters" aria-label="Filter inventory by subcategory">
         <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>
         {subcategoryNames.map((name) => <button className={`inv-subcategory-filter ${selectedSubcategory === name ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === name} key={name} onClick={() => setSelectedSubcategory(name)}>{name} <span>{subcategoryCounts[name] || 0}</span></button>)}

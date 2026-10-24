@@ -13,6 +13,7 @@ test('rendered inventory staff, sales retries, audit and shift close', { timeout
   const server = await createServer({
     root: fileURLToPath(new URL('..', import.meta.url)),
     configFile: false, appType: 'custom', cacheDir: path.join(profile, 'vite-cache'),
+    optimizeDeps: { include: ['react', 'react-dom', 'react-dom/client', 'exceljs'] },
     server: { host: '127.0.0.1', port: 0 },
   });
   server.middlewares.use('/__inventory-test', async (_request, response, next) => {
@@ -33,6 +34,6 @@ test('rendered inventory staff, sales retries, audit and shift close', { timeout
     assert.equal(result, 'PASS', result || stdout.slice(-2000));
   } finally {
     await server.close();
-    await rm(profile, { recursive: true, force: true });
+    await rm(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });

@@ -179,9 +179,11 @@ The current implementation and deployment status are owned by
    a subcategory filters the visible products only; it does not change
    inventory data. Switching categories resets the subcategory selection to
    All.
-- Catalog actions pair **Add Category** with **+ Add Product** and a clearly
-   labeled **View golfer menu** link for the selected Course, opening in a new
-   tab. If no slug is configured, explain that Admin must configure the link
+- Catalog actions pair **Add Category** with **+ Add Product**. A clearly
+   labeled **View Menu** link for the selected Course opens in a new tab and
+   sits directly above **Confirm Inventory Audit** on the right of the filters,
+   matching the audit button's font and text size.
+   If no slug is configured, explain that Admin must configure the link
    rather than link to a different Course. The three state
    columns remain the sole product organization; subcategory remains product
    metadata and does not create nested inventory groups.
@@ -198,7 +200,9 @@ The current implementation and deployment status are owned by
    In Inventory and archived products are excluded. Categories, product counts,
    descriptions, prices and Last Updated reflect that coherent current state.
    The timestamp uses the Course timezone. Existing public links keep working;
-   an open menu refreshes periodically and on focus without an operator action.
+   the menu reads current committed inventory when opened or manually reloaded,
+   with no polling or focus-triggered refresh. Every category tile starts
+   collapsed, including Canned Cocktails, and expands only on golfer selection.
 
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
@@ -216,7 +220,7 @@ deployment.
 - The Inventory banner displays the Fairway Refresh logo at 150% of its prior
   displayed dimensions at each responsive breakpoint, an accessible Admin
   shield for entitled users, and Export without explanatory prose. Export
-  retains the same confirmed-view CSV contents, download and pending/unresolved
+  retains the same confirmed-view report contents, download and pending/unresolved
   submission protection.
 - Sales Today sits horizontally beside Cart Inventory Management Dashboard
   on iPad/desktop. The same compact panel clearly identifies the selected
@@ -227,9 +231,10 @@ deployment.
   After activity, the prominent shift button has two stacked lines:
   "Close out" / "Enter final sales". Final-sales entry, attribution, safe
   retry, failure retention and successful-close clearing are unchanged.
-  Add Category, Add Product and View golfer menu share one action
-  row immediately above the category filters. Confirm inventory audit sits on
-  the filter row, visually separated from filter controls. Preserve grouping
+  Add Category and Add Product share one action row immediately above the
+  category filters. View Menu is stacked directly above Confirm Inventory Audit
+  on the right of the filter row, visually separated from filter controls.
+  Preserve grouping
   on iPad; wrap rows cleanly on phones with no document overflow or reduced
   touch targets (44 CSS pixels minimum for these controls).
 - Routine success commentary boxes are omitted: confirmed tiles, quantities,
@@ -304,7 +309,7 @@ deployment.
   required; failed/uncertain submissions never appear confirmed. Retried intended
   operations cannot duplicate deductions or durable records. Stale absolute
   edits require fresh review; metadata autosaves cannot overwrite stock/state.
-- Export downloads a UTF-8 CSV of the confirmed displayed inventory view:
+- Export downloads a genuine Excel `.xlsx` workbook of the confirmed displayed inventory view:
   selected Customer/Course, explicit category/subcategory filters, displayed
   product names/availability/quantities, selected operator if any, revision,
   and export time in the configured Course timezone. Filtered reports are
@@ -315,6 +320,15 @@ deployment.
   are excluded; export is unavailable during pending/unresolved submissions or
   failed inventory loading. Export does not require operator selection, make
   shift activity, mutate stock, confirm an audit or publish a menu.
+  The manager-facing report has Customer, Course, Course-local export time and
+  selected operator at the top, clear headings and product, category,
+  availability and numeric whole-unit quantity columns. Two side-by-side tables
+  keep a representative 58-product report readable on one landscape Letter
+  page, with explicit print area, quarter-inch margins and one-page scaling.
+  Preserve all report rows, archived scope and daily product tallies rather
+  than truncating content to fit. Validate actual workbook contents and rendered
+  one-page printing, not only page-setup flags. If confirmed data or submission
+  state changes during workbook generation, require a fresh export.
 - Admin's Customer register contains a staff directory with stable person IDs,
   free-text names, and Cart Operator / F&B Management roles. Both roles have
   equal operational rights through one policy. These are operational identities,

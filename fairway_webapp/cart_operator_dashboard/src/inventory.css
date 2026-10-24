@@ -34,8 +34,9 @@
 .inv-title-row .inv-eyebrow, .inv-eyebrow { margin: 0 0 6px; color: var(--inv-green); font-size: 9px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; }
 .inv-subtitle { margin: 5px 0 0; color: var(--inv-muted); font-size: 12px; }
 .inv-catalog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
-.inv-catalog-actions button, .inv-catalog-actions a, .inv-audit-action button, .inv-header-controls > .inv-secondary { min-height: 44px; }
+.inv-catalog-actions button, .inv-audit-action .inv-secondary, .inv-header-controls > .inv-secondary { min-height: 44px; }
 .inv-menu-link { text-decoration: none; }
+.inv-audit-action .inv-menu-link { font: inherit; }
 .inv-menu-link:hover, .inv-menu-link:focus-visible { text-decoration: underline; }
 .inv-menu-unconfigured { color: #883d35; font-size: 12px; }
 .inv-primary, .inv-secondary { min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
@@ -44,7 +45,7 @@
 .inv-primary:disabled, .inv-secondary:disabled, .inv-icon-button:disabled { opacity: .55; cursor: not-allowed; }
 .inv-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 13px; padding-bottom: 12px; border-bottom: 1px solid #d6dfd8; }
 .inv-category-filters { min-width: 0; flex: 1 1 320px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.inv-audit-action { padding-left: 16px; border-left: 1px solid #cbd5ce; }
+.inv-audit-action { display: grid; gap: 8px; margin-left: auto; padding-left: 16px; border-left: 1px solid #cbd5ce; }
 .inv-category-filter { min-height: 44px; padding: 0 10px; flex: 0 1 auto; max-width: 100%; border: 1px solid #cbd5ce; border-radius: 5px; background: #fff; color: #425449; font-size: 10px; font-weight: 700; overflow-wrap: anywhere; cursor: pointer; }
 .inv-category-filter span { margin-left: 4px; color: #718077; font-size: 9px; }
 .inv-category-filter.active { border-color: var(--inv-green); background: var(--inv-green); color: #fff; }

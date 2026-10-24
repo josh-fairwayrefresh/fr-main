@@ -2544,7 +2544,7 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
-| `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use View golfer menu. |
+| `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use View Menu. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Transactionally reads current committed active On Cart products through the single public allowlist; no quantity or internal operational fields, no-store. |
 | `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
 | `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; it does not create Auth users or manage passwords. |
@@ -2576,8 +2576,10 @@ no writes, does not need staff authorization and never reads a publication
 pointer/snapshot. Successful stock/catalog transactions immediately determine
 subsequent public responses; failed/cancelled/unconfirmed actions and stale
 idempotent retries cannot replace newer public state. Anonymous responses and
-client fetches are no-store. Open public pages refresh every 15 seconds/on focus;
-superseded requests are aborted and ignored. Existing branded URLs and
+client fetches are no-store. Public pages fetch only when opened/manually
+reloaded or an initial error is explicitly retried, not on a timer or focus.
+All categories initially collapse, including Canned Cocktails.
+Superseded requests are aborted and ignored. Existing branded URLs and
 configured slug routes use the same API owner; unbranded Courses display their
 own returned Course name/timezone without another Course's branding.
 
