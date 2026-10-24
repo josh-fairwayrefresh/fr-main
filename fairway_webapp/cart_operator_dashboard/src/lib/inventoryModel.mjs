@@ -71,7 +71,7 @@ export function matchCoursePresentation(course, presentations) {
 export function groupPublishedProducts(products = []) {
   const categories = new Map();
   for (const product of products) {
-    if (product.archived === true || !['on_cart', 'sold_out'].includes(product.state)) continue;
+    if (product.archived === true || product.state !== 'on_cart') continue;
     const categoryName = product.category || product.category_name;
     if (typeof categoryName !== 'string' || !categoryName.trim()) continue;
     if (!categories.has(categoryName)) {

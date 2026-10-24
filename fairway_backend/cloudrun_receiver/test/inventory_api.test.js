@@ -397,7 +397,7 @@ test('A category whose only product is archived is deletable, matching the activ
   assert.strictEqual(archivedProductStillPresent?.category_name, 'THC Drinks');
 });
 
-test('Publication snapshots are atomic, preserve last success on failure, and public reads exclude drafts', async () => {
+test('public menu reads current On Cart data without publishing and failed edits preserve saved data', async () => {
   const db = new FakeFirestore();
   await seedCourse(db);
   await seedCustomerAssignment(db, TOKENS.fnb.uid);
@@ -436,15 +436,14 @@ test('Publication snapshots are atomic, preserve last success on failure, and pu
   });
   assert.strictEqual(archived.statusCode, 200);
 
-  const firstPublish = await request({ method: 'POST', path: `${coursePath()}/publish`, token: 'fnb' });
-  assert.strictEqual(firstPublish.statusCode, 200);
-  assert.strictEqual(firstPublish.body.version, 1);
-  assert.strictEqual(firstPublish.body.products.length, 2);
-  assert.ok(firstPublish.body.products.some((item) => item.state === 'sold_out'));
+  const oldPublish = await request({ method: 'POST', path: `${coursePath()}/publish`, token: 'fnb' });
+  assert.strictEqual(oldPublish.statusCode, 410);
+  assert.strictEqual(oldPublish.body.error, 'manual_publication_retired');
   const publicBefore = await request({ path: '/api/v1/public/menus/monarch-bay' });
   assert.strictEqual(publicBefore.statusCode, 200);
   assert.strictEqual('published_by' in publicBefore.body, false);
-  assert.deepStrictEqual(publicBefore.body.products.map((item) => item.name), ['On Cart Item', 'Sold Out Item']);
+  assert.deepStrictEqual(publicBefore.body.products.map((item) => item.name), ['On Cart Item']);
+  assert.strictEqual(publicBefore.headers['Cache-Control'], 'no-store');
   const menuBodyHasPrivateActor = JSON.stringify(publicBefore.body).includes('fnb-manager');
   assert.strictEqual(menuBodyHasPrivateActor, false);
 
@@ -454,23 +453,21 @@ test('Publication snapshots are atomic, preserve last success on failure, and pu
   });
   assert.strictEqual(editedDraft.statusCode, 200);
   const publicWithDraft = await request({ path: '/api/v1/public/menus/monarch-bay' });
-  assert.strictEqual(publicWithDraft.body.products[0].name, 'On Cart Item');
+  assert.strictEqual(publicWithDraft.body.products[0].name, 'Edited Draft');
   const preview = await request({ path: `${coursePath()}/preview`, token: 'fnb' });
-  assert.ok(preview.body.products.some((item) => item.name === 'Edited Draft'));
+  assert.strictEqual(preview.statusCode, 410);
 
   db.failNextTransactionCommit = true;
-  const failedPublish = await request({ method: 'POST', path: `${coursePath()}/publish`, token: 'cart' });
-  assert.strictEqual(failedPublish.statusCode, 500);
+  const failedEdit = await request({
+    method: 'PATCH', path: `${coursePath()}/products/${products[0].product_id}`,
+    token: 'cart', body: product('Failed edit'),
+  });
+  assert.strictEqual(failedEdit.statusCode, 500);
   const publicAfterFailure = await request({ path: '/api/v1/public/menus/monarch-bay' });
-  assert.strictEqual(publicAfterFailure.body.version, 1);
-  assert.strictEqual(publicAfterFailure.body.products[0].name, 'On Cart Item');
-
-  const secondPublish = await request({ method: 'POST', path: `${coursePath()}/publish`, token: 'cart' });
-  assert.strictEqual(secondPublish.statusCode, 200);
-  assert.strictEqual(secondPublish.body.version, 2);
-  const publicAfterSuccess = await request({ path: '/api/v1/public/menus/monarch-bay' });
-  assert.strictEqual(publicAfterSuccess.body.version, 2);
-  assert.strictEqual(publicAfterSuccess.body.products[0].name, 'Edited Draft');
+  assert.strictEqual(publicAfterFailure.body.inventory_revision, publicWithDraft.body.inventory_revision);
+  assert.strictEqual(publicAfterFailure.body.products[0].name, 'Edited Draft');
+  assert.strictEqual((await db.collection('customers').doc(CUSTOMER_ID).collection('courses')
+    .doc(COURSE_ID).collection('published_menus').get()).size, 0);
 
   const publicWrite = await request({ method: 'POST', path: '/api/v1/public/menus/monarch-bay', token: null });
   assert.strictEqual(publicWrite.statusCode, 405);

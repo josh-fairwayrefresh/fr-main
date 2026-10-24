@@ -1760,11 +1760,11 @@ function createFairwayHandlers(db, {
       if (req.method === 'POST' && stockMatch) {
         return res.status(200).json(await inventory.updateStock(db, customerId, courseId, decodeURIComponent(stockMatch[1]), req.body, identity.uid));
       }
-      if (req.method === 'GET' && action === 'preview') {
-        return res.status(200).json(await inventory.previewMenu(db, customerId, courseId));
-      }
-      if (req.method === 'POST' && action === 'publish') {
-        return res.status(200).json(await inventory.publishMenu(db, customerId, courseId, identity.uid, req.body));
+      if (action === 'preview' || action === 'publish') {
+        return res.status(410).json({
+          error: 'manual_publication_retired',
+          message: 'The golfer menu automatically reflects saved On Cart products. Refresh Inventory and use View golfer menu.',
+        });
       }
       if (req.method === 'POST' && action === 'categories') {
         requireBodyFields(req.body, ['name', 'shift_id', 'operation_id']);

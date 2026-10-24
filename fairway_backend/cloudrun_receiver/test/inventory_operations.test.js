@@ -187,7 +187,6 @@ test('every operational mutation rejects missing shift and cannot create unattri
     ['PATCH', `/products/${id}`, f.metadata()],
     ['POST', `/products/${id}/archive`, {}],
     ['POST', `/products/${id}/stock`, { kind: 'adjustment', quantity: 1, expected_stock_revision: 0 }],
-    ['POST', '/publish', {}],
     ['POST', '/audits', { authorized: true, inventory_revision: 0, approver_staff_id: f.manager.staff_id }],
   ];
   for (const [method, path, body] of operations) {
@@ -198,7 +197,7 @@ test('every operational mutation rejects missing shift and cannot create unattri
   assert.equal((await f.ok('GET', '/shifts/session?session_id=browser-one')).shift.has_activity, false);
 });
 
-test('metadata, create, archive, category, subcategory, delete, publish and audit all lock attribution', async () => {
+test('metadata, create, archive, category, subcategory, delete and audit all lock attribution', async () => {
   const f = await fixture();
   const id = await f.seedProduct('Activity Product', 'on_cart', 1);
   await f.customer.collection('courses').doc('course-a').collection('inventory_categories').doc('empty').set({ name: 'Empty' });
@@ -212,7 +211,6 @@ test('metadata, create, archive, category, subcategory, delete, publish and audi
     (context) => f.ok('POST', '/categories', { name: 'Activity Category', ...context }),
     (context) => f.ok('POST', '/categories/drinks/subcategories', { name: 'Activity Subcategory', ...context }),
     (context) => f.ok('DELETE', '/categories/empty', context),
-    (context) => f.ok('POST', '/publish', context),
     async (context) => f.ok('POST', '/audits', {
       inventory_revision: (await f.ok('GET', '')).inventory_revision,
       approver_staff_id: f.manager.staff_id, authorized: true, ...context,
@@ -545,25 +543,61 @@ test('daily sales use Course-local midnight rather than UTC midnight', async () 
   assert.equal(summary.total_units, 3);
 });
 
-test('public publications retain explicit allowlist and replay does not republish', async () => {
+test('live menu uses one public allowlist, preserves links and follows committed stock and metadata', async () => {
   const f = await fixture();
   await f.ok('PATCH', `/api/v1/admin/customers/${f.customerId}/courses/course-a/inventory-menu`,
     { public_menu_slug: f.customerId }, 'admin', true);
-  await f.seedProduct('Public', 'on_cart', 5);
+  const id = await f.seedProduct('Public', 'on_cart', 5);
   await f.seedProduct('Empty Public', 'sold_out', 3);
   await f.seedProduct('Private', 'in_inventory', 12);
-  const body = f.context();
-  const publication = await f.ok('POST', '/publish', body);
-  const publicMenu = await f.ok('GET', `/api/v1/public/menus/${f.customerId}`, undefined, 'operator', true);
-  assert.equal(publicMenu.products.length, 2);
+  const ref = f.course.collection('inventory_products').doc(id);
+  await ref.set({ price: { amount_minor: 200, currency_code: 'USD', quantity: 999, staff_id: 'secret' }, staff_id: 'secret' }, { merge: true });
+  // A retained old snapshot must never compete with the authoritative inventory.
+  await f.course.collection('published_menus').doc('0000000001').set({ products: [{ name: 'Obsolete snapshot', quantity: 99 }] });
+  const read = () => f.ok('GET', `/api/v1/public/menus/${f.customerId}`, undefined, 'outsider', true);
+  const publicMenu = await read();
+  assert.equal(publicMenu.products.length, 1);
   assert.deepEqual(Object.keys(publicMenu.products[0]).sort(), [
     'brand', 'category', 'description', 'name', 'price', 'product_id', 'state', 'subcategory',
   ]);
   for (const secret of ['quantity', 'stock_revision', 'staff_id', 'shift_id', 'actor_uid', 'operation_id', 'daily_sales']) {
     assert.equal(JSON.stringify(publicMenu).includes(`"${secret}"`), false);
   }
-  await f.ok('POST', `/shifts/${f.shift.shift_id}/close`, { session_id: 'browser-one', amount_minor: 0, operation_id: operation() });
-  assert.deepEqual(await f.ok('POST', '/publish', body), publication);
+  assert.deepEqual(publicMenu.products[0].price, { amount_minor: 200, currency_code: 'USD' });
+  assert.equal((await f.request('POST', '/publish', {})).status, 410);
+  assert.equal((await f.ok('GET', '/shifts/session?session_id=browser-one')).shift.has_activity, false);
+  await f.stock(id, { kind: 'availability', state: 'in_inventory', expected_stock_revision: 0 });
+  assert.equal((await read()).products.length, 0);
+  assert.equal((await ref.get()).data().quantity, 5);
+  assert.equal((await f.request('POST', `/products/${id}/stock`, {
+    ...f.context(), kind: 'availability', state: 'on_cart', quantity: 3, expected_stock_revision: 0,
+  })).status, 409);
+  assert.equal((await read()).products.length, 0, 'Failed loading is not public');
+  await f.stock(id, { kind: 'availability', state: 'on_cart', quantity: 3, expected_stock_revision: 1 });
+  assert.equal((await read()).products[0].name, 'Public');
+  await f.ok('PATCH', `/products/${id}`, {
+    ...f.metadata('Public renamed'), description: 'New public details',
+    price: { amount_minor: 350, currency_code: 'USD' }, ...f.context(),
+  });
+  assert.equal((await read()).products[0].description, 'New public details');
+  const sale = { ...f.context(), kind: 'sale', units: 3, expected_stock_revision: 2 };
+  await f.ok('POST', `/products/${id}/stock`, sale);
+  assert.equal((await read()).products.length, 0, 'Remaining sale removes the product atomically');
+  await f.ok('POST', `/products/${id}/stock`, sale);
+  assert.equal((await read()).products.length, 0, 'Retry cannot resurrect an old projection');
+  await f.stock(id, { kind: 'availability', state: 'on_cart', quantity: 4, expected_stock_revision: 3 });
+  const sales = [
+    f.stock(id, { kind: 'sale', units: 1 }),
+    f.stock(id, { kind: 'sale', units: 3 }),
+  ];
+  const reads = Array.from({ length: 4 }, read);
+  await Promise.all(sales);
+  for (const menu of await Promise.all(reads)) {
+    assert.ok(menu.products.length === 0 || menu.products[0].name === 'Public renamed');
+    assert.equal(JSON.stringify(menu).includes('"quantity"'), false);
+  }
+  assert.equal((await read()).products.length, 0);
+  assert.equal((await ref.get()).data().quantity, 0);
   assert.equal((await f.course.collection('published_menus').get()).size, 1);
 });
 
@@ -571,11 +605,15 @@ test('failed commit rolls back stock, immutable event, shift activity and idempo
   if (emulator) return;
   const f = await fixture();
   const id = await f.seedProduct('Rollback', 'on_cart', 2);
+  await f.ok('PATCH', `/api/v1/admin/customers/${f.customerId}/courses/course-a/inventory-menu`,
+    { public_menu_slug: f.customerId }, 'admin', true);
   const body = { ...f.context(), kind: 'sale', units: 1 };
   db.failNextTransactionCommit = true;
   assert.equal((await f.request('POST', `/products/${id}/stock`, body)).status, 500);
   assert.equal((await f.course.collection('inventory_products').doc(id).get()).data().quantity, 2);
   assert.equal((await f.course.collection('inventory_events').get()).size, 0);
+  const publicMenu = await f.ok('GET', `/api/v1/public/menus/${f.customerId}`, undefined, 'outsider', true);
+  assert.equal(publicMenu.products[0].name, 'Rollback');
   assert.equal((await f.ok('GET', '/shifts/session?session_id=browser-one')).shift.has_activity, false);
   assert.equal((await f.ok('POST', `/products/${id}/stock`, body)).quantity, 1);
 });

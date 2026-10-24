@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Beer, ChevronDown, GlassWater, Martini, RefreshCw, Sandwich } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Beer, ChevronDown, GlassWater, Martini, RefreshCw, Sandwich, Utensils } from 'lucide-react';
 import { publicMenuRequest } from './lib/inventoryApi.mjs';
 import { formatPrice, formatPublishedAt, groupPublishedProducts } from './lib/inventoryModel.mjs';
 import { courseMenuConfig } from './lib/courseMenuConfig';
+import fairwayRefreshLogo from '../../../docs/logo_source_files/fairway-refresh/fairway-refresh-horizontal-transparent.png';
 import './public-menu.css';
 
 const CATEGORY_ICONS = {
@@ -36,9 +37,7 @@ function ProductRow({ product }) {
     </div>
     <div className="pm-product-meta">
       {price && <span className="pm-price">{price}</span>}
-      <span className={`pm-availability ${product.state === 'sold_out' ? 'sold-out' : ''}`}>
-        {product.state === 'sold_out' ? 'Sold Out' : 'Available'}
-      </span>
+      <span className="pm-availability">Available</span>
     </div>
   </li>;
 }
@@ -87,57 +86,63 @@ export default function PublicMenuApp({ apiBaseUrl, slug }) {
   const [menu, setMenu] = useState(null);
   const [error, setError] = useState('');
   const [expandedCategory, setExpandedCategory] = useState(0);
+  const requestRef = useRef(null);
   const categories = useMemo(() => groupPublishedProducts(menu?.products), [menu]);
 
-  async function loadMenu(signal) {
-    if (!config) {
-      setStatus('unavailable');
-      setError('This course menu is not configured.');
-      return;
-    }
-    setStatus('loading');
+  const loadMenu = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setError('');
     try {
-      const result = await publicMenuRequest(apiBaseUrl, config.apiSlug, { signal });
+      const result = await publicMenuRequest(apiBaseUrl, config?.apiSlug || slug, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       setMenu(result);
-      setExpandedCategory(0);
       setStatus('ready');
     } catch (reason) {
-      if (reason.name === 'AbortError') return;
+      if (controller.signal.aborted || reason.name === 'AbortError') return;
       setError(reason.message);
-      setStatus(reason.status === 404 ? 'unpublished' : 'unavailable');
+      setStatus('unavailable');
     }
-  }
+  }, [apiBaseUrl, config?.apiSlug, slug]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    loadMenu(controller.signal);
-    return () => controller.abort();
-  }, [apiBaseUrl, slug]);
+    setMenu(null);
+    setStatus('loading');
+    setExpandedCategory(0);
+    loadMenu();
+    const interval = window.setInterval(loadMenu, 15000);
+    window.addEventListener('focus', loadMenu);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', loadMenu);
+      requestRef.current?.abort();
+    };
+  }, [loadMenu]);
 
-  const lastUpdated = formatPublishedAt(menu?.published_at, config?.timeZone);
+  const lastUpdated = formatPublishedAt(menu?.updated_at, menu?.timezone || config?.timeZone);
+  const courseName = menu?.course_name || config?.courseName || 'Course menu';
 
   return <main className="public-menu-app">
     <div className="pm-gold-rule" />
     <header className="pm-header">
       <div className="pm-brand-lockup">
-        <img className="pm-fairway-logo" src={config?.fairwayLogo} alt="Fairway Refresh" />
-        <span className="pm-at">AT</span>
-        <img className="pm-course-logo" src={config?.courseLogo} alt="Monarch Bay Golf Club" />
+        <img className="pm-fairway-logo" src={config?.fairwayLogo || fairwayRefreshLogo} alt="Fairway Refresh" />
+        {config?.courseLogo && <><span className="pm-at">AT</span>
+          <img className="pm-course-logo" src={config.courseLogo} alt={config.customerName} /></>}
       </div>
       <div className="pm-heading">
-        <p>{config?.courseName || 'COURSE MENU'}</p>
+        <p>{courseName}</p>
         <h1>Today’s Cart Menu</h1>
-        <span id="menu-last-updated" data-field="published_at" className="pm-last-updated">
+        <span id="menu-last-updated" data-field="updated_at" className="pm-last-updated">
           LAST UPDATED: {lastUpdated || '—'}
         </span>
       </div>
     </header>
 
-    {status === 'loading' && <MenuMessage title="Loading menu" detail="The latest published menu is loading." />}
-    {status === 'unpublished' && <MenuMessage title="Menu not published yet" detail="Please check back later." />}
+    {status === 'loading' && <MenuMessage title="Loading menu" detail="The current cart menu is loading." />}
     {status === 'unavailable' && <MenuMessage title="Menu unavailable" detail={error || 'Please try again shortly.'} retry={() => loadMenu()} />}
-    {status === 'ready' && categories.length === 0 && <MenuMessage title="No items listed" detail="There are no available items on the current published menu." />}
+    {status === 'ready' && categories.length === 0 && <MenuMessage title="No items listed" detail="There are no items currently On Cart." />}
     {status === 'ready' && categories.length > 0 && <>
       <p className="pm-section-label">BROWSE BY CATEGORY</p>
       <div className="pm-category-grid">
@@ -150,6 +155,6 @@ export default function PublicMenuApp({ apiBaseUrl, slug }) {
         />)}
       </div>
     </>}
-    <footer className="pm-footer">Fairway Refresh <span>·</span> {config?.courseName}</footer>
+    <footer className="pm-footer">Fairway Refresh <span>·</span> {courseName}</footer>
   </main>;
 }

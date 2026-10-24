@@ -2423,21 +2423,23 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `GET /api/v1/access/bootstrap` | Any user with valid schema-v2 access | Returns `admin`, `customer_id`, and `course_ids` (plus a compatibility-only `user_type` response field); the UI uses `admin` to gate Admin entry. |
 | `GET /api/v1/operator/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses and push configuration. |
 | `GET /api/v1/inventory/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses; same entitlement as Cart Operations. |
-| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Admin or user entitled to the exact Customer/Course | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
+| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Admin or user entitled to the exact Customer/Course | Returns course-level products, categories, archives, revision, configured public slug and operational summaries. |
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
-| `GET .../preview`; `POST .../publish` | Course member | Preview reads saved working inventory. Publish atomically stores a snapshot and advances the published pointer. |
-| `GET /api/v1/public/menus/{slug}` | Public, read-only | Returns only the latest published snapshot; no staff identity or draft fields. |
+| `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use View golfer menu. |
+| `GET /api/v1/public/menus/{slug}` | Public, read-only | Transactionally reads current committed active On Cart products through the single public allowlist; no quantity or internal operational fields, no-store. |
 | `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
 | `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; it does not create Auth users or manage passwords. |
 
 Data is owned by the existing nested Course. `inventory/state` stores a
-monotonic inventory revision and last-published pointer. `inventory_products`
-stores working records; `inventory_categories` and nested `subcategories` store
+monotonic inventory revision and public slug. `inventory_products`
+stores authoritative records; `inventory_categories` and nested `subcategories` store
 canonical labels; `inventory_product_keys` protects exact product identity;
 `inventory_events` records actor/action/revision; and
-`published_menus/{version}` contains immutable public snapshots.
+`published_menus/{version}` and old publication state fields are retained
+historical records only, never a serving source after the 2026-10-24 CPO
+automatic-menu decision in PR #12.
 `user_access/{uid}` is the sole user-class and Course-entitlement authority;
 `public_menu_slugs` is a public-routing index, not an alternate catalog
 authority. `operator_course_assignments` and `inventory_course_memberships`
@@ -2449,19 +2451,29 @@ atomic stock/event operations, expected stock revisions for absolute edits,
 and idempotent operation identities. Metadata autosaves no longer own
 stock/availability, and cached writes cannot bypass the stock contract.
 This supersedes the prior last-write-wins stock/state behavior; ordinary
-metadata edits retain their existing synchronization. Publish reads the
-course revision and products in one Firestore transaction, snapshots only
-non-archived On Cart/Sold Out items, and commits snapshot, audit event, and
-pointer together. A failed commit therefore preserves the previous published
-version. The read-only public route resolves only the slug and published pointer;
-it does not query the editable catalog or require staff authorization. Snapshot
-payloads are bounded below the Firestore document-size limit.
+metadata edits retain their existing synchronization. The public route reads
+the slug mapping, Course, state/revision and products in one consistent
+transaction. It selects only non-archived On Cart products through the single
+public-product allowlist, including explicit nested price fields. It performs
+no writes, does not need staff authorization and never reads a publication
+pointer/snapshot. Successful stock/catalog transactions immediately determine
+subsequent public responses; failed/cancelled/unconfirmed actions and stale
+idempotent retries cannot replace newer public state. Anonymous responses and
+client fetches are no-store. Open public pages refresh every 15 seconds/on focus;
+superseded requests are aborted and ignored. Existing branded URLs and
+configured slug routes use the same API owner; unbranded Courses display their
+own returned Course name/timezone without another Course's branding.
 
 The API/data contract is source-defined, locally tested, and deployed as
 recorded above. The Inventory and public-menu React routes are deployed.
-Current live menu publication is recorded under the release section.
+Current sandbox alignment is recorded in the latest Alignment Register entry;
+dated production publication remains the separate release evidence.
 
 #### Increment 2 Local UI and Public Route
+
+Historical implementation record below. Manual preview/publication and
+snapshot serving were superseded in PR #12 by the 2026-10-24 CPO automatic-menu
+decision and current contract above; they are not current operator instructions.
 
 - `/inventory` uses the existing Inventory bootstrap/course APIs. Firebase
   authentication is followed by the same assigned-Course authorization as

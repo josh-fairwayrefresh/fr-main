@@ -115,7 +115,7 @@ The current implementation and deployment status are owned by
   **ORPHANED RECORD**; cleanup is deferred until after the Monarch Bay pilot.
 - Course assignment is the shared entitlement for Cart Operations and
    Inventory. Inventory has no separate membership or user class. An assigned
-   user can view, add, edit, move, archive, preview, and publish products for
+   user can view, add, edit, move and archive products for
    that course; another course remains inaccessible unless separately assigned.
 - One course-level catalog is shared across staff and carts. Each active
    product has exactly one state: **On Cart**, **Sold Out**, or **In Inventory**.
@@ -123,15 +123,13 @@ The current implementation and deployment status are owned by
 - Metadata edits save automatically. The persistent-stock sandbox increment
    below supersedes last-write-wins for stock/availability: stale quantity
    edits must not overwrite intervening sales, and metadata autosaves must not
-   restore stale availability. Product changes and publications retain account
+   restore stale availability. Product changes retain account
    attribution and gain operational staff/shift attribution.
-- Saved working inventory does not change the public menu. Preview shows the
-   current saved draft; only explicit Publish Menu publishes a coherent snapshot.
-   A failed save is not reported as saved, and failed publication leaves the
-   prior published menu available.
-- Anonymous golfers scan a stable course QR URL and see only the last successful
-   publication. On Cart products appear available, Sold Out products are marked,
-   and In Inventory or Archived products are omitted. The menu is read-only and
+- Saved inventory automatically determines the public menu. Failed saves and
+   unconfirmed/cancelled operations never appear as saved public changes.
+- Anonymous golfers scan a stable Course QR URL and see the current committed
+   On Cart products. Sold Out, In Inventory and archived products are omitted.
+   The menu is read-only and
    does not support ordering, checkout, requests, POS, or quantity tracking.
 - Public menu category badges use category-appropriate icons; the
    Non-Alcoholic badge retains the text "NA".
@@ -156,8 +154,9 @@ The current implementation and deployment status are owned by
 - Inventory edits are sent to the backend and displayed as saved only after a
    successful response. Product fields autosave; availability can be changed
    with a state selector or drag-and-drop. The board refreshes from the server
-   while open so other authorized staff edits become visible. Publish remains
-   explicit; draft preview does not alter the public menu.
+   while open so other authorized staff edits become visible. The public menu
+   automatically reflects saved active On Cart products; there is no separate
+   preview/publish step.
 - The Inventory dashboard title is **CART INVENTORY MANAGEMENT DASHBOARD**.
    The Customer name appears above and the readable Course name below it;
    internal Firestore IDs are not displayed. A horizontal category-filter row
@@ -180,8 +179,10 @@ The current implementation and deployment status are owned by
    a subcategory filters the visible products only; it does not change
    inventory data. Switching categories resets the subcategory selection to
    All.
-- Catalog actions pair **+ Category** with **+ Add Product**. **Preview Draft**
-   and **Publish Menu** are a separate adjacent action group. The three state
+- Catalog actions pair **Add Category** with **+ Add Product** and a clearly
+   labeled **View golfer menu** link for the selected Course, opening in a new
+   tab. If no slug is configured, explain that Admin must configure the link
+   rather than link to a different Course. The three state
    columns remain the sole product organization; subcategory remains product
    metadata and does not create nested inventory groups.
 - The optional Inventory price control is **Price ($)**. It converts a valid
@@ -192,10 +193,12 @@ The current implementation and deployment status are owned by
    browser regains focus. An open editor adopts server changes in untouched
    fields while preserving that user's active field edits; there is no manual
    Refresh control, edit lock, or conflict warning.
-- The anonymous course menu uses the last published snapshot. Its categories,
-   product counts, states, optional descriptions/prices, and Last Updated value
-   come from that snapshot; the timestamp is formatted in the configured Course
-   timezone. In Inventory and archived products are not presented.
+- The anonymous Course menu reads the current committed inventory through one
+   public-field allowlist. Only active On Cart products appear; Sold Out,
+   In Inventory and archived products are excluded. Categories, product counts,
+   descriptions, prices and Last Updated reflect that coherent current state.
+   The timestamp uses the Course timezone. Existing public links keep working;
+   an open menu refreshes periodically and on focus without an operator action.
 
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
@@ -205,8 +208,10 @@ by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 The CPO authorized this coherent increment on 2026-10-23, from accepted main
 `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. It is not a production release.
 On 2026-10-24 the CPO accepted its current functionality and requested the
-presentation refinement below within PR #12; this does not authorize merge
-or production deployment.
+presentation refinement below within PR #12. A subsequent same-day CPO decision
+supersedes explicit publication with an automatic current On Cart menu and
+simplifies the sales header. Neither decision authorizes merge or production
+deployment.
 
 - The Inventory banner displays the Fairway Refresh logo at 150% of its prior
   displayed dimensions at each responsive breakpoint, an accessible Admin
@@ -215,17 +220,24 @@ or production deployment.
   submission protection.
 - Sales Today sits horizontally beside Cart Inventory Management Dashboard
   on iPad/desktop. The same compact panel clearly identifies the selected
-  operator and contains Select operator/Close shift and submission recovery.
-  Add Category, Add Product, Preview Draft and Publish Menu share one action
+  operator and contains Select operator/Close out and submission recovery.
+  The sales box is labeled "Sales Today" and shows only today's total units
+  sold, not date, cart-stock totals or per-product details. Individual sales
+  and product tallies remain durable and available to the existing export.
+  After activity, the prominent shift button has two stacked lines:
+  "Close out" / "Enter final sales". Final-sales entry, attribution, safe
+  retry, failure retention and successful-close clearing are unchanged.
+  Add Category, Add Product and View golfer menu share one action
   row immediately above the category filters. Confirm inventory audit sits on
   the filter row, visually separated from filter controls. Preserve grouping
   on iPad; wrap rows cleanly on phones with no document overflow or reduced
   touch targets (44 CSS pixels minimum for these controls).
 - Routine success commentary boxes are omitted: confirmed tiles, quantities,
-  tally, shift identity and publication revision convey successful changes.
+  tally and shift identity convey successful changes.
   Actionable failures, stock conflicts, unknown submission outcomes and retry/
-  recovery controls remain visible. Explicit sale/loading/audit/publication
-  confirmations and all underlying operations are unchanged.
+  recovery controls remain visible. Sale/loading/audit confirmations remain
+  explicit. Obsolete Preview Draft/Publish Menu controls, instructions and
+  publication-status messaging are removed.
 
 - One shared cart inventory per Course uses the existing Course catalog.
   Inventory ownership remains bounded for a future Course-to-Cart hierarchy;
@@ -286,8 +298,9 @@ or production deployment.
   and direct numeric entry. Minimum is zero for adjustments and one for sales
   and loading. Buttons never submit a transaction; explicit Confirm remains
   required.
-- The compact Course-local daily tally shows products and units sold across all
-  sessions. Individual sales/adjustments remain beyond the day. Connectivity is
+- The compact Course-local daily tally shows only total units sold across all
+  sessions. Individual sales, product tallies and adjustments remain durable
+  beyond the day; hiding header details does not delete records. Connectivity is
   required; failed/uncertain submissions never appear confirmed. Retried intended
   operations cannot duplicate deductions or durable records. Stale absolute
   edits require fresh review; metadata autosaves cannot overwrite stock/state.
@@ -325,9 +338,17 @@ or production deployment.
   success closes that session's shift and clears its name. Failure or uncertainty
   preserves the name and amount, with idempotent retry/recovery. Stock, daily
   sales, other sessions and history are unaffected.
-- Stock/sales/audit/shift activity never publishes the public menu. Publication
-  remains explicit and its allowlisted immutable snapshot exposes no internal
-  quantities, staff, sales, shift or audit fields. No POS/payment processing,
+- Successful confirmed changes into/out of On Cart automatically change the
+  golfer menu, including a sale/adjustment that moves zero stock to Sold Out.
+  Saved public-facing metadata for On Cart products also appears automatically.
+  Failed, cancelled, stale or unconfirmed operations do not change public data.
+  Public reads use one coherent transaction over committed inventory, not
+  asynchronous copies or older publication snapshots. Concurrent transactions
+  and exact idempotent retries cannot replace a newer menu with older state.
+  One authoritative public-menu field allowlist excludes quantities (including
+  nested price fields), staff, sales, shifts, audits and other operational data
+  from anonymous API responses as well as visible content. Existing snapshot
+  records may remain as history but are never a serving source. No POS/payment processing,
   offline queue, trend screens, speculative role framework or physical-device
   changes are included. Accepted request queue, service categories and request
   KPIs remain unchanged.

@@ -65,8 +65,11 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         const admin=document.querySelector('[aria-label="Open Admin"]');
         return {
           title:box(document.querySelector('.inv-title')),panel:box(panel),
-          actionBoxes:[...actions.querySelectorAll('button')].map(box),
-          actionNames:[...actions.querySelectorAll('button')].map(e=>e.textContent),
+          actionBoxes:[...actions.querySelectorAll('button,a')].map(box),
+          actionNames:[...actions.querySelectorAll('button,a')].map(e=>e.textContent),
+          publicLink:{href:actions.querySelector('a')?.getAttribute('href'),target:actions.querySelector('a')?.target},
+          compactTotal:panel.querySelector('.inv-sales-total').textContent,
+          detailedTally:Boolean(panel.querySelector('ul')),
           aboveFilters:actions.nextElementSibling.classList.contains('inv-filter-row'),
           auditOnFilters:Boolean(document.querySelector('.inv-filter-row .inv-audit-action button')),
           exportInBanner:[...document.querySelectorAll('.inv-header button')].some(e=>e.textContent==='Export'),
@@ -75,7 +78,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           logo:box(document.querySelector('.inv-brand img')),
           operatorInPanel:Boolean(panel.querySelector('.inventory-session')),
           headerActions:[...document.querySelectorAll('.inv-header button,.inv-header .inv-cart-link,.inv-course-picker select')].map(box),
-          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action button,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
+          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-catalog-actions a,.inv-audit-action button,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
           overflow:document.documentElement.scrollWidth>innerWidth
         };
       })()`);
@@ -86,7 +89,10 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.equal(layout.exportHelp, false);
       assert.equal(layout.adminIcon, true);
       assert.equal(layout.operatorInPanel, true);
-      assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product', 'Preview Draft', 'Publish Menu']);
+      assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product', 'View golfer menu']);
+      assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank' });
+      assert.equal(layout.compactTotal, 'Sales Today0 units sold');
+      assert.equal(layout.detailedTally, false);
       assert.equal(layout.logo.width, width <= 380 ? 90 : width <= 680 ? 108 : 156, 'Logo is 150% of its previous displayed width');
       assert.equal(layout.logo.height, width <= 680 ? 72 : 96);
       for (const box of layout.targets) {
@@ -168,7 +174,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.equal(data.products[0].state, 'in_inventory');
       assert.equal(await evaluate('Boolean(document.querySelector(".inv-notice"))'), false, 'Routine success creates no commentary box');
       assert.ok(await evaluate('document.querySelector(".inv-daily-sales .inventory-session").textContent.includes("Pointer Operator")'), 'Selected operator stays clear in Sales Today');
-      assert.ok(await evaluate('[...document.querySelectorAll(".inv-daily-sales .inventory-session button")].some(e=>e.textContent==="Close shift")'), 'Close shift is inside Sales Today');
+      assert.deepEqual(await evaluate('[...document.querySelectorAll(".inv-daily-sales .inventory-close-out > span")].map(e=>e.textContent)'), ['Close out', 'Enter final sales'], 'Prominent stacked close-out stays inside panel');
       assert.equal(data.writes[0].quantity, undefined);
       assert.equal(data.writes[0].shift_id, 'pointer-shift');
       await navigate('Page.reload');

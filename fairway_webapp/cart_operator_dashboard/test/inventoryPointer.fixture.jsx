@@ -50,7 +50,7 @@ window.fetch = async (url, options = {}) => {
     return response(product);
   }
   if (route.endsWith('/POINTER-U')) return response({
-    ...course, products: [...data.products.slice(1), data.products[0]], inventory_revision: data.revision, categories: [{ category_id: 'drinks', name: 'Drinks', subcategories: [] }],
+    ...course, public_menu_slug: 'pointer-course', products: [...data.products.slice(1), data.products[0]], inventory_revision: data.revision, categories: [{ category_id: 'drinks', name: 'Drinks', subcategories: [] }],
     daily_sales: { local_date: '2026-10-23', total_units: data.sales, products: data.sales ? [{ product_id: 'drag', name: 'Pointer Water', units: data.sales }] : [] },
   });
   throw new Error(`Unexpected pointer fixture route ${route}`);

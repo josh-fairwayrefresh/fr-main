@@ -149,8 +149,19 @@ and closes only with a durable submitted USD total. Both selected staff
 snapshots and authenticated UID are recorded. Stock/history commit together;
 stable operation identities make lost-response retries and shift close
 idempotent. Uncertain outcomes remain explicit and recoverable, not success.
-Public snapshots retain their existing explicit publication/field allowlist;
-no internal stock/staff/shift/audit data enters the golfer menu.
+The CPO's 2026-10-24 follow-up supersedes manual publication: the anonymous
+menu transactionally reads the same committed Course inventory, selecting only
+active On Cart products through one public-product allowlist (including nested
+price projection). There is no second mutable menu projection or publication
+pointer. Old published snapshots/metadata remain historical and unmodified,
+not a serving source. Existing slug mappings and branded URLs are preserved;
+other configured Course slugs use the same public route. Anonymous responses
+are no-store; the public UI refreshes every 15 seconds/on focus and aborts
+superseded requests so older responses cannot replace current state. Retired
+preview/publish endpoints explicitly return 410 without mutation or shift
+activity, directing cached clients to refresh. This changes sandbox source,
+not production release authority. No internal stock/staff/shift/audit data
+enters the golfer menu.
 
 K-001/K-002 readiness uses the CPO's resolved transitions rather than inventing
 new behavior. K-003 assigns each capability one owner; K-004 focuses evidence

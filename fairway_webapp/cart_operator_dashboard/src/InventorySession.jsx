@@ -221,11 +221,11 @@ export function InventorySessionControls({ session }) {
   }
   return <div className="inventory-session">
     <span>Operator: <strong>{session.shift?.staff_name || 'Not selected'}</strong></span>
-    <button type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
+    <button className={session.shift?.has_activity ? 'inventory-close-out' : undefined} type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
       setError(''); setClosing(Boolean(session.shift?.has_activity));
       setAmount(session.closeDraft);
       if (!session.shift?.has_activity) session.choose();
-    }}>{session.shift?.has_activity ? 'Close shift' : 'Select operator'}</button>
+    }}>{session.shift?.has_activity ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
     {session.unresolved && <button type="button" disabled={pending} onClick={async () => {
       setPending(true); setError('');
       try { await session.resolvePending(); setClosing(false); setAmount(''); }

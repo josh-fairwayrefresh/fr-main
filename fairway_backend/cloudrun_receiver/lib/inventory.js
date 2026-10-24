@@ -13,9 +13,7 @@ const PRODUCTS_COLLECTION = 'inventory_products';
 const CATEGORIES_COLLECTION = 'inventory_categories';
 const EVENTS_COLLECTION = 'inventory_events';
 const SUBCATEGORIES_COLLECTION = 'subcategories';
-const PUBLISHED_MENUS_COLLECTION = 'published_menus';
 const INVENTORY_STATES = new Set(['on_cart', 'sold_out', 'in_inventory']);
-const MAX_MENU_BYTES = 900_000;
 
 class InventoryError extends Error {
   constructor(status, code, message, details = undefined) {
@@ -100,10 +98,6 @@ function eventsCollection(db, customerId, courseId) {
   return coursesCollection(db, customerId).doc(courseId).collection(EVENTS_COLLECTION);
 }
 
-function menuSnapshotsCollection(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId).collection(PUBLISHED_MENUS_COLLECTION);
-}
-
 function courseRef(db, customerId, courseId) {
   return coursesCollection(db, customerId).doc(courseId);
 }
@@ -173,14 +167,17 @@ function publicProduct(product) {
     subcategory: product.subcategory_name || null,
     brand: product.brand,
     description: product.description,
-    price: product.price,
+    price: product.price ? {
+      amount_minor: product.price.amount_minor,
+      currency_code: product.price.currency_code,
+    } : null,
     state: product.state,
   };
 }
 
 function toPublicMenu(products) {
   return sortProducts(products.filter((product) => (
-    product.archived !== true && ['on_cart', 'sold_out'].includes(product.state)
+    product.archived !== true && product.state === 'on_cart'
   ))).map(publicProduct);
 }
 
@@ -221,12 +218,7 @@ async function listInventory(db, customerId, courseId) {
     course_name: courseSnapshot.data().course_name || null,
     timezone: courseSnapshot.data().timezone || null,
     inventory_revision: state.inventory_revision || 0,
-    published_version: state.published_version || 0,
-    published_revision: state.published_revision ?? null,
     public_menu_slug: state.public_menu_slug || null,
-    has_unpublished_changes: state.published_version
-      ? (state.inventory_revision || 0) !== state.published_revision
-      : (state.inventory_revision || 0) > 0,
     categories: categoryDocs.sort((a, b) => a.name.localeCompare(b.name)),
     products: sortProducts(products.filter((product) => product.archived !== true)),
     archived_products: sortProducts(products.filter((product) => product.archived === true)),
@@ -287,8 +279,6 @@ async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid
     transaction.set(stateDocument, {
       ...state,
       inventory_revision: state.inventory_revision || 0,
-      published_version: state.published_version || 0,
-      published_revision: state.published_revision ?? null,
       public_menu_slug: slug,
       updated_at: timestamp,
       updated_by: actorUid,
@@ -354,10 +344,6 @@ function nextState(current, actorUid, timestamp) {
   return {
     ...current,
     inventory_revision: (current.inventory_revision || 0) + 1,
-    published_version: current.published_version || 0,
-    published_revision: current.published_revision ?? null,
-    published_at: current.published_at || null,
-    published_by: current.published_by || null,
     public_menu_slug: current.public_menu_slug || null,
     updated_at: timestamp,
     updated_by: actorUid,
@@ -1109,191 +1095,32 @@ async function deleteCategory(db, customerId, courseId, categoryId, actorUid, co
   });
 }
 
-async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid) {
-  const slug = validateSlug(value);
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const nextSlugRef = db.collection(PUBLIC_MENU_SLUGS).doc(slug);
-
-  return db.runTransaction(async (transaction) => {
-    const [courseSnapshot, stateSnapshot, nextSlugSnapshot] = await Promise.all([
-      transaction.get(courseDocument),
-      transaction.get(stateDocument),
-      transaction.get(nextSlugRef),
-    ]);
-    if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-    const nextSlug = nextSlugSnapshot.exists ? nextSlugSnapshot.data() : null;
-    if (nextSlug && (nextSlug.customer_id !== customerId || nextSlug.course_id !== courseId)) {
-      fail(409, 'slug_in_use', 'Public menu slug is already assigned to another Course');
-    }
-
-    const state = stateSnapshot.exists ? stateSnapshot.data() : {};
-    const previousSlug = state.public_menu_slug || null;
-    const previousSlugRef = previousSlug && previousSlug !== slug
-      ? db.collection(PUBLIC_MENU_SLUGS).doc(previousSlug)
-      : null;
-    const previousSlugSnapshot = previousSlugRef ? await transaction.get(previousSlugRef) : null;
-    if (previousSlugSnapshot?.exists) {
-      const previous = previousSlugSnapshot.data();
-      if (previous.customer_id === customerId && previous.course_id === courseId) {
-        transaction.delete(previousSlugRef);
-      }
-    }
-
-    const timestamp = FieldValue.serverTimestamp();
-    transaction.set(nextSlugRef, {
-      customer_id: customerId,
-      course_id: courseId,
-      updated_at: timestamp,
-      updated_by: actorUid,
-    });
-    transaction.set(stateDocument, {
-      ...state,
-      inventory_revision: state.inventory_revision || 0,
-      published_version: state.published_version || 0,
-      published_revision: state.published_revision ?? null,
-      public_menu_slug: slug,
-      updated_at: timestamp,
-      updated_by: actorUid,
-    });
-    return { customer_id: customerId, course_id: courseId, public_menu_slug: slug };
-  });
-}
-
-function publicProducts(products) {
-  return sortProducts(products.filter((product) => (
-    product.archived !== true && ['on_cart', 'sold_out'].includes(product.state)
-  ))).map(publicProduct);
-}
-
-function sortProducts(products) {
-  return [...products].sort((left, right) => (
-    left.category_name.localeCompare(right.category_name) ||
-    (left.subcategory_name || '').localeCompare(right.subcategory_name || '') ||
-    left.name.localeCompare(right.name)
-  ));
-}
-
-function publicProduct(product) {
-  return {
-    product_id: product.product_id,
-    name: product.name,
-    category: product.category_name,
-    subcategory: product.subcategory_name || null,
-    brand: product.brand,
-    description: product.description,
-    price: product.price,
-    state: product.state,
-  };
-}
-
-async function previewMenu(db, customerId, courseId) {
-  const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
-    courseRef(db, customerId, courseId).get(),
-    inventoryStateRef(db, customerId, courseId).get(),
-    productsCollection(db, customerId, courseId).get(),
-  ]);
-  if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-  const state = stateSnapshot.exists ? stateSnapshot.data() : {};
-  const products = productsSnapshot.docs.map((productDoc) => ({ product_id: productDoc.id, ...productDoc.data() }));
-  return {
-    course_id: courseId,
-    course_name: courseSnapshot.data().course_name || null,
-    inventory_revision: state.inventory_revision || 0,
-    products: publicProducts(products),
-  };
-}
-
-async function publishMenu(db, customerId, courseId, actorUid, context) {
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const productsQuery = productsCollection(db, customerId, courseId);
-  const publication = await runMutation(db, customerId, courseId, actorUid, context, 'publish', context, async (transaction) => {
-    const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
-      transaction.get(courseDocument),
-      transaction.get(stateDocument),
-      transaction.get(productsQuery),
-    ]);
-    if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-    const state = stateSnapshot.exists ? stateSnapshot.data() : {};
-    const slug = state.public_menu_slug;
-    if (!slug) fail(409, 'menu_slug_not_configured', 'A public menu slug must be configured before publishing');
-
-    const slugRef = db.collection(PUBLIC_MENU_SLUGS).doc(slug);
-    const slugSnapshot = await transaction.get(slugRef);
-    if (!slugSnapshot.exists || slugSnapshot.data().customer_id !== customerId || slugSnapshot.data().course_id !== courseId) {
-      fail(409, 'menu_slug_not_configured', 'Public menu slug mapping is not configured for this Course');
-    }
-
-    const products = productsSnapshot.docs.map((productDoc) => ({ product_id: productDoc.id, ...productDoc.data() }));
-    const menuProducts = publicProducts(products);
-    const snapshotPayload = {
-      course_id: courseId,
-      course_name: courseSnapshot.data().course_name || null,
-      version: (state.published_version || 0) + 1,
-      inventory_revision: state.inventory_revision || 0,
-      products: menuProducts,
-    };
-    if (Buffer.byteLength(JSON.stringify(snapshotPayload), 'utf8') > MAX_MENU_BYTES) {
-      fail(413, 'menu_snapshot_too_large', 'Published menu exceeds the supported snapshot size');
-    }
-
-    const timestamp = FieldValue.serverTimestamp();
-    const versionId = String(snapshotPayload.version).padStart(10, '0');
-    transaction.set(menuSnapshotsCollection(db, customerId, courseId).doc(versionId), {
-      ...snapshotPayload,
-      published_at: timestamp,
-      published_by: actorUid,
-    });
-    transaction.set(stateDocument, {
-      ...state,
-      inventory_revision: state.inventory_revision || 0,
-      published_version: snapshotPayload.version,
-      published_revision: snapshotPayload.inventory_revision,
-      published_at: timestamp,
-      published_by: actorUid,
-      updated_at: timestamp,
-      updated_by: actorUid,
-    });
-    transaction.set(eventsCollection(db, customerId, courseId).doc(), {
-      action: 'menu_published',
-      actor_uid: actorUid,
-      inventory_revision: snapshotPayload.inventory_revision,
-      published_version: snapshotPayload.version,
-      created_at: timestamp,
-    });
-    return { version: snapshotPayload.version, slug };
-  });
-  const versionId = String(publication.version).padStart(10, '0');
-  const saved = await menuSnapshotsCollection(db, customerId, courseId).doc(versionId).get();
-  if (!saved.exists) fail(500, 'publication_readback_failed', 'Published snapshot could not be read back');
-  return { public_menu_slug: publication.slug, ...saved.data() };
-}
-
 async function getPublicMenu(db, slugValue) {
   const slug = validateSlug(slugValue);
-  const slugSnapshot = await db.collection(PUBLIC_MENU_SLUGS).doc(slug).get();
-  if (!slugSnapshot.exists) fail(404, 'menu_not_found', 'Published menu not found');
-  const { customer_id: customerId, course_id: courseId } = slugSnapshot.data();
-  if (typeof customerId !== 'string' || typeof courseId !== 'string') {
-    fail(404, 'menu_not_found', 'Published menu not found');
-  }
-  const stateSnapshot = await inventoryStateRef(db, customerId, courseId).get();
-  if (!stateSnapshot.exists || !Number.isSafeInteger(stateSnapshot.data().published_version) || stateSnapshot.data().published_version < 1) {
-    fail(404, 'menu_not_found', 'Published menu not found');
-  }
-  const versionId = String(stateSnapshot.data().published_version).padStart(10, '0');
-  const snapshot = await menuSnapshotsCollection(db, customerId, courseId).doc(versionId).get();
-  if (!snapshot.exists) fail(404, 'menu_not_found', 'Published menu not found');
-  const data = snapshot.data();
-  return {
-    course_id: courseId,
-    course_name: data.course_name,
-    version: data.version,
-    inventory_revision: data.inventory_revision,
-    published_at: data.published_at,
-    products: data.products,
-  };
+  return db.runTransaction(async (transaction) => {
+    const slugSnapshot = await transaction.get(db.collection(PUBLIC_MENU_SLUGS).doc(slug));
+    if (!slugSnapshot.exists) fail(404, 'menu_not_found', 'Course menu not found');
+    const { customer_id: customerId, course_id: courseId } = slugSnapshot.data();
+    if (typeof customerId !== 'string' || typeof courseId !== 'string') {
+      fail(404, 'menu_not_found', 'Course menu not found');
+    }
+    const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
+      transaction.get(courseRef(db, customerId, courseId)),
+      transaction.get(inventoryStateRef(db, customerId, courseId)),
+      transaction.get(productsCollection(db, customerId, courseId)),
+    ]);
+    if (!courseSnapshot.exists) fail(404, 'menu_not_found', 'Course menu not found');
+    const course = courseSnapshot.data();
+    const state = stateSnapshot.data() || {};
+    return {
+      course_id: courseId,
+      course_name: course.course_name || null,
+      timezone: course.timezone || null,
+      inventory_revision: state.inventory_revision || 0,
+      updated_at: state.updated_at || null,
+      products: toPublicMenu(productsSnapshot.docs.map((doc) => ({ ...doc.data(), product_id: doc.id }))),
+    };
+  }, { readOnly: true });
 }
 
 module.exports = {
@@ -1318,7 +1145,5 @@ module.exports = {
   createProduct,
   updateProduct,
   archiveProduct,
-  previewMenu,
-  publishMenu,
   getPublicMenu,
 };

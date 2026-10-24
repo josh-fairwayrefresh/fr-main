@@ -12,11 +12,14 @@
 .inv-stock-controls button:disabled { opacity: .5; cursor: not-allowed; }
 .inv-daily-sales { min-width: 0; display: grid; gap: 12px; padding: 16px; border: 1px solid #bac9bd; border-radius: 10px; background: white; font-size: 12px; overflow-wrap: anywhere; }
 .inv-daily-sales strong, .inv-daily-sales span { display: block; }
-.inv-daily-sales ul { display: flex; flex-wrap: wrap; gap: 4px 18px; padding-left: 18px; margin: 8px 0 0; }
-.inv-daily-sales ul:empty { display: none; }
+.inv-sales-total { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inv-sales-total > span { font-size: 18px; font-weight: 800; }
 .inv-daily-sales .inventory-session { border-top: 1px solid #d9e0db; padding-top: 12px; }
 .inv-daily-sales .inventory-session > span:first-child { flex: 1 1 140px; }
 .inv-daily-sales .inventory-session button { min-height: 44px; }
+.inventory-session .inventory-close-out { display: grid; gap: 3px; min-height: 56px; padding: 10px 16px; border-color: #17603d; background: #17603d; color: #fff; font-weight: 800; }
+.inventory-close-out span { display: block; }
+.inventory-close-out span + span { font-size: 11px; font-weight: 600; }
 .inv-quantity-field { display: grid; gap: 8px; }
 .inv-quantity-input { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 12px; align-items: center; }
 .inv-quantity-input button { width: 48px; height: 48px; padding: 0; border: 1px solid #bac9bd; border-radius: 7px; background: #fff; color: #183e2c; font-size: 24px; cursor: pointer; }

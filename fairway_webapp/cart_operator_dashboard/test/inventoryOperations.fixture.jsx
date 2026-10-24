@@ -14,6 +14,7 @@ const catalog = [
 let staff = [{ staff_id: 'manager', name: 'Test Manager', role: 'fnb_management', active: true }];
 let shift = null;
 let revision = 0;
+let loadedRevision = -1;
 let unitsSold = 0;
 let sales = 0;
 let closes = 0;
@@ -93,11 +94,14 @@ window.fetch = async (url, options = {}) => {
     committed.set(body.operation_id, { audit_id: 'audit1' });
     return response({ audit_id: 'audit1' });
   }
-  if (route.endsWith('/TEST-U') && method === 'GET') return response({
+  if (route.endsWith('/TEST-U') && method === 'GET') {
+    loadedRevision = revision;
+    return response({
     ...course,
     products: catalog, categories: [{ category_id: 'drinks', name: 'Drinks', subcategories: [] }, { category_id: 'food', name: 'Food', subcategories: [] }],
     inventory_revision: revision, daily_sales: { local_date: '2026-10-23', total_units: unitsSold, products: unitsSold ? [{ product_id: 'p1', name: 'Water', units: unitsSold }] : [] },
-  });
+    });
+  }
   throw new Error(`Unexpected fixture request ${method} ${route}`);
 };
 const root = createRoot(document.getElementById('root'));
@@ -204,15 +208,17 @@ try {
   check(audit === null, 'A concurrent revision must not save an unconfirmed baseline');
   click(auditSection.querySelector('button[type="button"]'));
   window.dispatchEvent(new Event('inventory-updated'));
-  await wait(() => document.querySelector('.inv-revision').textContent.includes(`Revision ${revision}`));
+  await wait(() => loadedRevision === revision);
+  flushSync(() => {});
   click(button('Confirm inventory audit'));
+  await wait(() => document.querySelector('#inv-audit-title')?.closest('section').textContent.includes(`revision ${revision}`));
   const freshAudit = document.querySelector('#inv-audit-title').closest('section');
   input(freshAudit.querySelector('select'), 'manager');
   click(freshAudit.querySelector('input[type="checkbox"]'));
   click(button('Confirm audit'));
   await wait(() => !document.querySelector('#inv-audit-title'));
   check(audit.length === 2, 'Audit includes all On Cart and Sold Out');
-  click(button('Close shift'));
+  click(document.querySelector('.inventory-close-out'));
   input(document.querySelector('.inventory-session-overlay input'), '12.34');
   click(button('Submit shift total'));
   await wait(() => document.querySelector('.inventory-session-overlay [role="alert"]'));
@@ -230,7 +236,7 @@ try {
     const bounds = control.getBoundingClientRect();
     check(bounds.left >= 0 && bounds.right <= innerWidth && bounds.width > 0, 'Stock actions must be visible within viewport');
   }
-  check(!calls.some(call => call.route.endsWith('/publish')), 'Operational actions never publish');
+  check(!calls.some(call => call.route.endsWith('/publish')), 'No obsolete manual publication calls');
   flushSync(() => root.render(<CustomerStaff user={user} apiBaseUrl={location.origin} customer={{ customer_id: 'TEST-C', customer_name: 'Inventory Test' }} />));
   click(button('Staff list · Inventory Test'));
   await wait(() => document.body.textContent.includes('Test Manager'));
