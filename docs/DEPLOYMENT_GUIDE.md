@@ -1089,6 +1089,94 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Remaining-sale confirmation and full-height drop targets — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority/source:** CPO feedback supersedes positive On Cart-to-Sold Out
+  availability-only behavior. Application source
+  `8b57602475dc21cff20f5d9b1380fb9ffbd40071`, existing isolated branch
+  `feat/persistent-cart-inventory`, draft PR #12. No merge or production work.
+  UX/Engineering owners record the new contract.
+- **Behavior:** drag, keyboard Move here and selector share one intent owner.
+  Positive remaining stock opens "Confirm that you sold the remaining X units
+  of [product name]." Confirm reuses the existing attributed sale transaction,
+  sale event, Course-local tally and idempotency replay. Expected stock revision
+  binds the displayed amount; intervening changes reject without another sale.
+  Explicit Refresh confirmation updates the displayed amount but does not
+  submit; another Confirm is required. Cancel makes no operation. Zero On Cart
+  stock uses availability only, not a zero-unit sale. Restaurant returns retain
+  quantity; loading still confirms a positive Quantity. Cached availability-only
+  clients cannot bypass a remaining sale; the server rejects that positive-stock
+  transition explicitly.
+- **First-attempt drag investigation:** actual previous served layout had
+  `align-items:start`; at 768x1024, a lower Return Cycle tile started at y728
+  while Sold Out ended at y720. Its straight-across point at y753 hit no column.
+  Real mouse down/move/up reproduced no highlight/no move, without mutations.
+  Stretching adjacent columns to full grid-row height closes that target gap.
+  Accepted noninteractive mouse regions also prevent competing native
+  text/HTML dragging; interactive children and normal touch scrolling remain.
+  This is a confirmed failure mechanism, not a claim to have observed the
+  CPO's exact physical gesture.
+- **Verification:** full backend suite 154 passed. Isolated real Firestore
+  emulator 20 passed, one in-memory-only rollback fault injection skipped;
+  that rollback passes in the unit suite. Existing installed Java 21 was
+  explicitly added to PATH after default Java discovery failed; no dependency
+  installation. Frontend 68 unit checks and five rendered/browser regressions
+  passed; sandbox configuration/build, editor diagnostics and diff checks pass.
+  New backend checks cover attributed exact remaining sale, concurrent
+  same-operation replay, stale sale/adjustment revisions (including restored
+  original quantity), positive availability bypass rejection and zero-stock
+  non-sale transition. Normal concurrent quick sales retain delta behavior.
+- **Rendered input coverage:** browser-generated mouse at 1024x900 and trusted
+  touch at 768x900/375x900, repeated first-drop confirmations, lower-card
+  horizontal drops, selected noninteractive text, keyboard activation,
+  selector parity, Cancel, stale confirmation/explicit refresh, response-loss
+  retry with exactly one sale, tally update and zero-stock availability.
+  Existing return/load, touch scrolling/edge scrolling, staff resumption,
+  cancellation, stock/retry/audit/shift, CSV and queue/tab/category checks pass.
+  One old virtual-time browser harness run ended RUNNING rather than PASS;
+  the complete rerun passed. No synthetic handler execution is used as drag
+  acceptance evidence.
+- **Publication:** sandbox Admin `fairway-admin-sandbox-00021-wbd`, Ready/100%
+  after explicit traffic activation (source deployment initially retained
+  pinned 00020 traffic). Image digest
+  `sha256:eda27f71dfa12bfec027d77eae5de5970ca451fb108d18e5f063717bfcdae397`,
+  build `caa05db9-49ca-4e67-90b1-542ffa87f8e6`, source archive
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792809750.687911-3d2968d66bf8400c9037d825495559d1.zip#1792809751075769`.
+  Hosting project/site `fairway-refresh-sandbox-260930`, version
+  `166bc5e1aad1e2c7`, release `1792809869472000`,
+  time `2026-10-24T02:44:29.472Z`. Receiver unchanged at
+  `fairway-button-receiver-sandbox-00025-9lr`/100%; no Receiver deployment.
+- **Served artifact verification:** every built JS/CSS file fetched and matched
+  SHA-256. Main `index-BqTwjrSr.js`:
+  `0262361b0a2a755f07c4c6cf091128b0879c7e1d3e5bc7c181d40208425a52cf`;
+  inventory `InventoryApp-DD6cXk9p.js`:
+  `9916d463df1ed5cda23c13e3bdc217301731a3b46115f1a04e0b23888c55c5b0`;
+  inventory CSS `InventoryApp-BLowayP0.css`:
+  `c97400c7395e5cd448b0244f47e31fdd159711922aee3af0de32ce4d89ce87d6`.
+- **Live sandbox evidence:** dedicated synthetic Return Cycle only. Three
+  consecutive real Playwright mouse horizontal drops at 768x1024 each
+  highlighted Sold Out and opened the exact 3-unit confirmation on the first
+  attempt; Cancel left On Cart/3 and the 2026-10-23 tally 25 unchanged.
+  Trusted Chromium CDP touch input in the visible independent session opened
+  the same confirmation on its first drop, with `isTrusted:true` pointerdown/up.
+  A separate session's attributed adjustment to 4 invalidated the open 3-unit
+  confirmation: HTTP409 `stock_revision_conflict`, Confirm disabled, explicit
+  refresh displayed 4 without submitting. Reconfirmation returned HTTP200,
+  zero stock/Sold Out, and survived reload.
+- **Durable result:** sale event `HGeY1Eg6nlLBC3y9J1C8`, operation
+  `14d6aef2-b88a-4b6f-b1b1-e2c0814b5815`, four units, stock 4->0,
+  On Cart->Sold Out, stock revision 14/inventory revision 54, selected synthetic
+  manager, shift and authenticated UID. Live testing crossed Course-local
+  midnight; this sale belongs to 2026-10-24 and the displayed new-day tally is
+  four, not a claim that the previous day's 25 was erased. Final Return Cycle
+  remains Sold Out/0; no artificial restock/reset after the sale. Other CPO
+  product changes observed during review were preserved. Public menu remains
+  version zero/no slug. No audit confirmation, shift close, request/service/
+  device operation or production change was performed.
+- **Review:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=8b57602`.
+  Refresh cached tabs. Chromium-generated pointer/touch evidence is not
+  physical iPad/Safari acceptance, which remains with the CPO.
+
 ### Inventory Pointer Drag Correction — PR #12 Sandbox (2026-10-24 UTC)
 
 - **Defect/evidence correction:** the CPO confirmed native inventory dragging
