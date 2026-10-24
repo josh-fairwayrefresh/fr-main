@@ -1089,6 +1089,101 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Sold Out invariant, On Cart audits and idle completion — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority:** CPO correction within draft PR #12. No merge, production data
+  repair/deployment, firmware or physical-device operations. Current requirements
+  are owned by the UX specification; earlier entries retain historical evidence.
+- **Published source:** `118a0bbb232ccf21f52d7cd8c220966f0eb52ba5` on
+  `feat/persistent-cart-inventory`, based on main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Subsequent evidence-only commits
+  do not change deployed application bytes.
+- **Contract correction:** positive On Cart **or In Inventory** to Sold Out
+  uses the existing sale mutation with explicit `state: sold_out`, exact remaining
+  units and required `expected_stock_revision`. The transaction validates current
+  revision/count, records one attributed sale and writes zero/Sold Out together.
+  Ordinary sales remain On Cart-only; availability-only moves cannot bypass the
+  invariant, and positive Sold Out creation is rejected. Cancel changes nothing.
+  Stale confirmation requires refresh/reconfirmation; identical retries reuse
+  the original operation. No zero-unit sales, clamping or fabricated corrections.
+- **Audit/UI correction:** new immutable audits contain only nonarchived current
+  On Cart products. Old audits remain unchanged. The dialog says exactly
+  "Record your cart inventory at the start and end of a shift." without revision
+  commentary. Audit is directly beneath Close out / Enter final sales inside
+  the operator/Sales Today panel. Golfer-View Menu remains on the filter-row right
+  with matching typography and a new-tab selected-Course link.
+- **Idle completion:** successful stock/audit submissions cannot re-enter during
+  their post-save refresh. Successful close invalidates older session reads,
+  clears only that scoped session's name/draft/continuation and leaves no dialog.
+  Failure/uncertainty retains explicit retry recovery. A subsequent attributed
+  user action, not completed audit/close callbacks, prompts for a name.
+  The initial live pre-fix audit/close sequence did not reproduce the CPO's exact
+  popup. Deterministic regressions reproduced repeated audit completion during
+  refresh and a delayed pre-close session result restoring the closed identity;
+  removing either respective guard reproduces its failure. Physical iPad cause
+  and acceptance are not claimed from those tests.
+- **Verification:** backend **158 passed**; isolated Firestore emulator
+  **24 passed, 1 unit-only fault-injection case skipped** (passed in-memory);
+  frontend **69 passed**; full browser **6 passed**. Final two affected browser
+  tests were rerun after the scoped-generation/audit-loading refinements and
+  passed, then sandbox configuration/build passed. Editor diagnostics and
+  `git diff --check` passed. Existing stock concurrency, retry, immutable/stale
+  audit, shift recovery, public privacy, export, queue and service regressions
+  remain covered. The existing large lazy Excel chunk warning is nonblocking.
+- **Admin publication:** `fairway-admin-sandbox-00023-hsd`, explicitly routed
+  **100%**, verified Ready/Active. Image
+  `sha256:fd519297b92da6f53212c1e28294ce9429c7edadb93aadc97bee264ff9946805`;
+  build `6f0b12fb-62b8-4dfc-ab98-08e9303c57fa`; source
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792879489.086242-355b700cc08d47338cbbb028b7452031.zip#1792879489428230`.
+  Runtime service account, sandbox project/env, allowed origin and service-control
+  setting matched the predeployment description. Receiver remained
+  `fairway-button-receiver-sandbox-00025-9lr` at **100%**, not redeployed.
+- **Hosting publication:** version **`a26dc30c32e60f4f`**, release
+  **`1792882873237000`**, **2026-10-24T23:01:13.237Z**. Exact served index and
+  all **11** asset files matched the committed-source local build.
+  Firebase credentials were refreshed before successful publication.
+- **Deployed interaction:** browser-generated mouse dragging from In Inventory
+  opened the remaining-two confirmation on its first gesture; Cancel retained
+  revision 71, quantity 2 and daily total 7. The selector opened the same dialog;
+  Confirm committed In Inventory 2 -> Sold Out 0 and total 9. Confirmed loading
+  restored On Cart 2. Browser-generated touch input then opened remaining-two
+  confirmation on its first gesture. An attributed test adjustment to 1 made
+  that confirmation reject with 409; refresh displayed remaining-one, and Confirm
+  committed On Cart 1 -> Sold Out 0, total 10. Replaying the exact successful
+  operation changed neither inventory nor tally and persisted only one sale.
+  These were trusted browser input, not synthetic `dispatchEvent` drag proof.
+  Physical iPad/Safari acceptance remains for the CPO.
+- **Deployed audit/close:** the exact explanation and only Tea 4 / Automatic Menu
+  Updated 2 appeared in the audit; Sold Out and In Inventory were absent.
+  Audit `FX7ZQ4mylGv79M2Ia3yE` durably snapshots those two On Cart products at
+  revision 75, manager approval, operator identity, Auth account and server time.
+  Success left no chooser. Test shift `D0kmQ06UJmDPLBsBUPCV` closed for **$0.00**;
+  after a delay and focus refresh the name remained Not selected with no dialog.
+  Only a subsequent explicit quantity-confirm action prompted for staff; both
+  dialogs were cancelled, leaving the UI idle and inventory unchanged.
+- **Data accounting:** scope was labeled `CUST-0005 / COURSE-0007` only. New
+  `CPO TEST Sold Out Invariant 118a0bb` product `PwwYVkfzoSgbRrWCYl6Q` remains
+  Sold Out 0 with two genuine test sale records (2 + 1 units), one loading event
+  and one explicit 2 -> 1 adjustment used to test stale confirmation.
+  Existing five products' quantity/state/stock revisions were unchanged; other
+  sessions were not closed or reassigned. Final Course revision is 76.
+  Pre-fix investigation audit `yuka2lA1ot77BJ8CDNl1` at revision 69 retained its
+  then-valid three-product scope; its test shift `0acqXFukAHX5AZyOmMLG` closed
+  for $0.00. Neither historical record was rewritten.
+- **Existing-data scan:** before testing, all **65** sandbox inventory products
+  contained **zero** positive-quantity Sold Out records. Final **66**-product
+  scan again found zero; no legacy correction or invented sale was required.
+  Durable readback verified both attributed test sales, exactly one record for
+  the replayed operation, the two-product audit and the closed shift.
+  Production was not inspected or silently repaired.
+- **Responsive/live preservation:** deployed geometry at **1440/1024/768/430/375
+  px** showed no horizontal overflow, clipped relevant controls or lost grouping.
+  Audit remained beneath the session action inside its panel, menu typography
+  matched, and relevant targets remained at least 44 x 44 pixels. Public response
+  still contained only the two committed On Cart products with no quantities or
+  private operational records. Review:
+  <https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=118a0bb>.
+
 ### Open/reload menu and Excel inventory report — PR #12 Sandbox (2026-10-24 UTC)
 
 - **Authority:** CPO refinement within existing draft PR #12, superseding the
@@ -2634,7 +2729,7 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
-| `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use View Menu. |
+| `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use Golfer-View Menu. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Transactionally reads current committed active On Cart products through the single public allowlist; no quantity or internal operational fields, no-store. |
 | `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
 | `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; it does not create Auth users or manage passwords. |
