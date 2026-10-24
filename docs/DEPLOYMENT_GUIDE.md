@@ -1089,6 +1089,123 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Automatic current On Cart menu and compact sales — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority/current requirement:** the CPO superseded the explicit
+  Preview/Publish workflow with automatic current On Cart serving, compact
+  Sales Today and prominent two-line Close out. This remains draft PR #12,
+  sandbox-only; no merge or production deployment/data authority. The earlier
+  publication entries below are dated history, not current instructions.
+  UX owns behavior; the Engineering Guide owns the single-state architecture.
+- **Published application source:** `698443fc10e042eb603cd5016a7ef546c7791ac8`,
+  branch `feat/persistent-cart-inventory`, based on canonical main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Evidence-only commits do not
+  change these deployed artifacts.
+- **Implementation:** anonymous public reads use one read-only Firestore
+  transaction over the existing slug/Course/inventory state/products, selecting
+  active On Cart records through one public-product field allowlist. Nested
+  price fields are explicitly projected too. There is no second menu balance,
+  asynchronous projection, publication pointer dependency, or snapshot write.
+  Historical snapshots/fields remain untouched, never served. Successful
+  stock/metadata transactions immediately determine subsequent API reads.
+  Failed/cancelled/not-yet-confirmed operations do not change those records;
+  exact operation replay cannot resurrect an older public projection.
+  Existing URLs/slugs remain valid. Generic configured Course slugs render
+  returned Course name/timezone without borrowing Monarch branding.
+  No-store responses/fetches, 15-second/focus refresh and abort/ignore of
+  superseded requests prevent stale client refreshes replacing newer results.
+  Retired preview/publish endpoints return explicit 410 without mutation or
+  shift activity and tell cached clients to refresh.
+- **UI:** Sales Today displays only the Course-local day's total units;
+  individual sales/product tallies remain durable and available to export.
+  Selected operator stays clear; prominent Close out / Enter final sales uses
+  the existing close/attribution/recovery operation. Removed manual publication
+  controls, preview dialog and publication-status instructions. View golfer menu
+  opens the selected Course's configured public link in a new tab; unconfigured
+  Courses get an explicit Admin-configuration explanation rather than a wrong
+  Course link.
+- **Validation:** full backend 154 passed; real Firestore emulator 20 passed,
+  one unit-only fault-injection scenario skipped there (passed in-memory).
+  Frontend 68 passed, browser six passed, final focused pointer/public-menu
+  checks and sandbox config/build passed; editor diagnostics/diff checks clean.
+  Coverage includes transaction-consistent public reads during concurrent sales,
+  metadata edits, zero-stock removal, no snapshot dependency, exact replay,
+  rollback, nested privacy allowlisting, public no-store/access boundary,
+  generic/legacy URLs, stale client response suppression, compact totals,
+  two-line close-out and 44-pixel responsive controls. Existing stock/retry/
+  audit/shift/export/drag/queue/category regressions pass. A test that previously
+  waited on removed publication/revision UI now waits for fetched state and
+  asserts the actual reopened audit revision. Existing build chunk-size warning
+  remains nonblocking.
+- **Admin sandbox:** `fairway-admin-sandbox-00022-9gn`, Ready/Active and 100%
+  traffic after explicitly switching from the prior pinned `00021-wbd`.
+  Runtime identity, environment/origin settings and no-invoker-IAM-check setting
+  preserved. Image
+  `sha256:ce0dabd00872425a7b7adf0df430168bf318c5a5a748047ee3020bc9b3fda883`,
+  build `8d26138b-b501-4187-9a6c-34b6c2b53bcc`, source archive
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792837661.407273-73ac1bf8b7c6483aae9de87d9f2597a6.zip#1792837661714515`.
+  Receiver remains `fairway-button-receiver-sandbox-00025-9lr` at 100%;
+  it was not redeployed.
+- **Hosting sandbox:** project/site `fairway-refresh-sandbox-260930`,
+  version `ce56795b6f985177`, release `1792837661141000`,
+  time `2026-10-24T10:27:41.141Z`. All served JS/CSS matched local build SHA-256.
+  Main `index-BQyjHHfx.js`:
+  `3fc9ecd44d222eb10407a4a085425b64ba41567e379846478f87fd2ec1d623dc`;
+  Inventory `InventoryApp-Bw1sS1xd.js`:
+  `e137ba420af65858ff8f45dbc63e1d5cb35395643fededa2b1b7c0e6ca669649`;
+  Public menu `PublicMenuApp-BZTABOtZ.js`:
+  `8b08285dfc83846b6caaf4b7ea0edd310dfd42ab7b18fe215184db51aec75db6`;
+  Inventory CSS `InventoryApp-DaMtxS05.css`:
+  `5c97bff6fb596290227f39056b81864840997040586826c5bb2040aa6962d643`;
+  shared CSS `index-CCL6HDYj.css`:
+  `86ec62871ea5df22898440dbe25851f3672d3a3eb4aac7ce0dd5e20524888a3d`.
+- **Deployed end-to-end evidence:** in synthetic
+  `CUST-0005` / `COURSE-0007`, configured the previously absent public slug
+  `cpo-test-persistent-inventory` through the existing Admin API. Created the
+  clearly named synthetic product `92R4cReFFo6b9Cci84zm`
+  (CPO TEST Automatic Menu, later CPO TEST Automatic Menu Updated).
+  Its initial On Cart record appeared on the actual public page without
+  publishing. Return to In Inventory removed it automatically; pending loading
+  and Cancel left the menu empty. Confirmed loading of three restored it.
+  Autosaved name/description/price 2.50->3.75 appeared on the open public page.
+  A further return preserved quantity three and excluded it publicly;
+  confirmed reload preserved three. Excessive sale of four rejected 409 with
+  stock three and public item unchanged. Remaining-three sale confirmation
+  Cancel left the exact public response, stock and daily tally unchanged.
+  Reconfirmed remaining-three sale created one attributed record, moved to
+  Sold Out/zero and removed the item from the actual open public page.
+  Public-page checks observed automatic polling, not just forced API refresh.
+- **Durable review state:** sale `3LnvJ6AUZpTkW5UUx58g`, operation
+  `cc31f917-bcc0-4981-afe1-131db01c2328`, before three/after zero, units three,
+  revision 62, timestamp `2026-10-24T10:32:19.712Z`. Staff/shift/authenticated
+  account attribution verified. Course-local tally rose four->seven; both
+  individual product tallies remain in the authenticated API. Afterwards
+  confirmed loading of two leaves the new synthetic product On Cart for review,
+  revision 63. The four existing products/quantities/states remain unchanged.
+  Selected CPO TEST F&B Manager and active shift preserved; opened/cancelled
+  the existing final-sales dialog without closing it. No audit was submitted.
+  ADC SDK readback was blocked by expired reauthentication; active gcloud
+  credentials successfully verified the exact durable event through the
+  Firestore read API instead. No credential or Auth configuration changed.
+- **Public boundary/rendered evidence:** anonymous synthetic slug and existing
+  `monarch-bay` API links both return 200/no-store; the latter retains 57 active
+  products. Exact public envelope fields are course_id, course_name, timezone,
+  inventory_revision, updated_at and products; exact product fields are
+  product_id, name, category, subcategory, brand, description, price and state.
+  Recursive live response inspection found no quantities, staff, sales, shift,
+  audit, actor or idempotency fields. Anonymous Inventory remains 401.
+  Actual public content contains product details/price/Available, not quantities.
+  Rendered Inventory measurements at 1440/1024/768/430/375 pixels confirm the
+  total-only box, stacked close-out wording, selected-Course menu link, no
+  publication controls, clean wrapping, no horizontal overflow and >=44x44
+  catalog/audit/session controls. Physical iPad/Safari is not claimed.
+- **Review links:** Inventory
+  `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=698443f`;
+  golfer menu
+  `https://fairway-refresh-sandbox-260930.web.app/cartmenus/cpo-test-persistent-inventory`.
+  Refresh old Inventory tabs. No production deployment/data, merge, requests,
+  service/device state, firmware or physical-device operations occurred.
+
 ### Inventory organization refinement — PR #12 Sandbox (2026-10-24 UTC)
 
 - **Acceptance/boundary:** the CPO accepts current inventory functionality and
