@@ -3,6 +3,7 @@
 const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { createFairwayHandlers } = require('../index');
+const crypto = require('node:crypto');
 
 let passed = 0;
 let failed = 0;
@@ -38,7 +39,28 @@ function createApi(db) {
     verifyOperatorToken: async (token) => TOKENS[token] || null,
     allowedAdminOrigins: ['https://app.fairwayrefresh.com'],
   });
+  const selected = new Set();
+  let operation = 0;
   return async ({ method = 'GET', path, body, token, origin } = {}) => {
+    const courseMatch = path?.match(/^\/api\/v1\/inventory\/courses\/([^/]+)\/([^/]+)/);
+    if (method !== 'GET' && courseMatch && TOKENS[token]) {
+      const actor = TOKENS[token].uid;
+      const shiftId = `${token}-${courseMatch[2]}`;
+      if (!selected.has(shiftId)) {
+        const course = db.collection('customers').doc(courseMatch[1]).collection('courses').doc(courseMatch[2]);
+        await db.collection('customers').doc(courseMatch[1]).collection('staff').doc(token).set({
+          name: `${token} fixture`, role: 'cart_operator', active: true,
+        });
+        await course.collection('inventory_shifts').doc(shiftId).set({
+          actor_uid: actor, session_id: 'legacy-test', staff_id: token, staff_name: `${token} fixture`,
+          staff_role: 'cart_operator', has_activity: false, status: 'active',
+        });
+        const sessionKey = crypto.createHash('sha256').update(`${actor}\0legacy-test`).digest('hex').slice(0, 32);
+        await course.collection('inventory_sessions').doc(sessionKey).set({ shift_id: shiftId });
+        selected.add(shiftId);
+      }
+      body = { ...body, shift_id: shiftId, operation_id: `legacy-${++operation}` };
+    }
     const headers = {};
     if (token) headers.authorization = `Bearer ${token}`;
     if (origin) headers.origin = origin;

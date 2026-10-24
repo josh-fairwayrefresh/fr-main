@@ -120,9 +120,11 @@ The current implementation and deployment status are owned by
 - One course-level catalog is shared across staff and carts. Each active
    product has exactly one state: **On Cart**, **Sold Out**, or **In Inventory**.
    Archived products are retained outside active inventory.
-- Edits save automatically. Last saved edit wins. There are no edit locks,
-   conflict warnings, approval roles, or change notifications in the pilot.
-   Product changes and publications are attributed to the acting account.
+- Metadata edits save automatically. The persistent-stock sandbox increment
+   below supersedes last-write-wins for stock/availability: stale quantity
+   edits must not overwrite intervening sales, and metadata autosaves must not
+   restore stale availability. Product changes and publications retain account
+   attribution and gain operational staff/shift attribution.
 - Saved working inventory does not change the public menu. Preview shows the
    current saved draft; only explicit Publish Menu publishes a coherent snapshot.
    A failed save is not reported as saved, and failed publication leaves the
@@ -197,6 +199,69 @@ The current implementation and deployment status are owned by
 
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
+
+### Persistent cart stock, staff, audits and shift close — sandbox increment
+
+The CPO authorized this coherent increment on 2026-10-23, from accepted main
+`08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. It is not a production release.
+
+- One shared cart inventory per Course uses the existing Course catalog.
+  Inventory ownership remains bounded for a future Course-to-Cart hierarchy;
+  there is no multiple-cart UI, separate restaurant balance or transfer model.
+  Existing products retain metadata, price, categories and initial availability.
+  Missing quantities display zero without initialization moving any tile.
+- Each card exposes an editable nonnegative whole-unit quantity. Quantities
+  persist across days and shifts; no automatic reset occurs. Direct edits are
+  attributed adjustments, never sales. Stock changes and immutable historical
+  events commit in one authoritative operation.
+- Cart-stock totals select only On Cart products. Moving to In Inventory changes
+  availability only: preserve the recorded quantity and do not manufacture an
+  adjustment. In Inventory means restaurant-held products available to load,
+  not a tracked restaurant stock balance. Manual Sold Out availability likewise
+  does not invent a quantity adjustment. Loading either state into On Cart
+  requires a positive Quantity and explicit confirmation, committed together.
+- A sale icon opens positive whole units sold, default one, and Confirm. Server
+  transactions validate against current On Cart stock. An excessive sale is
+  rejected without deduction or successful sale event, explaining that the
+  quantity must be corrected first. Zero is the minimum; negative stock,
+  overselling, silent clamping and oversell-confirmation paths are excluded.
+  A sale/quantity edit that makes an On Cart balance zero moves it to Sold Out;
+  replenishing Sold Out above zero restores On Cart. Initialization alone does
+  not apply those transition rules.
+- The compact Course-local daily tally shows products and units sold across all
+  sessions. Individual sales/adjustments remain beyond the day. Connectivity is
+  required; failed/uncertain submissions never appear confirmed. Retried intended
+  operations cannot duplicate deductions or durable records. Stale absolute
+  edits require fresh review; metadata autosaves cannot overwrite stock/state.
+- Admin's Customer register contains a staff directory with stable person IDs,
+  free-text names, and Cart Operator / F&B Management roles. Both roles have
+  equal operational rights through one policy. These are operational identities,
+  separate from Firebase users; adding a name grants no login or Admin access.
+  Custom operator entry adds a Cart Operator to that Customer directory.
+- Cart and Inventory banners share a session/Course operator selection, isolated
+  from other sessions/accounts and Customer/Course contexts. The first inventory
+  action without a selection prompts and resumes that action. One shift is active
+  per operator session and Course. Before inventory activity, the name can be
+  corrected freely; after activity, selecting a different person requires
+  successful shift close. Operational records preserve selected staff snapshots
+  and the authenticated submitting UID.
+- An explicit audit presents the entire On Cart/Sold Out set, independent of
+  filters, excluding In Inventory and archives. Select a Customer staff approver
+  and require: "Confirm you are authorized to approve this inventory count audit."
+  Commit a coherent immutable snapshot, approver and submitting account, revision
+  and authoritative timestamp. Concurrent changes invalidate the reviewed
+  revision and require reconfirmation. Later product/staff edits cannot rewrite it.
+- Shift close accepts a nonnegative USD total in dollars, stores exact cents and
+  attribution, and supports multiple shifts per Course/local day. Only confirmed
+  success closes that session's shift and clears its name. Failure or uncertainty
+  preserves the name and amount, with idempotent retry/recovery. Stock, daily
+  sales, other sessions and history are unaffected.
+- Stock/sales/audit/shift activity never publishes the public menu. Publication
+  remains explicit and its allowlisted immutable snapshot exposes no internal
+  quantities, staff, sales, shift or audit fields. No POS/payment processing,
+  offline queue, trend screens, speculative role framework or physical-device
+  changes are included. Accepted request queue, service categories and request
+  KPIs remain unchanged.
 
 ## Cart Operator Push Notifications (Source behavior and dated physical validation)
 

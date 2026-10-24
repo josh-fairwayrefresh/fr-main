@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowLeft, Check, ChevronDown, CircleAlert, Eye, LogOut, PackagePlus,
-  Send, Settings, Trash2, X,
+  Send, Settings, ShoppingCart, Trash2, X,
 } from 'lucide-react';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
+import { InventorySessionControls, useInventorySession } from './InventorySession';
+import { AuditDialog, StockDialog } from './InventoryOperations';
 import { courseContextUrl, courseKey, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
 import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, INVENTORY_STATES, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
 import { presentationForCourse } from './lib/courseMenuConfig';
@@ -18,18 +20,6 @@ const STATE_LABELS = Object.freeze({
 
 function coursePath(course, suffix = '') {
   return `/api/v1/inventory/courses/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.course_id)}${suffix}`;
-}
-
-function productBody(product, state = product.state) {
-  return {
-    name: product.name,
-    category_name: product.category_name || product.category,
-    subcategory_name: product.subcategory_name || product.subcategory || null,
-    brand: product.brand || null,
-    description: product.description || null,
-    price: product.price || null,
-    state,
-  };
 }
 
 function buildProductBody(draft, state, preservedPrice = null) {
@@ -48,7 +38,7 @@ function buildProductBody(draft, state, preservedPrice = null) {
       brand: draft.brand.trim() || null,
       description: draft.description.trim() || null,
       price,
-      state,
+      ...(state ? { state } : {}),
     },
   };
 }
@@ -89,7 +79,7 @@ function ProductDialog({ product, categories, onClose, onCreate, onSave }) {
   const currentDraft = useRef(draft);
   const initialServerDraft = draftFromProduct(product);
   const lastServerDraft = useRef(initialServerDraft);
-  const initialServerBody = buildProductBody(initialServerDraft, product?.state, product?.price);
+  const initialServerBody = buildProductBody(initialServerDraft, undefined, product?.price);
   const lastSaved = useRef(initialServerBody.body ? JSON.stringify(initialServerBody.body) : '');
   const saveQueue = useRef(Promise.resolve());
   const onSaveRef = useRef(onSave);
@@ -99,7 +89,7 @@ function ProductDialog({ product, categories, onClose, onCreate, onSave }) {
   useEffect(() => {
     if (!product) return;
     const remoteDraft = draftFromProduct(product);
-    const remote = buildProductBody(remoteDraft, product.state, product.price);
+    const remote = buildProductBody(remoteDraft, undefined, product.price);
     if (remote.error) return;
     const signature = JSON.stringify(remote.body);
     if (signature === lastSaved.current) {
@@ -115,7 +105,7 @@ function ProductDialog({ product, categories, onClose, onCreate, onSave }) {
 
   useEffect(() => {
     if (!product) return undefined;
-    const validation = buildProductBody(draft, product.state, product.price);
+    const validation = buildProductBody(draft, undefined, product.price);
     if (validation.error) {
       setSaveError(validation.error);
       setSaveStatus('error');
@@ -135,14 +125,13 @@ function ProductDialog({ product, categories, onClose, onCreate, onSave }) {
         setSaveStatus('saving');
         const saved = await onSaveRef.current(product.product_id, validation.body);
         const savedDraft = saved ? draftFromProduct(saved) : currentDraft.current;
-        const savedState = saved?.state || product.state;
-        const savedBody = buildProductBody(savedDraft, savedState, saved?.price);
+        const savedBody = buildProductBody(savedDraft, undefined, saved?.price);
         lastServerDraft.current = savedDraft;
         lastSaved.current = savedBody.error ? signature : JSON.stringify(savedBody.body);
-        const latest = buildProductBody(currentDraft.current, savedState, saved?.price);
+        const latest = buildProductBody(currentDraft.current, undefined, saved?.price);
         if (!latest.error && JSON.stringify(latest.body) === lastSaved.current) setSaveStatus('saved');
       }).catch((error) => {
-        const latest = buildProductBody(currentDraft.current, product.state, product.price);
+        const latest = buildProductBody(currentDraft.current, undefined, product.price);
         if (!latest.error && JSON.stringify(latest.body) === signature) {
           setSaveError(error.message);
           setSaveStatus('error');
@@ -187,7 +176,7 @@ function ProductDialog({ product, categories, onClose, onCreate, onSave }) {
   </section></div>;
 }
 
-function CategoryDialog({ course, categories, apiBaseUrl, user, onClose, onSaved }) {
+function CategoryDialog({ categories, session, onClose, onSaved }) {
   const [kind, setKind] = useState('category');
   const [categoryId, setCategoryId] = useState(categories[0]?.category_id || '');
   const [name, setName] = useState('');
@@ -200,7 +189,7 @@ function CategoryDialog({ course, categories, apiBaseUrl, user, onClose, onSaved
     setError('');
     try {
       const suffix = kind === 'category' ? '/categories' : `/categories/${encodeURIComponent(categoryId)}/subcategories`;
-      await inventoryRequest(user, apiBaseUrl, coursePath(course, suffix), { method: 'POST', body: { name } });
+      await session.request(suffix, { name });
       await onSaved();
       onClose();
     } catch (reason) {
@@ -222,7 +211,7 @@ function CategoryDialog({ course, categories, apiBaseUrl, user, onClose, onSaved
   </section></div>;
 }
 
-function CategoryManagerDialog({ course, category, productCount, apiBaseUrl, user, onClose, onDeleted }) {
+function CategoryManagerDialog({ category, productCount, session, onClose, onDeleted }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -232,10 +221,7 @@ function CategoryManagerDialog({ course, category, productCount, apiBaseUrl, use
     setPending(true);
     setError('');
     try {
-      await inventoryRequest(
-        user, apiBaseUrl, coursePath(course, `/categories/${encodeURIComponent(category.category_id)}`),
-        { method: 'DELETE' }
-      );
+      await session.request(`/categories/${encodeURIComponent(category.category_id)}`, {}, 'DELETE');
       await onDeleted();
       onClose();
     } catch (reason) {
@@ -285,21 +271,22 @@ function PreviewProduct({ product }) {
   return <div className="inv-preview-product"><div><strong>{product.name}</strong>{product.description && <p>{product.description}</p>}</div><span className={product.state === 'sold_out' ? 'sold-out' : ''}>{product.state === 'sold_out' ? 'Sold Out' : 'Available'}</span>{formatPrice(product.price) && <b>{formatPrice(product.price)}</b>}</div>;
 }
 
-function ProductTile({ product, busy, onStateChange, onEdit, onArchive, onDragStart }) {
+function ProductTile({ product, busy, onStateChange, onEdit, onArchive, onDragStart, onStock }) {
   const description = product.description || product.brand;
   return <article className="inv-product-tile" draggable="true" onDragStart={(event) => onDragStart(event, product.product_id)}>
     <div className="inv-product-heading"><strong>{product.name}</strong><div className="inv-product-actions"><button className="inv-icon-button" type="button" onClick={() => onEdit(product)} title="Edit product" aria-label={`Edit ${product.name}`}><Eye size={16} /></button><button className="inv-icon-button" type="button" onClick={() => onArchive(product)} title="Archive product" aria-label={`Archive ${product.name}`}><Archive size={16} /></button></div></div>
     {(product.subcategory_name || description) && <p className="inv-product-detail">{[product.subcategory_name, product.brand, product.description].filter(Boolean).join(' · ')}</p>}
     {formatPrice(product.price) && <p className="inv-product-price">{formatPrice(product.price)}</p>}
+    <div className="inv-stock-controls"><button type="button" disabled={busy} onClick={() => onStock({ product, kind: 'adjustment' })} aria-label={`Edit quantity for ${product.name}`}>Quantity: <strong>{product.quantity ?? 0}</strong></button><button type="button" disabled={busy || product.state !== 'on_cart'} onClick={() => onStock({ product, kind: 'sale' })} aria-label={`Record sale for ${product.name}`}><ShoppingCart size={16} />Sale</button></div>
     <label className="inv-state-select"><span>Availability</span><select aria-label={`${product.name} state`} value={product.state} disabled={busy} onChange={(event) => onStateChange(product, event.target.value)}>{INVENTORY_STATES.map((state) => <option key={state} value={state}>{STATE_LABELS[state]}</option>)}</select><ChevronDown size={14} /></label>
   </article>;
 }
 
-function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArchive, onDrop, onDragStart }) {
+function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArchive, onDrop, onDragStart, onStock }) {
   const [dragOver, setDragOver] = useState(false);
   return <section className={`inv-column inv-column-${state} ${dragOver ? 'drag-over' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragOver(true); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false); }} onDrop={(event) => { event.preventDefault(); setDragOver(false); onDrop(event, state); }}>
     <header><div><h2>{STATE_LABELS[state]}</h2><span>{products.length}</span></div></header>
-    <div className="inv-column-products">{products.map((product) => <ProductTile key={product.product_id} product={product} busy={busyId === product.product_id} onStateChange={onStateChange} onEdit={onEdit} onArchive={onArchive} onDragStart={onDragStart} />)}{products.length === 0 && <p className="inv-empty-column">No products</p>}</div>
+    <div className="inv-column-products">{products.map((product) => <ProductTile key={product.product_id} product={product} busy={busyId === product.product_id} onStateChange={onStateChange} onEdit={onEdit} onArchive={onArchive} onDragStart={onDragStart} onStock={onStock} />)}{products.length === 0 && <p className="inv-empty-column">No products</p>}</div>
   </section>;
 }
 
@@ -322,10 +309,13 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const [publishing, setPublishing] = useState(false);
   const [publication, setPublication] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [stockAction, setStockAction] = useState(null);
+  const [auditing, setAuditing] = useState(false);
   const refreshRef = useRef(async () => {});
   const course = courses.find((item) => courseKey(item) === selectedKey)
     || selectedCourseFromLocation(courses, window.location.search);
   const coursePresentation = course && presentationForCourse(course);
+  const session = useInventorySession(user, apiBaseUrl, course);
   const categories = inventory?.categories || [];
   const products = (inventory?.products || []).filter((product) => product.archived !== true);
   const categoryFilteredProducts = useMemo(() => (
@@ -363,6 +353,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     setSelectedCategory('all');
     setSelectedSubcategory('all');
     setLoadError('');
+    setEditor(null); setCategoryEditor(false); setCategoryManager(null);
+    setStockAction(null); setAuditing(false); setNotice('');
     async function refresh(silent = false) {
       if (!silent) setLoadStatus('loading');
       try {
@@ -381,11 +373,14 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     refresh();
     const interval = window.setInterval(() => refresh(true), 15000);
     const onFocus = () => refresh(true);
+    const onResolved = () => { setStockAction(null); setAuditing(false); refresh(true); };
     window.addEventListener('focus', onFocus);
+    window.addEventListener('inventory-updated', onResolved);
     return () => {
       active = false;
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('inventory-updated', onResolved);
     };
   }, [apiBaseUrl, course?.customer_id, course?.course_id, user]);
 
@@ -394,22 +389,29 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   }
 
   async function saveProduct(productId, body) {
-    const saved = await inventoryRequest(user, apiBaseUrl, coursePath(course, `/products/${encodeURIComponent(productId)}`), { method: 'PATCH', body });
+    const saved = await session.request(`/products/${encodeURIComponent(productId)}`, body, 'PATCH');
     await refreshInventory(true);
     return saved;
   }
 
   async function createProduct(body) {
-    await inventoryRequest(user, apiBaseUrl, coursePath(course, '/products'), { method: 'POST', body });
+    await session.request('/products', body);
     await refreshInventory(true);
   }
 
   async function changeState(product, state) {
     if (product.state === state) return;
+    if (state === 'on_cart') {
+      setStockAction({ product, kind: 'availability', state });
+      return;
+    }
     setBusyId(product.product_id);
     setNotice('');
     try {
-      await saveProduct(product.product_id, productBody(product, state));
+      await session.request(`/products/${encodeURIComponent(product.product_id)}/stock`, {
+        kind: 'availability', state, expected_stock_revision: product.stock_revision ?? 0,
+      });
+      await refreshInventory(true);
       setNotice(`${product.name} saved as ${STATE_LABELS[state]}.`);
     } catch (error) {
       setNotice(`Unable to save ${product.name}: ${error.message}`);
@@ -423,7 +425,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     setBusyId(product.product_id);
     setNotice('');
     try {
-      await inventoryRequest(user, apiBaseUrl, coursePath(course, `/products/${encodeURIComponent(product.product_id)}/archive`), { method: 'POST' });
+      await session.request(`/products/${encodeURIComponent(product.product_id)}/archive`);
       await refreshInventory(true);
       setNotice(`${product.name} archived.`);
     } catch (error) {
@@ -459,7 +461,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     setPublishing(true);
     setNotice('');
     try {
-      const result = await inventoryRequest(user, apiBaseUrl, coursePath(course, '/publish'), { method: 'POST' });
+      const result = await session.request('/publish');
       setPublication(result);
       await refreshInventory(true);
       setNotice(`Menu version ${result.version} published.`);
@@ -479,6 +481,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       {isAdmin && <button className="inv-cart-link" type="button" onClick={onOpenAdmin} title="Return to Admin">Admin</button>}
       {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
       <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+      <InventorySessionControls key={`${user.uid}:${selectedKey}`} session={session} />
     </div></header>
     <div className="inv-main">
       <section className="inv-title-row"><div><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div><div className="inv-title-actions"><div className="inv-edit-actions"><button className="inv-secondary" type="button" onClick={() => setCategoryEditor(true)}><PackagePlus size={16} />+ Category</button><button className="inv-primary" type="button" onClick={() => setEditor({ product: null })}>+ Add Product</button></div><div className="inv-publication-actions"><button className="inv-secondary" type="button" onClick={loadPreview}><Eye size={16} />Preview Draft</button><button className="inv-publish" type="button" onClick={publishMenu} disabled={publishing || loadStatus !== 'ready'}><Send size={16} />{publishing ? 'Publishing…' : 'Publish Menu'}</button></div></div></section>
@@ -486,6 +489,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       {loadError && <div className="inv-alert" role="alert"><CircleAlert size={17} /><span>{loadError}</span><button type="button" onClick={() => refreshInventory(false)}>Retry</button></div>}
       {notice && <div className="inv-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
       {loadStatus === 'loading' && <div className="inv-loading" role="status">Loading course inventory…</div>}
+      {inventory && <section className="inv-daily-sales" aria-label="Today's inventory sales"><div><strong>Sales today · {inventory.daily_sales?.local_date || 'Course-local day'}</strong><span>{inventory.daily_sales?.total_units ?? 0} units sold · Cart stock {products.filter(product => product.state === 'on_cart').reduce((sum, product) => sum + (product.quantity ?? 0), 0)} units</span><ul>{(inventory.daily_sales?.products || []).map(product => <li key={product.product_id}>{product.name}: {product.units}</li>)}</ul></div><button className="inv-secondary" type="button" onClick={() => setAuditing(true)}>Confirm inventory audit</button></section>}
       {inventory && <nav className="inv-category-filters" aria-label="Filter inventory by category">
         <button className={`inv-category-filter ${selectedCategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedCategory === 'all'} onClick={() => selectCategory('all')}>All Products <span>{products.length}</span></button>
         {categories.map((category) => <div className="inv-category-filter-group" key={category.category_id}>
@@ -497,19 +501,20 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>
         {subcategoryNames.map((name) => <button className={`inv-subcategory-filter ${selectedSubcategory === name ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === name} key={name} onClick={() => setSelectedSubcategory(name)}>{name} <span>{subcategoryCounts[name] || 0}</span></button>)}
       </nav>}
-      {inventory && <div className="inv-board">{columnStates.map((state) => <InventoryColumn key={state} state={state} products={visibleProducts.filter((product) => product.state === state)} busyId={busyId} onStateChange={changeState} onEdit={(product) => setEditor({ product })} onArchive={archiveProduct} onDrop={dropProduct} onDragStart={startProductDrag} />)}</div>}
+      {inventory && <div className="inv-board">{columnStates.map((state) => <InventoryColumn key={state} state={state} products={visibleProducts.filter((product) => product.state === state)} busyId={busyId} onStateChange={changeState} onEdit={(product) => setEditor({ product })} onArchive={archiveProduct} onDrop={dropProduct} onDragStart={startProductDrag} onStock={setStockAction} />)}</div>}
       {inventory?.archived_products?.length > 0 && <section className="inv-archive"><button type="button" className="inv-archive-toggle" aria-expanded={showArchived} onClick={() => setShowArchived(!showArchived)}><Archive size={16} />Archived products <span>{inventory.archived_products.length}</span><ChevronDown size={16} /></button>{showArchived && <ul>{inventory.archived_products.map((product) => <li key={product.product_id}><strong>{product.name}</strong><span>{product.category_name}</span></li>)}</ul>}</section>}
       {publication && <section className="inv-publication" role="status"><Check size={18} /><div><strong>Publication confirmed · Version {publication.version}</strong><span>{formatPublishedAt(publication.published_at, localTimeZone) || 'Course timezone not configured'} · Published by {user.email || user.uid}</span></div><button type="button" onClick={() => setPublication(null)} aria-label="Dismiss publication confirmation"><X size={16} /></button></section>}
       <p className="inv-sync-note">Inventory refreshes from the server while open. Your saved changes are shared with assigned staff.</p>
     </div>
     {editor && <ProductDialog key={editor.product?.product_id || 'new'} product={editor.product} categories={categories} onClose={() => setEditor(null)} onCreate={createProduct} onSave={saveProduct} />}
-    {categoryEditor && <CategoryDialog course={course} categories={categories} apiBaseUrl={apiBaseUrl} user={user} onClose={() => setCategoryEditor(false)} onSaved={() => refreshInventory(true)} />}
+    {categoryEditor && <CategoryDialog categories={categories} session={session} onClose={() => setCategoryEditor(false)} onSaved={() => refreshInventory(true)} />}
     {categoryManager && <CategoryManagerDialog
       course={course}
       category={categoryManager}
       productCount={categoryCounts[categoryManager.name] || 0}
       apiBaseUrl={apiBaseUrl}
       user={user}
+      session={session}
       onClose={() => setCategoryManager(null)}
       onDeleted={async () => {
         if (selectedCategory === categoryManager.name) selectCategory('all');
@@ -517,5 +522,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       }}
     />}
     {preview && <DraftPreviewDialog preview={preview} course={course} onClose={() => setPreview(null)} />}
+    {stockAction && <StockDialog action={stockAction} session={session} onSaved={() => refreshInventory(true)} onClose={() => setStockAction(null)} />}
+    {auditing && <AuditDialog inventory={inventory} session={session} onSaved={async () => { await refreshInventory(true); setNotice('Inventory audit confirmed.'); }} onClose={() => setAuditing(false)} />}
   </main>;
 }

@@ -38,7 +38,7 @@ test('category filters open a management card with Delete Category, protected ag
   assert.match(inventorySource, /canDelete = productCount === 0/);
   assert.match(inventorySource, /disabled=\{!canDelete\}/);
   assert.match(inventorySource, /This category still has products\. Reassign or remove its products before deleting it\./);
-  assert.match(inventorySource, /method: 'DELETE'/);
+  assert.match(inventorySource, /session\.request\(`\/categories\/\$\{encodeURIComponent\(category\.category_id\)\}`, \{\}, 'DELETE'\)/);
   assert.doesNotMatch(inventorySource, /deleteProduct|cascadeDelete/i);
   assert.match(inventorySource, /onDeleted=\{async \(\) => \{/);
   assert.match(inventorySource, /await refreshInventory\(true\);\s*\}\}/);

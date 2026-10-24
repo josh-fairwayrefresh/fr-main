@@ -85,6 +85,48 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ## Change and Validation Discipline
 
+### Persistent cart inventory increment — sandbox only
+
+The CPO resolved readiness on 2026-10-23 and authorized a single coherent
+increment from main `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`: persistent
+nonnegative quantities, whole-unit sales, Customer operational staff, immutable
+inventory audits and session-specific shift close. This is sandbox-only work,
+not merge, production, firmware, physical-device or production-data authority.
+Product requirements are owned by
+[the UX specification](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close--sandbox-increment).
+
+Extend the existing inventory owner under the Course; one shared inventory is
+the only supported scope. Keep its storage boundary localized so a future
+Course-to-Cart hierarchy does not require competing balances now. Staff IDs
+belong to a Customer, not Firebase Auth. Existing `user_access` remains the
+sole login/Admin/Course entitlement authority. A small centralized operational
+role policy initially permits both Cart Operator and F&B Management equally.
+
+Balance/availability changes and their immutable attributed historical record
+form one transaction. Missing quantities mean zero without moving legacy tiles.
+Sales apply deltas against current On Cart stock; excessive sales reject, never
+clamp or go negative. Absolute stock edits use expected stock revisions.
+Metadata autosaves cannot carry stale availability into this contract. Movement
+to In Inventory preserves quantity; no restaurant balance or automatic-zeroing
+adjustment exists. Stock totals count On Cart only. Audits cover On Cart and
+Sold Out, binding confirmed immutable data to a coherent inventory revision.
+
+Operational context is scoped to authenticated UID, browser operator session,
+Customer and Course. One open shift per session/Course allows staff correction
+before activity, requires close before a different operator after activity,
+and closes only with a durable submitted USD total. Both selected staff
+snapshots and authenticated UID are recorded. Stock/history commit together;
+stable operation identities make lost-response retries and shift close
+idempotent. Uncertain outcomes remain explicit and recoverable, not success.
+Public snapshots retain their existing explicit publication/field allowlist;
+no internal stock/staff/shift/audit data enters the golfer menu.
+
+K-001/K-002 readiness uses the CPO's resolved transitions rather than inventing
+new behavior. K-003 assigns each capability one owner; K-004 focuses evidence
+on lost responses, concurrency, authorization, audit revision coherence and
+unchanged adjacent accepted behavior. No speculative permissions framework,
+POS, offline queue, multiple carts, transfers or trend UI is introduced.
+
 ### Independent service groups sandbox increment
 
 The `feat/independent-service-groups` increment is based on PR #8's

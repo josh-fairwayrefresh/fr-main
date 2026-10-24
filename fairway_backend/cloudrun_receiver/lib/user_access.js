@@ -2,6 +2,12 @@
 
 const USER_ACCESS_COLLECTION = 'user_access';
 const AUTHORIZATION_SCHEMA_VERSION = 2;
+const INVENTORY_STAFF_ROLES = Object.freeze(['cart_operator', 'fnb_management']);
+
+// Staff attribution is deliberately independent of account authorization.
+function canOperateInventory(staff) {
+  return staff?.active === true && INVENTORY_STAFF_ROLES.includes(staff.role);
+}
 
 function normalizeAccessRecord(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -124,6 +130,8 @@ async function resolveAuthorizedCourses(db, access) {
 }
 
 module.exports = {
+  INVENTORY_STAFF_ROLES,
+  canOperateInventory,
   AUTHORIZATION_SCHEMA_VERSION,
   USER_ACCESS_COLLECTION,
   getUserAccess,

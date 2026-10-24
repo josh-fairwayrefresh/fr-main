@@ -1089,6 +1089,56 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Persistent Cart Inventory / Staff / Audits / Shift Close Sandbox Increment (2026-10-23)
+
+- **Authority/source:** CPO-approved readiness and implementation on isolated
+  `feat/persistent-cart-inventory`, based on verified canonical main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. No merge or production
+  deployment/data/device operations are authorized. Product requirements are in
+  the UX owner; engineering ownership is in the Engineering Guide.
+- **Resolved transitions:** quantities are nonnegative whole units; an excessive
+  sale rejects atomically and asks for a corrected quantity first. Moving to
+  In Inventory preserves quantity without an adjustment. Loading into On Cart
+  requires confirmed Quantity. Stock totals select On Cart; audits additionally
+  include Sold Out. One active shift per operator session/Course permits a name
+  correction before activity and requires successful close before a different
+  operator after activity. No multiple carts, restaurant balance, automatic
+  zeroing, negative stock, overselling or offline queue.
+- **Compatibility/publication:** absent quantity reads as zero without a bulk
+  migration or changed initial product state. Metadata autosaves do not own
+  stock/state. Existing published public-menu snapshots remain unchanged until
+  explicit publication; internal quantities, staff and operation records are
+  omitted by the public field allowlist. Request queue, service categories,
+  device protocol and request KPIs are not changed.
+- **Evidence/publication:** exact source, focused verification and sandbox
+  identities are added here after publication. Prior sandbox evidence below
+  remains dated history, not a claim that this increment was already deployed.
+- **Frontend evidence:** 65/65 unit checks, 3/3 rendered browser regressions,
+  sandbox configuration validation and build pass. New rendered checks cover
+  first-action Custom attribution/resumption, sale response-loss replay without
+  a second deduction, excessive-sale rejection, quantity-preserving In Inventory
+  moves, confirmed loading, revision-conflicted audit reconfirmation, and
+  uncertain shift close with name/amount retained across a full remount.
+  Existing select-any queue, History visibility/selection and category-owner
+  rename checks remain passing. These mock-network checks are UI evidence, not
+  a substitute for authoritative stock/concurrency verification.
+- **Authoritative backend evidence:** full suite 150 passed. Sixteen actual
+  handler scenarios passed against isolated loopback Firestore emulator
+  transactions; the rollback fault-injection scenario is unit-only and skipped
+  in emulator mode. Coverage includes simultaneous sales, concurrent replay,
+  stock-revision conflicts, stale cached metadata, session/Course isolation,
+  exact replay after close, immutable audits, local-midnight sales, more than
+  1,000 sale records, public-field exclusion and explicit publication.
+  Inventory GET reads state/products in one transaction; audit submission
+  verifies that revision before capturing the immutable baseline.
+- **Synthetic review context:** sandbox-only Customer `CUST-0005`, Course
+  `COURSE-0007` (`CPO TEST Persistent Cart Inventory`, `America/Los_Angeles`).
+  Before publication, the previous Admin API created labeled Water/Tea/Juice
+  products respectively On Cart/Sold Out/In Inventory, without quantity fields,
+  at inventory revision 4 and publication version 0. This provides a real legacy
+  initialization baseline; no devices, requests, service state or production
+  records were changed.
+
 ### Queue Selection / Amenity Areas Production Release (2026-10-23)
 
 - **CPO closeout:** production FRB-0006 test passed; the CPO accepts the released
@@ -2052,8 +2102,12 @@ authority. `operator_course_assignments` and `inventory_course_memberships`
 are legacy migration inputs only and are not read at runtime.
 
 Each save transaction serializes on the course state document and increments
-the revision, so the last transaction committed wins without locking, stale
-write rejection, conflict warnings, or client-clock ordering. Publish reads the
+the revision. The persistent-stock sandbox increment extends this owner with
+atomic stock/event operations, expected stock revisions for absolute edits,
+and idempotent operation identities. Metadata autosaves no longer own
+stock/availability, and cached writes cannot bypass the stock contract.
+This supersedes the prior last-write-wins stock/state behavior; ordinary
+metadata edits retain their existing synchronization. Publish reads the
 course revision and products in one Firestore transaction, snapshots only
 non-archived On Cart/Sold Out items, and commits snapshot, audit event, and
 pointer together. A failed commit therefore preserves the previous published
