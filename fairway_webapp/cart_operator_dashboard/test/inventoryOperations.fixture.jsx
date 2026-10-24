@@ -110,10 +110,8 @@ try {
   check(calls.length === beforeExport && shift === null, 'Export must not select an operator or make a request');
   check((await downloads[0].text()).includes('"Selected operator","Not selected"'), 'Export supports no selected operator');
   check(catalog[0].state === 'on_cart', 'Zero initialization must not move existing tiles');
-  const transfer = new DataTransfer();
-  const tile = document.querySelector('[aria-label="Water state"]').closest('article');
-  flushSync(() => tile.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer })));
-  flushSync(() => document.querySelector('.inv-column-in_inventory').dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer })));
+  click(document.querySelector('[aria-label="Move Water"]'));
+  click(button('Move here: In Inventory'));
   await wait(() => document.querySelector('#inventory-session-title'));
   input(document.querySelector('.inventory-session-overlay select'), 'custom');
   input(document.querySelector('.inventory-session-overlay input'), 'Test Operator');

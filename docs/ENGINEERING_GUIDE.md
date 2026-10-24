@@ -115,6 +115,14 @@ On Cart products; restaurant-held stock remains In Inventory. Drag-and-drop
 and selectors share the same attributed stock endpoint, including staff
 selection/resumption and expected revisions. Conflicted moves refresh the
 confirmed view before retry, rather than leaving an unrepeatable stale card.
+One Pointer Events interaction owns mouse/touch/pen dragging, replacing native
+HTML drag-and-drop. Pointer capture, a movement threshold and coordinate-based
+column hit testing handle nested targets consistently. Only the visible
+product-name/grip reserves touch gestures; other card areas retain scrolling.
+Viewport-edge scrolling supports stacked columns. Cancellation and scope
+changes clear the interaction; a completed drop calls the same availability
+owner as the selector. Browser-generated mouse/touch regression evidence is
+distinct from synthetic handler tests and physical iPad/Safari acceptance.
 
 The browser's current-view CSV exporter consumes the same confirmed inventory
 snapshot, visible-product filters and displayed Course-wide tally as the UI;

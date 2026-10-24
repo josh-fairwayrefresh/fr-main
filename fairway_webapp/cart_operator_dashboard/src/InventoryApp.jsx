@@ -6,6 +6,7 @@ import {
 import { inventoryRequest } from './lib/inventoryApi.mjs';
 import { downloadBlob } from './admin/adminApi';
 import { inventoryViewCsv } from './lib/inventoryExport.mjs';
+import { InventoryDragFeedback, useInventoryDrag } from './InventoryDrag';
 import { InventorySessionControls, useInventorySession } from './InventorySession';
 import { AuditDialog, StockDialog } from './InventoryOperations';
 import { courseContextUrl, courseKey, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
@@ -267,10 +268,10 @@ function PreviewProduct({ product }) {
   return <div className="inv-preview-product"><div><strong>{product.name}</strong>{product.description && <p>{product.description}</p>}</div><span className={product.state === 'sold_out' ? 'sold-out' : ''}>{product.state === 'sold_out' ? 'Sold Out' : 'Available'}</span>{formatPrice(product.price) && <b>{formatPrice(product.price)}</b>}</div>;
 }
 
-function ProductTile({ product, busy, onStateChange, onEdit, onArchive, onDragStart, onStock }) {
+function ProductTile({ product, busy, onStateChange, onEdit, onArchive, movement, onStock }) {
   const description = product.description || product.brand;
-  return <article className="inv-product-tile" draggable="true" onDragStart={(event) => onDragStart(event, product.product_id)}>
-    <div className="inv-product-heading"><strong>{product.name}</strong><div className="inv-product-actions"><button className="inv-icon-button" type="button" onClick={() => onEdit(product)} title="Edit product" aria-label={`Edit ${product.name}`}><Eye size={16} /></button><button className="inv-icon-button" type="button" onClick={() => onArchive(product)} title="Archive product" aria-label={`Archive ${product.name}`}><Archive size={16} /></button></div></div>
+  return <article className={`inv-product-tile ${movement.drag?.product.product_id === product.product_id ? 'is-dragging' : ''}`} {...movement.bindings(product)}>
+    <div className="inv-product-heading"><button className="inv-drag-handle" data-inventory-drag-handle type="button" disabled={busy} aria-label={`Move ${product.name}`} aria-pressed={movement.drag?.product.product_id === product.product_id} aria-describedby="inv-drag-help" onClick={() => movement.pick(product)}><span aria-hidden="true">::</span><strong>{product.name}</strong></button><div className="inv-product-actions"><button className="inv-icon-button" type="button" onClick={() => onEdit(product)} title="Edit product" aria-label={`Edit ${product.name}`}><Eye size={16} /></button><button className="inv-icon-button" type="button" onClick={() => onArchive(product)} title="Archive product" aria-label={`Archive ${product.name}`}><Archive size={16} /></button></div></div>
     {(product.subcategory_name || description) && <p className="inv-product-detail">{[product.subcategory_name, product.brand, product.description].filter(Boolean).join(' · ')}</p>}
     {formatPrice(product.price) && <p className="inv-product-price">{formatPrice(product.price)}</p>}
     <div className="inv-stock-controls"><button type="button" disabled={busy} onClick={() => onStock({ product, kind: 'adjustment' })} aria-label={`Edit quantity for ${product.name}`}>Quantity: <strong>{product.quantity ?? 0}</strong></button><button type="button" disabled={busy || product.state !== 'on_cart'} onClick={() => onStock({ product, kind: 'sale' })} aria-label={`Record sale for ${product.name}`}><ShoppingCart size={16} />Sale</button></div>
@@ -278,11 +279,11 @@ function ProductTile({ product, busy, onStateChange, onEdit, onArchive, onDragSt
   </article>;
 }
 
-function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArchive, onDrop, onDragStart, onStock }) {
-  const [dragOver, setDragOver] = useState(false);
-  return <section aria-label={`${STATE_LABELS[state]} products`} className={`inv-column inv-column-${state} ${dragOver ? 'drag-over' : ''}`} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDragOver(true); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false); }} onDrop={(event) => { event.preventDefault(); setDragOver(false); onDrop(event, state); }}>
+function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArchive, movement, onStock }) {
+  return <section aria-label={`${STATE_LABELS[state]} products`} data-inventory-drop={state} className={`inv-column inv-column-${state} ${movement.drag?.target === state ? 'drag-over' : ''}`}>
     <header><div><h2>{STATE_LABELS[state]}</h2><span>{products.length}</span></div></header>
-    <div className="inv-column-products">{products.map((product) => <ProductTile key={product.product_id} product={product} busy={busyId === product.product_id} onStateChange={onStateChange} onEdit={onEdit} onArchive={onArchive} onDragStart={onDragStart} onStock={onStock} />)}{products.length === 0 && <p className="inv-empty-column">No products</p>}</div>
+    {movement.drag?.keyboard && <button className="inv-move-here" type="button" disabled={movement.drag.product.state === state} onClick={() => movement.drop(state)}>Move here: {STATE_LABELS[state]}</button>}
+    <div className="inv-column-products">{products.map((product) => <ProductTile key={product.product_id} product={product} busy={Boolean(busyId)} onStateChange={onStateChange} onEdit={onEdit} onArchive={onArchive} movement={movement} onStock={onStock} />)}{products.length === 0 && <p className="inv-empty-column">No products</p>}</div>
   </section>;
 }
 
@@ -336,6 +337,11 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const localTimeZone = inventory?.timezone || course?.timezone || coursePresentation?.timeZone;
   const canExport = inventory?.customer_id === course?.customer_id && inventory?.course_id === course?.course_id
     && loadStatus === 'ready' && !session.unresolved && !session.submitting && !busyId && !publishing;
+  const movement = useInventoryDrag({
+    scope: `${user?.uid}:${course?.customer_id}:${course?.course_id}:${selectedCategory}:${selectedSubcategory}`,
+    disabled: Boolean(busyId || session.submitting || session.unresolved || session.choosing || stockAction || editor || auditing || publishing),
+    onMove: changeState,
+  });
 
   function selectCategory(categoryName) {
     setSelectedCategory(categoryName);
@@ -435,21 +441,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     }
   }
 
-  async function dropProduct(event, state) {
-    const productId = event.dataTransfer.getData('text/plain');
-    const product = products.find((item) => item.product_id === productId);
-    if (product) await changeState(product, state);
-  }
-
-  function startProductDrag(event, productId) {
-    if (busyId || event.target.closest('button, select, input, a')) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', productId);
-  }
-
   function exportView() {
     if (!canExport) {
       setNotice('Export is unavailable until inventory is loaded and pending submissions are resolved.');
@@ -522,7 +513,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>
         {subcategoryNames.map((name) => <button className={`inv-subcategory-filter ${selectedSubcategory === name ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === name} key={name} onClick={() => setSelectedSubcategory(name)}>{name} <span>{subcategoryCounts[name] || 0}</span></button>)}
       </nav>}
-      {inventory && <div className="inv-board">{columnStates.map((state) => <InventoryColumn key={state} state={state} products={visibleProducts.filter((product) => product.state === state)} busyId={busyId} onStateChange={changeState} onEdit={(product) => setEditor({ product })} onArchive={archiveProduct} onDrop={dropProduct} onDragStart={startProductDrag} onStock={setStockAction} />)}</div>}
+      <p id="inv-drag-help" className="inv-sync-note">Drag the product name or grip to an availability column. Scroll normally outside the grip. Or select the name, then choose Move here. Escape cancels.</p>
+      {inventory && <div className="inv-board">{columnStates.map((state) => <InventoryColumn key={state} state={state} products={visibleProducts.filter((product) => product.state === state)} busyId={busyId} onStateChange={changeState} onEdit={(product) => setEditor({ product })} onArchive={archiveProduct} movement={movement} onStock={setStockAction} />)}</div>}
+      <InventoryDragFeedback drag={movement.drag} />
       {inventory?.archived_products?.length > 0 && <section className="inv-archive"><button type="button" className="inv-archive-toggle" aria-expanded={showArchived} onClick={() => setShowArchived(!showArchived)}><Archive size={16} />Archived products <span>{inventory.archived_products.length}</span><ChevronDown size={16} /></button>{showArchived && <ul>{inventory.archived_products.map((product) => <li key={product.product_id}><strong>{product.name}</strong><span>{product.category_name}</span></li>)}</ul>}</section>}
       {publication && <section className="inv-publication" role="status"><Check size={18} /><div><strong>Publication confirmed · Version {publication.version}</strong><span>{formatPublishedAt(publication.published_at, localTimeZone) || 'Course timezone not configured'} · Published by {user.email || user.uid}</span></div><button type="button" onClick={() => setPublication(null)} aria-label="Dismiss publication confirmation"><X size={16} /></button></section>}
       <p className="inv-sync-note">Inventory refreshes from the server while open. Your saved changes are shared with assigned staff.</p>

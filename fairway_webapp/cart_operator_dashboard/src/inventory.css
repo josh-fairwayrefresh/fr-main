@@ -77,8 +77,16 @@
 .inv-column-in_inventory > header span { background: #e3e8e5; color: #57675d; }
 .inv-column-products { min-height: 150px; display: grid; align-content: start; gap: 8px; }
 .inv-product-tile { min-width: 0; padding: 10px; border: 1px solid var(--inv-line); border-radius: 5px; background: #fff; }
-.inv-product-tile[draggable="true"] { cursor: grab; }
-.inv-product-tile:active { cursor: grabbing; }
+.inv-product-tile.is-dragging { outline: 2px solid #35724f; }
+.inv-drag-handle { min-width: 0; min-height: 44px; flex: 1; display: flex; align-items: center; gap: 8px; padding: 4px; border: 0; border-radius: 4px; background: #f1f6f2; color: inherit; text-align: left; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.inv-drag-handle strong { overflow-wrap: anywhere; font-size: 12px; }
+.inv-drag-handle > span { flex: 0 0 20px; font-size: 20px; }
+.inv-drag-handle:active { cursor: grabbing; }
+.inv-drag-handle:disabled { cursor: wait; opacity: .6; }
+.inv-move-here { min-height: 44px; margin-bottom: 8px; padding: 8px; border: 1px solid #35724f; border-radius: 5px; background: #fff; color: #183e2c; }
+.inv-drag-preview { position: fixed; z-index: 140; width: 220px; padding: 12px; border: 2px solid #35724f; border-radius: 8px; background: #fff; color: #183e2c; box-shadow: 0 4px 16px #0003; pointer-events: none; font-size: 13px; }
+.inv-drag-announcement { position: fixed; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); pointer-events: none; }
+.inv-column.drag-over { outline: 3px solid #35724f; outline-offset: -3px; }
 .inv-product-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .inv-product-heading > strong { min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.35; }
 .inv-product-actions { display: flex; gap: 4px; }

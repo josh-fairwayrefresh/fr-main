@@ -226,6 +226,15 @@ The CPO authorized this coherent increment on 2026-10-23, from accepted main
   unchanged quantity; remove the product from cart totals and later cart audits.
   The state and quantity survive reload. Adjusting an In Inventory product to
   zero must leave it In Inventory, not move it to Sold Out.
+- Inventory dragging uses the visible product-name/grip control for mouse,
+  touch and pen through one shared interaction. Touch scroll remains available
+  outside that grip; sale, quantity, edit and selector controls do not initiate
+  dragging. A movement threshold, visible destination highlight and viewport-edge
+  scrolling support deliberate drops, including stacked phone columns. Dropping
+  on a column or its children uses the same attributed availability operation.
+  Escape, browser cancellation and dropping outside columns do not mutate stock.
+  The grip also supports selection followed by a labeled Move here button
+  without requiring the availability selector. This is not a separate stock path.
 - A sale icon opens positive whole units sold, default one, and Confirm. Server
   transactions validate against current On Cart stock. An excessive sale is
   rejected without deduction or successful sale event, explaining that the

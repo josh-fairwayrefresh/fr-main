@@ -1,0 +1,162 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { createServer } from 'vite';
+import { chromeSession, pause, until } from './browserHarness.mjs';
+
+test('trusted mouse and touch dragging returns stock, resumes staff selection, scrolls and confirms loading', { timeout: 120000 }, async () => {
+  const profile = await mkdtemp(path.join(tmpdir(), 'fairway-inventory-pointer-'));
+  const server = await createServer({
+    root: fileURLToPath(new URL('..', import.meta.url)), configFile: false, appType: 'custom',
+    cacheDir: path.join(profile, 'vite-cache'), optimizeDeps: { include: ['react', 'react-dom', 'react-dom/client'] },
+    server: { host: '127.0.0.1', port: 0 },
+  });
+  server.middlewares.use('/__pointer-test', async (_req, res, next) => {
+    try {
+      res.setHeader('Content-Type', 'text/html');
+      res.end(await server.transformIndexHtml('/__pointer-test', '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/test/inventoryPointer.fixture.jsx"></script>'));
+    } catch (error) { next(error); }
+  });
+  let browser;
+  try {
+    await server.listen();
+    browser = await chromeSession(profile);
+    const { send, evaluate } = browser;
+    const url = `http://127.0.0.1:${server.httpServer.address().port}/__pointer-test`;
+    const state = () => evaluate('JSON.parse(localStorage.getItem("pointer-data"))');
+    const writes = async () => (await state())?.writes || [];
+    const bounds = selector => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    const button = text => `[aria-label="${text}"]`;
+    async function navigate(method, params = {}) {
+      const prior = await evaluate('globalThis.pointerFixtureId');
+      await send(method, params);
+      await until(async () => {
+        try {
+          return await evaluate(`globalThis.pointerFixtureId && globalThis.pointerFixtureId !== ${JSON.stringify(prior) || 'null'} && Boolean(document.querySelector("[aria-label='Move Pointer Water']"))`);
+        } catch (error) {
+          if (error.code === -32000 && /navigated|Execution context was destroyed|Cannot find context/.test(error.message)) return false;
+          throw error;
+        }
+      }, 'new inventory document');
+    }
+    async function key(key, code, virtual) {
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: virtual });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: virtual });
+    }
+    async function click(selector) {
+      await until(() => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e && !e.disabled;})()`), `enabled ${selector}`);
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center'})`);
+      const p = await bounds(selector);
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...p, button: 'left', clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p, button: 'left', clickCount: 1 });
+    }
+    for (const [pointerType, width] of [['mouse', 1024], ['touch', 768], ['touch', 375]]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: pointerType === 'touch' });
+      await send('Emulation.setTouchEmulationEnabled', { enabled: pointerType === 'touch', maxTouchPoints: 5 });
+      await navigate('Page.navigate', { url });
+      await evaluate('localStorage.clear();sessionStorage.clear()');
+      await navigate('Page.reload');
+      async function down(p) {
+        if (pointerType === 'touch') await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...p, id: 1, radiusX: 5, radiusY: 5 }] });
+        else await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...p, button: 'left', clickCount: 1 });
+      }
+      async function move(p) {
+        if (pointerType === 'touch') await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...p, id: 1, radiusX: 5, radiusY: 5 }] });
+        else await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...p, button: 'left', buttons: 1 });
+      }
+      async function up(p) {
+        if (pointerType === 'touch') await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        else await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p, button: 'left', clickCount: 1 });
+      }
+      async function drag(targetState) {
+        const source = button('Move Pointer Water');
+        await evaluate(`document.querySelector(${JSON.stringify(source)}).scrollIntoView({block:'center'})`);
+        const start = await bounds(source);
+        await down(start);
+        await move({ x: start.x + 15, y: start.y + 4 });
+        const targetSelector = `[data-inventory-drop="${targetState}"] > header`;
+        let target = await bounds(targetSelector);
+        if (target.y > 850 || target.y < 40) {
+          const edge = { x: start.x, y: target.y > 850 ? 890 : 10 };
+          await move(edge);
+          await until(async () => { target = await bounds(targetSelector); return target.y > 80 && target.y < 820; }, 'drag edge scrolling');
+        }
+        await move(target);
+        await pause(80);
+        assert.equal(await evaluate(`document.querySelector('[data-inventory-drop="${targetState}"]').classList.contains('drag-over')`), true);
+        assert.equal((await writes()).length, targetState === 'in_inventory' ? 0 : 1, 'Dragging alone never writes');
+        await up(target);
+      }
+      await drag('in_inventory');
+      await until(() => evaluate('Boolean(document.querySelector("#inventory-session-title"))'), 'staff prompt after drop');
+      assert.equal((await writes()).length, 0);
+      await evaluate(`(()=>{const select=document.querySelector('.inventory-session-overlay select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'operator');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await pause(50);
+      await click('.inventory-session-overlay button[type="submit"]');
+      await until(async () => {
+        const error = await evaluate('document.querySelector("[role=alert]")?.textContent');
+        if (error) throw new Error(error);
+        return (await writes()).length === 1;
+      }, 'resumed return');
+      let data = await state();
+      assert.equal(data.products[0].quantity, 5);
+      assert.equal(data.products[0].state, 'in_inventory');
+      assert.equal(data.writes[0].quantity, undefined);
+      assert.equal(data.writes[0].shift_id, 'pointer-shift');
+      await navigate('Page.reload');
+      await until(() => evaluate('document.querySelector("[aria-label=\'Pointer Water state\']")?.value==="in_inventory"'), 'persistent restaurant state');
+      await drag('on_cart');
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Load onto cart"'), 'load confirmation');
+      assert.equal((await writes()).length, 1);
+      await click('.inv-dialog footer button[type="submit"]');
+      await until(async () => (await writes()).length === 2, 'confirmed loading');
+      await until(() => evaluate('!document.querySelector("#inv-stock-title")'), 'loading dialog closed');
+      data = await state();
+      assert.equal(data.products[0].quantity, 5);
+      assert.equal(data.products[0].state, 'on_cart');
+      const evidence = await evaluate('globalThis.pointerEvidence');
+      assert.ok(evidence.some(e => e.trusted && e.pointerType === pointerType && e.type === 'pointerdown'), `${pointerType} input must be browser-trusted`);
+      assert.ok(evidence.every(e => e.trusted), 'No synthetic pointer events');
+      // A child action remains a click, not a move.
+      await click(button('Edit quantity for Pointer Water'));
+      await until(() => evaluate('document.querySelector("#inv-stock-title")?.textContent==="Adjust quantity"'), 'interactive tile child');
+      assert.equal((await writes()).length, 2);
+      await click('.inv-dialog footer button[type="button"]');
+      await evaluate('document.querySelector("[aria-label=\'Move Pointer Water\']").scrollIntoView({block:"center"})');
+      const cancelStart = await bounds(button('Move Pointer Water'));
+      await down(cancelStart); await move({ x: cancelStart.x + 20, y: cancelStart.y });
+      await key('Escape', 'Escape', 27);
+      assert.equal(await evaluate('Boolean(document.querySelector(".inv-drag-preview"))'), false, 'Escape clears active gesture');
+      await up(cancelStart);
+      assert.equal(await evaluate('Boolean(document.querySelector(".inv-move-here"))'), false, 'Release after cancellation must not pick the handle again');
+      assert.equal((await writes()).length, 2, 'Cancelled drag must not mutate');
+      await down(cancelStart); await move({ x: 2, y: 200 }); await up({ x: 2, y: 200 });
+      assert.equal((await writes()).length, 2, 'Dropping outside columns must not mutate');
+      if (pointerType === 'touch') {
+        await down(cancelStart); await move({ x: cancelStart.x + 20, y: cancelStart.y });
+        await send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+        assert.equal(await evaluate('Boolean(document.querySelector(".inv-drag-preview"))'), false, 'Browser pointer cancellation clears gesture');
+        const detail = '[aria-label="Pointer Water state"]';
+        await evaluate(`document.querySelector(${JSON.stringify(detail)}).closest('article').scrollIntoView({block:'center'})`);
+        const position = await bounds(detail);
+        const beforeScroll = await evaluate('window.scrollY');
+        // A noninteractive card edge keeps ordinary touch scrolling, rather than initiating a drag.
+        const x = await evaluate(`document.querySelector(${JSON.stringify(detail)}).closest('article').getBoundingClientRect().right - 3`);
+        await down({ x, y: position.y });
+        for (let delta = 20; delta <= 140; delta += 20) { await move({ x, y: position.y - delta }); await pause(20); }
+        await up({ x, y: position.y - 140 });
+        await pause(100);
+        assert.ok(await evaluate('window.scrollY') > beforeScroll, 'Touch scrolling works outside grip');
+        assert.equal((await writes()).length, 2, 'Touch scrolling does not move stock');
+      }
+      assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, 'No horizontal overflow');
+    }
+  } finally {
+    await browser?.close();
+    await server.close();
+    await rm(profile, { recursive: true, force: true });
+  }
+});
