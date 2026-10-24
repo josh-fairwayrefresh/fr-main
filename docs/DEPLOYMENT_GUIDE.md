@@ -1089,6 +1089,74 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Inventory Pointer Drag Correction — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Defect/evidence correction:** the CPO confirmed native inventory dragging
+  still failed. Prior synthetic DragEvents below proved handler/backend routing
+  only, not a working drag gesture. That evidence was insufficient for drag
+  acceptance. The whole-card HTML draggable implementation lacked a shared
+  touch interaction and competed with interactive children/browser gestures;
+  previous mouse automation also failed to reach its intended target.
+- **Implementation:** one Pointer Events owner handles mouse/touch/pen, a
+  visible product-name/grip, eight-pixel initiation threshold, pointer capture,
+  coordinate-based nested column hit testing, feedback and viewport-edge
+  scrolling. Touch scrolling remains normal outside the grip. Interactive child
+  buttons/selectors do not start dragging. Escape, lost capture, browser
+  cancellation, scope change and outside drops clear the interaction without
+  stock writes. Select-name/Move here is an accessible alternative, not a
+  requirement to use the availability dropdown. All moves call the existing
+  attributed availability owner; staff resumption and confirmed loading remain.
+- **Published application source:** `8624ce76f19c05cf45cb7edbf4fab5739e366ab6`,
+  branch `feat/persistent-cart-inventory`, draft PR #12. Hosting-only publication:
+  project/site `fairway-refresh-sandbox-260930`, version `d3fc2920cf9ab00a`,
+  release `1792808391856000`, time `2026-10-24T02:19:51.856Z`.
+  Admin remains `fairway-admin-sandbox-00020-rkt` at 100%; Receiver remains
+  `fairway-button-receiver-sandbox-00025-9lr` at 100%. Neither was redeployed.
+- **Automated verification:** 68 frontend unit checks and five browser checks
+  pass; sandbox configuration/build and editor diagnostics pass. The added
+  real-input browser check uses Chromium CDP mouse/touch input, verifying
+  browser-trusted Pointer Events at 1024x900 mouse, 768x900 touch and 375x900
+  touch. It covers deliberate drops onto nested column headers, no write before
+  drop, first-action staff prompt/resumption, quantity-preserving return,
+  persisted reload, positive Quantity loading/Confirm, interactive child
+  controls, outside drop/Escape/pointer cancellation, normal non-grip touch
+  scrolling and phone edge scrolling in both directions. No synthetic
+  DragEvents/PointerEvents provide its drag evidence. Existing operation,
+  response-loss retry, audit/shift, CSV-download and queue/tab/category
+  regressions pass. Backend code is unchanged; previously passing 151 backend
+  checks and 17 real-emulator scenarios remain the retained backend evidence,
+  not a claim of a new backend run.
+- **Deployed verification:** actual Playwright mouse down/move/up moved only
+  synthetic `CPO TEST Return Cycle` from On Cart to In Inventory (HTTP 200,
+  quantity 3->3, no quantity payload/dialog). Reload retained that state; opening
+  but not confirming the audit excluded it. Chromium CDP touch start/move/end
+  at 768x1024 then opened Load onto cart; state stayed In Inventory until
+  explicit Confirm and survived another reload. A fresh independent operator
+  session used trusted touch input to return the same product, prompted for
+  staff with no Quantity dialog, then resumed exactly that move after selecting
+  the existing synthetic manager. Touch loading again required Confirm.
+- **Durable evidence:** availability event `mp3PClmpk2iI8oZUMa3Y` (mouse return),
+  `KKq3Iep0QzIzOaPgLzpT` (confirmed reload), `KfaRxmtbrnpD97CxcLF3` (fresh-session
+  touch return), and `35e9yodISFAlcsFqY6nz` (confirmed reload) each preserve
+  quantity 3->3, staff ID/name, shift ID and authenticated submitting UID.
+  Final observed revision 44; Return Cycle finishes On Cart at 3. Existing CPO
+  changes to other products were preserved; the displayed daily sales tally
+  remains 25, publication version zero/no slug. No sale, audit confirmation,
+  shift close or public-menu publication was performed by this drag follow-up.
+- **Served artifacts:** every built JS/CSS asset was fetched and SHA-256 matched.
+  Main `index-CKGZuGqy.js`:
+  `bc1f3b68b1de1f0b4bf2ff91d77c1f8ae22a3f5fe19295630fecbd33e4fedd07`;
+  inventory `InventoryApp-Gffc13--.js`:
+  `c07a6fefdead34c677a730fbc842c451a581faea6246db35b10c7cdb95578622`;
+  inventory CSS `InventoryApp-C4GCjd6Z.css`:
+  `8a50d349422e5dc1243168dbd1f172d8856b32d91088a20d73a6fd0d66784420`.
+- **Review:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=8624ce7`.
+  Refresh old tabs to receive the new product-name/grip controls.
+  Browser-generated trusted touch input is not a physical iPad/Safari test;
+  physical iPad acceptance remains with the CPO. No merge, production
+  deployment/data, request generation, service/device changes or physical
+  operations occurred.
+
 ### Persistent Cart Inventory / Staff / Audits / Shift Close Sandbox Increment (2026-10-24 UTC)
 
 - **CPO feedback follow-up:** PR #12 retains all prior work and adds confirmed
@@ -1109,7 +1177,7 @@ The Alignment Register is the canonical record mapping release milestones across
   A fourth browser check saved an actual Chromium CSV file and verified its
   filename/content (not just generated text). Final frontend totals: 68 unit
   checks and four browser checks passed.
-- **Current feedback publication:** application source
+- **Prior feedback publication (superseded by pointer correction above):** application source
   `1cca8d7ea5766d040c05e6be8246623166e6a75c`, same draft PR #12.
   Admin `fairway-admin-sandbox-00020-rkt`, Ready/100% after explicit traffic
   activation; image
@@ -1143,14 +1211,14 @@ The Alignment Register is the canonical record mapping release milestones across
   Course had 24 units sold before this follow-up sale and 25 afterward; existing
   CPO sandbox activity was preserved. Revision 36, publication version zero/no
   slug, no menu publication or audit confirmation by this follow-up.
-- **Current served hashes:** main `index-v1GxKmK1.js` SHA-256
+- **Prior served hashes:** main `index-v1GxKmK1.js` SHA-256
   `f8d48d38392075f768059e93a31ff60574da5b18ac074b3d78470a3e6e4a65a8`;
   inventory `InventoryApp-D-ogljpK.js`
   `b083772025d50f93660989a42a3407f260c744b0486573939bbdfab199818408`;
   shared CSS `index-3jx2LLq3.css`
   `84b2e92aeaf71fa67366d9458db4bddc7278dc1609993c84a96b8b85a4df8556`.
   All three served hashes match local build bytes.
-- **Current review URL:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=1cca8d7`.
+- **Prior review URL:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=1cca8d7`.
   Physical iPad/Safari drag gestures and its native download UI remain CPO
   device checks: integrated-browser pointer drag automation did not land on the
   intended column, so live drag-route evidence uses rendered DragEvents. The
