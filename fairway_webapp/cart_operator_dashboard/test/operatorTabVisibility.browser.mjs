@@ -32,6 +32,7 @@ test(`rendered queue and category surfaces use the shared owner: ${displayName}`
     root: fileURLToPath(new URL('..', import.meta.url)),
     configFile: false,
     appType: 'custom',
+    cacheDir: path.join(profile, 'vite-cache'),
     plugins: [{
       name: 'review-category-owner',
       enforce: 'pre',

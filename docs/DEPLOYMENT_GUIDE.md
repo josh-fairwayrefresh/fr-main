@@ -1089,6 +1089,605 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Open/reload menu and Excel inventory report — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority:** CPO refinement within existing draft PR #12, superseding the
+  prior public polling/focus behavior and CSV format. No merge, production,
+  firmware or physical-device authority. The existing committed-inventory API,
+  field allowlist, stable links and accepted operational transactions remain
+  unchanged. Prior entries below are dated evidence, not current UI guidance.
+- **Published application source:** `67076f0b0de0d48b1bba5a9011878ecb3eaeb6fa`,
+  branch `feat/persistent-cart-inventory`, based on main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Subsequent documentation-only
+  evidence commits do not change deployed assets.
+- **Changes:** the golfer menu fetches on open/manual reload or explicit
+  initial-error retry, not on a timer or focus. All categories start collapsed,
+  including Canned Cocktails. View Menu opens the selected Course in a new tab,
+  stacked directly above Confirm Inventory Audit on the right of the filters,
+  with matching typography and 44-pixel targets. Excel replaces CSV without
+  changing export scope or introducing an operational API.
+- **Workbook:** genuine zipped OOXML `.xlsx`, ExcelJS 4.4.0 loaded only when
+  Export is used, patched scoped UUID 11.1.1 dependency. Customer/Course names
+  and IDs, Course-local export time/timezone, operator, explicit filters/archive
+  scope and confirmed revision precede two side-by-side inventory tables.
+  Literal string cells cannot become formulas; quantities and sales units are
+  numeric whole units. The Course-wide daily product/unit tally and full
+  On Cart total remain included. Print area, landscape Letter, quarter-inch
+  margins and fit-to-one-page are explicit. Pending/unresolved writes disable
+  Export; a changed confirmed/submission/filter context during generation
+  rejects the download with an actionable error.
+- **Checks:** frontend **69 passed**, browser **6 passed**, sandbox
+  configuration/build, editor diagnostics and `git diff --check` passed.
+  Browser regressions retain trusted mouse/touch/keyboard/selector movement,
+  remaining-sale confirmation/cancel, stock conflicts, staff resumption,
+  sales/audit/shift retries, numeric controls, read-only export and queue/category
+  behavior. New checks cover real `.xlsx` download/readback, literal formula-like
+  names, typed numbers, filters, print configuration, no focus/interval fetch,
+  collapsed categories and manual-reload freshness. Changed filter context
+  during generation correctly prevents a stale download without an API request.
+  Backend source was unchanged; earlier backend/emulator evidence remains
+  retained, not claimed as rerun for this presentation/export refinement.
+- **Rendered and live evidence:** local rendered Inventory and deployed DOM
+  geometry at **1440/1024/768/430/375 px** have no horizontal overflow or clipped
+  actions; View Menu remains above Audit, with identical computed font and
+  targets at least 44 pixels high. Live legacy Monarch menu began with all six
+  populated categories collapsed, including Canned Cocktails; a browser-generated
+  mouse click expanded it. Focus plus **16.5 seconds** produced no extra public
+  fetch; manual reload fetched once and restored collapsed categories.
+- **Actual workbook/print evidence:** a real Chromium pointer-triggered file
+  download used the byte-verified deployed workbook module and representative
+  inputs: 57 existing catalog names/categories plus one representative product,
+  varied availability/quantities, and seven daily sales rows (28 units).
+  LibreOffice **26.8.1.1** opened the downloaded workbook and rendered
+  **one 792 x 612 pt landscape Letter page**. Text extraction retained all
+  **58 product names** and the sales summary; visual PDF inspection found
+  readable tables and no cropped names, quantities or headings. Worksheet body
+  text is 10 pt before one-page scaling. This is spreadsheet-engine print
+  evidence, not merely OOXML page flags or a physical printer/Excel acceptance.
+  The actual authenticated sandbox Export additionally generated an inspected
+  7,906-byte `.xlsx` payload: Customer CUST-0005 / Course COURSE-0007,
+  America/Los_Angeles, operator Not selected, all five products, revision63,
+  daily seven units and cart stock two. It also rendered one Letter page;
+  tile/session text remained unchanged. The integrated VS Code browser did not
+  expose a native download event, so its exact Blob payload was captured at
+  the download boundary; filesystem download was verified separately in Chrome.
+- **Sandbox publication:** project/site `fairway-refresh-sandbox-260930`,
+  Hosting version **`8a1ddec5ac14bb5a`**, release **`1792843432480000`**,
+  **`2026-10-24T12:03:52.480Z`**. Hosting only; all served JS/CSS and index bytes
+  matched the sandbox build.
+  - `index-BDo7btIQ.js` SHA-256:
+    `5eb9127eb5412d12b8a3ca39953671ad4669401a4b3ae3d85fc974015627666e`
+  - `InventoryApp-DdVpy77A.js`:
+    `ce0c0c345bb60f977e7760e4dddf1eadd73fe12071add1fbdbcd232cf7a99cad`
+  - `PublicMenuApp-BhC69WXt.js`:
+    `f910dcd810bb351978066bfb58996e39cf5ae0efcf45664d68a61acf06df8330`
+  - `inventoryExport-BoKso6Gb.js`:
+    `6a8f2d1c83a29525bd81292e44472bfbc6590ab588c411913084e81f4b70dba5`
+- **Unchanged services/data:** Admin `fairway-admin-sandbox-00022-9gn` and
+  Receiver `fairway-button-receiver-sandbox-00025-9lr` remain at100% traffic,
+  read back after Hosting publication. New and legacy public APIs returned
+  200/no-store; recursive inspection found no quantity, staff, sales, shifts,
+  audits or actor fields. The existing public version counter remains part
+  of its accepted response, not a quantity. Synthetic review Course stayed at
+  revision63 with one public On Cart product; no stock, staff, shift, audit,
+  assignment, request or service mutation was needed for this follow-up.
+- **Review:** [Inventory](https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=67076f0)
+  and [golfer menu](https://fairway-refresh-sandbox-260930.web.app/cartmenus/cpo-test-persistent-inventory).
+  Physical iPad/Safari and native Microsoft Excel/physical-printer acceptance
+  remain CPO checks. Existing Firebase dependency advisories remain unchanged;
+  the added ExcelJS UUID advisory was eliminated by the scoped override.
+  The lazy export chunk adds a nonblocking build size warning without adding
+  that download to the initial Inventory/public-menu load.
+
+### Automatic current On Cart menu and compact sales — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority/current requirement:** the CPO superseded the explicit
+  Preview/Publish workflow with automatic current On Cart serving, compact
+  Sales Today and prominent two-line Close out. This remains draft PR #12,
+  sandbox-only; no merge or production deployment/data authority. The earlier
+  publication entries below are dated history, not current instructions.
+  UX owns behavior; the Engineering Guide owns the single-state architecture.
+- **Published application source:** `698443fc10e042eb603cd5016a7ef546c7791ac8`,
+  branch `feat/persistent-cart-inventory`, based on canonical main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Evidence-only commits do not
+  change these deployed artifacts.
+- **Implementation:** anonymous public reads use one read-only Firestore
+  transaction over the existing slug/Course/inventory state/products, selecting
+  active On Cart records through one public-product field allowlist. Nested
+  price fields are explicitly projected too. There is no second menu balance,
+  asynchronous projection, publication pointer dependency, or snapshot write.
+  Historical snapshots/fields remain untouched, never served. Successful
+  stock/metadata transactions immediately determine subsequent API reads.
+  Failed/cancelled/not-yet-confirmed operations do not change those records;
+  exact operation replay cannot resurrect an older public projection.
+  Existing URLs/slugs remain valid. Generic configured Course slugs render
+  returned Course name/timezone without borrowing Monarch branding.
+  No-store responses/fetches, 15-second/focus refresh and abort/ignore of
+  superseded requests prevent stale client refreshes replacing newer results.
+  Retired preview/publish endpoints return explicit 410 without mutation or
+  shift activity and tell cached clients to refresh.
+- **UI:** Sales Today displays only the Course-local day's total units;
+  individual sales/product tallies remain durable and available to export.
+  Selected operator stays clear; prominent Close out / Enter final sales uses
+  the existing close/attribution/recovery operation. Removed manual publication
+  controls, preview dialog and publication-status instructions. View golfer menu
+  opens the selected Course's configured public link in a new tab; unconfigured
+  Courses get an explicit Admin-configuration explanation rather than a wrong
+  Course link.
+- **Validation:** full backend 154 passed; real Firestore emulator 20 passed,
+  one unit-only fault-injection scenario skipped there (passed in-memory).
+  Frontend 68 passed, browser six passed, final focused pointer/public-menu
+  checks and sandbox config/build passed; editor diagnostics/diff checks clean.
+  Coverage includes transaction-consistent public reads during concurrent sales,
+  metadata edits, zero-stock removal, no snapshot dependency, exact replay,
+  rollback, nested privacy allowlisting, public no-store/access boundary,
+  generic/legacy URLs, stale client response suppression, compact totals,
+  two-line close-out and 44-pixel responsive controls. Existing stock/retry/
+  audit/shift/export/drag/queue/category regressions pass. A test that previously
+  waited on removed publication/revision UI now waits for fetched state and
+  asserts the actual reopened audit revision. Existing build chunk-size warning
+  remains nonblocking.
+- **Admin sandbox:** `fairway-admin-sandbox-00022-9gn`, Ready/Active and 100%
+  traffic after explicitly switching from the prior pinned `00021-wbd`.
+  Runtime identity, environment/origin settings and no-invoker-IAM-check setting
+  preserved. Image
+  `sha256:ce0dabd00872425a7b7adf0df430168bf318c5a5a748047ee3020bc9b3fda883`,
+  build `8d26138b-b501-4187-9a6c-34b6c2b53bcc`, source archive
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792837661.407273-73ac1bf8b7c6483aae9de87d9f2597a6.zip#1792837661714515`.
+  Receiver remains `fairway-button-receiver-sandbox-00025-9lr` at 100%;
+  it was not redeployed.
+- **Hosting sandbox:** project/site `fairway-refresh-sandbox-260930`,
+  version `ce56795b6f985177`, release `1792837661141000`,
+  time `2026-10-24T10:27:41.141Z`. All served JS/CSS matched local build SHA-256.
+  Main `index-BQyjHHfx.js`:
+  `3fc9ecd44d222eb10407a4a085425b64ba41567e379846478f87fd2ec1d623dc`;
+  Inventory `InventoryApp-Bw1sS1xd.js`:
+  `e137ba420af65858ff8f45dbc63e1d5cb35395643fededa2b1b7c0e6ca669649`;
+  Public menu `PublicMenuApp-BZTABOtZ.js`:
+  `8b08285dfc83846b6caaf4b7ea0edd310dfd42ab7b18fe215184db51aec75db6`;
+  Inventory CSS `InventoryApp-DaMtxS05.css`:
+  `5c97bff6fb596290227f39056b81864840997040586826c5bb2040aa6962d643`;
+  shared CSS `index-CCL6HDYj.css`:
+  `86ec62871ea5df22898440dbe25851f3672d3a3eb4aac7ce0dd5e20524888a3d`.
+- **Deployed end-to-end evidence:** in synthetic
+  `CUST-0005` / `COURSE-0007`, configured the previously absent public slug
+  `cpo-test-persistent-inventory` through the existing Admin API. Created the
+  clearly named synthetic product `92R4cReFFo6b9Cci84zm`
+  (CPO TEST Automatic Menu, later CPO TEST Automatic Menu Updated).
+  Its initial On Cart record appeared on the actual public page without
+  publishing. Return to In Inventory removed it automatically; pending loading
+  and Cancel left the menu empty. Confirmed loading of three restored it.
+  Autosaved name/description/price 2.50->3.75 appeared on the open public page.
+  A further return preserved quantity three and excluded it publicly;
+  confirmed reload preserved three. Excessive sale of four rejected 409 with
+  stock three and public item unchanged. Remaining-three sale confirmation
+  Cancel left the exact public response, stock and daily tally unchanged.
+  Reconfirmed remaining-three sale created one attributed record, moved to
+  Sold Out/zero and removed the item from the actual open public page.
+  Public-page checks observed automatic polling, not just forced API refresh.
+- **Durable review state:** sale `3LnvJ6AUZpTkW5UUx58g`, operation
+  `cc31f917-bcc0-4981-afe1-131db01c2328`, before three/after zero, units three,
+  revision 62, timestamp `2026-10-24T10:32:19.712Z`. Staff/shift/authenticated
+  account attribution verified. Course-local tally rose four->seven; both
+  individual product tallies remain in the authenticated API. Afterwards
+  confirmed loading of two leaves the new synthetic product On Cart for review,
+  revision 63. The four existing products/quantities/states remain unchanged.
+  Selected CPO TEST F&B Manager and active shift preserved; opened/cancelled
+  the existing final-sales dialog without closing it. No audit was submitted.
+  ADC SDK readback was blocked by expired reauthentication; active gcloud
+  credentials successfully verified the exact durable event through the
+  Firestore read API instead. No credential or Auth configuration changed.
+- **Public boundary/rendered evidence:** anonymous synthetic slug and existing
+  `monarch-bay` API links both return 200/no-store; the latter retains 57 active
+  products. Exact public envelope fields are course_id, course_name, timezone,
+  inventory_revision, updated_at and products; exact product fields are
+  product_id, name, category, subcategory, brand, description, price and state.
+  Recursive live response inspection found no quantities, staff, sales, shift,
+  audit, actor or idempotency fields. Anonymous Inventory remains 401.
+  Actual public content contains product details/price/Available, not quantities.
+  Rendered Inventory measurements at 1440/1024/768/430/375 pixels confirm the
+  total-only box, stacked close-out wording, selected-Course menu link, no
+  publication controls, clean wrapping, no horizontal overflow and >=44x44
+  catalog/audit/session controls. Physical iPad/Safari is not claimed.
+- **Review links:** Inventory
+  `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=698443f`;
+  golfer menu
+  `https://fairway-refresh-sandbox-260930.web.app/cartmenus/cpo-test-persistent-inventory`.
+  Refresh old Inventory tabs. No production deployment/data, merge, requests,
+  service/device state, firmware or physical-device operations occurred.
+
+### Inventory organization refinement — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Acceptance/boundary:** the CPO accepts current inventory functionality and
+  requested presentation refinement in the existing draft PR #12. This is not
+  merge or production authorization. README/backlog now distinguish accepted
+  functionality from pending presentation review. Product layout requirements
+  are owned by the UX specification.
+- **Published source:** `3dcbf33ecaf397ad509204ca695ec31f96b40c41`,
+  branch `feat/persistent-cart-inventory`. Main grouping change
+  `178248595e807169bc075f0b2d63418ee4af2baa`; final source additionally bounds
+  the tablet account label so a multi-Course banner does not orphan Sign out.
+  The earlier intermediate Hosting version `e91674fbc7193a90` is superseded by
+  the final publication below.
+- **UI:** logo displayed dimensions increased exactly 50% at each breakpoint
+  (desktop/iPad 104x64->156x96; phones 72x48->108x72; smallest phone width
+  60->90 with 72-pixel height). Admin uses the familiar accessible shield.
+  Export is in the banner without explanatory wording; confirmed CSV data,
+  download and unresolved-submission gates are unchanged. Sales Today sits
+  beside the dashboard title at iPad/desktop widths, with selected operator,
+  Close shift and submission-recovery controls inside the same panel.
+  Add Category/Add Product/Preview Draft/Publish Menu form one action row
+  immediately above filters. Audit sits on the filter row, visually separated.
+  Routine move/archive/export/audit/publication success boxes are removed;
+  persisted tiles/quantities/tally/shift/publication revision convey success.
+  Failures/conflicts/unknown outcomes remain visible with alert semantics.
+- **Verification:** final frontend 68 unit checks and five browser checks pass,
+  sandbox config/build, diff checks and editor diagnostics pass. Browser
+  regression now measures actual layout at 1440/1024/768/430/375 CSS pixels,
+  including multi-Course/account context, accessible working shield, exact logo
+  dimensions, banner Export, adjacent title/sales panel, operator/Close shift
+  inside panel, catalog row ordering, separated audit, clean phone wrapping,
+  no clipped controls/document overflow and >=44x44 regrouped touch targets.
+  Existing real mouse/touch dragging, remaining-sale confirmation/stale refresh/
+  retry, return/load, staff, audit/shift-close failure recovery, CSV download/
+  contents, unresolved-export protection and queue/tab/category regressions pass.
+  An initial isolated browser run hit a profile-cleanup ENOTEMPTY race; bounded
+  removal retries on the exact temporary profile fix cleanup, and final runs
+  pass. Backend code unchanged: prior 154 backend / 20 emulator scenarios are
+  retained evidence, not represented as a new backend run.
+- **Final sandbox publication:** Hosting only, project/site
+  `fairway-refresh-sandbox-260930`, version `c22a708a990a6ab2`,
+  release `1792836258363000`, time `2026-10-24T10:04:18.363Z`.
+  Admin `fairway-admin-sandbox-00021-wbd` and Receiver
+  `fairway-button-receiver-sandbox-00025-9lr` remain unchanged at 100% traffic;
+  neither was redeployed.
+- **Served identities:** all built JS/CSS assets were fetched and SHA-256
+  matched. Main `index-CSOyOyeK.js`:
+  `b8dff5bc246cc792f7ba81b8cbf0f151b2a2b3975440d2716ca621ce51ed62f1`;
+  inventory `InventoryApp-ClrTJOO0.js`:
+  `eb1e399115947b9ab4d9db5307f788a2128f83b9bf5c267250551855c20f7006`;
+  inventory CSS `InventoryApp-BFYufh36.css`:
+  `699f63a4900094936af7d26518e8759aa2f5d2f7e52a57b4732f4ec5ad494a0c`;
+  shared CSS `index-Dy1gy2s_.css`:
+  `38d532de4f2dff50f80d3ecc9d4d8c00b772fb62972fa5b6e3d7365e1db32906`.
+- **Deployed rendered review:** authenticated sandbox at 1440x1000 desktop,
+  1024x768 iPad landscape, 768x1024 portrait, 430x932 and 375x812 phone.
+  Measured all new groupings, exact logo sizes, >=44x44 controls, no clipping
+  or horizontal document scroll. Catalog actions remain one row at 768 and
+  above and wrap into two on phones; title/Sales Today remain horizontal on
+  iPad/desktop and stack on phones. Actual screenshots inspected at desktop,
+  iPad portrait and small phone. Relocated Close shift and Audit dialogs opened
+  and cancelled normally, preserving selected manager; neither was submitted.
+  Revision 55 was observed from existing review data; this presentation
+  follow-up performed no stock/sale/staff/shift/audit/publication mutation.
+- **Review:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=3dcbf33`.
+  Refresh old tabs. Chromium rendered evidence does not substitute for physical
+  iPad/Safari review. No merge, production deployment/data, requests, service/
+  device changes, firmware or physical-device operations occurred.
+
+### Remaining-sale confirmation and full-height drop targets — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Authority/source:** CPO feedback supersedes positive On Cart-to-Sold Out
+  availability-only behavior. Application source
+  `8b57602475dc21cff20f5d9b1380fb9ffbd40071`, existing isolated branch
+  `feat/persistent-cart-inventory`, draft PR #12. No merge or production work.
+  UX/Engineering owners record the new contract.
+- **Behavior:** drag, keyboard Move here and selector share one intent owner.
+  Positive remaining stock opens "Confirm that you sold the remaining X units
+  of [product name]." Confirm reuses the existing attributed sale transaction,
+  sale event, Course-local tally and idempotency replay. Expected stock revision
+  binds the displayed amount; intervening changes reject without another sale.
+  Explicit Refresh confirmation updates the displayed amount but does not
+  submit; another Confirm is required. Cancel makes no operation. Zero On Cart
+  stock uses availability only, not a zero-unit sale. Restaurant returns retain
+  quantity; loading still confirms a positive Quantity. Cached availability-only
+  clients cannot bypass a remaining sale; the server rejects that positive-stock
+  transition explicitly.
+- **First-attempt drag investigation:** actual previous served layout had
+  `align-items:start`; at 768x1024, a lower Return Cycle tile started at y728
+  while Sold Out ended at y720. Its straight-across point at y753 hit no column.
+  Real mouse down/move/up reproduced no highlight/no move, without mutations.
+  Stretching adjacent columns to full grid-row height closes that target gap.
+  Accepted noninteractive mouse regions also prevent competing native
+  text/HTML dragging; interactive children and normal touch scrolling remain.
+  This is a confirmed failure mechanism, not a claim to have observed the
+  CPO's exact physical gesture.
+- **Verification:** full backend suite 154 passed. Isolated real Firestore
+  emulator 20 passed, one in-memory-only rollback fault injection skipped;
+  that rollback passes in the unit suite. Existing installed Java 21 was
+  explicitly added to PATH after default Java discovery failed; no dependency
+  installation. Frontend 68 unit checks and five rendered/browser regressions
+  passed; sandbox configuration/build, editor diagnostics and diff checks pass.
+  New backend checks cover attributed exact remaining sale, concurrent
+  same-operation replay, stale sale/adjustment revisions (including restored
+  original quantity), positive availability bypass rejection and zero-stock
+  non-sale transition. Normal concurrent quick sales retain delta behavior.
+- **Rendered input coverage:** browser-generated mouse at 1024x900 and trusted
+  touch at 768x900/375x900, repeated first-drop confirmations, lower-card
+  horizontal drops, selected noninteractive text, keyboard activation,
+  selector parity, Cancel, stale confirmation/explicit refresh, response-loss
+  retry with exactly one sale, tally update and zero-stock availability.
+  Existing return/load, touch scrolling/edge scrolling, staff resumption,
+  cancellation, stock/retry/audit/shift, CSV and queue/tab/category checks pass.
+  One old virtual-time browser harness run ended RUNNING rather than PASS;
+  the complete rerun passed. No synthetic handler execution is used as drag
+  acceptance evidence.
+- **Publication:** sandbox Admin `fairway-admin-sandbox-00021-wbd`, Ready/100%
+  after explicit traffic activation (source deployment initially retained
+  pinned 00020 traffic). Image digest
+  `sha256:eda27f71dfa12bfec027d77eae5de5970ca451fb108d18e5f063717bfcdae397`,
+  build `caa05db9-49ca-4e67-90b1-542ffa87f8e6`, source archive
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792809750.687911-3d2968d66bf8400c9037d825495559d1.zip#1792809751075769`.
+  Hosting project/site `fairway-refresh-sandbox-260930`, version
+  `166bc5e1aad1e2c7`, release `1792809869472000`,
+  time `2026-10-24T02:44:29.472Z`. Receiver unchanged at
+  `fairway-button-receiver-sandbox-00025-9lr`/100%; no Receiver deployment.
+- **Served artifact verification:** every built JS/CSS file fetched and matched
+  SHA-256. Main `index-BqTwjrSr.js`:
+  `0262361b0a2a755f07c4c6cf091128b0879c7e1d3e5bc7c181d40208425a52cf`;
+  inventory `InventoryApp-DD6cXk9p.js`:
+  `9916d463df1ed5cda23c13e3bdc217301731a3b46115f1a04e0b23888c55c5b0`;
+  inventory CSS `InventoryApp-BLowayP0.css`:
+  `c97400c7395e5cd448b0244f47e31fdd159711922aee3af0de32ce4d89ce87d6`.
+- **Live sandbox evidence:** dedicated synthetic Return Cycle only. Three
+  consecutive real Playwright mouse horizontal drops at 768x1024 each
+  highlighted Sold Out and opened the exact 3-unit confirmation on the first
+  attempt; Cancel left On Cart/3 and the 2026-10-23 tally 25 unchanged.
+  Trusted Chromium CDP touch input in the visible independent session opened
+  the same confirmation on its first drop, with `isTrusted:true` pointerdown/up.
+  A separate session's attributed adjustment to 4 invalidated the open 3-unit
+  confirmation: HTTP409 `stock_revision_conflict`, Confirm disabled, explicit
+  refresh displayed 4 without submitting. Reconfirmation returned HTTP200,
+  zero stock/Sold Out, and survived reload.
+- **Durable result:** sale event `HGeY1Eg6nlLBC3y9J1C8`, operation
+  `14d6aef2-b88a-4b6f-b1b1-e2c0814b5815`, four units, stock 4->0,
+  On Cart->Sold Out, stock revision 14/inventory revision 54, selected synthetic
+  manager, shift and authenticated UID. Live testing crossed Course-local
+  midnight; this sale belongs to 2026-10-24 and the displayed new-day tally is
+  four, not a claim that the previous day's 25 was erased. Final Return Cycle
+  remains Sold Out/0; no artificial restock/reset after the sale. Other CPO
+  product changes observed during review were preserved. Public menu remains
+  version zero/no slug. No audit confirmation, shift close, request/service/
+  device operation or production change was performed.
+- **Review:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=8b57602`.
+  Refresh cached tabs. Chromium-generated pointer/touch evidence is not
+  physical iPad/Safari acceptance, which remains with the CPO.
+
+### Inventory Pointer Drag Correction — PR #12 Sandbox (2026-10-24 UTC)
+
+- **Defect/evidence correction:** the CPO confirmed native inventory dragging
+  still failed. Prior synthetic DragEvents below proved handler/backend routing
+  only, not a working drag gesture. That evidence was insufficient for drag
+  acceptance. The whole-card HTML draggable implementation lacked a shared
+  touch interaction and competed with interactive children/browser gestures;
+  previous mouse automation also failed to reach its intended target.
+- **Implementation:** one Pointer Events owner handles mouse/touch/pen, a
+  visible product-name/grip, eight-pixel initiation threshold, pointer capture,
+  coordinate-based nested column hit testing, feedback and viewport-edge
+  scrolling. Touch scrolling remains normal outside the grip. Interactive child
+  buttons/selectors do not start dragging. Escape, lost capture, browser
+  cancellation, scope change and outside drops clear the interaction without
+  stock writes. Select-name/Move here is an accessible alternative, not a
+  requirement to use the availability dropdown. All moves call the existing
+  attributed availability owner; staff resumption and confirmed loading remain.
+- **Published application source:** `8624ce76f19c05cf45cb7edbf4fab5739e366ab6`,
+  branch `feat/persistent-cart-inventory`, draft PR #12. Hosting-only publication:
+  project/site `fairway-refresh-sandbox-260930`, version `d3fc2920cf9ab00a`,
+  release `1792808391856000`, time `2026-10-24T02:19:51.856Z`.
+  Admin remains `fairway-admin-sandbox-00020-rkt` at 100%; Receiver remains
+  `fairway-button-receiver-sandbox-00025-9lr` at 100%. Neither was redeployed.
+- **Automated verification:** 68 frontend unit checks and five browser checks
+  pass; sandbox configuration/build and editor diagnostics pass. The added
+  real-input browser check uses Chromium CDP mouse/touch input, verifying
+  browser-trusted Pointer Events at 1024x900 mouse, 768x900 touch and 375x900
+  touch. It covers deliberate drops onto nested column headers, no write before
+  drop, first-action staff prompt/resumption, quantity-preserving return,
+  persisted reload, positive Quantity loading/Confirm, interactive child
+  controls, outside drop/Escape/pointer cancellation, normal non-grip touch
+  scrolling and phone edge scrolling in both directions. No synthetic
+  DragEvents/PointerEvents provide its drag evidence. Existing operation,
+  response-loss retry, audit/shift, CSV-download and queue/tab/category
+  regressions pass. Backend code is unchanged; previously passing 151 backend
+  checks and 17 real-emulator scenarios remain the retained backend evidence,
+  not a claim of a new backend run.
+- **Deployed verification:** actual Playwright mouse down/move/up moved only
+  synthetic `CPO TEST Return Cycle` from On Cart to In Inventory (HTTP 200,
+  quantity 3->3, no quantity payload/dialog). Reload retained that state; opening
+  but not confirming the audit excluded it. Chromium CDP touch start/move/end
+  at 768x1024 then opened Load onto cart; state stayed In Inventory until
+  explicit Confirm and survived another reload. A fresh independent operator
+  session used trusted touch input to return the same product, prompted for
+  staff with no Quantity dialog, then resumed exactly that move after selecting
+  the existing synthetic manager. Touch loading again required Confirm.
+- **Durable evidence:** availability event `mp3PClmpk2iI8oZUMa3Y` (mouse return),
+  `KKq3Iep0QzIzOaPgLzpT` (confirmed reload), `KfaRxmtbrnpD97CxcLF3` (fresh-session
+  touch return), and `35e9yodISFAlcsFqY6nz` (confirmed reload) each preserve
+  quantity 3->3, staff ID/name, shift ID and authenticated submitting UID.
+  Final observed revision 44; Return Cycle finishes On Cart at 3. Existing CPO
+  changes to other products were preserved; the displayed daily sales tally
+  remains 25, publication version zero/no slug. No sale, audit confirmation,
+  shift close or public-menu publication was performed by this drag follow-up.
+- **Served artifacts:** every built JS/CSS asset was fetched and SHA-256 matched.
+  Main `index-CKGZuGqy.js`:
+  `bc1f3b68b1de1f0b4bf2ff91d77c1f8ae22a3f5fe19295630fecbd33e4fedd07`;
+  inventory `InventoryApp-Gffc13--.js`:
+  `c07a6fefdead34c677a730fbc842c451a581faea6246db35b10c7cdb95578622`;
+  inventory CSS `InventoryApp-C4GCjd6Z.css`:
+  `8a50d349422e5dc1243168dbd1f172d8856b32d91088a20d73a6fd0d66784420`.
+- **Review:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=8624ce7`.
+  Refresh old tabs to receive the new product-name/grip controls.
+  Browser-generated trusted touch input is not a physical iPad/Safari test;
+  physical iPad acceptance remains with the CPO. No merge, production
+  deployment/data, request generation, service/device changes or physical
+  operations occurred.
+
+### Persistent Cart Inventory / Staff / Audits / Shift Close Sandbox Increment (2026-10-24 UTC)
+
+- **CPO feedback follow-up:** PR #12 retains all prior work and adds confirmed
+  current-view CSV export and shared 48 by 48 CSS-pixel quantity controls.
+  On Cart-to-In Inventory uses the same attributed availability operation from
+  drag-and-drop and selector, with no quantity payload/prompt. A prepublication
+  live positive-quantity selector return succeeded (HTTP 200, unchanged
+  quantity); a blanket route failure was not reproduced. Confirmed defects:
+  zero adjustment incorrectly forced restaurant-held products to Sold Out,
+  and conflicted moves did not refresh the stale view. Both are corrected.
+  Backend full suite: 151 passed; real-emulator inventory scenarios: 17 passed,
+  one unit-only rollback scenario skipped. Frontend: 68 unit checks and three
+  rendered regressions passed; sandbox configuration/build passed.
+  New rendered evidence covers drag return with first-action Custom selection,
+  no off-cart Quantity prompt, excluded audit stock, reload/loading, zero
+  restaurant quantity, step minima/no-submit/target sizes, filtered read-only
+  export, export disabled during unresolved operations and stale-move recovery.
+  A fourth browser check saved an actual Chromium CSV file and verified its
+  filename/content (not just generated text). Final frontend totals: 68 unit
+  checks and four browser checks passed.
+- **Prior feedback publication (superseded by pointer correction above):** application source
+  `1cca8d7ea5766d040c05e6be8246623166e6a75c`, same draft PR #12.
+  Admin `fairway-admin-sandbox-00020-rkt`, Ready/100% after explicit traffic
+  activation; image
+  `sha256:3b6bc9773c047b91a1aed2afbe25d7de8feb31c8cf4271b9efb5a5abf2b403a6`,
+  build `b6efa178-b15e-4c5b-805a-4fa2ea20a36a`, source
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792806516.741978-ac79bb74a1df4c89adfc0e81ce5a7919.zip#1792806517110223`.
+  Hosting version `ba1ef0c48bc2f21a`, release `1792806518503000`,
+  released `2026-10-24T01:48:38.503Z`. Receiver unchanged at
+  `fairway-button-receiver-sandbox-00025-9lr`/100%. Later changes to tests and
+  publication evidence do not alter these served application artifacts.
+- **Feedback live verification:** isolated fresh browser session in the same
+  synthetic Course, with new product `G9NzFbmSsUZtLJ4uZvab`
+  (`CPO TEST Return Cycle`, category `CPO TEST Returns`). Rendered HTML
+  dragstart/drop events reached the actual backend, prompted for staff, resumed
+  the move without Quantity confirmation and preserved five units. Reload,
+  subsequent audit exclusion and zero restaurant adjustment/reload passed.
+  Loading with plus controls required Confirm; selector returns also preserved
+  quantities and resumed after staff selection. Durable return events
+  `bTPTRb5AIFYITzrV5nlD` (5->5), `xgJ4m9GTqKKujd2Gd6aO` (3->3), and
+  `WDStFzqFl9A4jnGYbwg1` (4->4) contain staff, shift and authenticated UID.
+  Each path excludes returned stock from totals/audits until explicitly loaded.
+  At 768 CSS pixels, sale/loading/adjustment step buttons measured 48 by 48;
+  minima, direct entry and draft-only stepping passed.
+- **Feedback export/retry evidence:** fresh-session export succeeded with
+  operator Not selected and without inventory writes. Filtered live CSV names
+  Customer/Course, `CPO TEST Returns`, Course-local time in
+  `America/Los_Angeles`, operator, revision, sole displayed product and the
+  explicitly Course-wide tally. Unsubmitted quantity 99 was excluded in favor
+  of confirmed three. A synthetic committed sale response loss disabled Export;
+  unchanged retry produced exactly one successful one-unit sale record. The
+  Course had 24 units sold before this follow-up sale and 25 afterward; existing
+  CPO sandbox activity was preserved. Revision 36, publication version zero/no
+  slug, no menu publication or audit confirmation by this follow-up.
+- **Prior served hashes:** main `index-v1GxKmK1.js` SHA-256
+  `f8d48d38392075f768059e93a31ff60574da5b18ac074b3d78470a3e6e4a65a8`;
+  inventory `InventoryApp-D-ogljpK.js`
+  `b083772025d50f93660989a42a3407f260c744b0486573939bbdfab199818408`;
+  shared CSS `index-3jx2LLq3.css`
+  `84b2e92aeaf71fa67366d9458db4bddc7278dc1609993c84a96b8b85a4df8556`.
+  All three served hashes match local build bytes.
+- **Prior review URL:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=1cca8d7`.
+  Physical iPad/Safari drag gestures and its native download UI remain CPO
+  device checks: integrated-browser pointer drag automation did not land on the
+  intended column, so live drag-route evidence uses rendered DragEvents. The
+  integrated browser also did not emit a download event; generated deployed
+  Blob contents were inspected and a separate real Chromium file-download
+  regression passed. These limits are not claims of physical-device validation.
+- **Authority/source:** CPO-approved readiness and implementation on isolated
+  `feat/persistent-cart-inventory`, based on verified canonical main
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. No merge or production
+  deployment/data/device operations are authorized. Product requirements are in
+  the UX owner; engineering ownership is in the Engineering Guide.
+- **Resolved transitions:** quantities are nonnegative whole units; an excessive
+  sale rejects atomically and asks for a corrected quantity first. Moving to
+  In Inventory preserves quantity without an adjustment. Loading into On Cart
+  requires confirmed Quantity. Stock totals select On Cart; audits additionally
+  include Sold Out. One active shift per operator session/Course permits a name
+  correction before activity and requires successful close before a different
+  operator after activity. No multiple carts, restaurant balance, automatic
+  zeroing, negative stock, overselling or offline queue.
+- **Compatibility/publication:** absent quantity reads as zero without a bulk
+  migration or changed initial product state. Metadata autosaves do not own
+  stock/state. Existing published public-menu snapshots remain unchanged until
+  explicit publication; internal quantities, staff and operation records are
+  omitted by the public field allowlist. Request queue, service categories,
+  device protocol and request KPIs are not changed.
+- **Initial application source (superseded above):** `9c240333983a9e9971334e9df2b58672f75b7b6b`,
+  draft PR #12, targeting main. Subsequent evidence-only documentation commits
+  do not change the published application. Prior sandbox evidence below remains
+  dated history, not an alternative identity for this increment.
+- **Initial sandbox publication (superseded above):** project/site `fairway-refresh-sandbox-260930`;
+  Admin `fairway-admin-sandbox-00019-r29`, Ready/Active at 100% traffic.
+  Source deployment retained the previous pinned revision initially; traffic
+  was explicitly moved to the verified new revision. Image digest
+  `sha256:58f004cddb47ca18aa83b8cdcf24776cd65307e8c1babb7340b1386319a0cd55`,
+  build `ed8f6179-4409-47b6-9e00-37badc1b12b2`, source archive
+  `gs://run-sources-fairway-refresh-sandbox-260930-us-central1/services/fairway-admin-sandbox/1792804858.954006-1deb6733a4aa4c68a0dda5d732f36aaf.zip#1792804859249405`.
+  Hosting version `d5a3a7ac740a9958`, release `1792804928794000`
+  (`2026-10-24T01:22:08.794Z`).
+  Receiver remained `fairway-button-receiver-sandbox-00025-9lr` at 100%;
+  no Receiver publication was necessary.
+- **Frontend evidence:** 65/65 unit checks, 3/3 rendered browser regressions,
+  sandbox configuration validation and build pass. New rendered checks cover
+  first-action Custom attribution/resumption, sale response-loss replay without
+  a second deduction, excessive-sale rejection, quantity-preserving In Inventory
+  moves, confirmed loading, revision-conflicted audit reconfirmation, and
+  uncertain shift close with name/amount retained across a full remount.
+  Existing select-any queue, History visibility/selection and category-owner
+  rename checks remain passing. These mock-network checks are UI evidence, not
+  a substitute for authoritative stock/concurrency verification.
+- **Authoritative backend evidence:** full suite 150 passed. Sixteen actual
+  handler scenarios passed against isolated loopback Firestore emulator
+  transactions; the rollback fault-injection scenario is unit-only and skipped
+  in emulator mode. Coverage includes simultaneous sales, concurrent replay,
+  stock-revision conflicts, stale cached metadata, session/Course isolation,
+  exact replay after close, immutable audits, local-midnight sales, more than
+  1,000 sale records, public-field exclusion and explicit publication.
+  Inventory GET reads state/products in one transaction; audit submission
+  verifies that revision before capturing the immutable baseline.
+- **Synthetic review context:** sandbox-only Customer `CUST-0005`, Course
+  `COURSE-0007` (`CPO TEST Persistent Cart Inventory`, `America/Los_Angeles`).
+  Before publication, the previous Admin API created labeled Water/Tea/Juice
+  products respectively On Cart/Sold Out/In Inventory, without quantity fields,
+  at inventory revision 4 and publication version 0. This provides a real legacy
+  initialization baseline; no devices, requests, service state or production
+  records were changed.
+- **Live sandbox verification:** legacy quantities read zero with all three
+  original states, descriptions and prices preserved. Actual UI Custom
+  selection resumed a pending adjustment. Sale default one and excessive-sale
+  rejection worked. Concurrent two-unit sales plus duplicate replay deducted
+  four units once; stale absolute edits and audit confirmations returned 409.
+  A cached full metadata payload could not overwrite stock/state. Confirmed
+  loading, quantity-preserving In Inventory moves, zero-to-Sold-Out and
+  Sold-Out replenishment all passed. Admin created a separate F&B Management
+  staff entry; free pre-activity name correction, Course switching and shared
+  Cart/Inventory banner context passed.
+- **Durable evidence:** four sale records total eight units (Water five, Tea
+  three), with staff/shift/authenticated-account attribution. Audit
+  `fB8D7xeKRVSAneI1OJy1` confirmed revision 13, Water seven and Sold Out Tea
+  zero, excluding In Inventory Juice. A later Water adjustment to eight did
+  not change that audit baseline. Two session-specific closes persisted once
+  each: `9Quqj8r5gsYBxbk1PF0s` ($12.34) and
+  `wByuZtbsnZBYTZcEZcpO` ($24.50). The latter was committed with an intercepted,
+  interrupted response; reload retained name/$24.50 despite the server having
+  no active shift, and exact retry cleared only that session. Closing the
+  second session left the first active; replay after close did not deduct again.
+  Final review stock: Water eight On Cart, Tea zero Sold Out, Juice five In
+  Inventory; inventory revision 15, eight units sold, publication version zero.
+- **Responsive/served evidence:** deployed Cart and Inventory checked at 375,
+  430, 768, 1024 and 1440 CSS pixels without document overflow or clipped new
+  stock/session actions. Served JS SHA-256 matched the committed build:
+  `index-CzMm4Q55.js` =
+  `7947f456a77821abccf133e45ad153f15a74508f0ec4e32ec589caf898c35f95`;
+  `InventoryApp-CjE5UqhL.js` =
+  `0a790a88bd81f9f496f250430f277846e3e13186e739ce90406c2d567a9814fb`.
+  An already-open Admin page initially reused old cached HTML; a fresh
+  cache-busting navigation loaded the verified publication and staff controls.
+- **Review URL:** `https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007&inventory_review=9c240333`.
+  Sign in with an account authorized for this synthetic Course (or global
+  Admin); new staff names do not create login/access accounts.
+- **Limits:** CPO acceptance remains pending. Browser evidence is desktop
+  Chromium with responsive viewports, not physical Safari/phone testing.
+  No cross-day waiting test was performed; Course-local midnight is covered
+  deterministically. No production deployment/data changes, merge, firmware,
+  physical-device actions, service toggles or generated requests occurred.
+
 ### Queue Selection / Amenity Areas Production Release (2026-10-23)
 
 - **CPO closeout:** production FRB-0006 test passed; the CPO accepts the released
@@ -2031,41 +2630,59 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `GET /api/v1/access/bootstrap` | Any user with valid schema-v2 access | Returns `admin`, `customer_id`, and `course_ids` (plus a compatibility-only `user_type` response field); the UI uses `admin` to gate Admin entry. |
 | `GET /api/v1/operator/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses and push configuration. |
 | `GET /api/v1/inventory/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses; same entitlement as Cart Operations. |
-| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Admin or user entitled to the exact Customer/Course | Returns course-level working products, categories, archives, revision, publication pointer, and draft status. |
+| `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Admin or user entitled to the exact Customer/Course | Returns course-level products, categories, archives, revision, configured public slug and operational summaries. |
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |
-| `GET .../preview`; `POST .../publish` | Course member | Preview reads saved working inventory. Publish atomically stores a snapshot and advances the published pointer. |
-| `GET /api/v1/public/menus/{slug}` | Public, read-only | Returns only the latest published snapshot; no staff identity or draft fields. |
+| `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use View Menu. |
+| `GET /api/v1/public/menus/{slug}` | Public, read-only | Transactionally reads current committed active On Cart products through the single public allowlist; no quantity or internal operational fields, no-store. |
 | `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
 | `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; it does not create Auth users or manage passwords. |
 
 Data is owned by the existing nested Course. `inventory/state` stores a
-monotonic inventory revision and last-published pointer. `inventory_products`
-stores working records; `inventory_categories` and nested `subcategories` store
+monotonic inventory revision and public slug. `inventory_products`
+stores authoritative records; `inventory_categories` and nested `subcategories` store
 canonical labels; `inventory_product_keys` protects exact product identity;
 `inventory_events` records actor/action/revision; and
-`published_menus/{version}` contains immutable public snapshots.
+`published_menus/{version}` and old publication state fields are retained
+historical records only, never a serving source after the 2026-10-24 CPO
+automatic-menu decision in PR #12.
 `user_access/{uid}` is the sole user-class and Course-entitlement authority;
 `public_menu_slugs` is a public-routing index, not an alternate catalog
 authority. `operator_course_assignments` and `inventory_course_memberships`
 are legacy migration inputs only and are not read at runtime.
 
 Each save transaction serializes on the course state document and increments
-the revision, so the last transaction committed wins without locking, stale
-write rejection, conflict warnings, or client-clock ordering. Publish reads the
-course revision and products in one Firestore transaction, snapshots only
-non-archived On Cart/Sold Out items, and commits snapshot, audit event, and
-pointer together. A failed commit therefore preserves the previous published
-version. The read-only public route resolves only the slug and published pointer;
-it does not query the editable catalog or require staff authorization. Snapshot
-payloads are bounded below the Firestore document-size limit.
+the revision. The persistent-stock sandbox increment extends this owner with
+atomic stock/event operations, expected stock revisions for absolute edits,
+and idempotent operation identities. Metadata autosaves no longer own
+stock/availability, and cached writes cannot bypass the stock contract.
+This supersedes the prior last-write-wins stock/state behavior; ordinary
+metadata edits retain their existing synchronization. The public route reads
+the slug mapping, Course, state/revision and products in one consistent
+transaction. It selects only non-archived On Cart products through the single
+public-product allowlist, including explicit nested price fields. It performs
+no writes, does not need staff authorization and never reads a publication
+pointer/snapshot. Successful stock/catalog transactions immediately determine
+subsequent public responses; failed/cancelled/unconfirmed actions and stale
+idempotent retries cannot replace newer public state. Anonymous responses and
+client fetches are no-store. Public pages fetch only when opened/manually
+reloaded or an initial error is explicitly retried, not on a timer or focus.
+All categories initially collapse, including Canned Cocktails.
+Superseded requests are aborted and ignored. Existing branded URLs and
+configured slug routes use the same API owner; unbranded Courses display their
+own returned Course name/timezone without another Course's branding.
 
 The API/data contract is source-defined, locally tested, and deployed as
 recorded above. The Inventory and public-menu React routes are deployed.
-Current live menu publication is recorded under the release section.
+Current sandbox alignment is recorded in the latest Alignment Register entry;
+dated production publication remains the separate release evidence.
 
 #### Increment 2 Local UI and Public Route
+
+Historical implementation record below. Manual preview/publication and
+snapshot serving were superseded in PR #12 by the 2026-10-24 CPO automatic-menu
+decision and current contract above; they are not current operator instructions.
 
 - `/inventory` uses the existing Inventory bootstrap/course APIs. Firebase
   authentication is followed by the same assigned-Course authorization as

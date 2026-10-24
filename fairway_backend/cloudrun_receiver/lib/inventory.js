@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { FieldValue } = require('@google-cloud/firestore');
 const { coursesCollection } = require('./fleet/courses');
 const { getOperatorAssignment } = require('./operator_notifications');
+const { INVENTORY_STAFF_ROLES, canOperateInventory } = require('./user_access');
 
 const PUBLIC_MENU_SLUGS = 'public_menu_slugs';
 const INVENTORY_COLLECTION = 'inventory';
@@ -12,9 +13,7 @@ const PRODUCTS_COLLECTION = 'inventory_products';
 const CATEGORIES_COLLECTION = 'inventory_categories';
 const EVENTS_COLLECTION = 'inventory_events';
 const SUBCATEGORIES_COLLECTION = 'subcategories';
-const PUBLISHED_MENUS_COLLECTION = 'published_menus';
 const INVENTORY_STATES = new Set(['on_cart', 'sold_out', 'in_inventory']);
-const MAX_MENU_BYTES = 900_000;
 
 class InventoryError extends Error {
   constructor(status, code, message, details = undefined) {
@@ -99,10 +98,6 @@ function eventsCollection(db, customerId, courseId) {
   return coursesCollection(db, customerId).doc(courseId).collection(EVENTS_COLLECTION);
 }
 
-function menuSnapshotsCollection(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId).collection(PUBLISHED_MENUS_COLLECTION);
-}
-
 function courseRef(db, customerId, courseId) {
   return coursesCollection(db, customerId).doc(courseId);
 }
@@ -139,14 +134,18 @@ async function requireCourseAccess(db, uid, customerId, courseId) {
 async function getInventoryBootstrap(db, uid) {
   const assignments = await getCustomerCourses(db, uid);
   const courses = await Promise.all(assignments.map(async (assignment) => {
-    const snapshot = await courseRef(db, assignment.customer_id, assignment.course_id).get();
+    const [snapshot, customer] = await Promise.all([
+      courseRef(db, assignment.customer_id, assignment.course_id).get(),
+      db.collection('customers').doc(assignment.customer_id).get(),
+    ]);
     if (!snapshot.exists) return null;
     const data = snapshot.data();
     return {
       customer_id: assignment.customer_id,
       course_id: assignment.course_id,
-      customer_name: data.customer_name || null,
+      customer_name: customer.data()?.customer_name || data.customer_name || null,
       course_name: data.course_name || null,
+      timezone: data.timezone || null,
     };
   }));
   return { courses: courses.filter(Boolean) };
@@ -168,24 +167,28 @@ function publicProduct(product) {
     subcategory: product.subcategory_name || null,
     brand: product.brand,
     description: product.description,
-    price: product.price,
+    price: product.price ? {
+      amount_minor: product.price.amount_minor,
+      currency_code: product.price.currency_code,
+    } : null,
     state: product.state,
   };
 }
 
 function toPublicMenu(products) {
   return sortProducts(products.filter((product) => (
-    product.archived !== true && ['on_cart', 'sold_out'].includes(product.state)
+    product.archived !== true && product.state === 'on_cart'
   ))).map(publicProduct);
 }
 
 async function listInventory(db, customerId, courseId) {
-  const [courseSnapshot, stateSnapshot, productsSnapshot, categoriesSnapshot] = await Promise.all([
-    courseRef(db, customerId, courseId).get(),
-    inventoryStateRef(db, customerId, courseId).get(),
-    productsCollection(db, customerId, courseId).get(),
-    categoriesCollection(db, customerId, courseId).get(),
-  ]);
+  const [courseSnapshot, stateSnapshot, productsSnapshot, categoriesSnapshot, customerSnapshot] = await db.runTransaction((transaction) => Promise.all([
+    transaction.get(courseRef(db, customerId, courseId)),
+    transaction.get(inventoryStateRef(db, customerId, courseId)),
+    transaction.get(productsCollection(db, customerId, courseId)),
+    transaction.get(categoriesCollection(db, customerId, courseId)),
+    transaction.get(db.collection('customers').doc(customerId)),
+  ]));
   if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
 
   const categoryDocs = await Promise.all(categoriesSnapshot.docs.map(async (categoryDoc) => {
@@ -203,22 +206,26 @@ async function listInventory(db, customerId, courseId) {
   const products = productsSnapshot.docs.map((productDoc) => ({
     product_id: productDoc.id,
     ...productDoc.data(),
+    quantity: productDoc.data().quantity ?? 0,
+    stock_revision: productDoc.data().stock_revision ?? 0,
   }));
+  const dailySalesSummary = await dailySales(db, customerId, courseId, courseSnapshot.data());
 
   return {
     customer_id: customerId,
     course_id: courseId,
+    customer_name: customerSnapshot.data()?.customer_name || null,
     course_name: courseSnapshot.data().course_name || null,
+    timezone: courseSnapshot.data().timezone || null,
     inventory_revision: state.inventory_revision || 0,
-    published_version: state.published_version || 0,
-    published_revision: state.published_revision ?? null,
     public_menu_slug: state.public_menu_slug || null,
-    has_unpublished_changes: state.published_version
-      ? (state.inventory_revision || 0) !== state.published_revision
-      : (state.inventory_revision || 0) > 0,
     categories: categoryDocs.sort((a, b) => a.name.localeCompare(b.name)),
     products: sortProducts(products.filter((product) => product.archived !== true)),
     archived_products: sortProducts(products.filter((product) => product.archived === true)),
+    daily_sales: dailySalesSummary,
+    operations: {
+      daily_sales: dailySalesSummary,
+    },
   };
 }
 
@@ -272,8 +279,6 @@ async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid
     transaction.set(stateDocument, {
       ...state,
       inventory_revision: state.inventory_revision || 0,
-      published_version: state.published_version || 0,
-      published_revision: state.published_revision ?? null,
       public_menu_slug: slug,
       updated_at: timestamp,
       updated_by: actorUid,
@@ -303,9 +308,9 @@ function validateProduct(body, { defaultState = false } = {}) {
     brand: optionalText(body.brand, 'brand', 120),
     description: optionalText(body.description, 'description', 4000),
     price: validatePrice(body.price),
-    state: body.state === undefined && defaultState ? 'on_cart' : body.state,
+    ...(defaultState ? { state: body.state === undefined ? 'on_cart' : body.state } : {}),
   };
-  if (!INVENTORY_STATES.has(product.state)) {
+  if (defaultState && !INVENTORY_STATES.has(product.state)) {
     fail(400, 'invalid_state', 'state must be on_cart, sold_out, or in_inventory');
   }
   return product;
@@ -337,32 +342,427 @@ function mutationEventRef(db, customerId, courseId) {
 
 function nextState(current, actorUid, timestamp) {
   return {
+    ...current,
     inventory_revision: (current.inventory_revision || 0) + 1,
-    published_version: current.published_version || 0,
-    published_revision: current.published_revision ?? null,
-    published_at: current.published_at || null,
-    published_by: current.published_by || null,
     public_menu_slug: current.public_menu_slug || null,
     updated_at: timestamp,
     updated_by: actorUid,
   };
 }
 
-async function createProduct(db, customerId, courseId, body, actorUid) {
-  const product = validateProduct(body, { defaultState: true });
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const products = productsCollection(db, customerId, courseId);
-  const productDocument = products.doc();
-  const categoryDocument = categoryRef(db, customerId, courseId, product.category_name);
-  const categoryId = categoryDocument.id;
-  const subcategoryDocument = product.subcategory_name
-    ? subcategoryRef(db, customerId, courseId, categoryId, product.subcategory_name)
-    : null;
-  const productForKey = { ...product, category_id: categoryId, subcategory_id: subcategoryDocument?.id || null };
-  const keyDocument = identityKeysCollection(db, customerId, courseId).doc(makeProductKey(productForKey));
+function identifier(value, field) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value)) {
+    fail(400, 'invalid_input', `${field} must be a nonempty stable identifier`);
+  }
+  return value;
+}
 
-  await db.runTransaction(async (transaction) => {
+function nonnegativeInteger(value, field) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    fail(400, 'invalid_input', `${field} must be a nonnegative integer`);
+  }
+  return value;
+}
+
+function requireObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail(400, 'invalid_input', 'Request body must be an object');
+  }
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  }
+  return value;
+}
+
+function responseValue(value) {
+  // Persist the wire representation so Firestore Timestamp conversion cannot change a retry.
+  if (value instanceof Date) return value.toISOString();
+  if (value && typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (Array.isArray(value)) return value.map(responseValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, responseValue(child)]));
+  }
+  return value;
+}
+
+function operationRef(parent, operationId) {
+  return parent.collection('inventory_operations').doc(digest(identifier(operationId, 'operation_id')));
+}
+
+function fingerprint(actorUid, action, payload) {
+  return crypto.createHash('sha256').update(JSON.stringify(canonical({ actorUid, action, payload }))).digest('hex');
+}
+
+function retryResult(snapshot, hash) {
+  if (!snapshot.exists) return null;
+  if (snapshot.data().fingerprint !== hash) {
+    fail(409, 'operation_conflict', 'operation_id was already used with a different payload');
+  }
+  return { result: snapshot.data().result };
+}
+
+function staffCollection(db, customerId) {
+  return db.collection('customers').doc(customerId).collection('staff');
+}
+
+function staffModel(snapshot) {
+  const value = snapshot.data();
+  return { staff_id: snapshot.id, name: value.name, role: value.role, active: value.active === true };
+}
+
+async function listStaff(db, customerId, { activeOnly = false } = {}) {
+  const parent = await db.collection('customers').doc(customerId).get();
+  if (!parent.exists) fail(404, 'customer_not_found', 'Customer not found');
+  const snapshot = await staffCollection(db, customerId).get();
+  return {
+    staff: snapshot.docs.map(staffModel)
+      .filter((staff) => !activeOnly || canOperateInventory(staff))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.staff_id.localeCompare(b.staff_id)),
+  };
+}
+
+async function createStaff(db, customerId, body, actorUid, { operational = false } = {}) {
+  requireObject(body);
+  const parent = db.collection('customers').doc(customerId);
+  const operation = operationRef(parent, body.operation_id);
+  const hash = fingerprint(actorUid, operational ? 'staff_custom_create' : 'staff_create', body);
+  const staffRef = staffCollection(db, customerId).doc();
+  return db.runTransaction(async (transaction) => {
+    const [previous, customer] = await Promise.all([transaction.get(operation), transaction.get(parent)]);
+    const retry = retryResult(previous, hash);
+    if (retry) return retry.result;
+    const name = normalizeLabel(body.name, 'name', 160);
+    const role = operational ? 'cart_operator' : (body.role ?? 'cart_operator');
+    if (!INVENTORY_STAFF_ROLES.includes(role)) fail(400, 'invalid_role', 'Invalid staff role');
+    if (operational && (body.role !== undefined || body.active !== undefined)) {
+      fail(400, 'invalid_input', 'Custom staff is created as an active cart_operator');
+    }
+    if (body.active !== undefined && typeof body.active !== 'boolean') fail(400, 'invalid_input', 'active must be boolean');
+    if (!customer.exists) fail(404, 'customer_not_found', 'Customer not found');
+    const timestamp = new Date();
+    const result = { staff_id: staffRef.id, name, role, active: operational || body.active !== false };
+    transaction.set(staffRef, { ...result, created_at: timestamp, created_by: actorUid, updated_at: timestamp, updated_by: actorUid });
+    transaction.set(operation, { fingerprint: hash, result, actor_uid: actorUid, created_at: timestamp });
+    return result;
+  });
+}
+
+async function updateStaff(db, customerId, staffId, body, actorUid) {
+  if (!body || Object.keys(body).length === 0 || Object.keys(body).some((key) => !['name', 'role', 'active'].includes(key))) {
+    fail(400, 'invalid_input', 'Only name, role, and active may be edited');
+  }
+  const patch = {};
+  if (body.name !== undefined) patch.name = normalizeLabel(body.name, 'name', 160);
+  if (body.role !== undefined) {
+    if (!INVENTORY_STAFF_ROLES.includes(body.role)) fail(400, 'invalid_role', 'Invalid staff role');
+    patch.role = body.role;
+  }
+  if (body.active !== undefined) {
+    if (typeof body.active !== 'boolean') fail(400, 'invalid_input', 'active must be boolean');
+    patch.active = body.active;
+  }
+  const ref = staffCollection(db, customerId).doc(identifier(staffId, 'staff_id'));
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) fail(404, 'staff_not_found', 'Staff member not found');
+    const result = { ...staffModel(snapshot), ...patch };
+    transaction.set(ref, { ...snapshot.data(), ...patch, updated_by: actorUid, updated_at: new Date() });
+    return result;
+  });
+}
+
+function shiftsCollection(db, customerId, courseId) {
+  return courseRef(db, customerId, courseId).collection('inventory_shifts');
+}
+
+function sessionRef(db, customerId, courseId, actorUid, sessionId) {
+  identifier(sessionId, 'session_id');
+  return courseRef(db, customerId, courseId).collection('inventory_sessions').doc(digest(`${actorUid}\0${sessionId}`));
+}
+
+function shiftModel(id, shift) {
+  return {
+    shift_id: id,
+    staff_id: shift.staff_id,
+    staff_name: shift.staff_name,
+    has_activity: shift.has_activity === true,
+    status: shift.status,
+  };
+}
+
+async function getSessionShift(db, customerId, courseId, actorUid, sessionId) {
+  const session = await sessionRef(db, customerId, courseId, actorUid, sessionId).get();
+  if (!session.exists || !session.data().shift_id) return { shift: null };
+  const shift = await shiftsCollection(db, customerId, courseId).doc(session.data().shift_id).get();
+  return { shift: shift.exists && shift.data().status === 'active' ? shiftModel(shift.id, shift.data()) : null };
+}
+
+async function selectShift(db, customerId, courseId, actorUid, body) {
+  requireObject(body);
+  const parent = courseRef(db, customerId, courseId);
+  const operation = operationRef(parent, body.operation_id);
+  const hash = fingerprint(actorUid, 'shift_select', body);
+  const newShift = shiftsCollection(db, customerId, courseId).doc();
+  return db.runTransaction(async (transaction) => {
+    const previous = await transaction.get(operation);
+    const retry = retryResult(previous, hash);
+    if (retry) return retry.result;
+    const session = sessionRef(db, customerId, courseId, actorUid, body.session_id);
+    const staffRef = staffCollection(db, customerId).doc(identifier(body.staff_id, 'staff_id'));
+    const [currentSession, staff, course] = await Promise.all([
+      transaction.get(session), transaction.get(staffRef), transaction.get(parent),
+    ]);
+    if (!course.exists) fail(404, 'course_not_found', 'Course not found');
+    if (!staff.exists || !canOperateInventory(staff.data())) fail(409, 'staff_unavailable', 'Select an active staff member');
+    const existingRef = currentSession.exists && currentSession.data().shift_id
+      ? shiftsCollection(db, customerId, courseId).doc(currentSession.data().shift_id) : null;
+    const existing = existingRef ? await transaction.get(existingRef) : null;
+    const active = existing?.exists && existing.data().status === 'active';
+    if (active && existing.data().has_activity && existing.data().staff_id !== staff.id) {
+      fail(409, 'shift_close_required', 'Close the current shift before selecting different staff');
+    }
+    const timestamp = new Date();
+    const ref = active ? existingRef : newShift;
+    const shift = {
+      ...(active ? existing.data() : { created_at: timestamp, has_activity: false }),
+      actor_uid: actorUid, session_id: body.session_id, staff_id: staff.id,
+      staff_name: active && existing.data().has_activity ? existing.data().staff_name : staff.data().name,
+      staff_role: active && existing.data().has_activity ? existing.data().staff_role : staff.data().role,
+      status: 'active', updated_at: timestamp,
+    };
+    const result = { shift: shiftModel(ref.id, shift) };
+    transaction.set(ref, shift);
+    transaction.set(session, { actor_uid: actorUid, session_id: body.session_id, shift_id: ref.id });
+    transaction.set(operation, { fingerprint: hash, result, actor_uid: actorUid, created_at: timestamp });
+    return result;
+  });
+}
+
+async function runMutation(db, customerId, courseId, actorUid, context, action, payload, worker) {
+  const parent = courseRef(db, customerId, courseId);
+  const operation = operationRef(parent, context?.operation_id);
+  const hash = fingerprint(actorUid, action, payload);
+  return db.runTransaction(async (transaction) => {
+    const previous = await transaction.get(operation);
+    const retry = retryResult(previous, hash);
+    if (retry) return retry.result;
+    if (!context?.shift_id) fail(409, 'shift_required', 'Select staff and an active shift before changing inventory');
+    const shiftRef = shiftsCollection(db, customerId, courseId).doc(identifier(context.shift_id, 'shift_id'));
+    const snapshot = await transaction.get(shiftRef);
+    if (!snapshot.exists || snapshot.data().actor_uid !== actorUid || snapshot.data().status !== 'active') {
+      fail(409, 'shift_unavailable', 'The selected shift is not active for this account');
+    }
+    const shift = snapshot.data();
+    const [staff, session] = await Promise.all([
+      transaction.get(staffCollection(db, customerId).doc(shift.staff_id)),
+      transaction.get(sessionRef(db, customerId, courseId, actorUid, shift.session_id)),
+    ]);
+    if (!session.exists || session.data().shift_id !== shiftRef.id) fail(409, 'shift_unavailable', 'The shift is no longer selected');
+    if (!staff.exists || !canOperateInventory(staff.data())) fail(409, 'staff_unavailable', 'Select an active staff member');
+    const timestamp = new Date();
+    const attribution = {
+      actor_uid: actorUid, shift_id: shiftRef.id, operation_id: context.operation_id,
+      staff_id: shift.staff_id, staff_name: shift.staff_name, staff_role: shift.staff_role,
+      staff: { staff_id: shift.staff_id, name: shift.staff_name, role: shift.staff_role },
+      created_at: timestamp,
+    };
+    let wroteEvent = false;
+    const attributed = {
+      timestamp,
+      attribution,
+      get: (ref) => transaction.get(ref),
+      set: (ref, value, options) => {
+        const event = ref.path.startsWith(`${eventsCollection(db, customerId, courseId).path}/`);
+        if (event) wroteEvent = true;
+        transaction.set(ref, event ? { ...value, ...attribution } : value, options);
+      },
+      delete: (ref) => transaction.delete(ref),
+    };
+    const result = responseValue(await worker(attributed));
+    if (!wroteEvent) transaction.set(eventsCollection(db, customerId, courseId).doc(), { action, ...attribution });
+    transaction.set(shiftRef, { ...shift, has_activity: true, updated_at: timestamp });
+    transaction.set(operation, { fingerprint: hash, result, ...attribution });
+    return result;
+  });
+}
+
+async function updateStock(db, customerId, courseId, productId, body, actorUid) {
+  return runMutation(db, customerId, courseId, actorUid, body, 'stock', { product_id: productId, body }, async (transaction) => {
+    const productRef = productsCollection(db, customerId, courseId).doc(identifier(productId, 'product_id'));
+    const stateRef = inventoryStateRef(db, customerId, courseId);
+    const [product, state] = await Promise.all([transaction.get(productRef), transaction.get(stateRef)]);
+    if (!product.exists) fail(404, 'product_not_found', 'Product not found');
+    const existing = product.data();
+    if (existing.archived === true) fail(409, 'product_archived', 'Archived products cannot be edited');
+    const before = nonnegativeInteger(existing.quantity ?? 0, 'quantity');
+    const stockRevision = existing.stock_revision ?? 0;
+    let quantity = before;
+    let availability = existing.state;
+    if (body.kind === 'sale') {
+      if (!Number.isSafeInteger(body.units) || body.units <= 0) fail(400, 'invalid_units', 'Sale units must be a positive integer');
+      if (body.expected_stock_revision !== undefined &&
+          (!Number.isSafeInteger(body.expected_stock_revision) || body.expected_stock_revision !== stockRevision)) {
+        fail(409, 'stock_revision_conflict', 'Stock changed. Refresh and confirm the quantity again.');
+      }
+      if (body.units > before) fail(409, 'insufficient_stock', 'Not enough stock. Correct the quantity first, then record the sale.');
+      if (availability !== 'on_cart') fail(409, 'product_not_on_cart', 'Only On Cart products can be sold');
+      quantity -= body.units;
+      if (quantity === 0) availability = 'sold_out';
+    } else if (['adjustment', 'availability'].includes(body.kind)) {
+      if (!Number.isSafeInteger(body.expected_stock_revision) || body.expected_stock_revision !== stockRevision) {
+        fail(409, 'stock_revision_conflict', 'Stock changed. Refresh and confirm the quantity again.');
+      }
+      if (body.kind === 'adjustment') {
+        quantity = nonnegativeInteger(body.quantity, 'quantity');
+        if (quantity === 0 && availability === 'on_cart') availability = 'sold_out';
+        else if (quantity > 0 && availability === 'sold_out') availability = 'on_cart';
+      } else {
+        if (!INVENTORY_STATES.has(body.state)) fail(400, 'invalid_state', 'Invalid availability');
+        if (body.state === 'sold_out' && existing.state === 'on_cart' && before > 0) {
+          fail(409, 'sale_confirmation_required', 'Confirm a sale of the remaining units before moving On Cart stock to Sold Out.');
+        }
+        availability = body.state;
+        if (availability === 'on_cart' && existing.state !== 'on_cart') {
+          quantity = nonnegativeInteger(body.quantity, 'quantity');
+          if (quantity === 0) fail(400, 'positive_quantity_required', 'Loading requires an explicitly confirmed positive quantity');
+        }
+      }
+    } else {
+      fail(400, 'invalid_stock_kind', 'kind must be sale, adjustment, or availability');
+    }
+    const next = {
+      ...existing, quantity, state: availability, stock_revision: stockRevision + 1,
+      inventory_revision: (state.data()?.inventory_revision || 0) + 1,
+      updated_at: transaction.timestamp, updated_by: actorUid,
+    };
+    transaction.set(productRef, next);
+    transaction.set(stateRef, nextState(state.data() || {}, actorUid, transaction.timestamp));
+    transaction.set(eventsCollection(db, customerId, courseId).doc(), {
+      action: body.kind === 'sale' ? 'sale' : `stock_${body.kind}`,
+      product_id: productId, product_name: existing.name,
+      before, after: quantity,
+      before_quantity: before, after_quantity: quantity, delta: quantity - before,
+      before_state: existing.state, after_state: availability,
+      stock_revision: next.stock_revision, inventory_revision: next.inventory_revision,
+      ...(body.kind === 'sale' ? { units: body.units } : {}),
+    });
+    return { product_id: productId, ...next };
+  });
+}
+
+const AUDIT_ATTESTATION = 'Confirm you are authorized to approve this inventory count audit.';
+
+async function createAudit(db, customerId, courseId, body, actorUid) {
+  return runMutation(db, customerId, courseId, actorUid, body, 'audit', body, async (transaction) => {
+    if (body.authorized !== true) fail(400, 'audit_authorization_required', 'Explicit audit authorization is required');
+    const stateRef = inventoryStateRef(db, customerId, courseId);
+    const approverRef = staffCollection(db, customerId).doc(identifier(body.approver_staff_id, 'approver_staff_id'));
+    const [state, products, approver] = await Promise.all([
+      transaction.get(stateRef), transaction.get(productsCollection(db, customerId, courseId)), transaction.get(approverRef),
+    ]);
+    const revision = state.data()?.inventory_revision || 0;
+    if (!Number.isSafeInteger(body.inventory_revision) || body.inventory_revision !== revision) {
+      fail(409, 'inventory_revision_conflict', 'Inventory changed. Review the new quantities and confirm the audit again.');
+    }
+    if (!approver.exists || !canOperateInventory(approver.data())) fail(409, 'staff_unavailable', 'Select an active audit approver');
+    const snapshot = products.docs.map((product) => ({ product_id: product.id, ...product.data() }))
+      .filter((product) => product.archived !== true && ['on_cart', 'sold_out'].includes(product.state))
+      .sort((a, b) => a.product_id.localeCompare(b.product_id))
+      .map((product) => ({
+        product_id: product.product_id, name: product.name, category_name: product.category_name,
+        state: product.state, quantity: product.quantity ?? 0, stock_revision: product.stock_revision ?? 0,
+      }));
+    const auditRef = courseRef(db, customerId, courseId).collection('inventory_audits').doc();
+    const result = {
+      audit_id: auditRef.id, inventory_revision: revision, products: snapshot,
+      approver: staffModel(approver), approver_staff_id: approver.id, approver_staff_name: approver.data().name,
+      authorized: true, attestation: AUDIT_ATTESTATION, ...transaction.attribution,
+    };
+    transaction.set(auditRef, result);
+    transaction.set(eventsCollection(db, customerId, courseId).doc(), { action: 'inventory_audited', audit_id: auditRef.id, inventory_revision: revision });
+    transaction.set(stateRef, nextState(state.data() || {}, actorUid, transaction.timestamp));
+    return result;
+  });
+}
+
+async function closeShift(db, customerId, courseId, shiftId, body, actorUid) {
+  requireObject(body);
+  const parent = courseRef(db, customerId, courseId);
+  const operation = operationRef(parent, body.operation_id);
+  const hash = fingerprint(actorUid, 'shift_close', { shift_id: shiftId, body });
+  return db.runTransaction(async (transaction) => {
+    const previous = await transaction.get(operation);
+    const retry = retryResult(previous, hash);
+    if (retry) return retry.result;
+    nonnegativeInteger(body.amount_minor, 'amount_minor');
+    const ref = shiftsCollection(db, customerId, courseId).doc(identifier(shiftId, 'shift_id'));
+    const session = sessionRef(db, customerId, courseId, actorUid, body.session_id);
+    const [snapshot, sessionSnapshot] = await Promise.all([transaction.get(ref), transaction.get(session)]);
+    if (!snapshot.exists || snapshot.data().actor_uid !== actorUid || snapshot.data().session_id !== body.session_id ||
+        snapshot.data().status !== 'active' || sessionSnapshot.data()?.shift_id !== shiftId) {
+      fail(409, 'shift_unavailable', 'The selected shift is not active for this browser session');
+    }
+    const timestamp = new Date();
+    const shift = snapshot.data();
+    const record = {
+      ...shiftModel(ref.id, shift), status: 'closed', amount_minor: body.amount_minor, currency_code: 'USD',
+      actor_uid: actorUid, session_id: body.session_id, staff_role: shift.staff_role, closed_at: timestamp,
+    };
+    const result = responseValue(record);
+    transaction.set(ref, { ...shift, ...record, updated_at: timestamp });
+    transaction.set(session, { ...sessionSnapshot.data(), shift_id: null });
+    transaction.set(parent.collection('inventory_shift_closures').doc(shiftId), record);
+    transaction.set(eventsCollection(db, customerId, courseId).doc(), {
+      action: 'shift_closed', ...record, operation_id: body.operation_id, created_at: timestamp,
+    });
+    transaction.set(operation, { fingerprint: hash, result, created_at: timestamp, actor_uid: actorUid });
+    return result;
+  });
+}
+
+function localDate(value, timezone) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
+}
+
+async function dailySales(db, customerId, courseId, course, now = new Date()) {
+  const timezone = course.timezone || 'UTC';
+  const today = localDate(now, timezone);
+  // A single-field bounded time query avoids a composite index and includes DST's longest day.
+  const events = await eventsCollection(db, customerId, courseId)
+    .where('created_at', '>=', new Date(now.getTime() - 48 * 60 * 60 * 1000)).get();
+  const totals = new Map();
+  for (const event of events.docs) {
+    const value = event.data();
+    if (value.action !== 'sale') continue;
+    const timestamp = value.created_at?.toDate ? value.created_at.toDate() : value.created_at;
+    if (!(timestamp instanceof Date) || localDate(timestamp, timezone) !== today) continue;
+    const row = totals.get(value.product_id) || { product_id: value.product_id, name: value.product_name, units: 0 };
+    row.units += value.units;
+    totals.set(value.product_id, row);
+  }
+  const products = [...totals.values()].sort((a, b) => a.name.localeCompare(b.name) || a.product_id.localeCompare(b.product_id));
+  return { local_date: today, total_units: products.reduce((sum, product) => sum + product.units, 0), products };
+}
+
+async function createProduct(db, customerId, courseId, body, actorUid) {
+  return runMutation(db, customerId, courseId, actorUid, body, 'product_create', body, async (transaction) => {
+    const product = validateProduct(body, { defaultState: true });
+    const courseDocument = courseRef(db, customerId, courseId);
+    const stateDocument = inventoryStateRef(db, customerId, courseId);
+    const products = productsCollection(db, customerId, courseId);
+    const productDocument = products.doc();
+    const categoryDocument = categoryRef(db, customerId, courseId, product.category_name);
+    const categoryId = categoryDocument.id;
+    const subcategoryDocument = product.subcategory_name
+      ? subcategoryRef(db, customerId, courseId, categoryId, product.subcategory_name)
+      : null;
+    const productForKey = { ...product, category_id: categoryId, subcategory_id: subcategoryDocument?.id || null };
+    const keyDocument = identityKeysCollection(db, customerId, courseId).doc(makeProductKey(productForKey));
+
     const [courseSnapshot, stateSnapshot, categorySnapshot, subcategorySnapshot, keySnapshot] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
@@ -377,13 +777,15 @@ async function createProduct(db, customerId, courseId, body, actorUid) {
       });
     }
 
-    const timestamp = FieldValue.serverTimestamp();
+    const timestamp = transaction.timestamp;
     const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
     const categoryName = categorySnapshot.exists ? categorySnapshot.data().name : product.category_name;
     const subcategoryName = !subcategoryDocument ? null :
       (subcategorySnapshot?.exists ? subcategorySnapshot.data().name : product.subcategory_name);
     const storedProduct = {
       ...product,
+      quantity: nonnegativeInteger(body.quantity ?? 0, 'quantity'),
+      stock_revision: 0,
       category_id: categoryId,
       category_name: categoryName,
       subcategory_id: subcategoryDocument?.id || null,
@@ -422,29 +824,27 @@ async function createProduct(db, customerId, courseId, body, actorUid) {
       inventory_revision: revision,
       created_at: timestamp,
     });
+    return { product_id: productDocument.id, ...storedProduct };
   });
-  const saved = await productDocument.get();
-  if (!saved.exists) fail(500, 'product_save_failed', 'Saved product could not be read back');
-  return { product_id: productDocument.id, ...saved.data() };
 }
 
 async function updateProduct(db, customerId, courseId, productId, body, actorUid) {
-  const product = validateProduct(body);
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const productDocument = productsCollection(db, customerId, courseId).doc(productId);
-  const categoryDocument = categoryRef(db, customerId, courseId, product.category_name);
-  const categoryId = categoryDocument.id;
-  const subcategoryDocument = product.subcategory_name
-    ? subcategoryRef(db, customerId, courseId, categoryId, product.subcategory_name)
-    : null;
-  const newKeyDocument = identityKeysCollection(db, customerId, courseId).doc(makeProductKey({
-    ...product,
-    category_id: categoryId,
-    subcategory_id: subcategoryDocument?.id || null,
-  }));
+  return runMutation(db, customerId, courseId, actorUid, body, 'product_update', { product_id: productId, body }, async (transaction) => {
+    const product = validateProduct(body);
+    const courseDocument = courseRef(db, customerId, courseId);
+    const stateDocument = inventoryStateRef(db, customerId, courseId);
+    const productDocument = productsCollection(db, customerId, courseId).doc(productId);
+    const categoryDocument = categoryRef(db, customerId, courseId, product.category_name);
+    const categoryId = categoryDocument.id;
+    const subcategoryDocument = product.subcategory_name
+      ? subcategoryRef(db, customerId, courseId, categoryId, product.subcategory_name)
+      : null;
+    const newKeyDocument = identityKeysCollection(db, customerId, courseId).doc(makeProductKey({
+      ...product,
+      category_id: categoryId,
+      subcategory_id: subcategoryDocument?.id || null,
+    }));
 
-  await db.runTransaction(async (transaction) => {
     const [courseSnapshot, stateSnapshot, productSnapshot, categorySnapshot, subcategorySnapshot] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
@@ -469,7 +869,7 @@ async function updateProduct(db, customerId, courseId, productId, body, actorUid
       : identityKeysCollection(db, customerId, courseId).doc(currentKey);
     const oldKeySnapshot = oldKeyDocument ? await transaction.get(oldKeyDocument) : null;
 
-    const timestamp = FieldValue.serverTimestamp();
+    const timestamp = transaction.timestamp;
     const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
     const categoryName = categorySnapshot.exists ? categorySnapshot.data().name : product.category_name;
     const subcategoryName = !subcategoryDocument ? null :
@@ -518,17 +918,15 @@ async function updateProduct(db, customerId, courseId, productId, body, actorUid
       inventory_revision: revision,
       created_at: timestamp,
     });
+    return { product_id: productId, ...updated };
   });
-  const saved = await productDocument.get();
-  if (!saved.exists) fail(500, 'product_save_failed', 'Saved product could not be read back');
-  return { product_id: productId, ...saved.data() };
 }
 
-async function archiveProduct(db, customerId, courseId, productId, actorUid) {
+async function archiveProduct(db, customerId, courseId, productId, actorUid, context) {
   const courseDocument = courseRef(db, customerId, courseId);
   const stateDocument = inventoryStateRef(db, customerId, courseId);
   const productDocument = productsCollection(db, customerId, courseId).doc(productId);
-  await db.runTransaction(async (transaction) => {
+  return runMutation(db, customerId, courseId, actorUid, context, 'product_archive', { product_id: productId, body: context }, async (transaction) => {
     const [courseSnapshot, stateSnapshot, productSnapshot] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
@@ -537,9 +935,9 @@ async function archiveProduct(db, customerId, courseId, productId, actorUid) {
     if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
     if (!productSnapshot.exists) fail(404, 'product_not_found', 'Product not found');
     const existing = productSnapshot.data();
-    if (existing.archived === true) return;
+    if (existing.archived === true) return { product_id: productId, ...existing };
 
-    const timestamp = FieldValue.serverTimestamp();
+    const timestamp = transaction.timestamp;
     const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
     transaction.set(productDocument, {
       ...existing,
@@ -558,27 +956,25 @@ async function archiveProduct(db, customerId, courseId, productId, actorUid) {
       inventory_revision: revision,
       created_at: timestamp,
     });
+    return { product_id: productId, ...existing, archived: true, inventory_revision: revision };
   });
-  const saved = await productDocument.get();
-  if (!saved.exists) fail(500, 'product_archive_failed', 'Archived product could not be read back');
-  return { product_id: productId, ...saved.data() };
 }
 
-async function createCategory(db, customerId, courseId, value, actorUid) {
-  const name = normalizeLabel(value, 'name', 100);
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const categoryDocument = categoryRef(db, customerId, courseId, name);
-  const result = await db.runTransaction(async (transaction) => {
+async function createCategory(db, customerId, courseId, value, actorUid, context) {
+  return runMutation(db, customerId, courseId, actorUid, context, 'category_create', { name: value, ...context }, async (transaction) => {
+    const name = normalizeLabel(value, 'name', 100);
+    const courseDocument = courseRef(db, customerId, courseId);
+    const stateDocument = inventoryStateRef(db, customerId, courseId);
+    const categoryDocument = categoryRef(db, customerId, courseId, name);
     const [courseSnapshot, stateSnapshot, categorySnapshot] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
       transaction.get(categoryDocument),
     ]);
     if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-    if (categorySnapshot.exists) return { created: false };
+    if (categorySnapshot.exists) return { category_id: categoryDocument.id, ...categorySnapshot.data(), created: false };
 
-    const timestamp = FieldValue.serverTimestamp();
+    const timestamp = transaction.timestamp;
     const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
     const category = {
       name,
@@ -595,20 +991,18 @@ async function createCategory(db, customerId, courseId, value, actorUid) {
       inventory_revision: revision,
       created_at: timestamp,
     });
-    return { created: true };
+    return { category_id: categoryDocument.id, ...category, created: true };
   });
-  const saved = await categoryDocument.get();
-  return { category_id: categoryDocument.id, ...saved.data(), created: result.created };
 }
 
-async function createSubcategory(db, customerId, courseId, categoryId, value, actorUid) {
-  const name = normalizeLabel(value, 'name', 100);
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const categoryDocument = categoriesCollection(db, customerId, courseId).doc(categoryId);
-  const subcategoryDocument = categoryDocument.collection(SUBCATEGORIES_COLLECTION)
-    .doc(subcategoryIdFor(categoryId, name));
-  const result = await db.runTransaction(async (transaction) => {
+async function createSubcategory(db, customerId, courseId, categoryId, value, actorUid, context) {
+  return runMutation(db, customerId, courseId, actorUid, context, 'subcategory_create', { category_id: categoryId, name: value, body: context }, async (transaction) => {
+    const name = normalizeLabel(value, 'name', 100);
+    const courseDocument = courseRef(db, customerId, courseId);
+    const stateDocument = inventoryStateRef(db, customerId, courseId);
+    const categoryDocument = categoriesCollection(db, customerId, courseId).doc(categoryId);
+    const subcategoryDocument = categoryDocument.collection(SUBCATEGORIES_COLLECTION)
+      .doc(subcategoryIdFor(categoryId, name));
     const [courseSnapshot, stateSnapshot, categorySnapshot, subcategorySnapshot] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
@@ -618,10 +1012,10 @@ async function createSubcategory(db, customerId, courseId, categoryId, value, ac
     if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
     if (!categorySnapshot.exists) fail(404, 'category_not_found', 'Category not found');
     if (subcategorySnapshot.exists) {
-      return { created: false };
+      return { subcategory_id: subcategoryDocument.id, ...subcategorySnapshot.data(), created: false };
     }
 
-    const timestamp = FieldValue.serverTimestamp();
+    const timestamp = transaction.timestamp;
     const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
     const subcategory = {
       name,
@@ -639,10 +1033,8 @@ async function createSubcategory(db, customerId, courseId, categoryId, value, ac
       inventory_revision: revision,
       created_at: timestamp,
     });
-    return { created: true };
+    return { subcategory_id: subcategoryDocument.id, ...subcategory, created: true };
   });
-  const saved = await subcategoryDocument.get();
-  return { subcategory_id: subcategoryDocument.id, ...saved.data(), created: result.created };
 }
 
 /*
@@ -661,7 +1053,7 @@ async function createSubcategory(db, customerId, courseId, categoryId, value, ac
  * without also belonging to the category) is rejected with a caller-facing
  * explanation instead.
  */
-async function deleteCategory(db, customerId, courseId, categoryId, actorUid) {
+async function deleteCategory(db, customerId, courseId, categoryId, actorUid, context) {
   const courseDocument = courseRef(db, customerId, courseId);
   const stateDocument = inventoryStateRef(db, customerId, courseId);
   const categoryDocument = categoryRefById(db, customerId, courseId, categoryId);
@@ -669,7 +1061,7 @@ async function deleteCategory(db, customerId, courseId, categoryId, actorUid) {
     .where('category_id', '==', categoryId);
   const subcategoriesCollection = categoryDocument.collection(SUBCATEGORIES_COLLECTION);
 
-  await db.runTransaction(async (transaction) => {
+  return runMutation(db, customerId, courseId, actorUid, context, 'category_delete', { category_id: categoryId, body: context }, async (transaction) => {
     const [courseSnapshot, stateSnapshot, categorySnapshot, productsSnapshot, subcategoriesSnapshot] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
@@ -683,7 +1075,7 @@ async function deleteCategory(db, customerId, courseId, categoryId, actorUid) {
       fail(409, 'category_not_empty', 'This category still has products. Reassign or remove its products before deleting it.');
     }
 
-    const timestamp = FieldValue.serverTimestamp();
+    const timestamp = transaction.timestamp;
     const revision = ((stateSnapshot.exists ? stateSnapshot.data().inventory_revision : 0) || 0) + 1;
     const categoryName = categorySnapshot.data().name;
     transaction.delete(categoryDocument);
@@ -699,198 +1091,48 @@ async function deleteCategory(db, customerId, courseId, categoryId, actorUid) {
       inventory_revision: revision,
       created_at: timestamp,
     });
+    return { category_id: categoryId, deleted: true };
   });
-  return { category_id: categoryId, deleted: true };
-}
-
-async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid) {
-  const slug = validateSlug(value);
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const nextSlugRef = db.collection(PUBLIC_MENU_SLUGS).doc(slug);
-
-  return db.runTransaction(async (transaction) => {
-    const [courseSnapshot, stateSnapshot, nextSlugSnapshot] = await Promise.all([
-      transaction.get(courseDocument),
-      transaction.get(stateDocument),
-      transaction.get(nextSlugRef),
-    ]);
-    if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-    const nextSlug = nextSlugSnapshot.exists ? nextSlugSnapshot.data() : null;
-    if (nextSlug && (nextSlug.customer_id !== customerId || nextSlug.course_id !== courseId)) {
-      fail(409, 'slug_in_use', 'Public menu slug is already assigned to another Course');
-    }
-
-    const state = stateSnapshot.exists ? stateSnapshot.data() : {};
-    const previousSlug = state.public_menu_slug || null;
-    const previousSlugRef = previousSlug && previousSlug !== slug
-      ? db.collection(PUBLIC_MENU_SLUGS).doc(previousSlug)
-      : null;
-    const previousSlugSnapshot = previousSlugRef ? await transaction.get(previousSlugRef) : null;
-    if (previousSlugSnapshot?.exists) {
-      const previous = previousSlugSnapshot.data();
-      if (previous.customer_id === customerId && previous.course_id === courseId) {
-        transaction.delete(previousSlugRef);
-      }
-    }
-
-    const timestamp = FieldValue.serverTimestamp();
-    transaction.set(nextSlugRef, {
-      customer_id: customerId,
-      course_id: courseId,
-      updated_at: timestamp,
-      updated_by: actorUid,
-    });
-    transaction.set(stateDocument, {
-      ...state,
-      inventory_revision: state.inventory_revision || 0,
-      published_version: state.published_version || 0,
-      published_revision: state.published_revision ?? null,
-      public_menu_slug: slug,
-      updated_at: timestamp,
-      updated_by: actorUid,
-    });
-    return { customer_id: customerId, course_id: courseId, public_menu_slug: slug };
-  });
-}
-
-function publicProducts(products) {
-  return sortProducts(products.filter((product) => (
-    product.archived !== true && ['on_cart', 'sold_out'].includes(product.state)
-  ))).map(publicProduct);
-}
-
-function sortProducts(products) {
-  return [...products].sort((left, right) => (
-    left.category_name.localeCompare(right.category_name) ||
-    (left.subcategory_name || '').localeCompare(right.subcategory_name || '') ||
-    left.name.localeCompare(right.name)
-  ));
-}
-
-function publicProduct(product) {
-  return {
-    product_id: product.product_id,
-    name: product.name,
-    category: product.category_name,
-    subcategory: product.subcategory_name || null,
-    brand: product.brand,
-    description: product.description,
-    price: product.price,
-    state: product.state,
-  };
-}
-
-async function previewMenu(db, customerId, courseId) {
-  const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
-    courseRef(db, customerId, courseId).get(),
-    inventoryStateRef(db, customerId, courseId).get(),
-    productsCollection(db, customerId, courseId).get(),
-  ]);
-  if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-  const state = stateSnapshot.exists ? stateSnapshot.data() : {};
-  const products = productsSnapshot.docs.map((productDoc) => ({ product_id: productDoc.id, ...productDoc.data() }));
-  return {
-    course_id: courseId,
-    course_name: courseSnapshot.data().course_name || null,
-    inventory_revision: state.inventory_revision || 0,
-    products: publicProducts(products),
-  };
-}
-
-async function publishMenu(db, customerId, courseId, actorUid) {
-  const courseDocument = courseRef(db, customerId, courseId);
-  const stateDocument = inventoryStateRef(db, customerId, courseId);
-  const productsQuery = productsCollection(db, customerId, courseId);
-  const publication = await db.runTransaction(async (transaction) => {
-    const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
-      transaction.get(courseDocument),
-      transaction.get(stateDocument),
-      transaction.get(productsQuery),
-    ]);
-    if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
-    const state = stateSnapshot.exists ? stateSnapshot.data() : {};
-    const slug = state.public_menu_slug;
-    if (!slug) fail(409, 'menu_slug_not_configured', 'A public menu slug must be configured before publishing');
-
-    const slugRef = db.collection(PUBLIC_MENU_SLUGS).doc(slug);
-    const slugSnapshot = await transaction.get(slugRef);
-    if (!slugSnapshot.exists || slugSnapshot.data().customer_id !== customerId || slugSnapshot.data().course_id !== courseId) {
-      fail(409, 'menu_slug_not_configured', 'Public menu slug mapping is not configured for this Course');
-    }
-
-    const products = productsSnapshot.docs.map((productDoc) => ({ product_id: productDoc.id, ...productDoc.data() }));
-    const menuProducts = publicProducts(products);
-    const snapshotPayload = {
-      course_id: courseId,
-      course_name: courseSnapshot.data().course_name || null,
-      version: (state.published_version || 0) + 1,
-      inventory_revision: state.inventory_revision || 0,
-      products: menuProducts,
-    };
-    if (Buffer.byteLength(JSON.stringify(snapshotPayload), 'utf8') > MAX_MENU_BYTES) {
-      fail(413, 'menu_snapshot_too_large', 'Published menu exceeds the supported snapshot size');
-    }
-
-    const timestamp = FieldValue.serverTimestamp();
-    const versionId = String(snapshotPayload.version).padStart(10, '0');
-    transaction.set(menuSnapshotsCollection(db, customerId, courseId).doc(versionId), {
-      ...snapshotPayload,
-      published_at: timestamp,
-      published_by: actorUid,
-    });
-    transaction.set(stateDocument, {
-      ...state,
-      inventory_revision: state.inventory_revision || 0,
-      published_version: snapshotPayload.version,
-      published_revision: snapshotPayload.inventory_revision,
-      published_at: timestamp,
-      published_by: actorUid,
-      updated_at: timestamp,
-      updated_by: actorUid,
-    });
-    transaction.set(eventsCollection(db, customerId, courseId).doc(), {
-      action: 'menu_published',
-      actor_uid: actorUid,
-      inventory_revision: snapshotPayload.inventory_revision,
-      published_version: snapshotPayload.version,
-      created_at: timestamp,
-    });
-    return { version: snapshotPayload.version, slug };
-  });
-  const versionId = String(publication.version).padStart(10, '0');
-  const saved = await menuSnapshotsCollection(db, customerId, courseId).doc(versionId).get();
-  if (!saved.exists) fail(500, 'publication_readback_failed', 'Published snapshot could not be read back');
-  return { public_menu_slug: publication.slug, ...saved.data() };
 }
 
 async function getPublicMenu(db, slugValue) {
   const slug = validateSlug(slugValue);
-  const slugSnapshot = await db.collection(PUBLIC_MENU_SLUGS).doc(slug).get();
-  if (!slugSnapshot.exists) fail(404, 'menu_not_found', 'Published menu not found');
-  const { customer_id: customerId, course_id: courseId } = slugSnapshot.data();
-  if (typeof customerId !== 'string' || typeof courseId !== 'string') {
-    fail(404, 'menu_not_found', 'Published menu not found');
-  }
-  const stateSnapshot = await inventoryStateRef(db, customerId, courseId).get();
-  if (!stateSnapshot.exists || !Number.isSafeInteger(stateSnapshot.data().published_version) || stateSnapshot.data().published_version < 1) {
-    fail(404, 'menu_not_found', 'Published menu not found');
-  }
-  const versionId = String(stateSnapshot.data().published_version).padStart(10, '0');
-  const snapshot = await menuSnapshotsCollection(db, customerId, courseId).doc(versionId).get();
-  if (!snapshot.exists) fail(404, 'menu_not_found', 'Published menu not found');
-  const data = snapshot.data();
-  return {
-    course_id: courseId,
-    course_name: data.course_name,
-    version: data.version,
-    inventory_revision: data.inventory_revision,
-    published_at: data.published_at,
-    products: data.products,
-  };
+  return db.runTransaction(async (transaction) => {
+    const slugSnapshot = await transaction.get(db.collection(PUBLIC_MENU_SLUGS).doc(slug));
+    if (!slugSnapshot.exists) fail(404, 'menu_not_found', 'Course menu not found');
+    const { customer_id: customerId, course_id: courseId } = slugSnapshot.data();
+    if (typeof customerId !== 'string' || typeof courseId !== 'string') {
+      fail(404, 'menu_not_found', 'Course menu not found');
+    }
+    const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
+      transaction.get(courseRef(db, customerId, courseId)),
+      transaction.get(inventoryStateRef(db, customerId, courseId)),
+      transaction.get(productsCollection(db, customerId, courseId)),
+    ]);
+    if (!courseSnapshot.exists) fail(404, 'menu_not_found', 'Course menu not found');
+    const course = courseSnapshot.data();
+    const state = stateSnapshot.data() || {};
+    return {
+      course_id: courseId,
+      course_name: course.course_name || null,
+      timezone: course.timezone || null,
+      inventory_revision: state.inventory_revision || 0,
+      updated_at: state.updated_at || null,
+      products: toPublicMenu(productsSnapshot.docs.map((doc) => ({ ...doc.data(), product_id: doc.id }))),
+    };
+  }, { readOnly: true });
 }
 
 module.exports = {
+  AUDIT_ATTESTATION,
+  listStaff,
+  createStaff,
+  updateStaff,
+  selectShift,
+  getSessionShift,
+  updateStock,
+  createAudit,
+  closeShift,
   InventoryError,
   INVENTORY_STATES,
   getInventoryBootstrap,
@@ -903,7 +1145,5 @@ module.exports = {
   createProduct,
   updateProduct,
   archiveProduct,
-  previewMenu,
-  publishMenu,
   getPublicMenu,
 };

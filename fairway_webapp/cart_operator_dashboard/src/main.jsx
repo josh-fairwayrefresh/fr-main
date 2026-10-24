@@ -870,6 +870,7 @@ function App() {
     <OperatorApp
       user={user}
       apiBaseUrl={API_BASE_URL}
+      inventoryApiBaseUrl={adminApiBaseUrl}
       operatorConfig={operatorConfig}
       requests={activeRequests}
       loadState={loadState}

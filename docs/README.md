@@ -35,6 +35,17 @@ On-course / Amenity Areas categories were merged and deployed on 2026-10-23.
 The CPO subsequently confirmed the production FRB-0006 test passed and accepted
 the released queue-selection and independent controls; that release handoff
 is closed.
+The next persistent cart inventory, Customer staff, audits and shift-close
+increment is published only to the authorized sandbox in draft PR #12.
+The CPO accepted its current functionality on 2026-10-24 and requested
+presentation refinement within the same PR, followed by an automatic current
+On Cart golfer-menu requirement superseding manual publication. The latest
+refinement reads that menu only on open/reload with collapsed categories,
+places View Menu above the audit action and replaces CSV with a formatted
+one-page-print Excel report. It is not
+merged or production-deployed; follow-up review remains pending. Its current review
+identity and verification are in the Deployment Guide's latest Alignment
+Register entry; accepted behavior is owned by the UX specification.
 Detailed operator behavior is owned by the
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements); deployed
 release identities, custom-domain Auth correction, verification, and remaining
