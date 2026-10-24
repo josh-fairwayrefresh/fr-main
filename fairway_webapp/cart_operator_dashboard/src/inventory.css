@@ -163,6 +163,7 @@
 
 @media (max-width: 900px) {
   .inv-header { padding-inline: 16px; }
+  .inv-user-label { max-width: 96px; }
   .inv-main { padding: 24px 16px 48px; }
   .inv-board { gap: 10px; }
   .inv-product-tile { padding: 8px; }

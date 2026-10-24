@@ -74,7 +74,8 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           adminIcon:Boolean(admin?.querySelector('svg')) && !admin.textContent,
           logo:box(document.querySelector('.inv-brand img')),
           operatorInPanel:Boolean(panel.querySelector('.inventory-session')),
-          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action button,.inv-category-filters button,.inv-header button,.inventory-session button')].map(box),
+          headerActions:[...document.querySelectorAll('.inv-header button,.inv-header .inv-cart-link,.inv-course-picker select')].map(box),
+          targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action button,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
           overflow:document.documentElement.scrollWidth>innerWidth
         };
       })()`);
@@ -93,6 +94,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
         assert.ok(box.x >= 0 && box.right <= width, `${width}px: controls not clipped`);
       }
       if (width >= 768) {
+        assert.ok(layout.headerActions.every(b=>b.y === layout.headerActions[0].y), `${width}px: banner actions have no orphaned sign-out row`);
         assert.ok(layout.panel.x >= layout.title.right, `${width}px: Sales Today beside title`);
         assert.ok(layout.panel.y < layout.title.bottom && layout.title.y < layout.panel.bottom);
         assert.ok(layout.actionBoxes.every(b=>b.y === layout.actionBoxes[0].y), `${width}px: catalog actions share one row`);

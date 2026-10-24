@@ -56,6 +56,6 @@ window.fetch = async (url, options = {}) => {
   throw new Error(`Unexpected pointer fixture route ${route}`);
 };
 createRoot(document.getElementById('root')).render(<InventoryApp
-  user={{ uid: 'pointer-user', getIdToken: async () => 'pointer-token' }} apiBaseUrl={location.origin}
-  courses={[course]} isAdmin onOpenAdmin={() => { globalThis.openedAdmin = true; }} onSignOut={() => {}}
+  user={{ uid: 'pointer-user', email: 'inventory.operator@example.invalid', getIdToken: async () => 'pointer-token' }} apiBaseUrl={location.origin}
+  courses={[course, { ...course, course_id: 'OTHER-U', course_name: 'Another authorized Course' }]} isAdmin onOpenAdmin={() => { globalThis.openedAdmin = true; }} onSignOut={() => {}}
 />);
