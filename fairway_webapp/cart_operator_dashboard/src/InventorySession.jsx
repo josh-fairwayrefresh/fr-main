@@ -210,6 +210,7 @@ export function InventorySessionControls({ session, actions }) {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [closing, setClosing] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const submitting = useRef(false);
@@ -222,10 +223,17 @@ export function InventorySessionControls({ session, actions }) {
   async function submit(event) {
     event.preventDefault();
     if (submitting.current || (!closing && !session.choosing)) return;
+    if (closing && !confirmingClose) {
+      const parsed = usdPriceFromInput(amount);
+      if (parsed.error || !parsed.price) { setError(parsed.error || 'Enter the shift total in dollars.'); return; }
+      setError('');
+      setConfirmingClose(true);
+      return;
+    }
     submitting.current = true;
     setPending(true); setError('');
     try {
-      if (closing) { await session.close(amount); setClosing(false); setAmount(''); }
+      if (closing) { await session.close(amount); setClosing(false); setConfirmingClose(false); setAmount(''); }
       else await session.select(staffId, name);
     } catch (reason) { setError(reason.message); }
     finally { submitting.current = false; setPending(false); }
@@ -233,27 +241,32 @@ export function InventorySessionControls({ session, actions }) {
   return <div className="inventory-session">
     <span>Operator: <strong>{session.shift?.staff_name || 'Not selected'}</strong></span>
     <div className="inventory-session-actions"><button className={session.shift?.has_activity ? 'inventory-close-out' : undefined} type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
-      setError(''); setClosing(Boolean(session.shift?.has_activity));
+      setError(''); setConfirmingClose(false); setClosing(Boolean(session.shift?.has_activity));
       setAmount(session.closeDraft);
       if (!session.shift?.has_activity) session.choose();
     }}>{session.shift?.has_activity ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
     {actions}</div>
     {session.unresolved && <button type="button" disabled={pending} onClick={async () => {
       setPending(true); setError('');
-      try { await session.resolvePending(); setClosing(false); setAmount(''); }
+      try { await session.resolvePending(); setClosing(false); setConfirmingClose(false); setAmount(''); }
       catch (reason) { setError(`Submission remains unconfirmed: ${reason.message}`); }
       finally { setPending(false); }
     }}>Resolve last submission</button>}
     {session.error && <span role="alert">{session.error} <button type="button" onClick={() => session.reload().catch(reason => setError(reason.message))}>Retry staff</button></span>}
     {(session.choosing || closing) && <div className="inventory-session-overlay"><section role="dialog" aria-modal="true" aria-labelledby="inventory-session-title">
-      <h2 id="inventory-session-title">{closing ? 'Close shift' : 'Select operator'}</h2>
+      <h2 id="inventory-session-title">{closing ? confirmingClose ? 'Are you sure?' : 'Close shift' : 'Select operator'}</h2>
       <form onSubmit={submit}>
-        {closing ? <><p>Close {session.shift?.staff_name}’s shift before selecting another operator. Stock and today’s sales remain unchanged.</p><label>Total sales ($)<input autoFocus type="number" min="0" step="0.01" required value={amount} onChange={event => { setAmount(event.target.value); session.saveCloseDraft(event.target.value); }} disabled={pending} /></label></> : <>
+        {closing ? confirmingClose
+          ? <p>Close {session.shift?.staff_name}’s shift with final sales of <strong>${(usdPriceFromInput(amount).price.amount_minor / 100).toFixed(2)}</strong>?</p>
+          : <><p>Close {session.shift?.staff_name}’s shift before selecting another operator. Stock and today’s sales remain unchanged.</p><label>Total sales ($)<input autoFocus type="number" min="0" step="0.01" required value={amount} onChange={event => { setAmount(event.target.value); session.saveCloseDraft(event.target.value); }} disabled={pending} /></label></> : <>
           <label>Staff name<select required value={staffId} onChange={event => setStaffId(event.target.value)} disabled={pending}><option value="">Select a name</option>{session.staff.filter(person => person.active !== false).map(person => <option key={person.staff_id} value={person.staff_id}>{person.name}</option>)}<option value="custom">Custom</option></select></label>
           {staffId === 'custom' && <label>New name<input autoFocus required maxLength="160" value={name} onChange={event => setName(event.target.value)} disabled={pending} /></label>}
         </>}
         {error && <p role="alert">{error}</p>}
-        <footer><button type="button" disabled={pending} onClick={() => { setClosing(false); session.cancel(); }}>Cancel</button><button type="submit" disabled={pending}>{pending ? 'Submitting…' : closing ? 'Submit shift total' : 'Confirm operator'}</button></footer>
+        <footer><button type="button" disabled={pending} onClick={() => {
+          if (confirmingClose) setConfirmingClose(false);
+          else { setClosing(false); session.cancel(); }
+        }}>Cancel</button><button type="submit" disabled={pending}>{pending ? 'Submitting…' : closing ? confirmingClose ? 'Confirm close out' : 'Submit shift total' : 'Confirm operator'}</button></footer>
       </form>
     </section></div>}
     {!session.choosing && !closing && error && <p role="alert">{error}</p>}

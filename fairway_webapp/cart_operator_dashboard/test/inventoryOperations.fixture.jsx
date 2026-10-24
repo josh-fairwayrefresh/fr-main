@@ -27,6 +27,8 @@ let holdSessionRefresh = false;
 let releaseSessionRefresh;
 let loseSaleResponse = true;
 let loseCloseResponse = true;
+let loseAuditResponse = false;
+let failHistory = false;
 const committed = new Map();
 const calls = [];
 const downloads = [];
@@ -103,11 +105,19 @@ window.fetch = async (url, options = {}) => {
     if (body.kind === 'sale' && loseSaleResponse) { loseSaleResponse = false; throw new TypeError('Response lost'); }
     return response(result);
   }
-  if (route.endsWith('/audits')) {
+  if (route.endsWith('/audits') && method === 'GET') {
+    if (failHistory) return response({ message: 'Audit history unavailable. Retry export.' }, 503);
+    return response({ start_date: '2026-10-10', end_date: '2026-10-23', timezone: course.timezone, audits: [
+      { audit_id: 'historical', created_at: '2026-10-24T01:00:00Z', approver_staff_name: 'Historical approver' },
+    ] });
+  }
+  if (route.endsWith('/audits') && method === 'POST') {
+    check(!body.shift_id, 'Audit submission must not carry operator/shift attribution');
     if (body.inventory_revision !== revision) return response({ message: 'Inventory changed. Review and confirm again.' }, 409);
     audit = structuredClone(catalog.filter(product => product.state === 'on_cart' && !product.archived));
     audits++;
     committed.set(body.operation_id, { audit_id: 'audit1' });
+    if (loseAuditResponse) { loseAuditResponse = false; throw new TypeError('Audit response lost'); }
     return response({ audit_id: 'audit1' });
   }
   if (route.endsWith('/TEST-U') && method === 'GET') {
@@ -128,8 +138,18 @@ try {
   await wait(() => !button('Export').disabled);
   const beforeExport = calls.length;
   click(button('Export'));
-  check(calls.length === beforeExport && shift === null, 'Export must not select an operator or make a request');
   await wait(() => downloads.length === 1);
+  check(calls.slice(beforeExport).every(call => call.method === 'GET' && call.route.endsWith('/audits')) && shift === null, 'Export reads history without selecting an operator or writing');
+  const exported = new ExcelJS.Workbook();
+  await exported.xlsx.load(await downloads[0].arrayBuffer());
+  check(exported.getWorksheet('Audit History').getCell('B6').value === 'Historical approver', 'Downloaded workbook includes durable Course-wide audit history');
+  failHistory = true;
+  await wait(() => !button('Export').disabled);
+  click(button('Export'));
+  await wait(() => document.querySelector('[role="alert"]')?.textContent.includes('Audit history unavailable'));
+  check(downloads.length === 1 && shift === null, 'History retrieval failure cannot silently export empty history or start a shift');
+  failHistory = false;
+  click(document.querySelector('[aria-label="Dismiss message"]'));
   check((await reportText(downloads[0])).includes('Operator: Not selected'), 'Export supports no selected operator');
   check(catalog[0].state === 'on_cart', 'Zero initialization must not move existing tiles');
   click(document.querySelector('[aria-label="Move Water"]'));
@@ -185,11 +205,12 @@ try {
   const filteredReport = await reportText(downloads.at(-1));
   check(filteredReport.includes('FILTERED VIEW - NOT THE COMPLETE INVENTORY') && filteredReport.includes('Category filter: Drinks'), 'Filtered exports identify active scope');
   check(!filteredReport.includes('"Juice"') && filteredReport.includes('Total units sold: 1') && filteredReport.includes('Test Operator'), 'Export uses displayed products and full displayed tally with operator');
-  check(calls.length === beforeFilteredExport, 'Filtered export remains read-only');
+  check(calls.slice(beforeFilteredExport).every(call => call.method === 'GET' && call.route.endsWith('/audits')), 'Filtered export remains read-only');
+  const afterFilteredExport = calls.length;
   click(button('Export'));
   click([...document.querySelectorAll('.inv-category-filter')].find(node => node.textContent.startsWith('All Products')));
   await wait(() => document.querySelector('.inv-notice')?.textContent.includes('changed while preparing the report'));
-  check(downloads.length === 2 && calls.length === beforeFilteredExport, 'Changed export scope must reject the in-flight download without a request');
+  check(downloads.length === 2 && calls.slice(afterFilteredExport).every(call => call.method === 'GET' && call.route.endsWith('/audits')), 'Changed export scope rejects download and never writes');
   click(document.querySelector('[aria-label="Dismiss message"]'));
   click(document.querySelector('[aria-label="Record sale for Water"]'));
   input(document.querySelector('#inv-stock-title').closest('section').querySelector('input'), '5');
@@ -254,13 +275,19 @@ try {
   click(document.querySelector('.inventory-close-out'));
   input(document.querySelector('.inventory-session-overlay input'), '12.34');
   click(button('Submit shift total'));
+  check(document.querySelector('#inventory-session-title').textContent === 'Are you sure?' && document.querySelector('.inventory-session-overlay').textContent.includes('$12.34'), 'Close confirmation shows exact entered amount');
+  click(document.querySelector('.inventory-session-overlay button[type="button"]'));
+  check(closes === 0 && document.querySelector('.inventory-session-overlay input').value === '12.34' && shift !== null, 'Cancel returns to amount and keeps shift/operator');
+  click(button('Submit shift total'));
+  click(button('Confirm close out'));
   await wait(() => document.querySelector('.inventory-session-overlay [role="alert"]'));
-  check(document.querySelector('.inventory-session-overlay input').value === '12.34', 'Uncertain close retains amount');
+  check(document.querySelector('.inventory-session-overlay').textContent.includes('$12.34'), 'Uncertain close retains confirmed amount');
   check(document.querySelector('.inventory-session').textContent.includes('Test Operator'), 'Uncertain close retains name');
   flushSync(() => root.render(<InventoryApp key="reload" user={user} apiBaseUrl={location.origin} courses={[course]} onSignOut={() => {}} />));
   await wait(() => document.querySelector('.inventory-session-overlay input')?.value === '12.34');
   check(document.querySelector('.inventory-session').textContent.includes('Test Operator'), 'Reload must retain unresolved close name, even when server already closed');
   click(button('Submit shift total'));
+  click(button('Confirm close out'));
   await wait(() => !document.querySelector('.inventory-session-overlay'));
   check(closes === 1 && document.querySelector('.inventory-session').textContent.includes('Not selected'), 'One successful close clears only current name');
   window.dispatchEvent(new Event('focus'));
@@ -278,11 +305,24 @@ try {
   click(document.querySelector('.inventory-close-out'));
   input(document.querySelector('.inventory-session-overlay input'), '0.00');
   click(button('Submit shift total'));
+  click(button('Confirm close out'));
   await wait(() => document.querySelector('.inventory-session').textContent.includes('Not selected') && !document.querySelector('[role="dialog"]'));
   holdSessionRefresh = false; releaseSessionRefresh();
   await new Promise(resolve => setTimeout(resolve, 50));
   check(!document.querySelector('[role="dialog"]') && document.querySelector('.inventory-session').textContent.includes('Not selected'), 'Late pre-close session refresh cannot resurrect a closed shift or open a dialog');
   check(closes === 2, 'Next user action alone selects a new shift, which closes once');
+  const beforeIdleAudit = calls.length;
+  click(button('Confirm Inventory Audit'));
+  input(document.querySelector('.inv-dialog select'), 'manager');
+  click(document.querySelector('.inv-dialog input[type="checkbox"]'));
+  loseAuditResponse = true;
+  click(button('Confirm audit'));
+  await wait(() => document.querySelector('.inv-dialog [role="alert"]')?.textContent.includes('not confirmed'));
+  check(shift === null && !document.querySelector('#inventory-session-title'), 'Uncertain no-operator audit never selects staff or starts a shift');
+  click(button('Confirm audit'));
+  await wait(() => !document.querySelector('#inv-audit-title'));
+  check(audits === 2 && shift === null && !document.querySelector('[role="dialog"]'), 'Audit with no operator succeeds without creating shift or prompting');
+  check(!calls.slice(beforeIdleAudit).some(call => call.route.endsWith('/shifts/select')), 'Audit has no implicit shift selection');
   check(catalog[0].quantity === 4 && unitsSold === 1, 'Shift close preserves stock and daily sales');
   check(document.documentElement.scrollWidth <= innerWidth, 'Inventory must not overflow viewport');
   for (const control of document.querySelectorAll('.inv-stock-controls button')) {

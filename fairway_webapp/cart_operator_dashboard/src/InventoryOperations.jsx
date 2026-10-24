@@ -83,7 +83,7 @@ export function AuditDialog({ inventory, session, onSaved, onClose }) {
     submitting.current = true;
     setPending(true); setError('');
     try {
-      await session.request('/audits', { inventory_revision: snapshot.revision, approver_staff_id: approver, authorized });
+      await session.request('/audits', { inventory_revision: snapshot.revision, approver_staff_id: approver, authorized }, 'POST', false);
       await onSaved(); onClose();
     } catch (reason) { submitting.current = false; setError(reason.message); }
     finally { setPending(false); }

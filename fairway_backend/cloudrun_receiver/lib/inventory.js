@@ -542,7 +542,7 @@ async function selectShift(db, customerId, courseId, actorUid, body) {
   });
 }
 
-async function runMutation(db, customerId, courseId, actorUid, context, action, payload, worker) {
+async function runMutation(db, customerId, courseId, actorUid, context, action, payload, worker, { requireShift = true } = {}) {
   const parent = courseRef(db, customerId, courseId);
   const operation = operationRef(parent, context?.operation_id);
   const hash = fingerprint(actorUid, action, payload);
@@ -550,26 +550,30 @@ async function runMutation(db, customerId, courseId, actorUid, context, action, 
     const previous = await transaction.get(operation);
     const retry = retryResult(previous, hash);
     if (retry) return retry.result;
-    if (!context?.shift_id) fail(409, 'shift_required', 'Select staff and an active shift before changing inventory');
-    const shiftRef = shiftsCollection(db, customerId, courseId).doc(identifier(context.shift_id, 'shift_id'));
-    const snapshot = await transaction.get(shiftRef);
-    if (!snapshot.exists || snapshot.data().actor_uid !== actorUid || snapshot.data().status !== 'active') {
-      fail(409, 'shift_unavailable', 'The selected shift is not active for this account');
-    }
-    const shift = snapshot.data();
-    const [staff, session] = await Promise.all([
-      transaction.get(staffCollection(db, customerId).doc(shift.staff_id)),
-      transaction.get(sessionRef(db, customerId, courseId, actorUid, shift.session_id)),
-    ]);
-    if (!session.exists || session.data().shift_id !== shiftRef.id) fail(409, 'shift_unavailable', 'The shift is no longer selected');
-    if (!staff.exists || !canOperateInventory(staff.data())) fail(409, 'staff_unavailable', 'Select an active staff member');
     const timestamp = new Date();
-    const attribution = {
-      actor_uid: actorUid, shift_id: shiftRef.id, operation_id: context.operation_id,
-      staff_id: shift.staff_id, staff_name: shift.staff_name, staff_role: shift.staff_role,
-      staff: { staff_id: shift.staff_id, name: shift.staff_name, role: shift.staff_role },
-      created_at: timestamp,
-    };
+    const attribution = { actor_uid: actorUid, operation_id: context.operation_id, created_at: timestamp };
+    let shiftRef;
+    let shift;
+    if (requireShift) {
+      if (!context?.shift_id) fail(409, 'shift_required', 'Select staff and an active shift before changing inventory');
+      shiftRef = shiftsCollection(db, customerId, courseId).doc(identifier(context.shift_id, 'shift_id'));
+      const snapshot = await transaction.get(shiftRef);
+      if (!snapshot.exists || snapshot.data().actor_uid !== actorUid || snapshot.data().status !== 'active') {
+        fail(409, 'shift_unavailable', 'The selected shift is not active for this account');
+      }
+      shift = snapshot.data();
+      const [staff, session] = await Promise.all([
+        transaction.get(staffCollection(db, customerId).doc(shift.staff_id)),
+        transaction.get(sessionRef(db, customerId, courseId, actorUid, shift.session_id)),
+      ]);
+      if (!session.exists || session.data().shift_id !== shiftRef.id) fail(409, 'shift_unavailable', 'The shift is no longer selected');
+      if (!staff.exists || !canOperateInventory(staff.data())) fail(409, 'staff_unavailable', 'Select an active staff member');
+      Object.assign(attribution, {
+        shift_id: shiftRef.id,
+        staff_id: shift.staff_id, staff_name: shift.staff_name, staff_role: shift.staff_role,
+        staff: { staff_id: shift.staff_id, name: shift.staff_name, role: shift.staff_role },
+      });
+    }
     let wroteEvent = false;
     const attributed = {
       timestamp,
@@ -584,7 +588,7 @@ async function runMutation(db, customerId, courseId, actorUid, context, action, 
     };
     const result = responseValue(await worker(attributed));
     if (!wroteEvent) transaction.set(eventsCollection(db, customerId, courseId).doc(), { action, ...attribution });
-    transaction.set(shiftRef, { ...shift, has_activity: true, updated_at: timestamp });
+    if (requireShift) transaction.set(shiftRef, { ...shift, has_activity: true, updated_at: timestamp });
     transaction.set(operation, { fingerprint: hash, result, ...attribution });
     return result;
   });
@@ -699,7 +703,32 @@ async function createAudit(db, customerId, courseId, body, actorUid) {
     transaction.set(eventsCollection(db, customerId, courseId).doc(), { action: 'inventory_audited', audit_id: auditRef.id, inventory_revision: revision });
     transaction.set(stateRef, nextState(state.data() || {}, actorUid, transaction.timestamp));
     return result;
-  });
+  }, { requireShift: false });
+}
+
+async function auditHistory(db, customerId, courseId, now = new Date()) {
+  const course = await courseRef(db, customerId, courseId).get();
+  if (!course.exists) fail(404, 'course_not_found', 'Course not found');
+  const timezone = course.data().timezone;
+  if (!timezone) fail(409, 'timezone_required', 'Course timezone is required for audit history');
+  const endDate = localDate(now, timezone);
+  const start = new Date(`${endDate}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 13);
+  const startDate = start.toISOString().slice(0, 10);
+  const snapshot = await courseRef(db, customerId, courseId).collection('inventory_audits')
+    .where('created_at', '>=', new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000)).get();
+  const audits = snapshot.docs.flatMap(document => {
+    const audit = document.data();
+    const timestamp = audit.created_at?.toDate ? audit.created_at.toDate() : audit.created_at;
+    if (!(timestamp instanceof Date) || !Number.isFinite(timestamp.getTime())) {
+      fail(500, 'invalid_audit_timestamp', 'An audit record has an invalid timestamp');
+    }
+    const date = localDate(timestamp, timezone);
+    return date >= startDate && date <= endDate && timestamp <= now
+      ? [{ audit_id: document.id, created_at: timestamp.toISOString(), approver_staff_name: audit.approver_staff_name }]
+      : [];
+  }).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.audit_id.localeCompare(b.audit_id));
+  return { start_date: startDate, end_date: endDate, timezone, audits };
 }
 
 async function closeShift(db, customerId, courseId, shiftId, body, actorUid) {
@@ -1149,6 +1178,7 @@ module.exports = {
   getSessionShift,
   updateStock,
   createAudit,
+  auditHistory,
   closeShift,
   InventoryError,
   INVENTORY_STATES,

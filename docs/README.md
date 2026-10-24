@@ -44,7 +44,9 @@ refinement reads that menu only on open/reload with collapsed categories,
 uses a formatted one-page-print Excel report, enforces zero-quantity Sold Out,
 limits new audits to On Cart and leaves successful close-out idle. Audit sits
 below Close out in the bounded operator panel; Golfer-View Menu remains on the
-right of the filters. It is not
+right of the filters. Final follow-ups permit approver/account-only audits
+without an operator shift, confirm the close-out dollar amount before submission,
+and add a separate 14-day audit-history worksheet to Excel export. It is not
 merged or production-deployed; follow-up review remains pending. Its current review
 identity and verification are in the Deployment Guide's latest Alignment
 Register entry; accepted behavior is owned by the UX specification.

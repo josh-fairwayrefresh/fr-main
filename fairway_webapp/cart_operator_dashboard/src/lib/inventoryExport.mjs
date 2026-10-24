@@ -5,8 +5,11 @@ export const INVENTORY_WORKBOOK_TYPE = 'application/vnd.openxmlformats-officedoc
 const GREEN = '183E2C';
 const LIGHT = 'EDF3EF';
 
-export async function inventoryViewWorkbook({ course, inventory, products, archivedProducts, category, subcategory, operator, exportedAt = new Date() }) {
+export async function inventoryViewWorkbook({ course, inventory, auditHistory, products, archivedProducts, category, subcategory, operator, exportedAt = new Date() }) {
   if (!inventory.timezone) throw new Error('Course timezone is not configured. Export requires a Course-local timestamp.');
+  if (!auditHistory || auditHistory.timezone !== inventory.timezone || !Array.isArray(auditHistory.audits)) {
+    throw new Error('Confirmed Course audit history is required for export.');
+  }
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Fairway Refresh';
   workbook.created = exportedAt;
@@ -83,5 +86,45 @@ export async function inventoryViewWorkbook({ course, inventory, products, archi
   textRow(next++, `Total units sold: ${tally.total_units}    |    Cart stock units (all On Cart products): ${cartStock}`, { bold: true });
   next = table(next, ['Product', 'Units'], tally.products.map(product => [product.name, product.units]), true);
   sheet.pageSetup.printArea = `A1:I${next - 1}`;
+  const history = workbook.addWorksheet('Audit History', {
+    views: [{ showGridLines: false }],
+    pageSetup: {
+      paperSize: 1, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      printTitlesRow: '1:5',
+      margins: { left: 0.4, right: 0.4, top: 0.4, bottom: 0.4, header: 0.15, footer: 0.15 },
+    },
+    headerFooter: { oddFooter: 'Page &P of &N' },
+  });
+  history.columns = [{ width: 36 }, { width: 48 }];
+  const context = [
+    'Fairway Refresh | Inventory Audit History',
+    `Customer: ${inventory.customer_name || course.customer_name || course.customer_id} | Course: ${inventory.course_name || course.course_name} (${course.course_id})`,
+    `Past 14 Course-local calendar days: ${auditHistory.start_date} through ${auditHistory.end_date} (inclusive, through export) | ${auditHistory.timezone}`,
+    'Entire Course audit history; independent of current inventory/category filters. Names are historical snapshots.',
+  ];
+  context.forEach((text, index) => {
+    history.mergeCells(index + 1, 1, index + 1, 2);
+    history.getCell(index + 1, 1).value = text;
+    history.getRow(index + 1).height = index === 0 ? 25 : 32;
+  });
+  history.addRow(['Audit date / time', 'Approver']);
+  if (auditHistory.audits.length) {
+    for (const audit of auditHistory.audits) {
+      history.addRow([formatPublishedAt(audit.created_at, auditHistory.timezone), audit.approver_staff_name]);
+    }
+  } else {
+    history.mergeCells('A6:B6');
+    history.getCell('A6').value = 'No completed inventory audits occurred during this reporting period.';
+  }
+  history.eachRow((row, index) => {
+    row.height = Math.max(row.height || 0, 32);
+    row.eachCell(cell => {
+      cell.font = { name: 'Arial', size: index === 1 ? 14 : 10, bold: index === 1 || index === 5, color: { argb: index === 5 ? 'FFFFFF' : GREEN } };
+      cell.alignment = { vertical: 'middle', wrapText: true };
+      if (index === 5 || (index > 5 && index % 2 === 0)) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: index === 5 ? GREEN : LIGHT } };
+      row.height = Math.max(row.height, Math.ceil(String(cell.value || '').length / (index <= 4 ? 95 : cell.col === 1 ? 35 : 45)) * 14);
+    });
+  });
+  history.pageSetup.printArea = `A1:B${history.rowCount}`;
   return workbook.xlsx.writeBuffer();
 }

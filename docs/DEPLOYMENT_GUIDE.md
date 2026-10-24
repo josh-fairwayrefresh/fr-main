@@ -2726,6 +2726,8 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `GET /api/v1/operator/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses and push configuration. |
 | `GET /api/v1/inventory/bootstrap` | Admin or user entitled to at least one Course | Returns only authorized Courses; same entitlement as Cart Operations. |
 | `GET /api/v1/inventory/courses/{customerId}/{courseId}` | Admin or user entitled to the exact Customer/Course | Returns course-level products, categories, archives, revision, configured public slug and operational summaries. |
+| `POST .../audits` | Course member | Active selected approver, explicit authorization and exact inventory revision commit an immutable On Cart snapshot with submitting Auth UID; no operator or shift requirement/activity. Existing operation IDs provide safe retry. |
+| `GET .../audits` | Course member | Durable audit date/time and historical approver summaries for today plus the previous 13 Course-local dates, through read time. Independent of inventory filters; used by the separate Excel Audit History worksheet. |
 | `POST .../categories`; `POST .../categories/{categoryId}/subcategories` | Course member | Creates normalized labels; equivalent normalized names reuse their existing IDs. |
 | `DELETE .../categories/{categoryId}` | Course member | Deletes an empty category (and its own empty subcategory labels); rejects with `409 category_not_empty` if any product still references it. Never deletes products. |
 | `POST .../products`; `PATCH .../products/{productId}`; `POST .../products/{productId}/archive` | Course member | Persists product state and actor. Exact normalized name/category/subcategory/brand duplicates are rejected. |

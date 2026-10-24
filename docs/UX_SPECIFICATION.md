@@ -339,6 +339,16 @@ deployment.
   than truncating content to fit. Validate actual workbook contents and rendered
   one-page printing, not only page-setup flags. If confirmed data or submission
   state changes during workbook generation, require a fresh export.
+  A separate **Audit History** worksheet reads completed durable audits for the
+  selected Course's past 14 local calendar dates (today and the preceding 13
+  dates, through export). Include the reporting period/timezone and each audit's
+  Course-local date/time and historical approver-name snapshot, independent of
+  current product/category filters. Show an explicit no-audits empty state.
+  Use readable columns, repeated headings, margins and fit-to-width printing;
+  history may span pages without shrinking the inventory report. Keep the
+  Inventory Report worksheet's existing readable one-page print layout.
+  History is an authorized read, not an audit/shift mutation; retrieval failure
+  prevents download with an actionable error rather than presenting empty history.
 - Admin's Customer register contains a staff directory with stable person IDs,
   free-text names, and Cart Operator / F&B Management roles. Both roles have
   equal operational rights through one policy. These are operational identities,
@@ -346,7 +356,8 @@ deployment.
   Custom operator entry adds a Cart Operator to that Customer directory.
 - Cart's banner and Inventory's Sales Today panel share a session/Course operator selection, isolated
   from other sessions/accounts and Customer/Course contexts. The first inventory
-  action without a selection prompts and resumes that action. One shift is active
+  action requiring operator attribution without a selection prompts and resumes
+  that action; audit submission is expressly exempt. One shift is active
   per operator session and Course. Before inventory activity, the name can be
   corrected freely; after activity, selecting a different person requires
   successful shift close. Operational records preserve selected staff snapshots
@@ -361,9 +372,15 @@ deployment.
   and authoritative timestamp. Concurrent changes invalidate the reviewed
   revision and require reconfirmation. Later product/staff edits cannot rewrite it.
   Historical audits are not rewritten to the new scope. Successful audit
-  submission closes the dialog without triggering operator selection.
+  submission closes the dialog without triggering operator selection. The
+  selected approver, authorization checkbox and Confirm audit suffice even with
+  no operator selected. Record approver and submitting Auth account without
+  requiring, starting, locking or altering an operator shift solely for an audit.
 - Shift close accepts a nonnegative USD total in dollars, stores exact cents and
-  attribution, and supports multiple shifts per Course/local day. Only confirmed
+  attribution, and supports multiple shifts per Course/local day. Submission
+  follows an **Are you sure?** step showing the exact entered dollar
+  amount. Confirm uses the existing duplicate-safe close operation; Cancel
+  returns to the entered amount without closing or clearing the operator. Only
   success closes that session's shift and clears its name. Failure or uncertainty
   preserves the name and amount, with idempotent retry/recovery. Stock, daily
   sales, other sessions and history are unaffected. Successful close leaves

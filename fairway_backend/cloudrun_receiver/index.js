@@ -1756,6 +1756,9 @@ function createFairwayHandlers(db, {
       if (req.method === 'POST' && action === 'audits') {
         return res.status(201).json(await inventory.createAudit(db, customerId, courseId, req.body, identity.uid));
       }
+      if (req.method === 'GET' && action === 'audits') {
+        return res.status(200).json(await inventory.auditHistory(db, customerId, courseId));
+      }
       const stockMatch = action.match(/^products\/([^/]+)\/stock$/);
       if (req.method === 'POST' && stockMatch) {
         return res.status(200).json(await inventory.updateStock(db, customerId, courseId, decodeURIComponent(stockMatch[1]), req.body, identity.uid));

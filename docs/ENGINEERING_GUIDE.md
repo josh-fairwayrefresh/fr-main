@@ -142,7 +142,15 @@ distinct from synthetic handler tests and physical iPad/Safari acceptance.
 The browser's current-view Excel (.xlsx) exporter consumes the same confirmed inventory
 snapshot, visible-product filters and displayed Course-wide tally as the UI;
 it has no mutation/shift API. Bootstrap/snapshot responses expose canonical
-Customer names and Course timezone for report context. Exports explicitly name
+Customer names and Course timezone for report context. A Course-authorized
+`GET .../audits` reads durable completed audit summaries for today plus the
+preceding 13 Course-local dates, through the read time. A bounded single-field
+timestamp query plus local-date filtering includes DST boundaries without a
+new composite index. Historical approver names come from audit snapshots, not
+the current directory. The exporter fetches this unfiltered history and places
+it on a separately print-formatted Audit History worksheet; failure blocks
+download explicitly. Inventory Report retains its one-page layout.
+Exports explicitly name
 their filter scope; pending or unresolved writes disable them, and changed
 snapshot/submission context during generation rejects the download explicitly.
 The ExcelJS writer is loaded only for export, writes untrusted text as literal
@@ -159,7 +167,13 @@ before activity, requires close before a different operator after activity,
 and closes only with a durable submitted USD total. Both selected staff
 snapshots and authenticated UID are recorded. Stock/history commit together;
 stable operation identities make lost-response retries and shift close
-idempotent. Uncertain outcomes remain explicit and recoverable, not success.
+idempotent. Close-out entry opens an amount-bearing Are you sure? confirmation;
+Cancel preserves the draft/name, and only confirmed successful close clears it.
+Audits use the shared transaction/idempotency owner without a shift requirement:
+their selected active approver and authenticated submitting UID suffice.
+Submitting an audit never starts or marks a shift active; stock/catalog mutations
+still require operator attribution. Uncertain outcomes remain explicit and
+recoverable, not success.
 Completed stock/audit submissions keep a synchronous intent guard until their
 dialog closes, including post-commit refresh; late/repeated submit callbacks
 cannot start a new attribution request. Session forms ignore submission when

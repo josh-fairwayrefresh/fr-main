@@ -187,7 +187,6 @@ test('every operational mutation rejects missing shift and cannot create unattri
     ['PATCH', `/products/${id}`, f.metadata()],
     ['POST', `/products/${id}/archive`, {}],
     ['POST', `/products/${id}/stock`, { kind: 'adjustment', quantity: 1, expected_stock_revision: 0 }],
-    ['POST', '/audits', { authorized: true, inventory_revision: 0, approver_staff_id: f.manager.staff_id }],
   ];
   for (const [method, path, body] of operations) {
     const response = await f.request(method, path, { ...body, operation_id: operation() });
@@ -197,7 +196,7 @@ test('every operational mutation rejects missing shift and cannot create unattri
   assert.equal((await f.ok('GET', '/shifts/session?session_id=browser-one')).shift.has_activity, false);
 });
 
-test('metadata, create, archive, category, subcategory, delete and audit all lock attribution', async () => {
+test('metadata, create, archive, category, subcategory and delete all lock attribution', async () => {
   const f = await fixture();
   const id = await f.seedProduct('Activity Product', 'on_cart', 1);
   await f.customer.collection('courses').doc('course-a').collection('inventory_categories').doc('empty').set({ name: 'Empty' });
@@ -211,10 +210,6 @@ test('metadata, create, archive, category, subcategory, delete and audit all loc
     (context) => f.ok('POST', '/categories', { name: 'Activity Category', ...context }),
     (context) => f.ok('POST', '/categories/drinks/subcategories', { name: 'Activity Subcategory', ...context }),
     (context) => f.ok('DELETE', '/categories/empty', context),
-    async (context) => f.ok('POST', '/audits', {
-      inventory_revision: (await f.ok('GET', '')).inventory_revision,
-      approver_staff_id: f.manager.staff_id, authorized: true, ...context,
-    }),
   ];
   for (let i = 0; i < actions.length; i += 1) {
     const sessionId = `activity-${i}`;
@@ -548,6 +543,57 @@ test('audit requires exact authorization, active approver, and the confirmed rev
   assert.equal((await f.request('POST', '/audits', {
     ...body, inventory_revision: current.inventory_revision, operation_id: operation(),
   })).body.error, 'staff_unavailable');
+});
+
+test('audit needs only approver and authenticated account, never starts or locks a shift', async () => {
+  const f = await fixture();
+  await f.ok('POST', `/shifts/${f.shift.shift_id}/close`, {
+    session_id: 'browser-one', amount_minor: 0, operation_id: operation(),
+  });
+  await f.seedProduct('Audit no operator', 'on_cart', 2);
+  const shiftsBefore = await f.course.collection('inventory_shifts').get();
+  const body = { operation_id: operation(), authorized: true, inventory_revision: 0, approver_staff_id: f.manager.staff_id };
+  const [audit, retry] = await Promise.all([f.ok('POST', '/audits', body), f.ok('POST', '/audits', body)]);
+  assert.deepEqual(retry, audit);
+  assert.equal(audit.actor_uid, f.actors.operator.uid);
+  assert.equal(audit.approver_staff_name, 'Test Manager');
+  assert.equal(audit.shift_id, undefined);
+  assert.equal(audit.staff_id, undefined);
+  assert.equal((await f.course.collection('inventory_audits').get()).size, 1);
+  assert.equal((await f.course.collection('inventory_shifts').get()).size, shiftsBefore.size);
+  assert.equal((await f.ok('GET', '/shifts/session?session_id=browser-one')).shift, null);
+  const selected = await f.select();
+  await f.ok('POST', '/audits', { ...body, inventory_revision: 1, operation_id: operation(), shift_id: selected.shift_id });
+  assert.equal((await f.ok('GET', '/shifts/session?session_id=browser-one')).shift.has_activity, false);
+  assert.equal((await f.request('POST', '/audits', { ...body, operation_id: operation() }, 'outsider')).status, 403);
+});
+
+test('audit history is Course-authorized, 14 local dates including today, DST-safe and snapshot-named', async () => {
+  const f = await fixture();
+  const collection = f.course.collection('inventory_audits');
+  const records = [
+    ['before', '2026-10-20T06:59:59Z'],
+    ['start', '2026-10-20T07:00:00Z'],
+    ['dst', '2026-11-01T09:30:00Z'],
+    ['today', '2026-11-02T08:00:00Z'],
+    ['future', '2026-11-02T12:00:01Z'],
+  ];
+  for (const [id, time] of records) await collection.doc(id).set({
+    created_at: new Date(time), approver_staff_name: `Historical ${id}`, authorized: true,
+  });
+  const history = await inventory.auditHistory(db, f.customerId, 'course-a', new Date('2026-11-02T12:00:00Z'));
+  assert.equal(history.start_date, '2026-10-20');
+  // October 20 through November 2 is fourteen local dates across the DST change.
+  assert.deepEqual(history.audits.map(audit => audit.audit_id), ['today', 'dst', 'start']);
+  await collection.doc('boundary').set({ created_at: new Date('2026-10-20T07:00:00Z'), approver_staff_name: 'Original manager' });
+  await f.ok('PATCH', `/api/v1/admin/customers/${f.customerId}/staff/${f.manager.staff_id}`, { name: 'Renamed manager' }, 'admin', true);
+  const next = await inventory.auditHistory(db, f.customerId, 'course-a', new Date('2026-11-02T12:00:00Z'));
+  assert.equal(next.audits.find(audit => audit.audit_id === 'boundary').approver_staff_name, 'Original manager');
+  assert.deepEqual((await inventory.auditHistory(db, f.customerId, 'course-b')).audits, []);
+  assert.equal((await f.request('GET', '/audits', undefined, 'outsider')).status, 403);
+  assert.equal((await f.request('GET', '/audits', undefined, 'other')).status, 200);
+  assert.equal((await f.request('GET', '/audits', undefined, '')).status, 401);
+  assert.ok(Array.isArray((await f.ok('GET', '/audits')).audits));
 });
 
 test('close validates exact cents, is immutable/idempotent, and allows multiple shifts per day', async () => {

@@ -15,6 +15,7 @@ const options = {
   },
   products, archivedProducts: [], category: 'all', subcategory: 'all', operator: '',
   exportedAt: new Date('2026-10-24T01:00:00Z'),
+  auditHistory: { start_date: '2026-10-10', end_date: '2026-10-23', timezone: 'America/Los_Angeles', audits: [] },
 };
 async function readReport(settings = options) {
   const bytes = await inventoryViewWorkbook(settings);
@@ -22,7 +23,7 @@ async function readReport(settings = options) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(bytes);
   const sheet = workbook.getWorksheet('Inventory Report');
-  return { sheet, text: JSON.stringify(sheet.getSheetValues()) };
+  return { sheet, workbook, text: JSON.stringify(sheet.getSheetValues()) };
 }
 test('XLSX exports confirmed view, Course-local context, literal names and numeric whole quantities', async () => {
   const { sheet, text } = await readReport();
@@ -59,4 +60,26 @@ test('58-product report has explicit one-page landscape print area, margins and 
 });
 test('missing Course timezone is an explicit export error', async () => {
   await assert.rejects(inventoryViewWorkbook({ ...options, inventory: { ...options.inventory, timezone: null } }), /timezone is not configured/);
+});
+test('separate audit worksheet preserves historical names and Course-local times independent of filters', async () => {
+  const { workbook, sheet } = await readReport({
+    ...options, category: 'Food', products: [],
+    auditHistory: { ...options.auditHistory, audits: [
+      { audit_id: 'a', created_at: '2026-10-24T01:00:00Z', approver_staff_name: '=Historical manager' },
+    ] },
+  });
+  const history = workbook.getWorksheet('Audit History');
+  const text = JSON.stringify(history.getSheetValues());
+  for (const value of ['2026-10-10', '2026-10-23', 'America/Los_Angeles', '10/23/2026 6:00 PM PDT', '=Historical manager', 'independent of current inventory/category filters']) assert.ok(text.includes(value), value);
+  assert.equal(history.getCell('B6').type, ExcelJS.ValueType.String);
+  assert.equal(history.pageSetup.fitToWidth, 1);
+  assert.equal(history.pageSetup.fitToHeight, 0);
+  assert.equal(history.pageSetup.printTitlesRow, '1:5');
+  assert.equal(history.pageSetup.printArea, 'A1:B6');
+  assert.equal(sheet.pageSetup.fitToHeight, 1);
+});
+test('audit history explicitly reports no completed audits and missing history fails export', async () => {
+  const { workbook } = await readReport();
+  assert.ok(workbook.getWorksheet('Audit History').getCell('A6').value.includes('No completed inventory audits'));
+  await assert.rejects(inventoryViewWorkbook({ ...options, auditHistory: undefined }), /history is required/);
 });

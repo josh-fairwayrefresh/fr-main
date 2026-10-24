@@ -438,8 +438,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     setExporting(true);
     try {
       const { inventoryViewWorkbook, INVENTORY_WORKBOOK_TYPE } = await import('./lib/inventoryExport.mjs');
+      const auditHistory = await inventoryRequest(user, apiBaseUrl, coursePath(course, '/audits'));
       const buffer = await inventoryViewWorkbook({
-        course, inventory, products: columnStates.flatMap(state => visibleProducts.filter(product => product.state === state)),
+        course, inventory, auditHistory, products: columnStates.flatMap(state => visibleProducts.filter(product => product.state === state)),
         archivedProducts: showArchived ? inventory.archived_products || [] : [],
         category: selectedCategory, subcategory: selectedSubcategory, operator: session.shift?.staff_name,
       });

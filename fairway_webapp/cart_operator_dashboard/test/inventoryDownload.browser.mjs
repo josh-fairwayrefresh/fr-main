@@ -25,7 +25,8 @@ test('inventory XLSX creates a real browser download with numeric data and one-p
           products:[{name:'Water',category_name:'Drinks',state:'on_cart',quantity:4}], archivedProducts:[],
           inventory:{timezone:'America/Los_Angeles',customer_name:'Test Customer',course_name:'Test Course',
             inventory_revision:3, products:[], daily_sales:{local_date:'2026-10-23',total_units:2,products:[{name:'Water',units:2}]}},
-          exportedAt:new Date('2026-10-24T01:00:00Z')
+          exportedAt:new Date('2026-10-24T01:00:00Z'),
+          auditHistory:{start_date:'2026-10-10',end_date:'2026-10-23',timezone:'America/Los_Angeles',audits:[{created_at:'2026-10-24T01:00:00Z',approver_staff_name:'Historical manager'}]}
         };
         document.querySelector('#export').onclick = async () => downloadBlob(new Blob([await inventoryViewWorkbook(options)],{type:INVENTORY_WORKBOOK_TYPE}),'inventory-C-U-view.xlsx');
         globalThis.ready = true;
@@ -83,6 +84,7 @@ test('inventory XLSX creates a real browser download with numeric data and one-p
     assert.ok(text.includes('Test operator'));
     assert.ok(text.includes('10/23/2026 6:00 PM PDT'));
     assert.equal(sheet.pageSetup.fitToHeight, 1);
+    assert.equal(workbook.getWorksheet('Audit History').getCell('B6').value, 'Historical manager');
     assert.equal(sheet.pageSetup.fitToWidth, 1);
   } finally {
     socket?.close();

@@ -327,6 +327,13 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       await click('.inventory-close-out');
       await evaluate(`(()=>{const input=document.querySelector('.inventory-session-overlay input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'0.00');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
       await click('.inventory-session-overlay button[type="submit"]');
+      await until(() => evaluate('document.querySelector("#inventory-session-title")?.textContent==="Are you sure?"'));
+      assert.ok(await evaluate('document.querySelector(".inventory-session-overlay").textContent.includes("$0.00")'));
+      await click('.inventory-session-overlay button[type="button"]');
+      assert.equal(await evaluate('document.querySelector(".inventory-session-overlay input").value'), '0.00');
+      assert.ok((await state()).shift, 'Cancelled close keeps selected shift');
+      await click('.inventory-session-overlay button[type="submit"]');
+      await click('.inventory-session-overlay button[type="submit"]');
       await until(() => evaluate('!document.querySelector("[role=dialog]")'));
       await pause(150);
       assert.ok(await evaluate('document.querySelector(".inventory-session").textContent.includes("Not selected")'));
