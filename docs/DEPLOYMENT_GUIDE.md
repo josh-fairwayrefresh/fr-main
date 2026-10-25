@@ -122,6 +122,63 @@ Exact reviewed source and publication identities are recorded with the
 completed review release evidence below. No production deployment, merge,
 firmware work or physical-device command is authorized by this record.
 
+### Completed isolated publication evidence — 2026-10-25 UTC
+
+Application source: `0a5b153399c5e3c8a90cf53c273172a9c7833913`.
+The subsequent evidence-only commit changes documentation, not shipped code.
+Each ready backend revision records this source in `FAIRWAY_SOURCE_REVISION`
+and serves 100% of its service traffic.
+
+| Surface | Final publication identity |
+| --- | --- |
+| Receiver | `fairway-button-receiver-sandbox-00002-d26`; image digest `sha256:8fa785d16755bdbe28717b8a4c684db11411996d25746c8846766632cfdc7542` |
+| Admin/access | `fairway-admin-sandbox-00002-zzf`; image digest `sha256:d485e0aa313c574807433a39f3bf905c301ee5ce084bef2ba308ad7373288f20` |
+| Notifier | `fairway-request-notifier-sandbox-00002-riv`; image digest `sha256:18104fe422599680ae675c072942c385f02bbd56e672995bfecdbe9547eb4404` |
+| Hosting | Version `efe009c66f88c365`; release `1792899908273000`, `2026-10-25T03:45:08.273Z` |
+| Rules | `projects/fairway-refresh-sandbox-qr1/rulesets/dbd64cd3-e67d-49d2-bfeb-ff56bcd84710`; source matched |
+| Eventarc | `projects/fairway-refresh-sandbox-qr1/locations/nam5/triggers/fairway-request-notifier-sandbox-003147`; created `requests/{requestId}`, `(default)`, retry enabled |
+
+- Receiver: https://fairway-button-receiver-sandbox-125189268671.us-central1.run.app.
+  Admin: https://fairway-admin-sandbox-125189268671.us-central1.run.app.
+  Notifier remains private; trigger/runtime identity is
+  `fairway-qr-sandbox@fairway-refresh-sandbox-qr1.iam.gserviceaccount.com`.
+- Operator review:
+  https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002.
+  Synthetic `qr-review@example.test` credentials are delivered privately,
+  never in this document, the PR or printed signs.
+- Local checks: 145 backend checks, 68 frontend checks and two existing
+  real-rendered Cart/category regression cases passed; sandbox build passed.
+  Existing large-bundle warning remains; no new build error.
+- Final deployed verification passed: 16 concurrent fresh intents produced
+  one request; simultaneous terminal actions returned 200/409; retries,
+  suspension, Course access, public field allowlists, all 26 bay mappings,
+  no QR device commands, and all 101 active records behind 105 newer closed
+  records were checked against real Firestore/Rules.
+- Real Chrome touch/mouse acceptance passed Yes/No, Course switching,
+  Complete/Cancel, History, independent service control, deep-link routing,
+  lost response followed by reload/retry after completion, and no overflow
+  at 375/430/768/1024px. Range inventory/KPI exclusion passed.
+- Final headed persistent Chrome received **Server requested — Bay 11** via
+  Eventarc and Web Push with the correct Customer/Course/request destination.
+  No synthetic PushEvent was used. Incognito rejected registration and a
+  headless repeat timed out despite transport acceptance; browser/platform
+  limits are not passing physical delivery evidence.
+- All 75 served files matched local SHA-256, including the 26-page Letter
+  PDF and the 26 decoded QR mappings. Five composite indexes were READY;
+  both counter TTL policies were ACTIVE. Synthetic active requests were
+  closed through the shared authorized lifecycle after testing.
+- Read-only preservation check: PR #12 stayed draft/open at
+  `4a02b47a4d5a63bc61cd877f3b3901ff04386bfa`, with a clean worktree.
+  Its receiver `fairway-button-receiver-sandbox-00025-9lr`, Admin
+  `fairway-admin-sandbox-00024-4wb` and Hosting version `7c21c25b1899c0e6`
+  were unchanged. Accepted remote main remained `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`.
+
+Remaining acceptance: physical phone/iPad/installed-PWA notification
+enablement and display, laminated-sign scans and CPO review. Production
+Monarch Driving Range Course creation, intended-account access, final
+production signs, release integration with PR #12 and launch are not done
+or authorized by this sandbox publication.
+
 ## Latest verified production alignment — 2026-10-23
 
 This summary reflects the production release and read-only checks recorded

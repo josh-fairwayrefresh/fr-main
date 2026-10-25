@@ -28,7 +28,7 @@ physical-phone/Safari, notification, or network-reliability work below.
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
 | Active queue production promotion | Corrected and verified in the isolated QR review increment; production remains unchanged pending authorized release. [Details](#active-queue-truncation). |
-| Notifier source/deployment and sandbox-delivery gap | Established deployment divergence; do not claim delivery-time entitlement/preference enforcement or sandbox delivery acceptance. [Details](#notification-release-gap). |
+| Production notifier source/deployment gap | QR-only sandbox delivery is verified in Chrome; production delivery filtering and physical-platform acceptance remain unverified. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
 | Provisioning policy and automation | Transactional allocation and prepared rotations exist; manufacturing, compromise/revocation, secret delivery, and end-to-end automation remain incomplete. [Details](#provisioning-policy-and-automation). |
 
@@ -64,16 +64,18 @@ installed-PWA/OS delivery acceptance or change the production deployment gap.
 - **Evidence/mechanism:** [Deployment Guide](DEPLOYMENT_GUIDE.md#cart-operator-web-push)
   records source delivery-time entitlement/preference checks absent from
   last-inspected notifier `fairway-request-notifier-00003-mah` (source archive
-  generation `1790840128801876`), and no sandbox notifier/VAPID deployment.
+  generation `1790840128801876`). That earlier record did not establish a
+  sandbox notifier/VAPID deployment; the independent QR publication above
+  now supplies sandbox evidence without changing production or PR #12.
   This is established source/deployment divergence, not evidence of a
   specific unauthorized notification incident.
 - **Impact/blocking:** Revocation/preference delivery claims are not
-  production-verified; local tests cannot prove actual sandbox delivery.
+  production-verified; local tests cannot substitute for browser/OS evidence.
   Blocks release acceptance of changed delivery filtering, not request
   persistence or Cart access.
 - **Durable outcome/dependencies/acceptance:** Separately authorize a
-  sandbox-capable notifier/delivery configuration and matched reviewed
-  release. Depend on environment/IAM/secret isolation and preference/access
+  matched reviewed production release after sandbox/physical acceptance.
+  Depend on environment/IAM/secret isolation and preference/access
   contracts. Verify enabled, disabled, revoked, retried, failed, and
   deep-linked delivery without duplicate dispatches, including missing-parent
   descendant handling. Record exact source/configuration/revision and
