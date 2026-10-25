@@ -179,6 +179,52 @@ changed; no installation edition or production artifact was generated.
 
 ### Verification and recovery boundaries
 
+#### Saved Monarch testing checkpoint — 2026-10-25 UTC
+
+CPO confirms the feature works. Saved reviewed frontend/generator source:
+`a92998c32fbdf11c669d4f60d595f23ad3c83a54`. The following evidence-only
+documentation commit is not a different application build. QR Hosting version
+`855e24c6db9ca420`, release `1792903551153000`
+(`2026-10-25T04:45:51.153Z`); all 75 served files matched local output.
+This is a sandbox testing checkpoint, not a production release.
+
+- Clean operator URL:
+  https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002.
+  In ordinary Safari/Chrome, use **Review email** with
+  `josh@fairwayrefresh.com` or `admin@fairwayrefresh.com`, then **Email me a
+  sign-in link**. Open the fresh email in the intended browser, enter the same
+  email, and choose **Finish private sign-in**. No sandbox password is needed.
+  Return to the clean URL while signed in; a new browser or signed-out session
+  can request another link at any time. Do not rely on an old expiring link.
+- Both actual identities completed fresh-browser hosted-email-action sign-in,
+  selected both synthetic Courses, and retained their sessions across a full
+  browser close/restart. This used the established Firebase Email Link
+  capability with unchanged schema-v2 Course access and protected operator APIs.
+  New user-delivered email links were requested through the rendered page for
+  both addresses and left unconsumed. Firebase accepted both sends; inbox/spam
+  receipt and physical phone/iPad acceptance are not independently verified.
+- Review PDF:
+  https://fairway-refresh-sandbox-qr1.web.app/qr-review/sandbox-url-bay-signs.pdf.
+  **All destinations are still sandbox URLs.** The CPO-authorized footer removal
+  affects all 26 pages, not production-launch authorization. Existing logo
+  banner, two-line headline, bay labels, QR size and safe margins are unchanged.
+  All 26 PDF pages rendered and decoded to the original bay destinations;
+  exact headline, safe bounds and absence of test/footer text passed.
+  Full-page samples were visually inspected. Downloaded/build PDF SHA-256:
+  `10bdae83f09c22d120175af9db0f2a54f8d9f72c732b50a437d94aaad041c755`.
+- 71 frontend checks, two focused generator checks and sandbox build passed.
+  Only affected Hosting was rebuilt/redeployed. Receiver remains
+  `fairway-button-receiver-sandbox-00002-d26`, Admin
+  `fairway-admin-sandbox-00002-zzf`, notifier
+  `fairway-request-notifier-sandbox-00002-riv`; their shipped backend source
+  remains `0a5b153399c5e3c8a90cf53c273172a9c7833913`.
+  Rules/indexes, account permissions and bay data were not changed.
+- PR #13 remains draft/unmerged. PR #12 remains unchanged: receiver
+  `fairway-button-receiver-sandbox-00025-9lr`, Admin
+  `fairway-admin-sandbox-00024-4wb`, Hosting `7c21c25b1899c0e6`.
+  No production deployment, account/credential change, firmware work or
+  physical-device command occurred.
+
 Two-line headline refinement (2026-10-25 UTC): generator source
 `5b2b2556b6e1c3462a2ff26852e446a9ed1f7566`, Hosting version
 `c0c07ab2925d2248`, release `1792903107379000`
