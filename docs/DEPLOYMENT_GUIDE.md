@@ -100,6 +100,20 @@ This is not anonymous operator access or a bypass. Ordinary unauthenticated
 visitors still see sign-in. Other sandbox projects, PR #12, production Auth,
 accounts, permissions and deployments are unchanged.
 
+Passwordless review publication: frontend source
+`d293df3725806420d10989bfd5a51bdb3614cf0e`, Hosting version
+`1dfd6e1740a2f939`, release `1792901425189000`
+(`2026-10-25T04:10:25.189Z`). Backend, notifier, Rules and indexes remain at
+the earlier QR publication below. All 71 frontend checks and sandbox build
+passed. Real deployed Chrome verified private link sign-in, Course switching,
+session persistence after reload, immediate fragment removal, ordinary
+anonymous sign-in protection and reused-link rejection. The actual Josh
+identity opened the operator workspace in the CPO's shared integrated browser;
+the Admin identity also completed real passwordless sign-in. That integrated
+browser reports notification permission blocked, which is a browser/platform
+acceptance limit, not an authentication failure. Fresh unconsumed review links
+are retained in a mode-600 local file, never in Hosting or the PR.
+
 `scripts/seed_qr_sandbox.js` creates only synthetic Customer/Courses/account
 fixtures in a separate sandbox and explicitly refuses the inventory sandbox.
 It retains permanent bay identities and refuses to replace a completed seed.
