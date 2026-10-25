@@ -125,10 +125,13 @@ Request A may still be active when Request B is created; that is valid. The oper
   then prominent **BAY 1** through **BAY 26**, then that bay's large QR with
   a white quiet zone. No extra instructions, URLs or technical information
   appear on the signs.
-- Sandbox review pages are clearly marked **TEST — NOT FOR INSTALLATION**.
+- CPO-authorized Monarch testing checkpoint: sandbox review pages omit the
+  **TEST — NOT FOR INSTALLATION** footer. The filename and download page
+  explicitly identify sandbox URLs, and all 26 existing destinations remain
+  unchanged. Unmarked printed pages do not authorize production launch.
   An installation edition must use approved permanent production URLs and
   omit test markings, and may be generated only during authorized production
-  launch. Sandbox links must never appear on installation-ready signs.
+  launch. Sandbox field-review signs are not a production installation edition.
   Production Course/account changes, production signs, launch and physical
   print acceptance remain separately authorized release work.
 

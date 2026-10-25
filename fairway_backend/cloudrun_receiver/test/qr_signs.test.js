@@ -22,7 +22,7 @@ test('26 sandbox signs decode to unique expected URLs and produce a 26-page Lett
     assert.equal(mapping.length, 26);
     assert.equal(new Set(mapping.map((row) => row.url)).size, 26);
     assert.ok(mapping.every((row, index) => row.decoded && row.bay_number === index + 1));
-    const pdf = await fs.readFile(path.join(directory, 'sandbox-bay-signs.pdf'));
+    const pdf = await fs.readFile(path.join(directory, 'sandbox-url-bay-signs.pdf'));
     const structure = pdf.toString('latin1');
     assert.equal((structure.match(/\/Type \/Page\b/g) || []).length, 26);
     assert.match(structure, /\/MediaBox \[0 0 612 792\]/);
@@ -42,7 +42,7 @@ test('26 sandbox signs decode to unique expected URLs and produce a 26-page Lett
     const manifest = JSON.parse(await fs.readFile(path.join(directory, 'sandbox-bay-mapping.json'), 'utf8'));
     assert.equal(manifest.production_printing_authorized, false);
     assert.equal((await fs.readdir(directory)).filter((name) => name.endsWith('.svg')).length, 26);
-    assert.match(await fs.readFile(path.join(directory, 'index.html'), 'utf8'), /TEST — NOT FOR INSTALLATION/);
+    assert.match(await fs.readFile(path.join(directory, 'index.html'), 'utf8'), /SANDBOX URLs/);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import {
   getRedirectResult,
+  isSignInWithEmailLink,
+  sendSignInLinkToEmail,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithEmailLink,
@@ -12,7 +14,7 @@ import {
 import { CheckCircle, Grid2X2, History, Settings, Map as MapIcon, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
 import { adminApiBaseUrl, apiBaseUrl, fairwayEnvironment, firebaseConfig } from './lib/environment';
-import { sandboxReviewSignIn } from './lib/sandboxReviewSignIn.mjs';
+import { isQrReviewEntry, sandboxReviewSignIn } from './lib/sandboxReviewSignIn.mjs';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
@@ -145,7 +147,36 @@ async function updateRequestStatus(requestId, action) {
 function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [linkState, setLinkState] = useState('idle');
+  const [linkError, setLinkError] = useState('');
+  const qrReview = isQrReviewEntry(window.location.href, fairwayEnvironment, firebaseConfig);
+  const completingEmailLink = qrReview && isSignInWithEmailLink(auth, window.location.href);
   const isAdminEntry = mode === APP_MODE.ADMIN;
+
+  async function handlePasswordlessSubmit(event) {
+    event.preventDefault();
+    if (linkState === 'sending') return;
+    setLinkState('sending');
+    setLinkError('');
+    try {
+      if (completingEmailLink) {
+        await signInWithEmailLink(auth, email.trim(), window.location.href);
+        window.history.replaceState(null, '', '/?customer_id=CUST-0001&course_id=COURSE-0002');
+      } else {
+        await sendSignInLinkToEmail(auth, email.trim(), {
+          url: 'https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002',
+          handleCodeInApp: true,
+        });
+        setLinkState('sent');
+      }
+    } catch (error) {
+      console.error('Sandbox email-link authentication failed:', error.code);
+      setLinkError(completingEmailLink
+        ? 'Unable to sign in. Check the email address, or open the operator page and request a fresh link.'
+        : 'Unable to send a sign-in email. Please try again shortly.');
+      setLinkState('error');
+    }
+  }
 
   async function handleEmailSubmit(event) {
     event.preventDefault();
@@ -172,7 +203,20 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
               <span>AUTHORIZED ACCESS</span>
               <h2>{isAdminEntry ? 'Admin sign in' : 'Course sign in'}</h2>
             </div>
-            <form className="login-form" onSubmit={handleEmailSubmit}>
+            {qrReview && <form className="login-form" onSubmit={handlePasswordlessSubmit}>
+              <label>
+                Review email
+                <input type="email" autoComplete="email" value={email}
+                  onChange={(event) => setEmail(event.target.value)} required />
+              </label>
+              <button className="google-button" type="submit" disabled={linkState === 'sending'}>
+                {completingEmailLink ? 'Finish private sign-in' : 'Email me a sign-in link'}
+              </button>
+              <p>Use your approved review email. No sandbox password is needed. Open the email link in the browser you want to use, then enter the same email to finish.</p>
+              {linkState === 'sent' && <p role="status">Sign-in email sent. Check your inbox and spam folder. You can request a fresh link here whenever needed.</p>}
+              {linkError && <p role="alert" className="login-error">{linkError}</p>}
+            </form>}
+            {!completingEmailLink && <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
                 Email
                 <input
@@ -198,7 +242,7 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
               <button className="google-button" type="submit">
                 Sign in
               </button>
-            </form>
+            </form>}
 
             <div className="login-divider">or</div>
 

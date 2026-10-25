@@ -84,7 +84,19 @@ from authorized Auth records as `josh@fairwayrefresh.com` and
 non-Admin access restricted to the synthetic Cart and Driving Range Courses.
 No production password hash, credential or authorization is copied.
 
-Authorized project administration generates Firebase `EMAIL_SIGNIN` action
+For tomorrow's phone/iPad review, open the clean operator URL
+https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002.
+Enter `josh@fairwayrefresh.com` or `admin@fairwayrefresh.com` in **Review email**
+and select **Email me a sign-in link**. Firebase sends a fresh private link
+on demand; check inbox/spam. Open it in the desired Safari/Chrome browser,
+enter the same email and select **Finish private sign-in**. Use a normal,
+not private/incognito browser to retain the session. Revisit the clean URL
+afterward; sign-out or a different browser can request another fresh email.
+No local file, pre-issued expiring link or VS Code session is required.
+Mail delivery/inbox receipt and physical iPad behavior must be distinguished
+from successful Firebase send responses and fresh-browser source verification.
+
+Authorized project administration can also generate Firebase `EMAIL_SIGNIN` action
 links for these accounts. Deliver them privately, never through Hosting,
 Git, PR text or printed signs. The review URL carries email and the action
 link in its fragment so Hosting requests do not receive the sign-in code.
@@ -132,7 +144,10 @@ New Range Courses start suspended; synthetic review was explicitly resumed.
 unique ordered bay identities, decodes every generated QR back to its expected
 URL, and emits a 26-page Letter PDF plus numbered PNG/SVG files and the mapping.
 Review links/signs: https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html.
-All signs say **TEST — NOT FOR INSTALLATION**. Pages are US Letter portrait
+For the CPO-authorized Monarch field-testing checkpoint, printed review pages
+omit **TEST — NOT FOR INSTALLATION**. The download page and filename
+`sandbox-url-bay-signs.pdf` explicitly identify sandbox URLs. All 26 existing
+bay destinations remain unchanged. Pages are US Letter portrait
 with 48-point (2/3-inch) margins, approved proportional logo banner, centered
 two-line headline (**WANT FOOD OR DRINKS?** at 30 points, then
 **SCAN TO REQUEST A SERVER.** at 24 points), 64-point bay identification and a 4.5-inch QR

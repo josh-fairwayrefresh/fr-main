@@ -24,8 +24,8 @@ async function generateSigns({ bays, origin, outputDirectory }) {
   for (const logo of [fairwayLogo, monarchLogo]) fs.accessSync(logo, fs.constants.R_OK);
   fs.mkdirSync(outputDirectory, { recursive: true });
   const pdf = new PDFDocument({ autoFirstPage: false, size: 'LETTER', margin: 48,
-    info: { Title: 'TEST — NOT FOR INSTALLATION — 26 Driving Range Bay Signs' } });
-  const pdfFile = path.join(outputDirectory, 'sandbox-bay-signs.pdf');
+    info: { Title: 'SANDBOX URLs — 26 Driving Range Review Signs' } });
+  const pdfFile = path.join(outputDirectory, 'sandbox-url-bay-signs.pdf');
   const stream = fs.createWriteStream(pdfFile);
   pdf.pipe(stream);
   const mapping = [];
@@ -49,7 +49,6 @@ async function generateSigns({ bays, origin, outputDirectory }) {
     pdf.fontSize(24).text('SCAN TO REQUEST A SERVER.', 48, 272, { width: 516, align: 'center' });
     pdf.fontSize(64).text(`BAY ${bay.bay_number}`, 48, 321, { width: 516, align: 'center' });
     pdf.image(png, 144, 396, { width: 324, height: 324 });
-    pdf.fontSize(14).text('TEST — NOT FOR INSTALLATION', 48, 724, { width: 516, align: 'center', lineBreak: false });
     mapping.push({ bay_number: bay.bay_number, url: target, qr_png: `${stem}.png`, qr_svg: `${stem}.svg`, decoded: true });
   }
   pdf.end();
@@ -57,7 +56,9 @@ async function generateSigns({ bays, origin, outputDirectory }) {
   fs.writeFileSync(path.join(outputDirectory, 'sandbox-bay-mapping.json'), JSON.stringify({
     environment: 'sandbox', production_printing_authorized: false, signs: mapping,
   }, null, 2));
-  fs.writeFileSync(path.join(outputDirectory, 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sandbox bay signs</title><h1>TEST — NOT FOR INSTALLATION</h1><p>26 verified bay links. <a href="sandbox-bay-signs.pdf">Download sandbox review signs (26 Letter portrait pages)</a></p><ol>${mapping.map((bay) => `<li><a href="${bay.url}">Bay ${bay.bay_number}</a> · <a href="${bay.qr_svg}">Raw QR image (not a complete sign)</a></li>`).join('')}</ol><p><a href="sandbox-bay-mapping.json">Verified bay-to-URL mapping</a></p>`);
+  fs.writeFileSync(path.join(outputDirectory, 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sandbox bay signs</title><h1>Sandbox URL review signs</h1><p>These 26 signs use SANDBOX URLs for Monarch field testing, not production launch. Printed pages intentionally omit test footers at CPO direction. <a href="sandbox-url-bay-signs.pdf">Download sandbox-URL review PDF (26 Letter portrait pages)</a></p><ol>${mapping.map((bay) => `<li><a href="${bay.url}">Bay ${bay.bay_number}</a> · <a href="${bay.qr_svg}">Raw QR image (not a complete sign)</a></li>`).join('')}</ol><p><a href="sandbox-bay-mapping.json">Verified bay-to-URL mapping</a></p>`);
+  const legacyPdf = path.join(outputDirectory, 'sandbox-bay-signs.pdf');
+  if (fs.existsSync(legacyPdf)) fs.unlinkSync(legacyPdf);
   return mapping;
 }
 

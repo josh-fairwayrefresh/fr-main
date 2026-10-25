@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sandboxReviewSignIn } from '../src/lib/sandboxReviewSignIn.mjs';
+import { isQrReviewEntry, sandboxReviewSignIn } from '../src/lib/sandboxReviewSignIn.mjs';
 
 const config = { projectId: 'fairway-refresh-sandbox-qr1', apiKey: 'test-key' };
 const action = 'https://fairway-refresh-sandbox-qr1.firebaseapp.com/__/auth/action?mode=signIn&apiKey=test-key&oobCode=test-code';
@@ -15,6 +15,9 @@ test('private QR review link composes Firebase email-link authentication without
   assert.equal(sandboxReviewSignIn('https://fairway-refresh-sandbox-qr1.web.app/', 'sandbox', config), null);
 });
 test('review authentication cannot cross environment, project, host or entry point', () => {
+  assert.equal(isQrReviewEntry(reviewUrl(), 'sandbox', config), true);
+  assert.equal(isQrReviewEntry(reviewUrl(), 'production', config), false);
+  assert.equal(isQrReviewEntry(reviewUrl(), 'sandbox', { ...config, projectId: 'fairway-refresh-sandbox-260930' }), false);
   assert.throws(() => sandboxReviewSignIn(reviewUrl(), 'production', config));
   assert.throws(() => sandboxReviewSignIn(reviewUrl(), 'sandbox', { ...config, projectId: 'fairway-refresh-sandbox-260930' }));
   assert.throws(() => sandboxReviewSignIn(reviewUrl().replace('.web.app/', '.web.app/admin'), 'sandbox', config));
