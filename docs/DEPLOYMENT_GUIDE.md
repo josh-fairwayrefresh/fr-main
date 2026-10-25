@@ -134,7 +134,8 @@ URL, and emits a 26-page Letter PDF plus numbered PNG/SVG files and the mapping.
 Review links/signs: https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html.
 All signs say **TEST — NOT FOR INSTALLATION**. Pages are US Letter portrait
 with 48-point (2/3-inch) margins, approved proportional logo banner, centered
-restaurant-service title, 64-point bay identification and a 4.5-inch QR
+two-line headline (**WANT FOOD OR DRINKS?** at 30 points, then
+**SCAN TO REQUEST A SERVER.** at 24 points), 64-point bay identification and a 4.5-inch QR
 including its four-module white quiet zone. No destination URL or extra
 instructions are printed. Rendered PDF pages must be checked for clipping,
 readability and correctly decoded bay destinations, not just raw QR images.

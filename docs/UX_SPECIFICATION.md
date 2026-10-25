@@ -120,7 +120,8 @@ Request A may still be active when Request B is created; that is valid. The oper
   background, strong contrast and comfortable printer-safe margins. A centered
   banner reads Fairway Refresh logo / AT / Monarch Bay Golf Club logo, using
   approved assets without distorting their proportions. Below it, centered:
-  **CONTACT THE RESTAURANT TO REQUEST A SERVER FOR OUTDOOR RANGE SERVICE.**,
+  exactly two lines: **WANT FOOD OR DRINKS?** (larger headline) and
+  **SCAN TO REQUEST A SERVER.** (supporting call to action),
   then prominent **BAY 1** through **BAY 26**, then that bay's large QR with
   a white quiet zone. No extra instructions, URLs or technical information
   appear on the signs.

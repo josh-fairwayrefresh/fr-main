@@ -45,10 +45,8 @@ async function generateSigns({ bays, origin, outputDirectory }) {
     pdf.image(monarchLogo, 334, 48, { fit: [230, 154], align: 'center', valign: 'center' });
     pdf.fillColor('#111111').font('Helvetica-Bold').fontSize(18)
       .text('AT', 288, 116, { width: 36, align: 'center' });
-    pdf.fontSize(24).text(
-      'CONTACT THE RESTAURANT\nTO REQUEST A SERVER FOR\nOUTDOOR RANGE SERVICE.',
-      48, 220, { width: 516, align: 'center', lineGap: 6 },
-    );
+    pdf.fontSize(30).text('WANT FOOD OR DRINKS?', 48, 226, { width: 516, align: 'center' });
+    pdf.fontSize(24).text('SCAN TO REQUEST A SERVER.', 48, 272, { width: 516, align: 'center' });
     pdf.fontSize(64).text(`BAY ${bay.bay_number}`, 48, 321, { width: 516, align: 'center' });
     pdf.image(png, 144, 396, { width: 324, height: 324 });
     pdf.fontSize(14).text('TEST — NOT FOR INSTALLATION', 48, 724, { width: 516, align: 'center', lineBreak: false });
