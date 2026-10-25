@@ -132,7 +132,16 @@ New Range Courses start suspended; synthetic review was explicitly resumed.
 unique ordered bay identities, decodes every generated QR back to its expected
 URL, and emits a 26-page Letter PDF plus numbered PNG/SVG files and the mapping.
 Review links/signs: https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html.
-All signs say **SANDBOX TEST — NOT FOR PRODUCTION**. Production Course/access
+All signs say **TEST — NOT FOR INSTALLATION**. Pages are US Letter portrait
+with 48-point (2/3-inch) margins, approved proportional logo banner, centered
+restaurant-service title, 64-point bay identification and a 4.5-inch QR
+including its four-module white quiet zone. No destination URL or extra
+instructions are printed. Rendered PDF pages must be checked for clipping,
+readability and correctly decoded bay destinations, not just raw QR images.
+The generator continues to reject production origins; enabling an installation
+edition requires separately authorized launch work and approved permanent
+production destinations, with test markings removed only for that edition.
+Production Course/access
 provisioning, permanent production URL binding, final production signs and
 launch remain separately authorized. Do not print sandbox signs for launch.
 

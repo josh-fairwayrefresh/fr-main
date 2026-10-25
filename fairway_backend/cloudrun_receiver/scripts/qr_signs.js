@@ -7,18 +7,24 @@ const PDFDocument = require('pdfkit');
 const jsQR = require('jsqr');
 const { PNG } = require('pngjs');
 
+const repositoryRoot = path.resolve(__dirname, '../../..');
+const fairwayLogo = path.join(repositoryRoot, 'fairway_webapp/cart_operator_dashboard/public/icons/logo-and-name-row-banner.jpg');
+const monarchLogo = path.join(repositoryRoot, 'docs/logo_source_files/customers/monarch-bay-golf-club/monarch-bay-golf-club.png');
+
 async function generateSigns({ bays, origin, outputDirectory }) {
   const url = new URL(origin);
-  if (url.protocol !== 'https:' || !/^fairway-refresh-sandbox-[a-z0-9-]+\.web\.app$/.test(url.host)) {
+  if (url.protocol !== 'https:' || !/^fairway-refresh-sandbox-[a-z0-9-]+\.web\.app$/.test(url.host) ||
+      url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw new Error('This increment generates sandbox signs only');
   }
   if (bays.length !== 26 || new Set(bays.map((bay) => bay.id)).size !== 26 ||
       bays.some((bay, index) => bay.bay_number !== index + 1 || !/^[A-Za-z0-9_-]{24,64}$/.test(bay.id))) {
     throw new Error('Exactly 26 unique, ordered bay identities are required');
   }
+  for (const logo of [fairwayLogo, monarchLogo]) fs.accessSync(logo, fs.constants.R_OK);
   fs.mkdirSync(outputDirectory, { recursive: true });
   const pdf = new PDFDocument({ autoFirstPage: false, size: 'LETTER', margin: 48,
-    info: { Title: 'SANDBOX TEST Driving Range — 26 Bay Signs' } });
+    info: { Title: 'TEST — NOT FOR INSTALLATION — 26 Driving Range Bay Signs' } });
   const pdfFile = path.join(outputDirectory, 'sandbox-bay-signs.pdf');
   const stream = fs.createWriteStream(pdfFile);
   pdf.pipe(stream);
@@ -34,13 +40,18 @@ async function generateSigns({ bays, origin, outputDirectory }) {
     fs.writeFileSync(path.join(outputDirectory, `${stem}.svg`),
       await QRCode.toString(target, { type: 'svg', errorCorrectionLevel: 'M', margin: 4 }));
     pdf.addPage();
-    pdf.fillColor('#8c3500').fontSize(16).text('SANDBOX TEST — NOT FOR PRODUCTION', { align: 'center' });
-    pdf.fillColor('#153c2b').fontSize(25).text('Fairway Refresh', 48, 95, { align: 'center' });
-    pdf.fontSize(48).text(`BAY ${bay.bay_number}`, 48, 145, { align: 'center' });
-    pdf.fontSize(20).text('Scan to request a server', 48, 215, { align: 'center' });
-    pdf.image(png, 126, 263, { width: 360, height: 360 });
-    pdf.fillColor('#222222').fontSize(11).text(target, 48, 652, { align: 'center', width: 516 });
-    pdf.fontSize(13).text('No login, ordering or payment required.', 48, 706, { align: 'center' });
+    pdf.rect(0, 0, 612, 792).fill('#ffffff');
+    pdf.image(fairwayLogo, 48, 48, { fit: [230, 154], align: 'center', valign: 'center' });
+    pdf.image(monarchLogo, 334, 48, { fit: [230, 154], align: 'center', valign: 'center' });
+    pdf.fillColor('#111111').font('Helvetica-Bold').fontSize(18)
+      .text('AT', 288, 116, { width: 36, align: 'center' });
+    pdf.fontSize(24).text(
+      'CONTACT THE RESTAURANT\nTO REQUEST A SERVER FOR\nOUTDOOR RANGE SERVICE.',
+      48, 220, { width: 516, align: 'center', lineGap: 6 },
+    );
+    pdf.fontSize(64).text(`BAY ${bay.bay_number}`, 48, 321, { width: 516, align: 'center' });
+    pdf.image(png, 144, 396, { width: 324, height: 324 });
+    pdf.fontSize(14).text('TEST — NOT FOR INSTALLATION', 48, 724, { width: 516, align: 'center', lineBreak: false });
     mapping.push({ bay_number: bay.bay_number, url: target, qr_png: `${stem}.png`, qr_svg: `${stem}.svg`, decoded: true });
   }
   pdf.end();
@@ -48,7 +59,7 @@ async function generateSigns({ bays, origin, outputDirectory }) {
   fs.writeFileSync(path.join(outputDirectory, 'sandbox-bay-mapping.json'), JSON.stringify({
     environment: 'sandbox', production_printing_authorized: false, signs: mapping,
   }, null, 2));
-  fs.writeFileSync(path.join(outputDirectory, 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sandbox bay signs</title><h1>SANDBOX TEST — NOT FOR PRODUCTION</h1><p>26 verified bay links. <a href="sandbox-bay-signs.pdf">Download print-ready signs (26 pages)</a></p><ol>${mapping.map((bay) => `<li><a href="${bay.url}">Bay ${bay.bay_number}</a> · <a href="${bay.qr_svg}">QR sign image</a></li>`).join('')}</ol><p><a href="sandbox-bay-mapping.json">Verified bay-to-URL mapping</a></p>`);
+  fs.writeFileSync(path.join(outputDirectory, 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sandbox bay signs</title><h1>TEST — NOT FOR INSTALLATION</h1><p>26 verified bay links. <a href="sandbox-bay-signs.pdf">Download sandbox review signs (26 Letter portrait pages)</a></p><ol>${mapping.map((bay) => `<li><a href="${bay.url}">Bay ${bay.bay_number}</a> · <a href="${bay.qr_svg}">Raw QR image (not a complete sign)</a></li>`).join('')}</ol><p><a href="sandbox-bay-mapping.json">Verified bay-to-URL mapping</a></p>`);
   return mapping;
 }
 

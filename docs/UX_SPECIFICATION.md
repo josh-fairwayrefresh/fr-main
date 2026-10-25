@@ -116,7 +116,18 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Public responses contain only bay number, Course display name, availability,
   or a minimal acceptance acknowledgement. Private requests, account access,
   staff, endpoints and operation receipts are not public.
-- Review signs are clearly marked SANDBOX TEST — NOT FOR PRODUCTION.
+- Review signs use 26 US Letter portrait pages, one bay per page, white
+  background, strong contrast and comfortable printer-safe margins. A centered
+  banner reads Fairway Refresh logo / AT / Monarch Bay Golf Club logo, using
+  approved assets without distorting their proportions. Below it, centered:
+  **CONTACT THE RESTAURANT TO REQUEST A SERVER FOR OUTDOOR RANGE SERVICE.**,
+  then prominent **BAY 1** through **BAY 26**, then that bay's large QR with
+  a white quiet zone. No extra instructions, URLs or technical information
+  appear on the signs.
+- Sandbox review pages are clearly marked **TEST — NOT FOR INSTALLATION**.
+  An installation edition must use approved permanent production URLs and
+  omit test markings, and may be generated only during authorized production
+  launch. Sandbox links must never appear on installation-ready signs.
   Production Course/account changes, production signs, launch and physical
   print acceptance remain separately authorized release work.
 
