@@ -145,6 +145,22 @@ Production Course/access
 provisioning, permanent production URL binding, final production signs and
 launch remain separately authorized. Do not print sandbox signs for launch.
 
+Field-layout review refinement (2026-10-25 UTC): generator source
+`ac42e206ede561f1e6c656e499ede43586c02bd9`, QR Hosting version
+`f98e0fa3c882ef34`, release `1792902563443000`
+(`2026-10-25T04:29:23.443Z`). The two focused generator checks passed,
+including exactly 26 Letter pages, white four-module quiet zones and rejection
+of production destinations and duplicate/missing bay identities. All 26 PDF
+pages were rendered at 100 dpi and decoded to the existing exact bay mapping.
+Text bounding boxes and rendered margins were checked on every page; full-page
+Bay 1/Bay 26 and the all-page overview were visually inspected for readable
+type, proportional logos, clipping and consistent spacing. The served PDF
+SHA-256 is `d30ed08fe97c3627a47a9f98b7df8faf6c97d6bcaf30560167da5e4338e80411`;
+all 75 served files matched local output. QR backend/notifier revisions,
+PR #12 backend revisions and its Hosting version were unchanged. Physical
+printer/lamination/phone-scan acceptance remains pending. Only review Hosting
+changed; no installation edition or production artifact was generated.
+
 ### Verification and recovery boundaries
 
 - Local suites retain Cart request, category, reporting, access and command
