@@ -164,6 +164,17 @@ changed; no installation edition or production artifact was generated.
 
 ### Verification and recovery boundaries
 
+Two-line headline refinement (2026-10-25 UTC): generator source
+`5b2b2556b6e1c3462a2ff26852e446a9ed1f7566`, Hosting version
+`c0c07ab2925d2248`, release `1792903107379000`
+(`2026-10-25T04:38:27.379Z`). All 26 rendered pages retain safe margins,
+correct bay QR destinations and test markings; both focused generator checks
+passed. Full-page Bay 1/Bay 26 were visually inspected. The downloaded PDF
+matched local SHA-256 `c43fc82fbdce7ec67d7d4de5de1bdbb4d9c6c40f8abbaf57991e43eb0bee33d0`.
+Only sign wording/type hierarchy and owner documentation changed; application
+behavior and backends were not changed. PR #12 Hosting remained
+`7c21c25b1899c0e6`; no production action or installation edition occurred.
+
 - Local suites retain Cart request, category, reporting, access and command
   correlation regressions, plus transactional QR acceptance/lifecycle tests.
 - Deployed HTTP/Firestore checks cover all 26 public allowlists/mappings,
