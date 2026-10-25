@@ -73,6 +73,33 @@ provisioning, verification and release boundaries.
 
 ### Synthetic review fixtures and signs
 
+#### Private passwordless operator review access
+
+The CPO selected private passwordless access rather than public operator
+access after password setup proved inconvenient. Only project
+`fairway-refresh-sandbox-qr1` enables Firebase Email Link sign-in alongside
+existing Email/Password sign-in. The two existing identities were resolved
+from authorized Auth records as `josh@fairwayrefresh.com` and
+`admin@fairwayrefresh.com`. Their separate sandbox identities have schema-v2,
+non-Admin access restricted to the synthetic Cart and Driving Range Courses.
+No production password hash, credential or authorization is copied.
+
+Authorized project administration generates Firebase `EMAIL_SIGNIN` action
+links for these accounts. Deliver them privately, never through Hosting,
+Git, PR text or printed signs. The review URL carries email and the action
+link in its fragment so Hosting requests do not receive the sign-in code.
+The UI accepts this entry only on the exact isolated QR project/host and root
+operator route, removes the fragment immediately, and exchanges the single-use,
+time-limited code through Firebase `signInWithEmailLink`. Existing backend
+authorization, Rules and per-user notification preferences remain authoritative.
+Invalid/expired/reused links show an explicit error; they never grant a public
+session. Issue a fresh private link when needed. Browser sessions persist
+normally; sign-out or a different browser may require a new link.
+
+This is not anonymous operator access or a bypass. Ordinary unauthenticated
+visitors still see sign-in. Other sandbox projects, PR #12, production Auth,
+accounts, permissions and deployments are unchanged.
+
 `scripts/seed_qr_sandbox.js` creates only synthetic Customer/Courses/account
 fixtures in a separate sandbox and explicitly refuses the inventory sandbox.
 It retains permanent bay identities and refuses to replace a completed seed.

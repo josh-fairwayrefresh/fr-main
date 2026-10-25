@@ -5,12 +5,14 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithEmailLink,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import { CheckCircle, Grid2X2, History, Settings, Map as MapIcon, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
-import { adminApiBaseUrl, apiBaseUrl, fairwayEnvironment } from './lib/environment';
+import { adminApiBaseUrl, apiBaseUrl, fairwayEnvironment, firebaseConfig } from './lib/environment';
+import { sandboxReviewSignIn } from './lib/sandboxReviewSignIn.mjs';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
@@ -559,6 +561,9 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [claimsReady, setClaimsReady] = useState(false);
   const [authState, setAuthState] = useState('checking');
+  const [reviewSignInState, setReviewSignInState] = useState(() => (
+    new URLSearchParams(window.location.hash.slice(1)).has('review_sign_in') ? 'checking' : null
+  ));
   const [requests, setRequests] = useState([]);
   const [loadState, setLoadState] = useState('loading');
   const [loadError, setLoadError] = useState('');
@@ -577,6 +582,16 @@ function App() {
 
   useEffect(() => {
     let isMounted = true;
+    let reviewSignIn = null;
+    try {
+      reviewSignIn = sandboxReviewSignIn(window.location.href, fairwayEnvironment, firebaseConfig);
+    } catch (error) {
+      console.error('Private review sign-in rejected:', error.message);
+      setReviewSignInState('error');
+    }
+    if (new URLSearchParams(window.location.hash.slice(1)).has('review_sign_in')) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       if (!isMounted) {
@@ -626,7 +641,16 @@ function App() {
       setAuthState('signed_in');
     });
 
-    getRedirectResult(auth)
+    if (reviewSignIn) {
+      signInWithEmailLink(auth, reviewSignIn.email, reviewSignIn.link)
+        .then(() => {
+          if (isMounted) setReviewSignInState(null);
+        })
+        .catch((error) => {
+          console.error('Private review sign-in failed:', error.code);
+          if (isMounted) setReviewSignInState('error');
+        });
+    } else getRedirectResult(auth)
       .then((result) => {
         if (!isMounted || !result?.user) {
           return;
@@ -841,6 +865,12 @@ function App() {
     let slug = '';
     try { slug = match ? decodeURIComponent(match[1]) : ''; } catch { slug = ''; }
     return <Suspense fallback={<EntryStatus title="Today’s Cart Menu" message="Loading menu…" />}><PublicMenuApp apiBaseUrl={adminApiBaseUrl} slug={slug} /></Suspense>;
+  }
+
+  if (reviewSignInState) {
+    return <EntryStatus title="Private sandbox access" message={reviewSignInState === 'checking'
+      ? 'Opening your private review session...'
+      : 'This private sign-in link is invalid, expired, or already used. Open a fresh private review link.'} />;
   }
 
   if (!user) {
