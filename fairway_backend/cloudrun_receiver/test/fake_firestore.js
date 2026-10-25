@@ -268,6 +268,10 @@ class FakeFirestore {
     return new FakeCollectionRef(this, name);
   }
 
+  doc(path) {
+    return new FakeDocRef(this, path);
+  }
+
   batch() {
     return new FakeBatch(this);
   }

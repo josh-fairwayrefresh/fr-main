@@ -33,6 +33,95 @@ current owner documents. Dated records, including statements written as
 stage only; they cannot grant present operational authorization. Completed
 recoveries and one-time exceptions must not be repeated from this history.
 
+## Driving Range QR isolated review sandbox — 2026-10-24
+
+This review increment branches from accepted main
+`08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Driving Range is an
+independent Course asset, not an additional Cart category or permission tier.
+The UX owner defines product behavior; this section owns environment,
+provisioning, verification and release boundaries.
+
+### Isolation and configuration
+
+- Separate project `fairway-refresh-sandbox-qr1` (number `125189268671`),
+  Firestore `(default)` in `nam5`, Firebase Auth/web application and Hosting.
+  It shares no application data, Auth accounts, service revisions, VAPID key
+  or Hosting releases with inventory project `fairway-refresh-sandbox-260930`.
+  PR #12 remains unmerged; its sandbox must not be redeployed for QR review.
+- Hosting: https://fairway-refresh-sandbox-qr1.web.app.
+  `firebase.qr-sandbox.json` is the explicit deployment target; do not use
+  `firebase.sandbox.json`, whose site belongs to PR #12.
+- Receiver/Admin services run in `us-central1` using the existing environment
+  guards, Node 22 and `fairway-qr-sandbox` project-local runtime identity.
+  The receiver alone enables `FAIRWAY_QR_ENABLED=true`, with server-only
+  `FAIRWAY_QR_RATE_KEY` from Secret Manager `qr-rate-key:1`.
+- A separate generation-2 `fairway-request-notifier-sandbox` consumes created
+  `requests/{requestId}` events from this database. Its Eventarc identity has
+  Eventarc receive and service-scoped Run invoke permission. The notifier is
+  not public. It uses explicit matching runtime environment configuration and
+  Secret Manager `qr-vapid-private:1`; no production secrets are reused.
+- Runtime data access is project-local. Counter collection groups
+  `qr_request_limits` and `rate_windows` use `expires_at` TTL; immutable
+  submission receipts do not expire into fresh intents. The ingress permits
+  120 fresh intents per network/minute and 60 per bay/minute; a salted HMAC,
+  not raw IP, identifies the network bucket. Receipt replay is idempotent.
+  Shared networks may hit this coarse limit; static QR URLs do not enforce
+  physical presence.
+- Deploy Rules and indexes before UI acceptance; wait until the active
+  customer/Course/status/received-time composite index is READY.
+  No new direct public Firestore access is granted.
+
+### Synthetic review fixtures and signs
+
+`scripts/seed_qr_sandbox.js` creates only synthetic Customer/Courses/account
+fixtures in a separate sandbox and explicitly refuses the inventory sandbox.
+It retains permanent bay identities and refuses to replace a completed seed.
+Its private credential output must stay outside Git; tooling may use ADC or
+an explicitly supplied short-lived authorized access token.
+
+The review Customer is **SYNTHETIC QR Review Club**, with **TEST Cart Course**
+and independent **TEST Driving Range**. The test account is not the intended
+production Monarch account. No production Course or account was changed.
+Driving Range Course creation requires `operation_kind: driving_range`;
+existing Courses default to Cart and are not converted by ordinary edits.
+The existing authenticated Admin Course-creation API accepts this configuration.
+New Range Courses start suspended; synthetic review was explicitly resumed.
+
+`scripts/qr_signs.js` generates only sandbox artifacts, requires exactly 26
+unique ordered bay identities, decodes every generated QR back to its expected
+URL, and emits a 26-page Letter PDF plus numbered PNG/SVG files and the mapping.
+Review links/signs: https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html.
+All signs say **SANDBOX TEST — NOT FOR PRODUCTION**. Production Course/access
+provisioning, permanent production URL binding, final production signs and
+launch remain separately authorized. Do not print sandbox signs for launch.
+
+### Verification and recovery boundaries
+
+- Local suites retain Cart request, category, reporting, access and command
+  correlation regressions, plus transactional QR acceptance/lifecycle tests.
+- Deployed HTTP/Firestore checks cover all 26 public allowlists/mappings,
+  concurrent scans, one outstanding request, terminal races, same-action
+  retries, receipt replay after completion, Course isolation, suspension,
+  deny-by-default private data and zero device commands.
+- `npm run test:qr:browser` uses private synthetic fixture input and real
+  Chrome touch/mouse input against the isolated deployment: Yes/No,
+  Course selection, Complete/Cancel, History, independent service controls,
+  notification destination routing, safe lost-response/reload retries and
+  375/430/768/1024px layout. It must not target production or PR #12.
+- Real Web Push reached the persistent Chrome service worker and produced
+  its notification with the correct Course/request URL. An incognito attempt
+  was rejected by Chrome; that is not delivery evidence. Physical phone/iPad
+  display, installed-PWA user enablement and laminated-sign scans remain CPO
+  acceptance limits. Source tests are not substitutes for those observations.
+- Rollback/recovery is confined to this project. Suspend the Range Course to
+  reject new intents while leaving existing requests actionable. Preserve bay
+  IDs, receipts and outstanding claims; do not reset identity/data or deploy
+  older non-QR-aware lifecycle code against active QR requests.
+
+Exact reviewed source and publication identities are recorded with the
+completed review release evidence below. No production deployment, merge,
+firmware work or physical-device command is authorized by this record.
+
 ## Latest verified production alignment — 2026-10-23
 
 This summary reflects the production release and read-only checks recorded

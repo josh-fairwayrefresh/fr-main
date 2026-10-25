@@ -1,0 +1,4 @@
+{
+  "cart": { "inventory": true, "cart_metrics": true, "physical_devices": true },
+  "driving_range": { "inventory": false, "cart_metrics": false, "physical_devices": false }
+}

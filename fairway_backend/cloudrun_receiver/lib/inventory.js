@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { FieldValue } = require('@google-cloud/firestore');
 const { coursesCollection } = require('./fleet/courses');
 const { getOperatorAssignment } = require('./operator_notifications');
+const { courseOperation } = require('./course_operation');
 
 const PUBLIC_MENU_SLUGS = 'public_menu_slugs';
 const INVENTORY_COLLECTION = 'inventory';
@@ -116,7 +117,7 @@ async function getCustomerCourses(db, uid) {
   if (!assignment) {
     fail(403, 'customer_course_access_denied', 'Assigned customer course access required');
   }
-  return assignment.courses.filter(isValidCoursePair);
+  return assignment.courses.filter((course) => isValidCoursePair(course) && courseOperation(course).inventory);
 }
 
 async function requireCourseAccess(db, uid, customerId, courseId) {

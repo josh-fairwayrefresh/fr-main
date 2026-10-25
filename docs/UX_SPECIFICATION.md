@@ -80,6 +80,46 @@ Request A may still be active when Request B is created; that is valid. The oper
 - `repeat_press_count` belongs to the originating accepted request. The cart operator does not need to see each repeat press as a new request or notification.
 - How repeat presses are communicated from the marker and persisted against the originating request is an engineering/implementation decision, not specified by this document; see `docs/feature_backlog.md`.
 
+## Driving Range QR requests (review increment)
+
+- Driving Range is its own Course asset under a Customer, alongside golf
+  Courses such as Tony Lema. All 26 bays belong to that Driving Range Course.
+  Explicit immutable-at-creation `operation_kind: driving_range` configuration
+  identifies it; names, email addresses and IDs never determine behavior.
+  Missing operation configuration preserves existing Cart behavior.
+- Existing Customer/Course access and Course selection govern both operations.
+  There is no additional Restaurant selector, user Service Type, role or
+  service-specific permission. Existing Course notification checkboxes permit
+  either Course, both or neither; a preference never grants access.
+- The Driving Range Course uses shared Requests, select-any-request,
+  Complete, Cancel and History. It has no Inventory or cart performance
+  controls. Its persistent Resume/Suspend state is independent of other
+  Courses. New Driving Range Courses start suspended until explicitly resumed.
+  Suspension rejects new submissions; existing requests remain actionable.
+- Each permanently identified bay has a static Fairway-hosted URL. The
+  anonymous mobile page identifies the Course and bay and asks:
+  **"Would you like a server to come and take your order?"**
+  No creates nothing. Yes confirms only server-acknowledged acceptance.
+  No golfer login, order entry or payment is required.
+- One outstanding request exists per bay until Complete or Cancel. Concurrent
+  scans and repeated Yes acknowledge that request without another request or
+  notification. A lost-response retry retains its original submission identity,
+  including across reload, completion or suspension; it cannot become a fresh
+  request. An explicit later submission after a terminal outcome can create one.
+  Failed/uncertain responses remain visible and provide safe retry.
+- QR requests are not devices. Their completion never generates a device
+  command. Terminal races have one winner; repeated identical actions are safe,
+  while an opposite terminal action reports the authoritative conflict.
+- Active queues retrieve all authorized active requests independently from
+  closed History; newer closed work cannot hide old active work behind a cap.
+  Restaurant requests and service time do not enter Cart performance metrics.
+- Public responses contain only bay number, Course display name, availability,
+  or a minimal acceptance acknowledgement. Private requests, account access,
+  staff, endpoints and operation receipts are not public.
+- Review signs are clearly marked SANDBOX TEST — NOT FOR PRODUCTION.
+  Production Course/account changes, production signs, launch and physical
+  print acceptance remain separately authorized release work.
+
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 
 The current implementation and deployment status are owned by

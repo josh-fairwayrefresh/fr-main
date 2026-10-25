@@ -3,6 +3,7 @@
 const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
 const { CUSTOMERS_COLLECTION } = require('./customers');
+const { courseOperation } = require('../course_operation');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
@@ -50,6 +51,7 @@ async function createCourse(db, {
   courseName,
   timezone,
   comments = null,
+  operationKind = 'cart',
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
@@ -63,6 +65,7 @@ async function createCourse(db, {
   if (comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
+  const operation = courseOperation({ operation_kind: operationKind });
 
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
   if (!customerSnap.exists) {
@@ -73,9 +76,10 @@ async function createCourse(db, {
   const now = new Date();
 
   const courseDoc = {
+    operation_kind: operation.kind,
     course_name: courseName,
     timezone,
-    service_suspension: null,
+    service_suspension: operation.kind === 'driving_range' ? { suspended_at: now, suspended_by: 'course_creation' } : null,
     comments,
     created_at: now,
     updated_at: now,

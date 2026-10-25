@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { collection, onSnapshot, orderBy, query, limit, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import {
   getRedirectResult,
   onAuthStateChanged,
@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { CheckCircle, Grid2X2, History, Settings, Map as MapIcon, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
-import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
+import { adminApiBaseUrl, apiBaseUrl, fairwayEnvironment } from './lib/environment';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
@@ -36,6 +36,7 @@ const FRESH_SIGN_IN_STORAGE_KEY = 'fairway.freshSignIn';
 
 const InventoryApp = lazy(() => import('./InventoryApp'));
 const PublicMenuApp = lazy(() => import('./PublicMenuApp'));
+const BayRequestApp = lazy(() => import('./BayRequestApp'));
 
 function timestampToDate(timestamp) {
   if (!timestamp?.toDate) {
@@ -160,14 +161,14 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
       <div className="auth-layout">
         <section className="auth-intro" aria-labelledby="auth-title">
           <p>{isAdminEntry ? 'INTERNAL ADMINISTRATION' : 'CUSTOMER COURSE ACCESS'}</p>
-          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart access'}</h1>
+          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Course access'}</h1>
           <span>{isAdminEntry ? 'Authorized Fairway Refresh personnel only.' : 'Sign in to access your assigned course.'}</span>
         </section>
         <div className="auth-entry">
-          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart sign in'}>
+          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Course sign in'}>
             <div className="auth-panel-heading">
               <span>AUTHORIZED ACCESS</span>
-              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart sign in'}</h2>
+              <h2>{isAdminEntry ? 'Admin sign in' : 'Course sign in'}</h2>
             </div>
             <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
@@ -715,6 +716,7 @@ function App() {
 
     let active = true;
     const { requestsByCourse, loadedCourses } = createCourseRequestState();
+    const failedCourses = new Set();
     setLoadState('loading');
     setLoadError('');
 
@@ -724,11 +726,11 @@ function App() {
           const leftTime = left.received_at?.toMillis?.() ?? new Date(left.received_at).getTime();
           const rightTime = right.received_at?.toMillis?.() ?? new Date(right.received_at).getTime();
           return rightTime - leftTime;
-        })
-        .slice(0, 100);
+        });
       if (active) {
         setRequests(nextRequests);
-        if (loadedCourses.size === courses.length) setLoadState('ready');
+        if (failedCourses.size > 0) setLoadState('error');
+        else if (loadedCourses.size === courses.length) { setLoadState('ready'); setLoadError(''); }
       }
     }
 
@@ -737,8 +739,8 @@ function App() {
         collection(db, 'requests'),
         where('customer_id', '==', course.customer_id),
         where('course_id', '==', course.course_id),
-        orderBy('received_at', 'desc'),
-        limit(100)
+        where('status', 'in', ['new', 'confirmed']),
+        orderBy('received_at', 'asc')
       ),
       (snapshot) => {
         const nextCourseRequests = snapshot.docs.map((doc) => {
@@ -753,7 +755,7 @@ function App() {
             completed_at: data.completed_at,
             cancelled_at: data.cancelled_at,
             device_id: data.device_id,
-            location_label: data.device_label,
+            location_label: data.location_label || data.device_label,
             customer_id: data.customer_id,
             course_id: data.course_id,
             course_name: data.course_name,
@@ -761,12 +763,14 @@ function App() {
           };
         });
         const key = `${course.customer_id}/${course.course_id}`;
+        failedCourses.delete(key);
         requestsByCourse.set(key, nextCourseRequests);
         loadedCourses.add(key);
         updateRequests();
       },
       (error) => {
         console.error('Failed to load requests:', error);
+        failedCourses.add(`${course.customer_id}/${course.course_id}`);
         if (active) {
           setLoadError(error.code || 'unknown');
           setLoadState('error');
@@ -824,6 +828,13 @@ function App() {
     operatorState,
     inventoryState,
   });
+
+  if (entry === 'public_bay') {
+    const match = window.location.pathname.match(/^\/range\/([A-Za-z0-9_-]+)\/?$/);
+    return <Suspense fallback={<EntryStatus title="Server request" message="Loading bay…" />}>
+      <BayRequestApp apiBaseUrl={API_BASE_URL} bayId={match?.[1] || ''} sandbox={fairwayEnvironment === 'sandbox'} />
+    </Suspense>;
+  }
 
   if (entry === 'public_menu') {
     const match = window.location.pathname.match(/^\/cartmenus\/([^/]+)\/?$/);

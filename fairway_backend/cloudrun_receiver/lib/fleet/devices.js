@@ -12,6 +12,7 @@ const {
 const { allocateNextId } = require('./ids');
 const { getCustomer } = require('./customers');
 const { getCourseForCustomer } = require('./courses');
+const { courseOperation } = require('../course_operation');
 const { generateDeviceCredential, verifyDeviceCredential } = require('./credentials');
 
 const DEVICES_COLLECTION = 'devices';
@@ -126,6 +127,7 @@ async function createDevice(db, {
       throw new Error(`Course ${courseId} does not belong to customer ${customerId}`);
     }
     courseName = course.course_name;
+    if (!courseOperation(course).physical_devices) throw new Error('Invalid Course for physical devices');
   }
 
   const deviceId = await allocateNextId(db, ID_PREFIXES.DEVICE);
@@ -242,6 +244,7 @@ async function updateDeviceAssignment(db, deviceId, {
         if (!courseSnap.exists) {
           throw new Error(`Course ${courseId} does not belong to customer ${effectiveCustomerId}`);
         }
+        if (!courseOperation(courseSnap.data()).physical_devices) throw new Error('Invalid Course for physical devices');
 
         update.course_id = courseId;
         update.course_name = courseSnap.data().course_name;
@@ -321,6 +324,7 @@ async function updateDeviceState(db, deviceId, nextState, {
       if (!courseSnap.exists) {
         throw new Error(`Course ${effectiveCourseId} does not belong to customer ${effectiveCustomerId}`);
       }
+      if (!courseOperation(courseSnap.data()).physical_devices) throw new Error('Invalid Course for physical devices');
 
       update.customer_id = effectiveCustomerId;
       update.customer_name = customerSnap.data().customer_name;

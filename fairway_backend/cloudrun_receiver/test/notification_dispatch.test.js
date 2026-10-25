@@ -63,7 +63,7 @@ test('dispatch sends one useful notification and does not mutate the request', a
   const payload = JSON.parse(sends[0][1]);
   assert.strictEqual(payload.body, 'Refresh requested — Hole 7');
   assert.strictEqual(payload.tag, 'request-a');
-  assert.strictEqual(payload.url, '/requests/request-a?course=COURSE-0001');
+  assert.strictEqual(payload.url, '/requests/request-a?customer_id=CUST-0001&course_id=COURSE-0001');
   assert.deepStrictEqual(sends[0][2], {
     TTL: 300,
     urgency: 'high',

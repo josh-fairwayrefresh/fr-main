@@ -45,7 +45,7 @@ test('course matching in OperatorApp matches on customer_id and course_id', () =
 });
 
 test('mobile operator header preserves navigation, course selection, and labeled service actions', () => {
-  assert.match(source, /<nav aria-label="Cart Operator navigation">/);
+  assert.match(source, /<nav aria-label="Course Operator navigation">/);
   assert.match(source, /aria-label="Select course"/);
   assert.match(source, /aria-label=\{`\$\{serviceActionLabel\} for \$\{course\?\.course_name/);
   assert.match(source, /<span>\{serviceActionLabel\}<\/span>/);

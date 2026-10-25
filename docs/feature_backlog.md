@@ -27,7 +27,7 @@ physical-phone/Safari, notification, or network-reliability work below.
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
-| Active queue truncation | Confirmed source defect; older open work can disappear behind newer closed requests. Blocks complete-queue acceptance; [details](#active-queue-truncation). |
+| Active queue production promotion | Corrected and verified in the isolated QR review increment; production remains unchanged pending authorized release. [Details](#active-queue-truncation). |
 | Notifier source/deployment and sandbox-delivery gap | Established deployment divergence; do not claim delivery-time entitlement/preference enforcement or sandbox delivery acceptance. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
 | Provisioning policy and automation | Transactional allocation and prepared rotations exist; manufacturing, compromise/revocation, secret delivery, and end-to-end automation remain incomplete. [Details](#provisioning-policy-and-automation). |
@@ -43,22 +43,23 @@ whole-product shutdown.
 
 ### Active queue truncation
 
-- **Evidence/mechanism:** [main.jsx](../fairway_webapp/cart_operator_dashboard/src/main.jsx)
-  retrieves latest 100 requests per course and slices the merged feed to 100.
-  [OperatorApp.jsx](../fairway_webapp/cart_operator_dashboard/src/OperatorApp.jsx)
-  filters/sorts active work after retrieval. Newer closed work can crowd older
-  active work out; ordering the reduced set oldest-first does not recover it.
-- **Impact/blocking:** Operators can miss actionable requests; blocks
-  complete-queue correctness at volume and is independent of responsive CSS.
-  Field prevalence was not measured in this documentation increment.
-- **Durable outcome/dependencies/acceptance:** Design complete authorized
-  active retrieval with bounded/paginated closed history, consistent with
-  Firestore rules/indexes and multi-course entitlements. Test more than 100
-  newer closed rows hiding an old open row, more than 100 active rows,
-  multi-course selection, deep links, and COMPLETE/Cancel with live updates.
-  No client-side re-sort or larger arbitrary cap is an accepted fix.
+- **Prior production mechanism:** latest-100 mixed request retrieval can hide
+  older open work behind newer closed requests.
+- **Review implementation:** the QR increment's shared listener filters active
+  status before retrieval and removes both caps. Isolated deployed Firestore
+  and Rules returned all 101 active records despite 105 newer closed records.
+  Course switching, notification deep links and real rendered actions passed.
+- **Remaining boundary:** merge/production promotion and physical acceptance
+  are not authorized by the QR review increment. Keep the correction paired
+  with its active-query index; reverting to a larger arbitrary cap is not a fix.
 
 ### Notification release gap
+
+The independent QR sandbox now has its own Firestore-triggered notifier and
+project-specific VAPID secret. A real persistent Chrome subscription received
+the actual "Server requested" notification through Eventarc, the deployed
+sender and browser service worker. This does not close physical phone/iPad,
+installed-PWA/OS delivery acceptance or change the production deployment gap.
 
 - **Evidence/mechanism:** [Deployment Guide](DEPLOYMENT_GUIDE.md#cart-operator-web-push)
   records source delivery-time entitlement/preference checks absent from

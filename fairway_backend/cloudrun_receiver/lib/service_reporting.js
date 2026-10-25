@@ -246,13 +246,13 @@ function aggregateSummaries(summariesByCourse) {
   }));
 }
 
-function aggregateCourseReports(reportsByCourse) {
+function aggregateCourseReports(reportsByCourse, { includeSummaries = true } = {}) {
   const summaryByCourse = reportsByCourse.map((reports) => Object.fromEntries(
     SUMMARY_PERIODS.map((period) => [period, reports[period].summary]),
   ));
-  const summaries = aggregateSummaries(summaryByCourse);
+  const summaries = includeSummaries ? aggregateSummaries(summaryByCourse) : null;
   return Object.fromEntries(SUMMARY_PERIODS.map((period) => [period, {
-    summary: summaries[period],
+    ...(summaries ? { summary: summaries[period] } : {}),
     history: reportsByCourse.flatMap((reports) => reports[period].history)
       .sort((left, right) => outcomeTime(right) - outcomeTime(left)),
   }]));
