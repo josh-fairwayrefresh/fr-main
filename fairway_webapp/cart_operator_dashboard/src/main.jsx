@@ -5,12 +5,14 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInAnonymously,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import { CheckCircle, Grid2X2, History, Settings, Map as MapIcon, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
-import { adminApiBaseUrl, apiBaseUrl } from './lib/environment';
+import { adminApiBaseUrl, apiBaseUrl, fairwayEnvironment, firebaseConfig } from './lib/environment';
+import { preparePublicReviewer, publicSandboxReviewEnabled } from './lib/publicSandboxReview.mjs';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
@@ -553,6 +555,8 @@ function PlaceholderScreen({ title }) {
 }
 
 function App() {
+  const publicReview = publicSandboxReviewEnabled(fairwayEnvironment, firebaseConfig, window.location, import.meta.env.VITE_FAIRWAY_PUBLIC_REVIEW);
+  const [publicReviewError, setPublicReviewError] = useState('');
   const [entryMode] = useState(() => modeForPath(window.location.pathname));
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -583,6 +587,17 @@ function App() {
       }
 
       if (!nextUser) {
+        if (publicReview) {
+          setUser(null);
+          setAuthState('checking');
+          try {
+            await signInAnonymously(auth);
+          } catch (error) {
+            console.error('Public sandbox session failed:', error.code);
+            if (isMounted) setPublicReviewError('Unable to open the public sandbox. Reload to retry.');
+          }
+          return;
+        }
         setUser(null);
         setIsAdmin(false);
         setClaimsReady(false);
@@ -605,6 +620,16 @@ function App() {
         return;
       }
 
+      if (publicReview && nextUser.isAnonymous) {
+        try {
+          await preparePublicReviewer(nextUser, API_BASE_URL);
+        } catch (error) {
+          console.error('Public sandbox access failed:', error.message);
+          if (isMounted) setPublicReviewError(error.message);
+          return;
+        }
+      }
+      if (!isMounted) return;
       setUser(nextUser);
       setClaimsReady(false);
       try {
@@ -833,6 +858,8 @@ function App() {
   }
 
   if (!user) {
+    if (publicReview) return <EntryStatus title="Public sandbox review"
+      message={publicReviewError || 'Opening test workspace. No sign-in required...'} />;
     return (
       <LoginScreen
         authState={authState}
@@ -870,6 +897,7 @@ function App() {
     <OperatorApp
       user={user}
       apiBaseUrl={API_BASE_URL}
+      inventoryApiBaseUrl={adminApiBaseUrl}
       operatorConfig={operatorConfig}
       requests={activeRequests}
       loadState={loadState}

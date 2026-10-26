@@ -1,0 +1,29 @@
+.inventory-session { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.inventory-session button { padding: 7px 10px; border: 1px solid #bac9bd; border-radius: 7px; background: #fff; color: #183e2c; cursor: pointer; }
+.inventory-session button:disabled { opacity: .6; cursor: wait; }
+.inventory-session-actions { display: grid; gap: 8px; }
+.inventory-session-overlay { position: fixed; inset: 0; z-index: 150; background: #102c26a8; display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.inventory-session-overlay section { background: white; color: #183e2c; border-radius: 14px; padding: 24px; width: min(440px, 100%); max-height: 90vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 16px 50px #0003; }
+.inventory-session-overlay label { display: grid; gap: 8px; margin: 14px 0; }
+.inventory-session-overlay input, .inventory-session-overlay select { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; }
+.inventory-session-overlay footer { display: flex; gap: 12px; justify-content: flex-end; }
+.inventory-session [role="alert"] { color: #a32c26; }
+.inv-stock-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.inv-stock-controls button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bac9bd; border-radius: 6px; padding: 8px; background: #fff; color: #183e2c; cursor: pointer; }
+.inv-stock-controls button:disabled { opacity: .5; cursor: not-allowed; }
+.inv-daily-sales { min-width: 0; display: grid; gap: 12px; padding: 16px; border: 1px solid #bac9bd; border-radius: 10px; background: white; font-size: 12px; overflow-wrap: anywhere; }
+.inv-daily-sales strong, .inv-daily-sales span { display: block; }
+.inv-sales-total { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inv-sales-total > span { font-size: 18px; font-weight: 800; }
+.inv-daily-sales .inventory-session { border-top: 1px solid #d9e0db; padding-top: 12px; }
+.inv-daily-sales .inventory-session > span:first-child { flex: 1 1 140px; }
+.inv-daily-sales .inventory-session button { min-height: 44px; }
+.inventory-session .inventory-close-out { display: grid; gap: 3px; min-height: 56px; padding: 10px 16px; border-color: #17603d; background: #17603d; color: #fff; font-weight: 800; }
+.inventory-close-out span { display: block; }
+.inventory-close-out span + span { font-size: 11px; font-weight: 600; }
+.inv-quantity-field { display: grid; gap: 8px; }
+.inv-quantity-input { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 12px; align-items: center; }
+.inv-quantity-input button { width: 48px; height: 48px; padding: 0; border: 1px solid #bac9bd; border-radius: 7px; background: #fff; color: #183e2c; font-size: 24px; cursor: pointer; }
+.inv-quantity-input button:disabled { opacity: .5; cursor: not-allowed; }
+.inv-quantity-input input { min-width: 0; min-height: 48px; text-align: center; appearance: textfield; -moz-appearance: textfield; }
+.inv-quantity-input input::-webkit-inner-spin-button, .inv-quantity-input input::-webkit-outer-spin-button { appearance: none; margin: 0; }

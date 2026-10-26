@@ -1,5 +1,16 @@
 # UX Specification — Fairway Refresh Pilot 1.1
 
+## Authorized public sandbox review
+
+The isolated inventory review URL opens without entering an email/password
+or following a private sign-in link. Anyone with that URL can operate the
+CPO TEST inventory Course. An automatic anonymous Firebase session receives
+only that explicit non-Admin Customer/Course scope; all existing inventory,
+operator attribution and unresolved-submission behavior remains in force.
+Named accounts, protected Admin access and production are unchanged.
+Entry errors are explicit and can be retried by reload. See the Deployment
+Guide for the exact URL, configuration and revocation procedure.
+
 ## Purpose and scope
 
 This document distinguishes current externally observable golfer, Cart Operator,
@@ -115,21 +126,21 @@ The current implementation and deployment status are owned by
   **ORPHANED RECORD**; cleanup is deferred until after the Monarch Bay pilot.
 - Course assignment is the shared entitlement for Cart Operations and
    Inventory. Inventory has no separate membership or user class. An assigned
-   user can view, add, edit, move, archive, preview, and publish products for
+   user can view, add, edit, move and archive products for
    that course; another course remains inaccessible unless separately assigned.
 - One course-level catalog is shared across staff and carts. Each active
    product has exactly one state: **On Cart**, **Sold Out**, or **In Inventory**.
    Archived products are retained outside active inventory.
-- Edits save automatically. Last saved edit wins. There are no edit locks,
-   conflict warnings, approval roles, or change notifications in the pilot.
-   Product changes and publications are attributed to the acting account.
-- Saved working inventory does not change the public menu. Preview shows the
-   current saved draft; only explicit Publish Menu publishes a coherent snapshot.
-   A failed save is not reported as saved, and failed publication leaves the
-   prior published menu available.
-- Anonymous golfers scan a stable course QR URL and see only the last successful
-   publication. On Cart products appear available, Sold Out products are marked,
-   and In Inventory or Archived products are omitted. The menu is read-only and
+- Metadata edits save automatically. The persistent-stock sandbox increment
+   below supersedes last-write-wins for stock/availability: stale quantity
+   edits must not overwrite intervening sales, and metadata autosaves must not
+   restore stale availability. Product changes retain account
+   attribution and gain operational staff/shift attribution.
+- Saved inventory automatically determines the public menu. Failed saves and
+   unconfirmed/cancelled operations never appear as saved public changes.
+- Anonymous golfers scan a stable Course QR URL and see the current committed
+   On Cart products. Sold Out, In Inventory and archived products are omitted.
+   The menu is read-only and
    does not support ordering, checkout, requests, POS, or quantity tracking.
 - Public menu category badges use category-appropriate icons; the
    Non-Alcoholic badge retains the text "NA".
@@ -154,8 +165,9 @@ The current implementation and deployment status are owned by
 - Inventory edits are sent to the backend and displayed as saved only after a
    successful response. Product fields autosave; availability can be changed
    with a state selector or drag-and-drop. The board refreshes from the server
-   while open so other authorized staff edits become visible. Publish remains
-   explicit; draft preview does not alter the public menu.
+   while open so other authorized staff edits become visible. The public menu
+   automatically reflects saved active On Cart products; there is no separate
+   preview/publish step.
 - The Inventory dashboard title is **CART INVENTORY MANAGEMENT DASHBOARD**.
    The Customer name appears above and the readable Course name below it;
    internal Firestore IDs are not displayed. A horizontal category-filter row
@@ -178,8 +190,13 @@ The current implementation and deployment status are owned by
    a subcategory filters the visible products only; it does not change
    inventory data. Switching categories resets the subcategory selection to
    All.
-- Catalog actions pair **+ Category** with **+ Add Product**. **Preview Draft**
-   and **Publish Menu** are a separate adjacent action group. The three state
+- Catalog actions pair **Add Category** with **+ Add Product**. A clearly
+   labeled **Golfer-View Menu** link for the selected Course opens in a new tab
+   on the right of the filters, matching the audit button's font and text size.
+   **Confirm Inventory Audit** sits directly beneath Close out / Enter final
+   sales inside the same bounded Sales Today/operator panel.
+   If no slug is configured, explain that Admin must configure the link
+   rather than link to a different Course. The three state
    columns remain the sole product organization; subcategory remains product
    metadata and does not create nested inventory groups.
 - The optional Inventory price control is **Price ($)**. It converts a valid
@@ -190,13 +207,221 @@ The current implementation and deployment status are owned by
    browser regains focus. An open editor adopts server changes in untouched
    fields while preserving that user's active field edits; there is no manual
    Refresh control, edit lock, or conflict warning.
-- The anonymous course menu uses the last published snapshot. Its categories,
-   product counts, states, optional descriptions/prices, and Last Updated value
-   come from that snapshot; the timestamp is formatted in the configured Course
-   timezone. In Inventory and archived products are not presented.
+- The anonymous Course menu reads the current committed inventory through one
+   public-field allowlist. Only active On Cart products appear; Sold Out,
+   In Inventory and archived products are excluded. Categories, product counts,
+   descriptions, prices and Last Updated reflect that coherent current state.
+   The timestamp uses the Course timezone. Existing public links keep working;
+   the menu reads current committed inventory when opened or manually reloaded,
+   with no polling or focus-triggered refresh. Every category tile starts
+   collapsed, including Canned Cocktails, and expands only on golfer selection.
 
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
+
+### Persistent cart stock, staff, audits and shift close — sandbox increment
+
+Status on 2026-10-26: CPO-accepted behavior is being prepared for production;
+merge and deployment remain unauthorized. Existing product IDs, metadata and
+availability survive the release unchanged. Missing quantities read as zero,
+without an initialization write or automatic movement; an existing On Cart
+product remains On Cart, including on the public menu, until an explicit
+authorized stock operation changes it. Production continues using ordinary
+Firebase sign-in and existing account/Course permissions, never automatic
+sandbox review entry. Release verification and recovery are owned by the
+Deployment Guide.
+
+The CPO authorized this coherent increment on 2026-10-23, from accepted main
+`08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. It is not a production release.
+On 2026-10-24 the CPO accepted its current functionality and requested the
+presentation refinement below within PR #12. A subsequent same-day CPO decision
+supersedes explicit publication with an automatic current On Cart menu and
+simplifies the sales header. Neither decision authorizes merge or production
+deployment.
+
+- The Inventory banner displays the Fairway Refresh logo at 150% of its prior
+  displayed dimensions at each responsive breakpoint, an accessible Admin
+  shield for entitled users, and Export without explanatory prose. Export
+  retains the same confirmed-view report contents, download and pending/unresolved
+  submission protection.
+- Sales Today sits horizontally beside Cart Inventory Management Dashboard
+  on iPad/desktop. The same compact panel clearly identifies the selected
+  operator and contains Select operator/Close out and submission recovery.
+  The sales box is labeled "Sales Today" and shows only today's total units
+  sold, not date, cart-stock totals or per-product details. Individual sales
+  and product tallies remain durable and available to the existing export.
+  After activity, the prominent shift button has two stacked lines:
+  "Close out" / "Enter final sales". Final-sales entry, attribution, safe
+  retry, failure retention and successful-close clearing are unchanged.
+  Add Category and Add Product share one action row immediately above the
+  category filters. Golfer-View Menu remains on the right of the filter row.
+  Confirm Inventory Audit is directly below the close-out control inside
+  the same bounded panel, not on the filter row.
+  Preserve grouping
+  on iPad; wrap rows cleanly on phones with no document overflow or reduced
+  touch targets (44 CSS pixels minimum for these controls).
+- Routine success commentary boxes are omitted: confirmed tiles, quantities,
+  tally and shift identity convey successful changes.
+  Actionable failures, stock conflicts, unknown submission outcomes and retry/
+  recovery controls remain visible. Sale/loading/audit confirmations remain
+  explicit. Obsolete Preview Draft/Publish Menu controls, instructions and
+  publication-status messaging are removed.
+
+- One shared cart inventory per Course uses the existing Course catalog.
+  Inventory ownership remains bounded for a future Course-to-Cart hierarchy;
+  there is no multiple-cart UI, separate restaurant balance or transfer model.
+  Existing products retain metadata, price, categories and initial availability.
+  Missing quantities display zero without initialization moving any tile.
+- Each card exposes an editable nonnegative whole-unit quantity. Quantities
+  persist across days and shifts; no automatic reset occurs. Direct edits are
+  attributed adjustments, never sales. Stock changes and immutable historical
+  events commit in one authoritative operation.
+- Cart-stock totals select only On Cart products. Moving to In Inventory changes
+  availability only: preserve the recorded quantity and do not manufacture an
+  adjustment. In Inventory means restaurant-held products available to load,
+  not a tracked restaurant stock balance. Loading either state into On Cart
+  requires a positive Quantity and explicit confirmation, committed together.
+  Both drag-and-drop and the availability selector support On Cart to In
+  Inventory, without a Quantity prompt. If operator selection is needed, resume
+  the same move after selection. Record an attributed availability event with
+  unchanged quantity; remove the product from cart totals and later cart audits.
+  The state and quantity survive reload. Adjusting an In Inventory product to
+  zero must leave it In Inventory, not move it to Sold Out.
+- Sold Out always means quantity zero. Moving either an On Cart or In Inventory
+  product with positive quantity X to Sold Out, by dragging,
+  keyboard movement or availability selector, asks:
+  "Confirm that you sold the remaining X units of [product name]."
+  Confirm uses the existing attributed sale operation to sell exactly the
+  displayed remaining units, set quantity zero and move to Sold Out atomically;
+  the Course-local daily sales tally updates. Cancel changes no stock,
+  availability, sale history or shift activity. Bind the confirmation to the
+  displayed stock revision: intervening sales/adjustments require refreshed
+  quantities and another explicit confirmation, never a silent amount change.
+  Uncertain responses retain the exact intended operation for safe retry.
+  A zero-quantity product moves to Sold Out as availability only,
+  without creating a zero-unit sale. Other non-sale availability changes do not
+  invent adjustments; quantity-preserving In Inventory returns and confirmed
+  positive loading onto On Cart are unchanged.
+  Enforce this on the server as well as all movement controls. Ordinary quick
+  sales remain restricted to On Cart; only an explicitly targeted, exact
+  remaining-units, revision-bound sale permits In Inventory as the source.
+  Existing positive Sold Out records are identified, never silently repaired.
+  Authorized corrections of labeled sandbox test records are attributed
+  adjustments to zero, not invented historical sales. No production repair
+  is authorized by this increment.
+- Inventory dragging uses the visible product-name/grip control for mouse,
+  touch and pen through one shared interaction. Touch scroll remains available
+  outside that grip; sale, quantity, edit and selector controls do not initiate
+  dragging. A movement threshold, visible destination highlight and viewport-edge
+  scrolling support deliberate drops, including stacked phone columns. Dropping
+  on a column or its children uses the same attributed availability operation.
+  Escape, browser cancellation and dropping outside columns do not mutate stock.
+  The grip also supports selection followed by a labeled Move here button
+  without requiring the availability selector. This is not a separate stock path.
+  Adjacent columns span the board's full row height so horizontal drops from
+  lower tiles land in the visible destination area, not a gap beneath a shorter
+  column. On stacked phones, viewport-edge scrolling reaches other columns.
+- A sale icon opens positive whole units sold, default one, and Confirm. Server
+  transactions validate against current On Cart stock. An excessive sale is
+  rejected without deduction or successful sale event, explaining that the
+  quantity must be corrected first. Zero is the minimum; negative stock,
+  overselling, silent clamping and oversell-confirmation paths are excluded.
+  A sale/quantity edit that makes an On Cart balance zero moves it to Sold Out;
+  replenishing Sold Out above zero restores On Cart. Initialization alone does
+  not apply those transition rules.
+- Sales, adjustments and cart-loading Quantity dialogs share visible minus/plus
+  controls with at least 44 by 44 CSS-pixel targets and spacing, accessible names
+  and direct numeric entry. Minimum is zero for adjustments and one for sales
+  and loading. Buttons never submit a transaction; explicit Confirm remains
+  required.
+- The compact Course-local daily tally shows only total units sold across all
+  sessions. Individual sales, product tallies and adjustments remain durable
+  beyond the day; hiding header details does not delete records. Connectivity is
+  required; failed/uncertain submissions never appear confirmed. Retried intended
+  operations cannot duplicate deductions or durable records. Stale absolute
+  edits require fresh review; metadata autosaves cannot overwrite stock/state.
+- Export downloads a genuine Excel `.xlsx` workbook of the confirmed displayed inventory view:
+  selected Customer/Course, explicit category/subcategory filters, displayed
+  product names/availability/quantities, selected operator if any, revision,
+  and export time in the configured Course timezone. Filtered reports are
+  prominently marked as not the complete inventory. If the archived section
+  is expanded, include those displayed rows and mark their separate scope.
+  Include the displayed Course-wide daily product/unit sales tally and full
+  On Cart total, explicitly not narrowed by product filters. Unsubmitted edits
+  are excluded; export is unavailable during pending/unresolved submissions or
+  failed inventory loading. Export does not require operator selection, make
+  shift activity, mutate stock, confirm an audit or publish a menu.
+  The manager-facing report has Customer, Course, Course-local export time and
+  selected operator at the top, clear headings and product, category,
+  availability and numeric whole-unit quantity columns. Two side-by-side tables
+  keep a representative 58-product report readable on one landscape Letter
+  page, with explicit print area, quarter-inch margins and one-page scaling.
+  Preserve all report rows, archived scope and daily product tallies rather
+  than truncating content to fit. Validate actual workbook contents and rendered
+  one-page printing, not only page-setup flags. If confirmed data or submission
+  state changes during workbook generation, require a fresh export.
+  A separate **Audit History** worksheet reads completed durable audits for the
+  selected Course's past 14 local calendar dates (today and the preceding 13
+  dates, through export). Include the reporting period/timezone and each audit's
+  Course-local date/time and historical approver-name snapshot, independent of
+  current product/category filters. Show an explicit no-audits empty state.
+  Use readable columns, repeated headings, margins and fit-to-width printing;
+  history may span pages without shrinking the inventory report. Keep the
+  Inventory Report worksheet's existing readable one-page print layout.
+  History is an authorized read, not an audit/shift mutation; retrieval failure
+  prevents download with an actionable error rather than presenting empty history.
+- Admin's Customer register contains a staff directory with stable person IDs,
+  free-text names, and Cart Operator / F&B Management roles. Both roles have
+  equal operational rights through one policy. These are operational identities,
+  separate from Firebase users; adding a name grants no login or Admin access.
+  Custom operator entry adds a Cart Operator to that Customer directory.
+- Cart's banner and Inventory's Sales Today panel share a session/Course operator selection, isolated
+  from other sessions/accounts and Customer/Course contexts. The first inventory
+  action requiring operator attribution without a selection prompts and resumes
+  that action; audit submission is expressly exempt. One shift is active
+  per operator session and Course. Before inventory activity, the name can be
+  corrected freely; after activity, selecting a different person requires
+  successful shift close. Operational records preserve selected staff snapshots
+  and the authenticated submitting UID.
+- An explicit audit says "Record your cart inventory at the start and end of a shift."
+  Its backcheck displays and snapshots only current On Cart products, independent
+  of filters, excluding Sold Out, In Inventory and archives. Revision details
+  remain internal to stale-confirmation protection, not the explanation.
+  Select a Customer staff approver
+  and require: "Confirm you are authorized to approve this inventory count audit."
+  Commit a coherent immutable snapshot, approver and submitting account, revision
+  and authoritative timestamp. Concurrent changes invalidate the reviewed
+  revision and require reconfirmation. Later product/staff edits cannot rewrite it.
+  Historical audits are not rewritten to the new scope. Successful audit
+  submission closes the dialog without triggering operator selection. The
+  selected approver, authorization checkbox and Confirm audit suffice even with
+  no operator selected. Record approver and submitting Auth account without
+  requiring, starting, locking or altering an operator shift solely for an audit.
+- Shift close accepts a nonnegative USD total in dollars, stores exact cents and
+  attribution, and supports multiple shifts per Course/local day. Submission
+  follows an **Are you sure?** step showing the exact entered dollar
+  amount. Confirm uses the existing duplicate-safe close operation; Cancel
+  returns to the entered amount without closing or clearing the operator. Only
+  success closes that session's shift and clears its name. Failure or uncertainty
+  preserves the name and amount, with idempotent retry/recovery. Stock, daily
+  sales, other sessions and history are unaffected. Successful close leaves
+  Not selected and no dialog, including after delayed refresh or repeated
+  completion callbacks. Only a subsequent user-initiated attributed action
+  prompts for a name; completed work never resumes a new action implicitly.
+- Successful confirmed changes into/out of On Cart automatically change the
+  golfer menu, including a sale/adjustment that moves zero stock to Sold Out.
+  Saved public-facing metadata for On Cart products also appears automatically.
+  Failed, cancelled, stale or unconfirmed operations do not change public data.
+  Public reads use one coherent transaction over committed inventory, not
+  asynchronous copies or older publication snapshots. Concurrent transactions
+  and exact idempotent retries cannot replace a newer menu with older state.
+  One authoritative public-menu field allowlist excludes quantities (including
+  nested price fields), staff, sales, shifts, audits and other operational data
+  from anonymous API responses as well as visible content. Existing snapshot
+  records may remain as history but are never a serving source. No POS/payment processing,
+  offline queue, trend screens, speculative role framework or physical-device
+  changes are included. Accepted request queue, service categories and request
+  KPIs remain unchanged.
 
 ## Cart Operator Push Notifications (Source behavior and dated physical validation)
 
