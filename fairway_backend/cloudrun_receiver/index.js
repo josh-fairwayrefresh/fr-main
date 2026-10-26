@@ -43,6 +43,7 @@ const {
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
 const inventory = require('./lib/inventory');
 const crypto = require('crypto');
+const { publicReviewConfiguration, provisionPublicReviewer } = require('./lib/public_sandbox_review');
 const { courseOperation } = require('./lib/course_operation');
 const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
 const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
@@ -178,6 +179,7 @@ function createFairwayHandlers(db, {
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
   qrEnabled = process.env.FAIRWAY_QR_ENABLED === 'true',
   qrRateKey = process.env.FAIRWAY_QR_RATE_KEY,
+  publicReviewAccess = publicReviewConfiguration(),
   protectedSystemAdminUids = resolveProtectedSystemAdminUids(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
   ),
@@ -1499,6 +1501,17 @@ function createFairwayHandlers(db, {
       }
 
       const path = req.path || '/';
+      if (path === '/api/v1/sandbox/review-access') {
+        res.set('Cache-Control', 'no-store');
+        if (!publicReviewAccess) return res.status(404).json({ error: 'not_found' });
+        if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+        const identity = await authenticateOperator(req, res);
+        if (!identity) return res;
+        if (!await provisionPublicReviewer(db, identity, publicReviewAccess)) {
+          return res.status(403).json({ error: 'Anonymous review session required' });
+        }
+        return res.status(200).json({ status: 'ready' });
+      }
       const publicBayMatch = path.match(/^\/api\/v1\/public\/bays\/([A-Za-z0-9_-]+)(\/requests)?$/);
       if (publicBayMatch) {
         res.set('Cache-Control', 'no-store');

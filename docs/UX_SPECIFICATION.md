@@ -1,5 +1,18 @@
 # UX Specification — Fairway Refresh Pilot 1.1
 
+## Authorized public sandbox review
+
+The two isolated review sandboxes support ordinary-browser entry without
+entering an email/password or following a private link. Anyone with their
+operator URLs can operate the explicitly scoped test Courses. Automatic
+anonymous Firebase sessions retain the existing non-Admin Course authorization,
+operator attribution and per-browser notification preferences; they do not
+grant production access. QR reviewers may switch between the synthetic Cart
+and Driving Range Courses. Inventory reviewers are limited to the CPO TEST
+inventory Course. Existing named sign-in remains available on protected routes.
+Entry failures are explicit and can be retried by reload, never presented as
+successful access. See the Deployment Guide for configuration and revocation. — Fairway Refresh Pilot 1.1
+
 ## Purpose and scope
 
 This document distinguishes current externally observable golfer, Cart Operator,

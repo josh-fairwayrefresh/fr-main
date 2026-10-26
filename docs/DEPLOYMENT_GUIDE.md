@@ -1,5 +1,39 @@
 # Deployment Guide
 
+## Public sandbox review access
+
+The CPO now authorizes no-sign-in public operation of both isolated review
+sandboxes. This supersedes the private-only review instructions below.
+Anyone with the URLs may change test inventory/sales, service state and requests.
+No production access, passwords or permissions are changed.
+
+- QR operator: https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002
+- Inventory: https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007
+
+Ordinary browsers automatically establish a persistent Firebase anonymous
+session. The receiver verifies its token and transactionally provisions the
+existing schema-v2 non-Admin access record, restricted to deployment-configured
+synthetic Customer/Courses. Existing named accounts and their permissions are
+unchanged. Normal authorization, Firestore Rules, attribution, operator-name
+selection and per-browser notification preferences remain authoritative.
+No shared password, custom credential or public Firestore rule is introduced.
+Clearing browser storage creates a new review identity and notification choices.
+
+Enable Anonymous sign-in only in these two sandbox Auth projects. Build with
+`VITE_FAIRWAY_PUBLIC_REVIEW=true`; deploy the receiver with
+`FAIRWAY_PUBLIC_REVIEW=true` and JSON `FAIRWAY_PUBLIC_REVIEW_SCOPE` containing
+`customer_id` and an explicit nonempty `course_ids` list. QR scope is
+`CUST-0001` / `COURSE-0001, COURSE-0002`; inventory scope is
+`CUST-0005` / `COURSE-0007`. Server configuration refuses production and any
+other project. Caller-supplied scope is never used. The frontend enables auto
+entry only on the exact sandbox Hosting origin and operator/inventory routes.
+
+To revoke public review, disable both build/runtime flags and Anonymous
+sign-in, and remove the specifically identified anonymous reviewers' access
+records (or disable those sandbox Auth identities). Disabling the entry flag
+alone does not revoke already-issued access. Do not remove named users or
+broaden this into production configuration.
+
 ## Current Pilot 1.1 Operating State
 
 The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
@@ -73,9 +107,9 @@ provisioning, verification and release boundaries.
 
 ### Synthetic review fixtures and signs
 
-#### Private passwordless operator review access
+#### Historical private passwordless operator review access
 
-The CPO selected private passwordless access rather than public operator
+The CPO initially selected private passwordless access rather than public operator
 access after password setup proved inconvenient. Only project
 `fairway-refresh-sandbox-qr1` enables Firebase Email Link sign-in alongside
 existing Email/Password sign-in. The two existing identities were resolved
