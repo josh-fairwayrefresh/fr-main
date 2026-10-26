@@ -100,13 +100,87 @@ independent Course asset, not an additional Cart category or permission tier.
 The UX owner defines product behavior; this section owns environment,
 provisioning, verification and release boundaries.
 
+### Current A/B bay-side review publication — 2026-10-26
+
+The CPO changed each of the 26 Letter portrait sheets to serve two independent
+practice locations: **A on the left, B on the right**. The CPO explicitly
+selected retaining all original URLs as side A, adding only side B URLs.
+The existing `qr_bays` owner now contains **52** identities, `1A/1B` through
+`26A/26B`, using numeric `bay_number` plus `bay_side`. There is no second
+register or request lifecycle. Historical unsuffixed request snapshots remain
+unchanged; new golfer pages, requests, operator History and notification labels
+identify the side. One outstanding request is enforced independently per side.
+
+- Deployed application/generator source:
+  **`c93aa1a0b221e96e29b9a03757ba8154c8469ff0`**.
+  Later browser-test/documentation commits do not change deployed runtime bytes.
+- Receiver **`fairway-button-receiver-sandbox-ab-c93aa1a`**, Ready at **100%**,
+  after zero-traffic staging. Runtime settings, service account, secrets and
+  authentication match the prior isolated revision; `bay-sides` targets the
+  new revision. Both staged and live public reads verified all 52 identities
+  and their minimal allowlists.
+- Hosting **`36cb8474ec83e15b`**, release **`1793057725746000`**,
+  `2026-10-26T23:35:25.746Z`. All **127 local publication files** match their
+  served bytes, including the PDF, register, 52 PNGs and 52 SVGs.
+- [Review/download page](https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html)
+  and [26-page sandbox-URL PDF](https://fairway-refresh-sandbox-qr1.web.app/qr-review/sandbox-url-bay-signs.pdf).
+  [Verified 52-side mapping register](https://fairway-refresh-sandbox-qr1.web.app/qr-review/sandbox-bay-mapping.json).
+  PDF SHA-256:
+  `36572eb5cd6e7355b27a8d44460c69a536314466b6b9a7632a008db15a766906`.
+- The approved logo banner and top camera instructions remain unchanged.
+  Each side has a prominent label and **246pt (3.42in)** square QR, including
+  the four-module white quiet zone; page margins remain 48pt. All **52 codes
+  decoded from the 26 rendered PDF pages** at 100dpi to the register.
+  Instructions, A/B positions and safe text/ink bounds passed. Bay 9 and the
+  all-page overview were visually inspected without clipping or distorted logos.
+  As previously authorized, no printed test footer is added; filename/download
+  page explicitly identify sandbox URLs. This is not a production installation
+  edition or production-launch authority.
+- **14 focused tests passed**, covering paired generation/rejected malformed
+  mappings, repeat-safe population, preserved claims/URLs, independent A/B
+  duplicate prevention, Complete/Cancel, legacy snapshots, Course scoping,
+  suspended service, retries and side-aware notification payload/deep links.
+  The deployed white-page/appearance browser check passed at
+  375/430/768/1024px in light/dark settings. The new deployed A/B browser
+  check passed: both public labels/Yes/No, repeated submissions, independent
+  queue entries, exact-side deep links, A Complete/B Cancel and History.
+  Early runner attempts exposed only test synchronization and unaccepted
+  confirmation-dialog issues; the corrected runner completed and closed its
+  synthetic requests. Original queue count was restored.
+- Before/after comparison preserved all **27 pre-existing requests**, all
+  original bay fields/claims except the intentional `bay_side: A` addition,
+  existing account access, Customer/Course records and service state.
+  Live browser verification added three terminal synthetic Bay 26 requests
+  (two A Complete, one B Cancel), including recovery of interrupted runner
+  attempts, and three ordinary narrowly scoped anonymous-review sessions.
+  No original request was actioned. Admin, notifier, Rules/indexes, production,
+  inventory sandbox, firmware and physical-device commands were not deployed
+  or changed. PR #13 remains draft and unmerged.
+
+The repeat-safe `scripts/assign_qr_bay_sides.js` requires the original private
+26-bay fixture and exact isolated sandbox project. It transactionally adds
+only `bay_side: A` to existing records and creates stable B identities, refusing
+missing originals or assignment conflicts. It never replaces existing URLs,
+claims, receipts or history. New sandbox seeding creates all 52 sides directly.
+Private before/staged/publication/renderer evidence is retained in session
+artifacts prefixed `qr-ab-`; original fixture credentials are not published.
+Recovery must preserve the 52 identities and side-aware receiver/page behavior;
+retain this publication and use a compatible forward fix, not an unsuffixed
+26-location rollback or reseed. Earlier records below are historical evidence.
+Physical laminated-sign scanning/phone notification acceptance has not been
+rerun; prior real notification evidence remains distinct from the new passing
+payload/lifecycle checks. Production Course/access setup and permanent
+production print links remain separately authorized.
+
 ### Isolation and configuration
 
 - Separate project `fairway-refresh-sandbox-qr1` (number `125189268671`),
   Firestore `(default)` in `nam5`, Firebase Auth/web application and Hosting.
   It shares no application data, Auth accounts, service revisions, VAPID key
   or Hosting releases with inventory project `fairway-refresh-sandbox-260930`.
-  PR #12 remains unmerged; its sandbox must not be redeployed for QR review.
+  PR #12 was unmerged at initial provisioning and has since been independently
+  released to production; its separate inventory sandbox remains protected
+  from QR deployments.
 - Hosting: https://fairway-refresh-sandbox-qr1.web.app.
   `firebase.qr-sandbox.json` is the explicit deployment target; do not use
   `firebase.sandbox.json`, whose site belongs to PR #12.

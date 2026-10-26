@@ -104,8 +104,11 @@ same-action replay preserves the first outcome and actor.
 `lib/qr_requests.js` owns minimal public reads and atomic anonymous acceptance:
 Course availability, per-bay outstanding pointer, immutable submission receipts
 and request creation commit together. A receipt replay cannot create a new
-request after completion. `qr_bays` owns permanent bay identity/configuration;
-private nested receipts preserve acceptance identity. Short-lived server-side
+request after completion. `qr_bays` owns permanent bay-side identity/configuration:
+26 numbered bays each have independent A/B records and outstanding pointers
+(52 URLs). Existing URLs remain side A; new request/notification labels include
+the side without rewriting historical snapshots.
+Private nested receipts preserve acceptance identity. Short-lived server-side
 rate counters limit each network/bay window; raw IP addresses are not persisted.
 The ingress requires explicit enablement and a server-only HMAC rate key.
 Static URLs are identifiers, not secrets or proof of physical presence.

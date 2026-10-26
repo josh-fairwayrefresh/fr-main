@@ -37,8 +37,9 @@ test('isolated deployed QR golfer and shared Course operator flows', { timeout: 
     await page.locator('.op-inventory').waitFor();
     assert.equal(await page.locator('.op-performance').count(), 1);
     await page.getByLabel('Select course').selectOption(`${fixture.customer_id}/${fixture.range_course_id}`);
-    await publicPage.goto(`${origin}/range/${fixture.bays[2].id}`);
-    await publicPage.getByRole('heading', { name: 'Bay 3', exact: true }).waitFor();
+    const bay = fixture.bays.find((item) => item.bay_number === 3 && (!item.bay_side || item.bay_side === 'A'));
+    await publicPage.goto(`${origin}/range/${bay.id}`);
+    await publicPage.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     await publicPage.getByRole('button', { name: 'No', exact: true }).tap();
     await publicPage.getByText('No request was sent.', { exact: true }).waitFor();
     assert.equal(await page.getByRole('heading', { name: 'No active requests' }).count(), 1);
@@ -51,16 +52,16 @@ test('isolated deployed QR golfer and shared Course operator flows', { timeout: 
     }
     await publicPage.getByRole('button', { name: 'Yes', exact: true }).tap();
     await publicPage.getByText('Your request has been received.', { exact: true }).waitFor();
-    await page.getByRole('heading', { name: 'Bay 3', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     const requestId = (await page.locator('.op-priority').getAttribute('id')).replace('request-', '');
     await page.goto(`${origin}/requests/${requestId}?customer_id=${fixture.customer_id}&course_id=${fixture.range_course_id}`);
-    await page.getByRole('heading', { name: 'Bay 3', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Complete service', exact: true }).click();
     await page.getByRole('heading', { name: 'No active requests' }).waitFor();
     await page.getByRole('button', { name: 'History', exact: true }).click();
     await page.getByRole('heading', { name: 'Request outcomes' }).waitFor();
     assert.equal(await page.locator('.op-metrics').count(), 0);
-    await page.locator('.op-history-row').filter({ hasText: 'Bay 3' }).first().waitFor();
+    await page.locator('.op-history-row').filter({ hasText: 'Bay 3A' }).first().waitFor();
     await page.getByRole('button', { name: 'Requests', exact: true }).click();
     page.on('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Suspend Service for TEST Driving Range', exact: true }).click();
@@ -71,7 +72,7 @@ test('isolated deployed QR golfer and shared Course operator flows', { timeout: 
     await page.getByText('Service ON', { exact: true }).waitFor();
     await publicPage.reload();
     await publicPage.getByRole('button', { name: 'Yes', exact: true }).tap();
-    await page.getByRole('heading', { name: 'Bay 3', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Cancel request', exact: true }).tap();
     await page.getByRole('heading', { name: 'No active requests' }).waitFor();
     let lost = false;
@@ -85,7 +86,7 @@ test('isolated deployed QR golfer and shared Course operator flows', { timeout: 
     await publicPage.reload();
     await publicPage.getByRole('button', { name: 'Yes', exact: true }).tap();
     await publicPage.getByRole('button', { name: 'Retry request', exact: true }).waitFor();
-    await page.getByRole('heading', { name: 'Bay 3', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Complete service', exact: true }).click();
     await page.getByRole('heading', { name: 'No active requests' }).waitFor();
     await publicPage.reload();
