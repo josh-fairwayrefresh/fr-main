@@ -126,6 +126,13 @@ sandbox publications are excluded.
 
 ## Persistent inventory production release — 2026-10-26
 
+**Historical inventory-only cutover, superseded by the
+[Course-assigned staff release](#course-assigned-operational-staff--2026-10-26).**
+Its revision, traffic and Hosting identities below describe that cutover, not
+the current production baseline. The consolidated
+[production milestone](#production-inventory-and-course-assigned-operators--2026-10-26)
+identifies the current stock-aware and assignment-aware deployment.
+
 **Released with explicit CPO authority after acceptance of the preparation
 checkpoint below.** Only production Admin and Hosting were deployed. There
 was no quantity initialization, migration, deletion, product copying, tile
@@ -148,7 +155,8 @@ movement or manufactured production sale/audit/shift.
   `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`.
   Runtime environment, origins, ingress/invoker configuration, resources and
   timeout match the retained baseline. Public review stays disabled/unset.
-  The `inventory-release` tag points to this same revision.
+  At this cutover, the `inventory-release` tag pointed to this same revision;
+  the subsequent staff release removed that assignment-unaware tag.
 - Admin immutable image:
   `us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:9c0bc0e3d6a832839058672fb77006d834689fed70b3b449378c1511a656f0e2`.
 - Admin source:
@@ -1620,26 +1628,67 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
-### Course-assigned operational staff — PR #15 (2026-10-26 UTC)
+### Production Inventory and Course-Assigned Operators — 2026-10-26
 
-Feature head `598a026b4b4bddcb44e94bae2ad1859fe031d3c0` merged/deployed as
-`00ada007910d8b758e1b9d922eb937e49873bd43`. Production Admin is
-`fairway-admin-staff-00ada00` at 100%; Hosting is `c2004110805c6599`.
-Five authorized names are active only on Monarch / Tony Lema. Stable IDs,
-duplicate-safe population, normal picker evidence and unchanged inventory/
-history/access are owned by the
-[staff release record](#course-assigned-operational-staff--2026-10-26).
-Keep assignment-aware and stock-aware Admin during recovery.
-
-### Persistent inventory production release — PR #12 (2026-10-26 UTC)
-
-Reviewed head `545bcf2249b1c967a6062266ebd2057fe75c5bab` merged as
-`854e10cf2a825363ba448e57a47b6748db50007a`. Production Admin is
-`fairway-admin-inventory-854e10c` at 100%; Hosting is
-`cf3ff61ae7b0254f`. Complete publication, read-only preservation/access evidence,
-CPO-confirmed concurrent service Resume and stock-compatible recovery are owned
-by the [release record](#persistent-inventory-production-release--2026-10-26).
-Both sandboxes and PR #13 remain unchanged.
+- **Accepted production scope:** persistent inventory, attributed sales,
+  immutable audits, session-specific shift close, genuine Excel export and the
+  live committed On Cart golfer menu. The public On Cart filter applies only
+  to the golfer menu; it never replaces, synchronizes or prunes the operator's
+  complete catalog. Accepted behavior remains owned by the
+  [UX specification](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close).
+- **One operational staff owner:** the existing Customer staff directory,
+  Admin editor and operator/approver pickers use explicit Course assignments,
+  independently of login accounts and account permissions. Monarch's active
+  Alex, Wendy, Christina and Michaela are Cart Operators; Michael is F&B
+  Management (Director of Food & Beverage). All five are assigned only to
+  Tony Lema (`CUST-0001 / COURSE-0001`), not Driving Range or other Courses.
+  Stable IDs, repeat-safe population, legacy compatibility and immutable
+  attribution evidence remain in the
+  [staff release record](#course-assigned-operational-staff--2026-10-26).
+- **Verified source and merged provenance:** reviewed
+  [PR #12](https://github.com/josh-fairwayrefresh/fr-main/pull/12) head
+  `545bcf2249b1c967a6062266ebd2057fe75c5bab` merged as
+  `854e10cf2a825363ba448e57a47b6748db50007a`;
+  [PR #14](https://github.com/josh-fairwayrefresh/fr-main/pull/14) recorded
+  its release evidence in merge `b3dd798dcd0447c9c5918a5d84129417de26d54a`.
+  [PR #15](https://github.com/josh-fairwayrefresh/fr-main/pull/15) head
+  `598a026b4b4bddcb44e94bae2ad1859fe031d3c0` merged/deployed as
+  **`00ada007910d8b758e1b9d922eb937e49873bd43`**;
+  [PR #16](https://github.com/josh-fairwayrefresh/fr-main/pull/16) recorded
+  its closeout in merge `4f92f55a01a3cf34cddf5f41df0b3496e2383d40`.
+  These documentation merges do not change deployed application bytes.
+- **Current production baseline:** Admin **`fairway-admin-staff-00ada00`**,
+  Ready at **100%**, with `staff-release` pointing to it; Hosting version
+  **`c2004110805c6599`**, release **`1793056093222000`**
+  (`2026-10-26T23:08:13.222Z`). Source/image identities and all 19 served-file
+  comparisons are retained in the staff release record. The inventory-only
+  revision `fairway-admin-inventory-854e10c` and Hosting
+  `cf3ff61ae7b0254f` are historical cutover identities, not the current baseline.
+- **Preservation and isolation:** the
+  [inventory release evidence](#persistent-inventory-production-release--2026-10-26)
+  proves complete Monarch preservation by product ID, field and column:
+  57 products (43 On Cart, 14 Sold Out; no In Inventory or archived records
+  existed), with archived/all-column behavior covered by representative tests.
+  Missing quantities read as zero without default writes or movement.
+  The staff follow-up reverified all 58 production products, 94 events and
+  four historical published menus unchanged; only the five authorized staff
+  and their five creation receipts were added. Existing authentication,
+  account/Course access, Receiver, notifier, firmware and both sandboxes are
+  unchanged. The separately recorded CPO-confirmed service Resume remains
+  intentional operational activity, not a release mutation.
+  [PR #13](https://github.com/josh-fairwayrefresh/fr-main/pull/13) remains a
+  separate draft, open and unmerged.
+- **Recovery and acceptance limits:** retain both stock-aware transaction/
+  idempotency contracts and Course-assignment enforcement. Do not restore
+  either the pre-inventory writer or the assignment-unaware inventory-only
+  Admin after population. Keep the current compatible Admin and all records;
+  use a compatible forward fix, or the documented Hosting-only recovery.
+  Never reset live stock/history from a stale snapshot. Detailed recovery,
+  retained private local-only artifacts and disabled PITR are owned by the
+  staff and inventory release records above. Their existing limits remain:
+  no new physical phone/Safari or office-print/native Excel acceptance,
+  and no manufactured production sales, audits or shifts; isolated attribution
+  tests and normal authenticated picker reads do not claim those transactions.
 
 ### Approver-only audits, final-sales confirmation and audit-history export — PR #12 Sandbox (2026-10-24 UTC)
 
