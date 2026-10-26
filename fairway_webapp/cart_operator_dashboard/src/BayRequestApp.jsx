@@ -58,7 +58,7 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
   return <main className="bay-page">
     <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
     {sandbox && <p className="bay-test">SANDBOX TEST — NOT FOR PRODUCTION</p>}
-    {bay && <><p>{bay.course_name}</p><h1>Bay {bay.bay_number}</h1></>}
+    {bay && <><p>{bay.course_name}</p><h1>Bay {bay.bay_number}{bay.bay_side || ''}</h1></>}
     {state === 'loading' && <p role="status">Loading bay…</p>}
     {state === 'retry' && bay && !bay.available && <p role="status">Server requests are currently unavailable. You can still check your earlier submission.</p>}
     {['ready', 'submitting', 'retry'].includes(state) && <>

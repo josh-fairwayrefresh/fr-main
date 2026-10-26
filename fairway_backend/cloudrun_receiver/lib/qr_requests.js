@@ -17,6 +17,7 @@ function bayRef(db, id) {
 
 function validateBay(bay, course) {
   if (!bay?.enabled || !Number.isInteger(bay.bay_number) || bay.bay_number < 1 ||
+      (bay.bay_side !== undefined && !['A', 'B'].includes(bay.bay_side)) ||
       !course || courseOperation(course).kind !== 'driving_range') {
     throw new RequestError(404, 'Bay not found');
   }
@@ -30,6 +31,7 @@ async function publicBay(db, id) {
   validateBay(bay, course.exists ? course.data() : null);
   return {
     bay_number: bay.bay_number,
+    ...(bay.bay_side ? { bay_side: bay.bay_side } : {}),
     course_name: course.data().course_name,
     available: resolveCourseServiceState(course.data()).active,
   };
@@ -89,7 +91,8 @@ async function acceptQrRequest(db, id, operationId, networkId, now = new Date())
         course_name: course.course_name,
         bay_id: id,
         bay_number: bay.bay_number,
-        location_label: `Bay ${bay.bay_number}`,
+        ...(bay.bay_side ? { bay_side: bay.bay_side } : {}),
+        location_label: `Bay ${bay.bay_number}${bay.bay_side || ''}`,
         source: 'qr',
         event_type: 'server_request',
         status: 'new',

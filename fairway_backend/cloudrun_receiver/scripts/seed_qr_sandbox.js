@@ -41,13 +41,14 @@ async function main() {
     timezone: 'America/Los_Angeles', operationKind: 'driving_range',
   });
   const batch = db.batch();
-  const bays = Array.from({ length: 26 }, (_, index) => ({
-    id: crypto.randomBytes(18).toString('base64url'), bay_number: index + 1,
+  const bays = Array.from({ length: 52 }, (_, index) => ({
+    id: crypto.randomBytes(18).toString('base64url'), bay_number: Math.floor(index / 2) + 1,
+    bay_side: index % 2 ? 'B' : 'A',
   }));
   for (const bay of bays) {
     batch.set(db.collection('qr_bays').doc(bay.id), {
       customer_id: customer.customer_id, course_id: range.course_id,
-      bay_number: bay.bay_number, enabled: true, active_request_id: null,
+      bay_number: bay.bay_number, bay_side: bay.bay_side, enabled: true, active_request_id: null,
     });
   }
   initializeApp({ projectId, ...(token ? { credential: {

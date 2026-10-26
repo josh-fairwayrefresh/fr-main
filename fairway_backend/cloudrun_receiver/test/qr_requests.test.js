@@ -13,6 +13,7 @@ const { setNotificationPreference } = require('../lib/operator_notifications');
 const { createCourse } = require('../lib/fleet/courses');
 const { createDevice, updateDeviceState } = require('../lib/fleet/devices');
 const { aggregateCourseReports } = require('../lib/service_reporting');
+const { assignBaySides } = require('../scripts/assign_qr_bay_sides');
 
 const id = 'synthetic_bay_000000000001';
 const network = 'a'.repeat(64);
@@ -44,6 +45,64 @@ test('public bay allowlist exposes identity and availability only', async () => 
     bay_number: 1, course_name: 'Independent QR Course', available: true,
   });
   await assert.rejects(publicBay(db, '../private'), { status: 404 });
+});
+
+test('A/B requests have independent claims, labels and completion; legacy requests keep their snapshots', async () => {
+  const db = await fixture();
+  await acceptQrRequest(db, id, randomUUID(), network);
+  const legacy = await activeId(db);
+  await transitionRequest(db, legacy, 'complete', assignment, 'operator');
+  await db.doc(`qr_bays/${id}`).update({ bay_side: 'A' });
+  const bId = 'synthetic_bay_00000000001B';
+  await db.doc(`qr_bays/${bId}`).set({
+    customer_id: 'customer', course_id: 'range', bay_number: 1, bay_side: 'B', enabled: true, active_request_id: null,
+  });
+  assert.equal((await publicBay(db, id)).bay_side, 'A');
+  assert.equal((await publicBay(db, bId)).bay_side, 'B');
+  await Promise.all([id, bId].flatMap((bayId) =>
+    Array.from({ length: 5 }, () => acceptQrRequest(db, bayId, randomUUID(), network))));
+  const aRequest = await activeId(db);
+  const bRequest = (await db.doc(`qr_bays/${bId}`).get()).data().active_request_id;
+  assert.notEqual(aRequest, bRequest);
+  assert.equal((await db.doc(`requests/${aRequest}`).get()).data().location_label, 'Bay 1A');
+  assert.equal((await db.doc(`requests/${bRequest}`).get()).data().location_label, 'Bay 1B');
+  assert.equal((await db.doc(`requests/${legacy}`).get()).data().location_label, 'Bay 1');
+  await transitionRequest(db, aRequest, 'complete', assignment, 'operator');
+  assert.equal((await db.doc(`qr_bays/${bId}`).get()).data().active_request_id, bRequest);
+  await transitionRequest(db, bRequest, 'cancel', assignment, 'operator');
+  await acceptQrRequest(db, bId, randomUUID(), network);
+  assert.notEqual((await db.doc(`qr_bays/${bId}`).get()).data().active_request_id, bRequest);
+  await db.doc(`qr_bays/${bId}`).update({ bay_side: 'C' });
+  await assert.rejects(publicBay(db, bId), { status: 404 });
+});
+
+test('sandbox side population is repeat-safe, keeps existing URLs/claims and refuses scope conflicts', async () => {
+  const db = await fixture();
+  const original = {
+    projectId: 'fairway-refresh-sandbox-qr1', customer_id: 'customer', range_course_id: 'range',
+    bays: Array.from({ length: 26 }, (_, index) => ({
+      id: `original_bay_${String(index + 1).padStart(12, '0')}`, bay_number: index + 1,
+    })),
+  };
+  for (const bay of original.bays) await db.doc(`qr_bays/${bay.id}`).set({
+    customer_id: 'customer', course_id: 'range', bay_number: bay.bay_number,
+    enabled: true, active_request_id: 'preserved-claim',
+  });
+  const first = await assignBaySides(db, original);
+  assert.equal(first.bays.length, 52);
+  assert.deepEqual(await assignBaySides(db, original), first);
+  for (const bay of original.bays) {
+    const stored = (await db.doc(`qr_bays/${bay.id}`).get()).data();
+    assert.equal(stored.bay_side, 'A');
+    assert.equal(stored.active_request_id, 'preserved-claim');
+  }
+  const b = first.bays[1];
+  await db.doc(`qr_bays/${b.id}`).update({ active_request_id: 'b-claim' });
+  await assignBaySides(db, original);
+  assert.equal((await db.doc(`qr_bays/${b.id}`).get()).data().active_request_id, 'b-claim');
+  await db.doc(`qr_bays/${b.id}`).update({ course_id: 'foreign' });
+  await assert.rejects(assignBaySides(db, original), /Conflicting bay assignment/);
+  await assert.rejects(assignBaySides(db, { ...original, projectId: 'production' }), /original 26-bay/);
 });
 
 test('concurrent scans create one request; retries remain bound after completion', async () => {
@@ -138,6 +197,7 @@ test('failed acceptance commit leaves no claim, receipt or successful request; r
 
 test('existing Course preferences route QR notifications independently with correct deep links', async () => {
   const db = await fixture();
+  await db.doc(`qr_bays/${id}`).update({ bay_side: 'B' });
   await db.doc('course_push_subscriptions/range/subscriptions/browser').set({
     operator_uid: 'operator', customer_id: 'customer', course_id: 'range',
     endpoint: 'https://push.example.test/review', keys: { auth: 'a', p256dh: 'b' }, status: 'active',
@@ -150,7 +210,7 @@ test('existing Course preferences route QR notifications independently with corr
   const send = async (_, payload) => {
     sends++;
     const notification = JSON.parse(payload);
-    assert.match(notification.body, /Server requested.*Bay 1/);
+    assert.match(notification.body, /Server requested.*Bay 1B/);
     assert.equal(notification.url, `/requests/${requestId}?customer_id=customer&course_id=range`);
   };
   await dispatchRequestNotifications(db, requestId, send);

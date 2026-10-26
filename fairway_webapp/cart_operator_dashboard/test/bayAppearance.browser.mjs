@@ -25,7 +25,7 @@ test('QR bay page stays white and usable across appearance settings, viewport si
         await page.getByText('Loading bay…', { exact: true }).waitFor();
         assert.equal(await page.locator('html').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
         releaseModule();
-        await page.getByRole('heading', { name: 'Bay 1', exact: true }).waitFor();
+        await page.getByRole('heading', { name: 'Bay 1A', exact: true }).waitFor();
         for (const width of [375, 430, 768, 1024]) {
           await page.setViewportSize({ width, height: 1000 });
           assert.deepEqual(await page.evaluate(() => ({

@@ -96,7 +96,8 @@ Request A may still be active when Request B is created; that is valid. The oper
 ## Driving Range QR requests (review increment)
 
 - Driving Range is its own Course asset under a Customer, alongside golf
-  Courses such as Tony Lema. All 26 bays belong to that Driving Range Course.
+  Courses such as Tony Lema. All 26 bays belong to that Driving Range Course,
+  with independently identified A and B sides (52 service locations).
   Explicit immutable-at-creation `operation_kind: driving_range` configuration
   identifies it; names, email addresses and IDs never determine behavior.
   Missing operation configuration preserves existing Cart behavior.
@@ -109,7 +110,10 @@ Request A may still be active when Request B is created; that is valid. The oper
   controls. Its persistent Resume/Suspend state is independent of other
   Courses. New Driving Range Courses start suspended until explicitly resumed.
   Suspension rejects new submissions; existing requests remain actionable.
-- Each permanently identified bay has a static Fairway-hosted URL. The
+- Each permanently identified bay side has its own static Fairway-hosted URL.
+  Existing 26 links are retained as side A; side B receives 26 additional links.
+  `qr_bays` remains the identity owner, with numeric `bay_number` and explicit
+  `bay_side: A | B`. The
   anonymous mobile page identifies the Course and bay and asks:
   **"Would you like a server to come and take your order?"**
   The complete page uses a white background and dark readable text, including
@@ -117,7 +121,11 @@ Request A may still be active when Request B is created; that is valid. The oper
   regardless of the phone's light/dark appearance setting.
   No creates nothing. Yes confirms only server-acknowledged acceptance.
   No golfer login, order entry or payment is required.
-- One outstanding request exists per bay until Complete or Cancel. Concurrent
+- One outstanding request exists per bay side until Complete or Cancel;
+  A and B can request independently. Public pages, new request snapshots,
+  operator queues/History and notifications identify the full side, e.g.
+  **Bay 9A** or **Bay 9B**. Historical unsuffixed snapshots remain unchanged.
+  Concurrent
   scans and repeated Yes acknowledge that request without another request or
   notification. A lost-response retry retains its original submission identity,
   including across reload, completion or suspension; it cannot become a fresh
@@ -129,23 +137,25 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Active queues retrieve all authorized active requests independently from
   closed History; newer closed work cannot hide old active work behind a cap.
   Restaurant requests and service time do not enter Cart performance metrics.
-- Public responses contain only bay number, Course display name, availability,
+- Public responses contain only bay number/side, Course display name, availability,
   or a minimal acceptance acknowledgement. Private requests, account access,
   staff, endpoints and operation receipts are not public.
-- Review signs use 26 US Letter portrait pages, one bay per page, white
+- Review signs use 26 US Letter portrait pages, one numbered bay per page with
+  two codes: A on the left and B on the right, white
   background, strong contrast and comfortable printer-safe margins. A centered
   banner reads Fairway Refresh logo / AT / Monarch Bay Golf Club logo, using
   approved assets without distorting their proportions. Below it, centered:
   **WANT FOOD OR DRINKS?** (larger headline), then
   **Use your [camera icon] and point it at the code to request a server.**
   (supporting instruction, centered across two lines with a drawn camera icon),
-  then prominent **BAY 1** through **BAY 26**, then that bay's large QR with
-  a white quiet zone. No extra instructions, URLs or technical information
+  then prominent side labels **BAY 1A / BAY 1B** through **BAY 26A / BAY 26B**,
+  each above its large QR with a four-module white quiet zone. No extra instructions, URLs or technical information
   appear on the signs.
 - CPO-authorized Monarch testing checkpoint: sandbox review pages omit the
   **TEST — NOT FOR INSTALLATION** footer. The filename and download page
-  explicitly identify sandbox URLs, and all 26 existing destinations remain
-  unchanged. Unmarked printed pages do not authorize production launch.
+  explicitly identify sandbox URLs. The verified mapping register contains
+  all 52 side-specific destinations; the existing 26 URLs remain side A.
+  Unmarked printed pages do not authorize production launch.
   An installation edition must use approved permanent production URLs and
   omit test markings, and may be generated only during authorized production
   launch. Sandbox field-review signs are not a production installation edition.
