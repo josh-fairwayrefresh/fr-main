@@ -99,6 +99,9 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Each permanently identified bay has a static Fairway-hosted URL. The
   anonymous mobile page identifies the Course and bay and asks:
   **"Would you like a server to come and take your order?"**
+  The complete page uses a white background and dark readable text, including
+  the surrounding viewport and loading, confirmation and error states,
+  regardless of the phone's light/dark appearance setting.
   No creates nothing. Yes confirms only server-acknowledged acceptance.
   No golfer login, order entry or payment is required.
 - One outstanding request exists per bay until Complete or Cancel. Concurrent
@@ -120,8 +123,9 @@ Request A may still be active when Request B is created; that is valid. The oper
   background, strong contrast and comfortable printer-safe margins. A centered
   banner reads Fairway Refresh logo / AT / Monarch Bay Golf Club logo, using
   approved assets without distorting their proportions. Below it, centered:
-  exactly two lines: **WANT FOOD OR DRINKS?** (larger headline) and
-  **SCAN TO REQUEST A SERVER.** (supporting call to action),
+  **WANT FOOD OR DRINKS?** (larger headline), then
+  **Use your [camera icon] and point it at the code to request a server.**
+  (supporting instruction, centered across two lines with a drawn camera icon),
   then prominent **BAY 1** through **BAY 26**, then that bay's large QR with
   a white quiet zone. No extra instructions, URLs or technical information
   appear on the signs.

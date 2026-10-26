@@ -46,7 +46,23 @@ async function generateSigns({ bays, origin, outputDirectory }) {
     pdf.fillColor('#111111').font('Helvetica-Bold').fontSize(18)
       .text('AT', 288, 116, { width: 36, align: 'center' });
     pdf.fontSize(30).text('WANT FOOD OR DRINKS?', 48, 226, { width: 516, align: 'center' });
-    pdf.fontSize(24).text('SCAN TO REQUEST A SERVER.', 48, 272, { width: 516, align: 'center' });
+    pdf.font('Helvetica').fontSize(22);
+    const prefix = 'Use your';
+    const suffix = 'and point it at the code';
+    const prefixWidth = pdf.widthOfString(prefix);
+    const instructionWidth = prefixWidth + 44 + pdf.widthOfString(suffix);
+    const instructionX = (612 - instructionWidth) / 2;
+    pdf.text(prefix, instructionX, 266, { lineBreak: false });
+    const cameraX = instructionX + prefixWidth + 10;
+    pdf.save().lineWidth(1.8).strokeColor('#111111');
+    pdf.roundedRect(cameraX, 271, 24, 16, 2).stroke();
+    pdf.moveTo(cameraX + 5, 271).lineTo(cameraX + 8, 267)
+      .lineTo(cameraX + 16, 267).lineTo(cameraX + 19, 271).stroke();
+    pdf.circle(cameraX + 12, 279, 4.5).stroke();
+    pdf.restore();
+    pdf.text(suffix, instructionX + prefixWidth + 44, 266, { lineBreak: false });
+    pdf.text('to request a server.', 48, 294, { width: 516, align: 'center' });
+    pdf.font('Helvetica-Bold');
     pdf.fontSize(64).text(`BAY ${bay.bay_number}`, 48, 321, { width: 516, align: 'center' });
     pdf.image(png, 144, 396, { width: 324, height: 324 });
     mapping.push({ bay_number: bay.bay_number, url: target, qr_png: `${stem}.png`, qr_svg: `${stem}.svg`, decoded: true });

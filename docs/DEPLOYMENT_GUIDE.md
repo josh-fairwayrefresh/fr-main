@@ -149,8 +149,10 @@ omit **TEST — NOT FOR INSTALLATION**. The download page and filename
 `sandbox-url-bay-signs.pdf` explicitly identify sandbox URLs. All 26 existing
 bay destinations remain unchanged. Pages are US Letter portrait
 with 48-point (2/3-inch) margins, approved proportional logo banner, centered
-two-line headline (**WANT FOOD OR DRINKS?** at 30 points, then
-**SCAN TO REQUEST A SERVER.** at 24 points), 64-point bay identification and a 4.5-inch QR
+headline (**WANT FOOD OR DRINKS?** at 30 points), followed by the centered
+22-point instruction **Use your [camera icon] and point it at the code to
+request a server.** on two lines with a vector camera icon, 64-point bay
+identification and a 4.5-inch QR
 including its four-module white quiet zone. No destination URL or extra
 instructions are printed. Rendered PDF pages must be checked for clipping,
 readability and correctly decoded bay destinations, not just raw QR images.
