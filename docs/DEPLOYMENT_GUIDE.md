@@ -181,6 +181,38 @@ changed; no installation edition or production artifact was generated.
 
 ### Verification and recovery boundaries
 
+#### Camera instruction and white bay page — 2026-10-26 UTC
+
+Reviewed frontend/generator source `cc6f87706285634d47cdd72e15c35c3f8e0be812`
+(incorporating generator refinement `e5d38d0e86eb7f8ab2f68d5918be8387a221c71c`).
+Only QR Hosting changed: version `ca10c5b38c55348b`, release
+`1793037616161000`, `2026-10-26T18:00:16.161Z`.
+Firebase publication initially failed on expired credentials, then succeeded
+after the CPO reauthenticated the existing Firebase CLI account.
+
+- The 26-page PDF retains its sandbox-only filename/destinations and no printed
+  test footer. It now reads **Use your [vector camera icon] and point it at the
+  code to request a server.** below **WANT FOOD OR DRINKS?**. Approved logo
+  banner, 64-point bay labels and 4.5-inch QRs are unchanged.
+- All 26 final PDF pages rendered at 100 dpi decoded to the existing bay mapping;
+  exact instruction text, safe margins and absent footer passed. Bay 1/Bay 26
+  full-page renders were visually inspected for camera alignment, clipping and
+  readability. Served PDF SHA-256:
+  `4e727aa9bfbb8d518c333055cf5df63a0b908687c68a98c44b283b359610e436`.
+- Bay-only root styling is applied before lazy loading, so the loading screen,
+  page and surrounding viewport stay white, including dark-device appearance.
+  No operator or request-lifecycle behavior changes. The deployed browser
+  appearance test passed light/dark settings at 375/430/768/1024px, blocked-module
+  loading, real No interaction and stubbed confirmation/unavailable/error states
+  without creating requests. A screenshot of the actual public Bay 1 page
+  confirmed the white background and readable controls.
+- 71 frontend checks, two focused sign-generator checks, two rendered existing
+  operator/category regression cases, sandbox build and diagnostics passed.
+  Existing bundle-size warning remains. All 75 served files match local build
+  hashes. QR backends, notifier, Rules and access records were not redeployed or
+  changed. PR #12 remains untouched; its Hosting version was rechecked as
+  `7c21c25b1899c0e6`. No merge or production action occurred.
+
 #### Saved Monarch testing checkpoint — 2026-10-25 UTC
 
 CPO confirms the feature works. Saved reviewed frontend/generator source:
