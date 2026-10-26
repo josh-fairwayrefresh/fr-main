@@ -9,7 +9,7 @@ only that explicit non-Admin Customer/Course scope; all existing inventory,
 operator attribution and unresolved-submission behavior remains in force.
 Named accounts, protected Admin access and production are unchanged.
 Entry errors are explicit and can be retried by reload. See the Deployment
-Guide for the exact URL, configuration and revocation procedure. — Fairway Refresh Pilot 1.1
+Guide for the exact URL, configuration and revocation procedure.
 
 ## Purpose and scope
 
@@ -220,6 +220,16 @@ Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
 ### Persistent cart stock, staff, audits and shift close — sandbox increment
+
+Status on 2026-10-26: CPO-accepted behavior is being prepared for production;
+merge and deployment remain unauthorized. Existing product IDs, metadata and
+availability survive the release unchanged. Missing quantities read as zero,
+without an initialization write or automatic movement; an existing On Cart
+product remains On Cart, including on the public menu, until an explicit
+authorized stock operation changes it. Production continues using ordinary
+Firebase sign-in and existing account/Course permissions, never automatic
+sandbox review entry. Release verification and recovery are owned by the
+Deployment Guide.
 
 The CPO authorized this coherent increment on 2026-10-23, from accepted main
 `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. It is not a production release.

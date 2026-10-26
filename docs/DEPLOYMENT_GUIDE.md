@@ -1,5 +1,210 @@
 # Deployment Guide
 
+## PR #12 production inventory release preparation — 2026-10-26
+
+**Prepared for Architect/CPO review only. No merge, deployment, production
+write, account change or artificial production transaction is authorized.**
+This supersedes earlier release permission. Public review sandboxes remain live.
+
+### Exact scope and verified baseline
+
+The clean preparation worktree is `persistent-cart-inventory`, branch
+`feat/persistent-cart-inventory`. Its initial remote HEAD was
+`152a411709f30ed87333306ab9cc83672ca0df05`; freshly fetched accepted `main`
+and PR base are `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`, with no
+main-only commits or merge conflict. Preparation adds release checks and
+owner-document corrections, not different application behavior. The final
+prepared commit is the release handoff/PR head, not an already-deployed identity.
+
+The release diff is the existing inventory owner/API, operational staff policy
+helper, Inventory/session/drag/quantity/report UI, Admin Customer staff editor,
+public-menu read/presentation and focused tests/docs. Cart integration adds only
+inventory session controls and the Admin API URL prop. ExcelJS and its new
+dependencies are added; **all pre-existing dependency versions/integrities,
+including Firebase, are unchanged**.
+
+PR #13 remains independently draft/unmerged at
+`8c547c68e0f7dd50c5837e5e3ebbc8745d39b26a`; it is neither a dependency
+nor part of this diff. No QR bay/routing/assets, firmware/device code,
+notification owners, service controls/categories/reporting owners, Firestore
+Rules/indexes, Auth configuration or existing account/Course entitlement policy
+changes are included. The inactive sandbox-only review helper remains in PR #12
+so its existing public test sandbox can stay usable.
+
+Read-back production identities in `savvy-kit-496703-r5`, `us-central1`:
+
+| Surface | Retained production recovery identity |
+| --- | --- |
+| Receiver | `fairway-button-receiver-00028-827`, Ready / 100%; image `sha256:c83ca43dbfda1c3eb395afc808634b78f0a62e6acf9a7260c4f229862815406a` |
+| Admin | `fairway-admin-00019-5hm`, Ready / 100%; image `sha256:a8bb3fccbee139ed40fc48060b4d221dfe044eeeb5d982022b3f42f47d2375dc` |
+| Hosting | Version `79e31c865a6025cc`, release `1792797232817000` |
+| Notifier, untouched | `fairway-request-notifier-00003-mah`, Ready / 100% |
+
+The exact retained Receiver/Admin source archives are the versioned GCS
+locations in the October 23 production publication entry below. Both were
+downloaded read-only; each ZIP SHA-256 is
+`7306e8e035a25179c8f4ecdc194ef0718f2a2316b88e72131c91510b2bbbae52`.
+Their inventory/auth/notifier/service/reporting source matches accepted main.
+The retained Hosting version has 18 ordinary files captured and checked against
+the Hosting manifest's gzip hashes; its two reserved Firebase-generated files
+are platform responses, not immutable application assets. Live public Firebase
+configuration was cross-checked against the deployed JS and used to reconstruct
+the production build inputs; no credentials were copied.
+
+### Production data compatibility and access evidence
+
+A consistent read-only Firestore snapshot at
+`2026-10-26T22:16:40.839065Z` contains **58 products**: 57 in
+`CUST-0001/COURSE-0001`, one in `CUST-0002/COURSE-0002`; 44 On Cart,
+14 Sold Out. All 58 lack quantities. No positive-quantity Sold Out or invalid
+quantity was found. There are no operational staff, shifts, audits, closures
+or operation receipts yet. Existing categories/subcategories, identity keys,
+94 legacy inventory events, slug mappings, state/publication metadata and
+historical published-menu snapshots were captured without editing them.
+
+The candidate's real read owner ran against an isolated copy of that snapshot:
+every product ID and stored field, including custom metadata/price/availability,
+was preserved; missing quantity/stock revision read as zero. A before/after
+comparison of the entire copied document map proved no writes or tile movement.
+There is no migration, reset, automatic stock count or historical-sale backfill.
+The existing Monarch slug `monarch-bay` resolves to **43 active On Cart**
+products; production's older published response currently has 57 products.
+Removing Sold Out from the golfer menu is the accepted change, not deletion of
+those products. The other Course's On Cart product has no public slug.
+
+The existing branded and canonical URLs both return 200:
+`/cartmenus/monarchbay_tony_lema_course` and `/cartmenus/monarch-bay`.
+The unchanged alias maps to the same slug. The candidate's one public allowlist
+excludes quantities, stock revisions, staff/account/shift/audit/operation data
+and nested private price fields. Public reads are transactional and no-store;
+they follow committed On Cart inventory, not retained published snapshots.
+
+Production Auth configuration still has Email/Password enabled, approved
+domains unchanged and no Anonymous provider enabled. A genuine anonymous
+token issued by the inventory sandbox received **401** from production
+access bootstrap, inventory bootstrap and Receiver operator bootstrap.
+The present Receiver has no review endpoint (GET returns 405). A separate
+test using the actual production runtime configuration proves the candidate
+review endpoint returns 404 by default and refuses startup/configuration with
+review enabled in production. Frontend checks cover both production origins
+even with the review flag erroneously true. Actual production sign-in UI and
+named-session entry were exercised in the isolated production-built browser;
+no real production password exchange was performed.
+
+The stock-aware Admin must precede any new UI: legacy mutators lack required
+operation/shift context and are rejected without writes. Metadata ignores cached
+quantity/availability and reads current stock within its transaction. Absolute
+stock/moves require expected revisions; remaining sales are revision-bound;
+ordinary sales are transactional deltas and cannot oversell. Replays remain
+duplicate-safe after a shift closes. Retired publish/preview return 410 without
+activity. These rejection paths are intentional refresh-required behavior for
+old clients, not silent compatibility writes.
+
+### Proportionate validation
+
+- New release tests: 58-product field/ID/read-only preservation and actual
+  production-runtime review isolation, **2 passed**. Broadened frontend
+  production-origin review-isolation assertions passed.
+- Current inventory operations suite **27 passed**, including stock races,
+  duplicate/lost-response retries, missing-shift/cached-client rejection,
+  stale revisions, metadata versus concurrent sales, Sold Out, immutable audits,
+  shift close and live public-menu privacy. Inventory API and schema-v2
+  authorization suites and sandbox review checks also passed.
+- Focused frontend/entry/export plus rendered operational flows **20 passed**.
+  Additional shared operator/category rendering plus review entry **4 passed**.
+  No-operator audit, close-out cancellation/retry, idle completion and Excel
+  audit history remain covered.
+- Production build uses the exact live Firebase project, API key/app ID,
+  auth domain, storage bucket and Receiver/Admin URLs, with public review false.
+  Index SHA-256:
+  `3a06cd83eef493580e25aa4ca0c28e1cc10819a7a2c62feb49b12e8256c02529`;
+  main asset `assets/index-CSIiibWX.js`. Build passed; the existing lazy
+  spreadsheet/main chunk-size warnings remain, not new failures.
+- That actual built app was served to isolated Chrome at the production origin
+  with **all network requests intercepted locally**. A 58-product fixture
+  verified normal sign-in rather than anonymous entry, authenticated inventory,
+  zero-default/unmoved legacy tiles, no-operator audit without starting a shift,
+  an actual downloaded two-sheet XLSX, historical approver history, both menu
+  aliases, collapsed categories, no focus/16-second polling, and a committed sale
+  disappearing from the golfer menu only after reload. No production operation
+  was submitted. Source tests, diagnostics and whitespace checks passed.
+- Reused evidence: the last inventory-owner publication's real isolated
+  Firestore emulator **26 passed / 1 unit-only skip**, browser drag/touch cases,
+  and actual 58-product spreadsheet-engine one-page print. These owners are
+  unchanged; no new emulator/physical-device/office-print claim is made.
+- Final read-back compared all captured inventory-related collections,
+  Customer/Course records and deployment identities to their pre-check values:
+  unchanged. No production Auth/account/notification/service/device mutation.
+
+### Proposed rollout, only after separate authorization
+
+1. Reconfirm reviewed PR head, resulting authorized merge provenance, unchanged
+   production baseline, available baseline artifacts and the production
+   environment. Retain a fresh, securely held inventory snapshot immediately
+   before cutover; do not rely on this preparation snapshot for later live data.
+2. **Admin only**, target `fairwayAdmin` on existing `fairway-admin`, preserving
+   runtime identity, production project, allowed origins and environment. Public
+   review stays unset/false; no sandbox scope/provider/config is copied.
+   Stage a Ready revision without traffic, inspect the exact source/image and
+   settings, then explicitly route to it and read back 100% traffic (the current
+   service is pinned to a named revision). Do not treat Ready alone as released.
+3. Before Hosting, use read-only checks for normal authorization, stable
+   inventory IDs/metadata/zero defaults, existing public links and field privacy.
+   Cached inventory clients may receive explicit refresh-required errors during
+   this short server-first interval. No synthetic production transactions.
+4. **Production Hosting only**, from the reviewed production build/configuration,
+   after the Admin checks pass. Preserve existing domains/URLs; verify served
+   assets against that build, normal sign-in, read-only Course access, menu
+   contents and absence of anonymous provisioning.
+5. Observe errors, 401/403/409/410 patterns and legitimate authorized user
+   activity during the release window. Stop for unexpected writes, ID/metadata
+   drift, permission bypass, stock inconsistency, private public fields, stale
+   overwrites or unrelated request/service regressions.
+
+**Not proposed:** Receiver, notifier, Rules/indexes, Auth, firmware, QR PR #13
+or either sandbox deployment. All changed inventory routes execute in Admin;
+the Receiver diff's added review endpoint is irrelevant/disabled in production.
+Do not redeploy unaffected surfaces merely because they share a source package.
+
+### Recovery compatible with new inventory records
+
+- Before any new-schema inventory mutation, if the live snapshot is confirmed
+  unchanged, restore the named baseline Admin revision/100% traffic and retained
+  Hosting version above. Never assume there were no writes solely because the
+  new UI was not published; an authorized caller may have used the API.
+- **After any new records exist**, do not restore the old Admin inventory
+  writer: it lacks stock attribution/revision/idempotency and audit/shift
+  semantics. Keep the verified stock-aware Admin revision and its data. Roll
+  Hosting back to retained version `79e31c865a6025cc` if necessary to recover
+  the previously accepted Cart/Admin presentation. Old inventory writes will
+  fail explicitly against the new Admin, and old publish returns 410: inventory
+  editing is deliberately degraded until the corrected UI is available.
+  Requests/History and service controls retain their existing contracts.
+- Record and pin the first verified stock-aware Admin revision/image at cutover.
+  A backend correction after new writes must be a reviewed compatible forward
+  fix from this contract, or another verified stock-aware revision, not blind
+  reversion to `fairway-admin-00019-5hm`. This preparation does not claim an
+  already-deployed compatible stock-aware production revision exists.
+- Never delete/reset products, quantities, staff, events, operation receipts,
+  sessions, shifts, closures or audits as part of code rollback. Preserve exact
+  uncertain operation IDs and restore duplicate-safe retry when service returns.
+  A pre-release data snapshot must not overwrite legitimate post-release sales
+  or immutable history. Any data repair/reconciliation requires separate
+  explicit authority and retained evidence.
+
+Private, local-only recovery/evidence files are in the session's
+`inventory-production-release-baseline/` directory: consistent Firestore wire
+snapshot, manifest/hashes, deployment descriptions/revisions, verified Hosting
+files, versioned backend source ZIPs, public Auth configuration and compatibility
+read-back. Production data is not committed or uploaded. Retained Cloud Run
+revisions, GCS source generations and Hosting version are the remote recovery
+references; the data snapshot/build/download/browser evidence exists only
+locally and must be safeguarded for release. Production PITR is **disabled**
+(one-hour version retention), not a durable rollback mechanism. No backup/PITR
+configuration change was made. Release authorization is still pending;
+physical phone/Safari/push/office printing has not been reaccepted by this
+preparation, and no unrelated deferred issue is claimed resolved.
+
 ## Public sandbox review access
 
 The CPO authorizes no-sign-in public review of the inventory sandbox at

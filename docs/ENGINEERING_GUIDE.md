@@ -87,6 +87,14 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ### Persistent cart inventory increment — sandbox only
 
+The CPO accepted the increment and requested production release preparation
+on 2026-10-26, not merge or deployment. The current production inventory must
+remain unchanged during preparation. The Deployment Guide owns the inspected
+baseline, production-configured acceptance evidence and rollout/recovery plan.
+No migration or quantity-initialization write is required. After new records
+exist, recovery must retain the stock-aware transaction/idempotency owner;
+reverting to the pre-increment inventory writer is not a compatible rollback.
+
 The CPO resolved readiness on 2026-10-23 and authorized a single coherent
 increment from main `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`: persistent
 nonnegative quantities, whole-unit sales, Customer operational staff, immutable

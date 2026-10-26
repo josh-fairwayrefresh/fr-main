@@ -47,7 +47,11 @@ below Close out in the bounded operator panel; Golfer-View Menu remains on the
 right of the filters. Final follow-ups permit approver/account-only audits
 without an operator shift, confirm the close-out dollar amount before submission,
 and add a separate 14-day audit-history worksheet to Excel export. It is not
-merged or production-deployed; follow-up review remains pending. Its current review
+merged or production-deployed. On 2026-10-26 the CPO requested preparation of
+the accepted inventory release, explicitly withholding merge/deploy authority.
+The Deployment Guide's production preparation entry records read-only data
+compatibility, production-configured validation and data-compatible recovery;
+Architect/CPO release review is pending. Its current sandbox review
 identity and verification are in the Deployment Guide's latest Alignment
 Register entry; accepted behavior is owned by the UX specification.
 Detailed operator behavior is owned by the
