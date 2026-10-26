@@ -1,5 +1,40 @@
 # Deployment Guide
 
+## Course-assigned operational staff — 2026-10-26
+
+The CPO authorizes extending the existing Customer staff owner with explicit
+Course assignments, publishing only affected production Admin/Hosting, and
+populating Alex, Wendy, Christina and Michaela as `cart_operator`, and Michael
+(Director of Food & Beverage) as `fnb_management`. Each is active and assigned
+only to Monarch / Tony Lema (`CUST-0001` / `COURSE-0001`).
+
+Implementation extends existing staff records, Admin editor, Course staff
+endpoint and the shared operational-role policy. No competing directory, login
+account, role framework or account-access change is introduced. Existing
+records without assignments retain legacy Customer-wide behavior without
+migration; newly created records have explicit scope. The existing stable
+operation receipt makes population retry-safe. Staff PATCH uses the existing
+editable-field contract, not creation-only `operation_id`.
+
+Pre-release source is main `b3dd798dcd0447c9c5918a5d84129417de26d54a`;
+Admin recovery baseline is `fairway-admin-inventory-854e10c` and Hosting
+`cf3ff61ae7b0254f`. Capture fresh consistent production inventory/history/access
+and staff records before publication. Stage only `fairwayAdmin` without
+traffic, preserve runtime identity/environment/authentication, verify readiness
+and source, then explicitly route 100%. Publish production Hosting only after
+read-only Admin gates pass. Populate the five names through the existing
+authenticated Admin staff API, using retained operation IDs and repeating exact
+requests to verify stable IDs. Do not select/submit a shift, sale or audit for
+verification; inspect the normal operator/approver pickers and cancel.
+
+Do not roll Admin back to an assignment-unaware writer after assignments are
+populated: it would ignore Course scope. Retain the first verified
+assignment-aware revision for compatible recovery/forward fixes. Retain all
+stock-aware inventory contracts and historical records. A Hosting rollback can
+use the baseline while keeping the assignment-aware Admin. Receiver, notifier,
+Auth configuration, Rules/indexes, firmware, service controls, PR #13 and both
+sandbox publications are excluded.
+
 ## Persistent inventory production release — 2026-10-26
 
 **Released with explicit CPO authority after acceptance of the preparation

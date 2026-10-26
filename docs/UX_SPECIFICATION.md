@@ -378,7 +378,22 @@ for Admin/Hosting only.
   free-text names, and Cart Operator / F&B Management roles. Both roles have
   equal operational rights through one policy. These are operational identities,
   separate from Firebase users; adding a name grants no login or Admin access.
-  Custom operator entry adds a Cart Operator to that Customer directory.
+  Staff have explicit `course_ids` within their owning Customer. Admin's existing
+  staff editor assigns Courses; the operator and audit-approver pickers show only
+  assigned active staff for the selected Course. Empty assignments mean no
+  Courses. New Admin-created staff default to no assignments if omitted; custom
+  operator entry adds an active Cart Operator assigned only to its source
+  Course. No name is automatically assigned to another Customer or future Course.
+  Legacy records without `course_ids` retain Customer-wide behavior without
+  a migration; the editor labels that legacy scope and saves explicit selections.
+  Course IDs are validated under the owning Customer. Server-side shift
+  selection, new stock/catalog operations and audit approval enforce the same
+  assignment policy, including stale clients. Removing an assignment blocks new
+  actions, but does not prevent an existing shift closing with its original
+  attribution or resolving an already-committed operation's exact retry.
+  Name/role/assignment edits never rewrite historical sales, shifts or audit
+  snapshots. Stable staff IDs and existing operation receipts make creation
+  retries duplicate-safe; no login accounts or account permissions are involved.
 - Cart's banner and Inventory's Sales Today panel share a session/Course operator selection, isolated
   from other sessions/accounts and Customer/Course contexts. The first inventory
   action requiring operator attribution without a selection prompts and resumes
@@ -391,7 +406,7 @@ for Admin/Hosting only.
   Its backcheck displays and snapshots only current On Cart products, independent
   of filters, excluding Sold Out, In Inventory and archives. Revision details
   remain internal to stale-confirmation protection, not the explanation.
-  Select a Customer staff approver
+  Select an active Customer staff approver assigned to this Course
   and require: "Confirm you are authorized to approve this inventory count audit."
   Commit a coherent immutable snapshot, approver and submitting account, revision
   and authoritative timestamp. Concurrent changes invalidate the reviewed
