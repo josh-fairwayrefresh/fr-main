@@ -29,6 +29,28 @@ records (or disable those sandbox Auth identities). Disabling the entry flag
 alone does not revoke already-issued access. Do not remove named users.
 Clearing browser storage creates a new reviewer identity.
 
+### Public-review publication — 2026-10-26
+
+- Source `d810b0f3c2d5347cdc87dfcfe8c03e66541d7e40`; receiver
+  `fairway-button-receiver-sandbox-00026-qdp`, Ready with 100% traffic.
+  Hosting version `749f980670c63cd1`, release `1793040054068000`
+  (`2026-10-26T18:40:54.068Z`).
+- Existing Admin `fairway-admin-sandbox-00024-4wb`, notifier and Rules
+  remain unchanged. Production and named accounts are untouched.
+  All 19 live Hosting assets matched the validated build byte-for-byte.
+- Focused backend authorization checks: 11 passed; frontend entry checks:
+  13 passed; sandbox build and edited-frontend diagnostics passed.
+- Fresh Chrome entered the actual inventory URL without credentials,
+  displayed the current test inventory and attribution controls, and
+  retained its anonymous session after reload and reopening at phone/tablet
+  widths. Bootstrap returned only the intended Course. Admin, other-Course
+  inventory and private direct Firestore reads were denied (403); requests
+  without tokens were denied (401). Notification preference write/read
+  remained scoped to this identity. No inventory/sales/audit/shift mutation
+  was needed for the access verification.
+- PR #12 remains draft/unmerged. The QR sandbox was independently published
+  from PR #13; no branch merge or production deployment occurred.
+
 ## Current Pilot 1.1 Operating State
 
 The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
