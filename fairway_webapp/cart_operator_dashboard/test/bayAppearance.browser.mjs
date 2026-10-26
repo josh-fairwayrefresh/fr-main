@@ -15,7 +15,16 @@ test('QR bay page stays white and usable across appearance settings, viewport si
       const context = await browser.newContext({ colorScheme, hasTouch: true });
       try {
         const page = await context.newPage();
-        await page.goto(`https://${fixture.projectId}.web.app/range/${fixture.bays[0].id}`);
+        let releaseModule;
+        const moduleReady = new Promise((resolve) => { releaseModule = resolve; });
+        await page.route('**/assets/BayRequestApp-*.js', async (route) => {
+          await moduleReady;
+          await route.continue();
+        });
+        await page.goto(`https://${fixture.projectId}.web.app/range/${fixture.bays[0].id}`, { waitUntil: 'domcontentloaded' });
+        await page.getByText('Loading bay…', { exact: true }).waitFor();
+        assert.equal(await page.locator('html').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
+        releaseModule();
         await page.getByRole('heading', { name: 'Bay 1', exact: true }).waitFor();
         for (const width of [375, 430, 768, 1024]) {
           await page.setViewportSize({ width, height: 1000 });

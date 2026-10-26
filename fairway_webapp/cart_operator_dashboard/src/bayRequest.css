@@ -1,5 +1,3 @@
-:root:has(.bay-page) { color-scheme: light; background: #fff; color: #163c2c; }
-body:has(.bay-page) { min-height: 100vh; background: #fff; }
 .bay-page { max-width: 32rem; margin: 2rem auto; padding: 1.25rem; text-align: center; color: #163c2c; background: #fff; }
 .bay-page img { width: min(100%, 22rem); height: auto; }
 .bay-page h1 { font-size: 2.5rem; margin: 1rem 0; }

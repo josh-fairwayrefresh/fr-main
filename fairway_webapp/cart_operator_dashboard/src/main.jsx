@@ -1012,4 +1012,7 @@ function App() {
 }
 
 const root = createRoot(document.getElementById('root'));
+if (modeForPath(window.location.pathname) === APP_MODE.PUBLIC_BAY) {
+  document.documentElement.classList.add('public-bay-page');
+}
 root.render(window.location.pathname === '/operator-design' ? <OperatorDesignReview /> : <App />);
