@@ -1,5 +1,16 @@
 # UX Specification — Fairway Refresh Pilot 1.1
 
+## Authorized public sandbox review
+
+The isolated inventory review URL opens without entering an email/password
+or following a private sign-in link. Anyone with that URL can operate the
+CPO TEST inventory Course. An automatic anonymous Firebase session receives
+only that explicit non-Admin Customer/Course scope; all existing inventory,
+operator attribution and unresolved-submission behavior remains in force.
+Named accounts, protected Admin access and production are unchanged.
+Entry errors are explicit and can be retried by reload. See the Deployment
+Guide for the exact URL, configuration and revocation procedure. — Fairway Refresh Pilot 1.1
+
 ## Purpose and scope
 
 This document distinguishes current externally observable golfer, Cart Operator,

@@ -1,5 +1,34 @@
 # Deployment Guide
 
+## Public sandbox review access
+
+The CPO authorizes no-sign-in public review of the inventory sandbox at
+https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007.
+Anyone with this URL may operate its test inventory, sales, audits and shifts.
+This is restricted to the verified CPO TEST Customer/Course, not other sandbox
+records or production.
+
+The browser automatically establishes a persistent Firebase anonymous session.
+The receiver verifies its token and transactionally provisions existing
+schema-v2 non-Admin access restricted to `CUST-0005` / `COURSE-0007`.
+Normal authorization, Firestore Rules, operator attribution, unresolved-operation
+recovery and inventory behavior remain unchanged. No password, named-account
+permission, production configuration or public Firestore rule is changed.
+
+Enable Anonymous sign-in only in this sandbox Auth project. Build with
+`VITE_FAIRWAY_PUBLIC_REVIEW=true`; deploy the receiver with
+`FAIRWAY_PUBLIC_REVIEW=true` and
+`FAIRWAY_PUBLIC_REVIEW_SCOPE={"customer_id":"CUST-0005","course_ids":["COURSE-0007"]}`.
+Server configuration refuses production and projects outside the two authorized
+review sandboxes. The frontend requires the exact sandbox Hosting origin and
+operator/inventory route. Caller-supplied scope is ignored.
+
+To revoke public review, disable both build/runtime flags and Anonymous
+sign-in, and remove the specifically identified anonymous reviewers' access
+records (or disable those sandbox Auth identities). Disabling the entry flag
+alone does not revoke already-issued access. Do not remove named users.
+Clearing browser storage creates a new reviewer identity.
+
 ## Current Pilot 1.1 Operating State
 
 The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
