@@ -56,8 +56,8 @@ owns merge/deployment identities, full-inventory preservation, access checks and
 stock-compatible recovery. No inventory migration or stock initialization was
 performed; the public On Cart filter never replaces the operator catalog.
 Its existing sandbox remains available unchanged. Its sandbox review
-identity and verification are in the Deployment Guide's latest Alignment
-Register entry; accepted behavior is owned by the UX specification.
+identity and verification are in the Deployment Guide's public-sandbox review
+record; accepted behavior is owned by the UX specification.
 Detailed operator behavior is owned by the
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements); deployed
 release identities, custom-domain Auth correction, verification, and remaining

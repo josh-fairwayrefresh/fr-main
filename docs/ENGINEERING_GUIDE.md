@@ -204,8 +204,8 @@ error retry), with no interval/focus refresh. Categories initially collapse and
 expand only by selection. Scope-change/unmount cleanup aborts superseded
 requests so older responses cannot replace current state. Retired
 preview/publish endpoints explicitly return 410 without mutation or shift
-activity, directing cached clients to refresh. This changes sandbox source,
-not production release authority. No internal stock/staff/shift/audit data
+activity, directing cached clients to refresh. Current publication identities
+and release authority are owned by the Deployment Guide. No internal stock/staff/shift/audit data
 enters the golfer menu.
 
 K-001/K-002 readiness uses the CPO's resolved transitions rather than inventing
