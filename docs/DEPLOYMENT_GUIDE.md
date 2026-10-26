@@ -34,6 +34,31 @@ records (or disable those sandbox Auth identities). Disabling the entry flag
 alone does not revoke already-issued access. Do not remove named users or
 broaden this into production configuration.
 
+### Public-review publication — 2026-10-26
+
+- QR source `645ee899d80f466d7937692583ecc3a848ed2fee`; receiver
+  `fairway-button-receiver-sandbox-00003-z59`, Ready with 100% traffic.
+  Hosting version `52eadcbe3996a79d`, release `1793040054264000`
+  (`2026-10-26T18:40:54.264Z`).
+- The existing Admin `fairway-admin-sandbox-00002-zzf`, notifier, Rules,
+  bay identities and printed QR destinations are unchanged. The published
+  PDF is byte-identical, SHA-256
+  `4e727aa9bfbb8d518c333055cf5df63a0b908687c68a98c44b283b359610e436`.
+  All 75 live Hosting assets matched the validated build byte-for-byte.
+- Focused backend authorization checks: 11 passed per branch; QR frontend
+  entry checks: 16 passed; inventory frontend entry checks: 13 passed.
+  Both sandbox builds and edited-frontend diagnostics passed.
+- Fresh Chrome contexts entered both actual URLs without credentials,
+  received only the configured Course lists, reloaded and reopened with
+  persisted anonymous sessions at phone/tablet widths. QR Course switching
+  and per-identity notification preference write/read were verified.
+  Anonymous reviewers received 403 for Admin, other-Course inventory and
+  private direct Firestore reads; requests without tokens still received 401.
+- This increment verifies entry, access scope and notification preference
+  persistence, not a new physical-phone push-delivery acceptance. Browser
+  permission and iOS Home Screen requirements remain. No merge or production
+  changes; both PRs remain draft.
+
 ## Current Pilot 1.1 Operating State
 
 The CPO confirms FRB-0001 through FRB-0005 passed firmware programming,
