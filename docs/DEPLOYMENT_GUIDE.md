@@ -1,8 +1,159 @@
 # Deployment Guide
 
+## Persistent inventory production release — 2026-10-26
+
+**Released with explicit CPO authority after acceptance of the preparation
+checkpoint below.** Only production Admin and Hosting were deployed. There
+was no quantity initialization, migration, deletion, product copying, tile
+movement or manufactured production sale/audit/shift.
+
+### Reviewed source and publication identities
+
+- Reviewed PR #12 head:
+  `545bcf2249b1c967a6062266ebd2057fe75c5bab`.
+- Pre-release main:
+  `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`.
+- PR #12 was marked ready and merged using the established merge-commit method
+  with an exact-head guard at `2026-10-26T22:37:08Z`.
+  Merge/deployed source: `854e10cf2a825363ba448e57a47b6748db50007a`.
+  Its parents are the preceding main and reviewed head; its tree is identical
+  to the reviewed head. The PR description was updated before merge.
+- Admin: **`fairway-admin-inventory-854e10c`**, Ready, explicitly routed to
+  **100%** after no-traffic staging and verification. Target `fairwayAdmin`,
+  Node.js 22; existing service account
+  `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`.
+  Runtime environment, origins, ingress/invoker configuration, resources and
+  timeout match the retained baseline. Public review stays disabled/unset.
+  The `inventory-release` tag points to this same revision.
+- Admin immutable image:
+  `us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:9c0bc0e3d6a832839058672fb77006d834689fed70b3b449378c1511a656f0e2`.
+- Admin source:
+  `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-admin/1793054241.137973-639680995d8c479fbb1bdae707f422b2.zip#1793054241578294`.
+  ZIP SHA-256:
+  `3c134c75447f9b5f7ea1e80b53c887b9c10a0d7bcf9d55d2c39b555e0e9ea713`.
+  All 51 uploaded tracked backend files match the merged source byte-for-byte;
+  only the two upload-control ignore files are intentionally excluded.
+- Hosting: **`cf3ff61ae7b0254f`**, release **`1793054758746000`**,
+  `2026-10-26T22:45:58.746Z`. The production-configured build from merged source
+  is byte-identical to the preparation build. All **19 served files** match on
+  both `app.fairwayrefresh.com` and `savvy-kit-496703-r5.web.app`.
+  Index SHA-256:
+  `3a06cd83eef493580e25aa4ca0c28e1cc10819a7a2c62feb49b12e8256c02529`;
+  main asset `assets/index-CSIiibWX.js`.
+
+### Read-only preservation and access evidence
+
+The pre-cutover consistent snapshot is
+`2026-10-26T22:36:07.153488Z`. Production deployment specifications and
+inventory documents matched preparation before merge. Restricted copies of
+the preparation artifacts and fresh cutover snapshot were retained separately;
+neither was overwritten or committed.
+
+Staged, live-Admin-before-Hosting and post-Hosting comparisons checked the
+complete inventory, not the public response. The final consistent read time
+is `2026-10-26T22:49:46.636848Z`:
+
+| Stored scope | Before and after |
+| --- | --- |
+| Monarch / Tony Lema | 57 product IDs: 43 On Cart, 14 Sold Out, 0 In Inventory, 0 archived |
+| Placeholder Hills / Test Links 18 | 1 product ID, On Cart |
+| All production products | 58; every ID, metadata field, column, stored quantity and document updateTime unchanged |
+| Historical inventory | 94 events, 4 published-menu snapshots; unchanged |
+| New stock-operation records | No staff, operations, shifts, sessions, audits or closures created by release verification |
+
+All 58 products still lack stored quantities; reads display zero without writing
+defaults or moving tiles. Exact ID/column maps and full document comparisons
+include archived products and all three availability values; no In Inventory
+or archived product existed in the actual snapshot. Their behavior remains
+covered by accepted representative tests. Identity keys, categories,
+subcategories, inventory state, slug mappings and `user_access` were unchanged.
+The operator read includes the full active inventory and separate archived
+array; it never replaces/prunes stock using the public On Cart response.
+
+The CPO completed normal production sign-in in the shared browser. Authenticated
+reads against the staged and then live Admin preserved all existing product
+fields/IDs/columns and returned both authorized Courses. An unassigned Course
+was denied with 403; unauthenticated access/bootstrap and inventory reads
+returned 401. Fresh production Chrome required normal sign-in and made no
+anonymous signup/review-provisioning calls. Existing signed-in state survived
+the Hosting publication. Production Auth configuration and Course entitlements
+remain unchanged; sandbox-origin requests are denied with 403. The preparation
+evidence for genuine sandbox-token rejection and production-mode fail-closed
+guards remains valid. An attempted IAM verification-session signer was denied;
+no permissions were granted or token/account created through that route.
+Verification instead used the CPO's ordinary sign-in.
+
+The production operator UI renders 43 On Cart and 14 Sold Out tiles, no Publish
+controls, no selected operator and no open dialog. Both existing public URLs
+return 200 and load the same **43 committed active On Cart products**, not the
+complete 57-product operator catalog:
+
+- https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course
+- https://app.fairwayrefresh.com/cartmenus/monarch-bay
+
+Public responses have the exact public-field allowlist, including only public
+amount/currency price fields, and no quantities/revisions/staff/operational
+records; `Cache-Control: no-store` is retained. Fresh 375px Chrome checks found
+all six categories collapsed initially, successful selection/expansion and no
+horizontal overflow on either URL. No public page mutates inventory.
+
+One concurrent, intentional operational change was detected rather than
+silently treated as deployment drift: the unchanged Receiver
+`fairway-button-receiver-00028-827` accepted
+`POST /api/v1/operator/service/resume` at `2026-10-26T22:46:23.561037Z`.
+The CPO explicitly confirmed the Resume and instructed that it remain.
+Only Tony Lema's `service_suspension`, `updated_at` and document updateTime
+changed; all other captured Course fields and all inventory/history documents
+matched. The release issued no service action and did not revert that state.
+
+Receiver `fairway-button-receiver-00028-827`, notifier
+`fairway-request-notifier-00003-mah`, both sandboxes' service specifications,
+traffic and Hosting release identities remain unchanged. PR #13 remains draft,
+unmerged at `8c547c68e0f7dd50c5837e5e3ebbc8745d39b26a`. Auth configuration,
+Rules/indexes, firmware, notification owners and service-control code were not
+deployed or modified. Initial new-Admin log observation found no error/5xx
+entries. Valid preparation tests/emulator/Excel-print evidence was reused;
+no artificial production transaction or physical-device test was performed.
+
+### Retained recovery and limits
+
+The first verified **stock-compatible recovery revision** is
+`fairway-admin-inventory-854e10c` with the immutable image/source above.
+Pin and retain it. After any new inventory writes, keep this stock-aware
+backend and all records; use a compatible forward fix or verified compatible
+revision if correction is needed. **Do not restore the old Admin writer or
+overwrite live sales/history with a snapshot.**
+
+Hosting rollback target remains **`79e31c865a6025cc`**, release
+`1792797232817000`; the old UI's inventory edits fail explicitly against the
+new backend, while the existing Cart presentation can return. Old Admin
+`fairway-admin-00019-5hm` is only a pre-new-write fallback after a fresh proof
+that no new-schema writes occurred, never the default post-release rollback.
+The preparation section below retains the full data-compatible procedure and
+baseline source archives. Never delete/reset products, quantities, operation
+receipts, shifts, closures, audits or events, or retry uncertain operations
+under new IDs.
+
+Private local recovery/evidence is retained in
+`inventory-production-cutover-20261026/` (directory mode 700, snapshots mode
+600), alongside the restricted preparation archive
+`inventory-preparation-recovery-retained-20261026.tar.gz`, SHA-256
+`cf88943e8c149fc91f3dc630fa4e4c4f68661a7447414dccd1803c011035f46a`.
+The separately restricted completed-release archive is
+`inventory-completed-release-recovery-20261026.tar.gz`, SHA-256
+`3e355a738b9ba9f2bed8f0a43ef9b77466c48f19012436ff8f107f37044be4b6`;
+its manifest binds the reviewed head, merge, deployed identities and file hashes.
+Raw production data and credentials are not committed. These private data
+snapshots remain local-only; remote revision/image/GCS source/Hosting references
+are retained independently. Production PITR remains disabled, not a recovery
+guarantee. No live stock-operation smoke transaction, physical Safari/push
+acceptance or new office-print acceptance is claimed. Existing chunk-size
+warnings remain nonblocking.
+
 ## PR #12 production inventory release preparation — 2026-10-26
 
-**Prepared for Architect/CPO review only. No merge, deployment, production
+**Historical preparation checkpoint, subsequently accepted and released above.
+At this checkpoint only, no merge, deployment, production
 write, account change or artificial production transaction is authorized.**
 This supersedes earlier release permission. Public review sandboxes remain live.
 
@@ -1344,6 +1495,16 @@ FRB-0003 sequence and failure handling are owned by
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Persistent inventory production release — PR #12 (2026-10-26 UTC)
+
+Reviewed head `545bcf2249b1c967a6062266ebd2057fe75c5bab` merged as
+`854e10cf2a825363ba448e57a47b6748db50007a`. Production Admin is
+`fairway-admin-inventory-854e10c` at 100%; Hosting is
+`cf3ff61ae7b0254f`. Complete publication, read-only preservation/access evidence,
+CPO-confirmed concurrent service Resume and stock-compatible recovery are owned
+by the [release record](#persistent-inventory-production-release--2026-10-26).
+Both sandboxes and PR #13 remain unchanged.
 
 ### Approver-only audits, final-sales confirmation and audit-history export — PR #12 Sandbox (2026-10-24 UTC)
 
