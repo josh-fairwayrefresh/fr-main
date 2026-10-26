@@ -2,11 +2,100 @@
 
 ## Course-assigned operational staff — 2026-10-26
 
-The CPO authorizes extending the existing Customer staff owner with explicit
+**Released and populated with explicit CPO authority.** The CPO authorized
+extending the existing Customer staff owner with explicit
 Course assignments, publishing only affected production Admin/Hosting, and
 populating Alex, Wendy, Christina and Michaela as `cart_operator`, and Michael
 (Director of Food & Beverage) as `fnb_management`. Each is active and assigned
 only to Monarch / Tony Lema (`CUST-0001` / `COURSE-0001`).
+
+### Source and deployed identities
+
+- PR #15 feature head `598a026b4b4bddcb44e94bae2ad1859fe031d3c0`
+  merged as **`00ada007910d8b758e1b9d922eb937e49873bd43`**, the deployed
+  source, from verified main `b3dd798dcd0447c9c5918a5d84129417de26d54a`.
+  The merge tree exactly matches the feature head.
+- Admin **`fairway-admin-staff-00ada00`**, Ready and explicitly routed to
+  **100%** after zero-traffic staging. Runtime identity, environment, origins,
+  ingress/invoker configuration and resources match the inventory-release
+  baseline; public review remains disabled. The `staff-release` tag points to
+  this revision. The obsolete `inventory-release` tag was removed so its
+  assignment-unaware writer is not separately reachable through that URL.
+- Image:
+  `us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:8c99fa79013923d53a392eef231051f0843207d8809e6a5de65d8fdcc0a68bf7`.
+- Immutable source:
+  `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-admin/1793055963.906485-57bfa99c6542444e83f8eb4ee83f2a9b.zip#1793055964188078`.
+  Archive SHA-256:
+  `016b11aa2bc5aec41d1aed7dca2ced567825a43c6fcac5a0ac3e3d3f698ea724`.
+  All 51 uploaded tracked backend files match merged source.
+- Hosting **`c2004110805c6599`**, release **`1793056093222000`**,
+  `2026-10-26T23:08:13.222Z`. The merged production-configured build matches
+  the validated feature build; all 19 served files match on both production
+  domains. Index SHA-256:
+  `7f08297e22fa83fd3695d8430cfdc6ed13b438174fbace61522681e943cf6fd6`.
+  Main asset `assets/index-CzJeWJy7.js`.
+
+### Authorized population and verification
+
+The existing production directory was empty. Five creates used the normal
+authenticated Admin staff API, with stable operation IDs
+`monarch-tony-lema-staff-20261026-{lowercase-name}`. Each exact request was
+replayed successfully and returned the same staff ID and result; five records
+and five Customer-level creation receipts exist, not ten staff records.
+
+| Name | Existing role | Stable staff ID | Active Course assignment |
+| --- | --- | --- | --- |
+| Alex | Cart Operator | `XLhuzXaw42j0kUbmJQxl` | `CUST-0001 / COURSE-0001` only |
+| Wendy | Cart Operator | `K5pCcUDdnMElWhDmYeih` | `CUST-0001 / COURSE-0001` only |
+| Christina | Cart Operator | `h7itnB28KhciAM0UlnZM` | `CUST-0001 / COURSE-0001` only |
+| Michaela | Cart Operator | `Z5GUboeyPmvDSaSG63IM` | `CUST-0001 / COURSE-0001` only |
+| Michael, Director of Food & Beverage | F&B Management | `kIXoWaE3Q7fAr1ULAUWT` | `CUST-0001 / COURSE-0001` only |
+
+Michael's directory name is `Michael`, role `fnb_management`; the other four
+roles are `cart_operator`. No new title/role/account model was introduced.
+No Driving Range or other-Course/Customer assignment was made.
+
+Focused evidence: **29** inventory/staff/attribution tests, **7** inventory API
+tests, **2** production read-preservation/isolation checks, the rendered
+Admin Course-assignment create/edit plus existing operator/audit/close flows,
+production build/configuration, diagnostics and whitespace checks passed.
+Tests cover inactive/unassigned/foreign/future-Course filtering, malformed
+assignments, legacy missing-field behavior, concurrent same-operation creation,
+exact retries after unassignment, stale new-action rejection, unchanged
+historical sale/shift/audit name/role snapshots and close after unassignment.
+
+Normal production-authenticated read checks passed against staged and live
+Admin before Hosting. After population, both actual Tony Lema operator and
+approver pickers show Alex, Christina, Michael, Michaela and Wendy; the other
+Customer's normal pickers show none. Dialogs were cancelled without confirming
+an operator or audit. Admin's released editor shows all five and Michael's
+F&B Management role with Tony Lema checked, inspected without saving.
+Cross-Customer invalid scope returns 403; unauthenticated staff reads return
+401. Existing login accounts, Auth configuration and all six `user_access`
+records are unchanged.
+
+A consistent before snapshot at `2026-10-26T23:04:37.744079Z` and final
+post-picker snapshot at `2026-10-26T23:10:56.300219Z` verified every pre-existing
+inventory/product ID/field/column/quantity/updateTime, category, key, state,
+published menu, sale/event, shift, session, closure and audit unchanged.
+There remain **58 products**, **94 events**, **4 published menus** and **zero
+shifts/sessions/audits/closures**. The only added application documents are the
+five authorized Customer staff records and five Customer creation receipts.
+Customer/Course records and service state also match the fresh baseline.
+Receiver/notifier specifications/traffic, both sandbox Hosting identities and
+production Auth configuration remain unchanged. No Receiver, notifier,
+Rules/indexes, firmware, notification/service-control or sandbox deployment
+occurred. PR #13 remains independent and unmerged.
+
+Initial observation found no new-Admin error/5xx log entries. Private restricted
+snapshots, source archive, publication read-backs, build and provenance manifests
+are retained locally in `staff-production-release-20261026/`; production data
+and tokens are not committed. These data snapshots remain local-only; PITR is
+still disabled. No physical Safari/phone acceptance or production stock/audit/
+shift transaction is claimed; attribution behavior was verified with isolated
+tests and actual picker reads, not manufactured operational history.
+
+### Owner and controlled release procedure
 
 Implementation extends existing staff records, Admin editor, Course staff
 endpoint and the shared operational-role policy. No competing directory, login
@@ -1530,6 +1619,17 @@ FRB-0003 sequence and failure handling are owned by
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Course-assigned operational staff — PR #15 (2026-10-26 UTC)
+
+Feature head `598a026b4b4bddcb44e94bae2ad1859fe031d3c0` merged/deployed as
+`00ada007910d8b758e1b9d922eb937e49873bd43`. Production Admin is
+`fairway-admin-staff-00ada00` at 100%; Hosting is `c2004110805c6599`.
+Five authorized names are active only on Monarch / Tony Lema. Stable IDs,
+duplicate-safe population, normal picker evidence and unchanged inventory/
+history/access are owned by the
+[staff release record](#course-assigned-operational-staff--2026-10-26).
+Keep assignment-aware and stock-aware Admin during recovery.
 
 ### Persistent inventory production release — PR #12 (2026-10-26 UTC)
 

@@ -58,6 +58,12 @@ performed; the public On Cart filter never replaces the operator catalog.
 Its existing sandbox remains available unchanged. Its sandbox review
 identity and verification are in the Deployment Guide's public-sandbox review
 record; accepted behavior is owned by the UX specification.
+The CPO-authorized Course-assigned staff follow-up was released through PR #15:
+the existing Customer directory now carries explicit Course assignments;
+five authorized Monarch staff are active only for Tony Lema. Account access
+and historical attribution are unchanged. The
+[staff release record](DEPLOYMENT_GUIDE.md#course-assigned-operational-staff--2026-10-26)
+owns stable staff IDs, publication identities, population and preservation evidence.
 Detailed operator behavior is owned by the
 [UX owner](UX_SPECIFICATION.md#cpo-stats-fix-reporting-requirements); deployed
 release identities, custom-domain Auth correction, verification, and remaining
