@@ -13,11 +13,15 @@ acceptance and publication evidence are retained in the
 not as open backlog items. This does not close the separate queue-volume,
 physical-phone/Safari, notification, or network-reliability work below.
 
+The CPO-accepted persistent inventory increment was merged through PR #12 and
+released to production Admin/Hosting on 2026-10-26. It is no longer open backlog
+work; accepted behavior and recovery evidence are owned by the UX specification
+and [release record](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26).
+
 ## Open and deferred work
 
 | Item | Status / boundary |
 |---|---|
-| Persistent cart stock / sales / staff / audits / shift close | CPO accepted current functionality on 2026-10-24; follow-ups remain in sandbox review within PR #12 on `feat/persistent-cart-inventory`, based on main `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Automatic committed On Cart serving supersedes manual publication; public pages read on open/reload and categories start collapsed. Excel retains its one-page Inventory Report plus a separate 14-day Audit History worksheet. Latest refinements permit approver/account-only audits without an operator shift and require amount-bearing final-sales confirmation; zero-quantity Sold Out, On Cart-only new audits, idle successful close-out, Audit beneath Close out and Golfer-View Menu remain. Requirements are owned by the [UX specification](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close--sandbox-increment). Production data/deployment, merge, firmware and physical-device actions are not authorized. Sandbox publication and review evidence are owned by the Deployment Guide. |
 | Cart Operator mobile acceptance | The responsive-layout release is live. Complete authenticated physical-phone/Safari checks at representative small and large phone widths and obtain CPO acceptance. Do not infer acceptance from build checks or unauthenticated route smoke tests. Preserve the accepted iPad and desktop experience. |
 | Repeat-press transport and persistence | Firmware-local repeat behavior exists; transporting repeat events and persisting `repeat_press_count`/`last_repeat_press_at` against the originating accepted request is deferred. Keep one authoritative service request per demand window. |
 | Production signing and artifact provenance | Open security/release concern, not unfinished pilot recovery. Synthetic tests and separately authorized completed recoveries used NCS's insecure debug key. Establish approved signing, installed trust-anchor compatibility, and exact artifact provenance before future release promotion; completed one-time exceptions are not standing permission. See [details](#signing-and-provenance). |

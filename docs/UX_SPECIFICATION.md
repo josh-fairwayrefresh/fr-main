@@ -219,25 +219,29 @@ The current implementation and deployment status are owned by
 Implementation/deployment status and the CSV pre-import review items are owned
 by `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
 
-### Persistent cart stock, staff, audits and shift close — sandbox increment
+### Persistent cart stock, staff, audits and shift close
 
-Status on 2026-10-26: CPO-accepted behavior is being prepared for production;
-merge and deployment remain unauthorized. Existing product IDs, metadata and
-availability survive the release unchanged. Missing quantities read as zero,
+Status on 2026-10-26: CPO-accepted behavior was merged through PR #12 and
+released to production Admin/Hosting after explicit release authorization.
+Every existing product ID, metadata field, column and stored quantity survives
+unchanged across On Cart, Sold Out and In Inventory, including archived records.
+The public On Cart response is never used to replace, synchronize or prune the
+operator's full inventory. Missing quantities read as zero,
 without an initialization write or automatic movement; an existing On Cart
 product remains On Cart, including on the public menu, until an explicit
 authorized stock operation changes it. Production continues using ordinary
 Firebase sign-in and existing account/Course permissions, never automatic
 sandbox review entry. Release verification and recovery are owned by the
-Deployment Guide.
+[Deployment Guide](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26).
 
 The CPO authorized this coherent increment on 2026-10-23, from accepted main
-`08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. It is not a production release.
+`08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`, initially for sandbox review.
 On 2026-10-24 the CPO accepted its current functionality and requested the
 presentation refinement below within PR #12. A subsequent same-day CPO decision
 supersedes explicit publication with an automatic current On Cart menu and
-simplifies the sales header. Neither decision authorizes merge or production
-deployment.
+simplifies the sales header. Those initial sandbox decisions did not authorize
+production; the separate 2026-10-26 release authorization superseded that limit
+for Admin/Hosting only.
 
 - The Inventory banner displays the Fairway Refresh logo at 150% of its prior
   displayed dimensions at each responsive breakpoint, an accessible Admin

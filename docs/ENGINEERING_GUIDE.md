@@ -85,23 +85,27 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ## Change and Validation Discipline
 
-### Persistent cart inventory increment — sandbox only
+### Persistent cart inventory increment — production
 
-The CPO accepted the increment and requested production release preparation
-on 2026-10-26, not merge or deployment. The current production inventory must
-remain unchanged during preparation. The Deployment Guide owns the inspected
-baseline, production-configured acceptance evidence and rollout/recovery plan.
-No migration or quantity-initialization write is required. After new records
-exist, recovery must retain the stock-aware transaction/idempotency owner;
-reverting to the pre-increment inventory writer is not a compatible rollback.
+The CPO accepted release preparation and authorized production publication on
+2026-10-26 from reviewed head `545bcf2249b1c967a6062266ebd2057fe75c5bab`.
+PR #12 is merged and its stock-aware Admin and production Hosting are released.
+The [Deployment Guide](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26)
+owns source/publication identities, full product-ID/field/column preservation,
+authorization evidence and compatible recovery. No migration or
+quantity-initialization write was performed. The public menu's On Cart filter
+does not synchronize/prune operator inventory or archived records. After new
+records exist, recovery must retain the stock-aware transaction/idempotency
+owner; reverting to the pre-increment inventory writer is not compatible.
 
 The CPO resolved readiness on 2026-10-23 and authorized a single coherent
 increment from main `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`: persistent
 nonnegative quantities, whole-unit sales, Customer operational staff, immutable
-inventory audits and session-specific shift close. This is sandbox-only work,
-not merge, production, firmware, physical-device or production-data authority.
+inventory audits and session-specific shift close. That initial authorization
+was sandbox-only; the later production authorization above covered Admin/Hosting
+only, not firmware, physical devices or artificial production transactions.
 Product requirements are owned by
-[the UX specification](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close--sandbox-increment).
+[the UX specification](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close).
 
 Extend the existing inventory owner under the Course; one shared inventory is
 the only supported scope. Keep its storage boundary localized so a future

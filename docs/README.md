@@ -35,8 +35,9 @@ On-course / Amenity Areas categories were merged and deployed on 2026-10-23.
 The CPO subsequently confirmed the production FRB-0006 test passed and accepted
 the released queue-selection and independent controls; that release handoff
 is closed.
-The next persistent cart inventory, Customer staff, audits and shift-close
-increment is published only to the authorized sandbox in draft PR #12.
+The persistent cart inventory, Customer staff, audits and shift-close
+increment was CPO-accepted, merged through PR #12 and released to production
+Admin and Hosting on 2026-10-26.
 The CPO accepted its current functionality on 2026-10-24 and requested
 presentation refinement within the same PR, followed by an automatic current
 On Cart golfer-menu requirement superseding manual publication. The latest
@@ -46,12 +47,15 @@ limits new audits to On Cart and leaves successful close-out idle. Audit sits
 below Close out in the bounded operator panel; Golfer-View Menu remains on the
 right of the filters. Final follow-ups permit approver/account-only audits
 without an operator shift, confirm the close-out dollar amount before submission,
-and add a separate 14-day audit-history worksheet to Excel export. It is not
-merged or production-deployed. On 2026-10-26 the CPO requested preparation of
-the accepted inventory release, explicitly withholding merge/deploy authority.
-The Deployment Guide's production preparation entry records read-only data
-compatibility, production-configured validation and data-compatible recovery;
-Architect/CPO release review is pending. Its current sandbox review
+and add a separate 14-day audit-history worksheet to Excel export.
+The CPO accepted the production preparation checkpoint and explicitly authorized
+the release from reviewed head `545bcf2249b1c967a6062266ebd2057fe75c5bab`.
+The Deployment Guide's
+[production release record](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26)
+owns merge/deployment identities, full-inventory preservation, access checks and
+stock-compatible recovery. No inventory migration or stock initialization was
+performed; the public On Cart filter never replaces the operator catalog.
+Its existing sandbox remains available unchanged. Its sandbox review
 identity and verification are in the Deployment Guide's latest Alignment
 Register entry; accepted behavior is owned by the UX specification.
 Detailed operator behavior is owned by the
