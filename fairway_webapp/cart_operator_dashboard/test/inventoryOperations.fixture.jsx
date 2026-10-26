@@ -61,8 +61,15 @@ window.fetch = async (url, options = {}) => {
   calls.push({ route, method, body });
   if (route.endsWith('/staff') && method === 'GET') return response({ staff });
   if (route.endsWith('/staff') && method === 'POST') {
-    const person = { staff_id: 'custom', name: body.name, role: body.role || 'cart_operator', active: true };
+    const person = { staff_id: 'custom', name: body.name, role: body.role || 'cart_operator', active: true,
+      ...(body.course_ids ? { course_ids: body.course_ids } : {}) };
     staff = [...staff.filter(item => item.staff_id !== person.staff_id), person];
+    return response(person);
+  }
+  if (route.includes('/staff/') && method === 'PATCH') {
+    check(!('operation_id' in body), 'Staff PATCH must match the existing editable-field contract');
+    const person = staff.find(item => route.endsWith(`/${item.staff_id}`));
+    Object.assign(person, body);
     return response(person);
   }
   if (route.endsWith('/shifts/session')) {
@@ -330,10 +337,26 @@ try {
     check(bounds.left >= 0 && bounds.right <= innerWidth && bounds.width > 0, 'Stock actions must be visible within viewport');
   }
   check(!calls.some(call => call.route.endsWith('/publish')), 'No obsolete manual publication calls');
-  flushSync(() => root.render(<CustomerStaff user={user} apiBaseUrl={location.origin} customer={{ customer_id: 'TEST-C', customer_name: 'Inventory Test' }} />));
+  flushSync(() => root.render(<CustomerStaff user={user} apiBaseUrl={location.origin} customer={{
+    customer_id: 'TEST-C', customer_name: 'Inventory Test',
+    courses: [{ course_id: 'TEST-U', course_name: 'Stock Course' }, { course_id: 'OTHER', course_name: 'Other Course' }],
+  }} />));
   click(button('Staff list · Inventory Test'));
   await wait(() => document.body.textContent.includes('Test Manager'));
   check(document.body.textContent.includes('does not grant login'), 'Staff management distinguishes login access');
+  const courseChecks = () => [...document.querySelectorAll('fieldset input[type="checkbox"]')];
+  check(courseChecks().length === 2 && courseChecks().every(node => !node.checked), 'New staff have no implicit Course assignments');
+  input(document.querySelector('form input:not([type="checkbox"])'), 'Assigned Staff');
+  click(courseChecks()[0]);
+  click(button('Save staff'));
+  await wait(() => staff.find(person => person.name === 'Assigned Staff'));
+  check(JSON.stringify(staff.find(person => person.name === 'Assigned Staff').course_ids) === '["TEST-U"]', 'Create sends explicit selected Course only');
+  click(button('Assigned Staff · Cart Operator'));
+  check(courseChecks()[0].checked && !courseChecks()[1].checked, 'Edit reflects persisted assignments');
+  click(courseChecks()[0]); click(courseChecks()[1]);
+  click(button('Save staff'));
+  await wait(() => staff.find(person => person.name === 'Assigned Staff').course_ids[0] === 'OTHER');
+  check(document.body.textContent.includes('Other Course'), 'Editor saves changed assignment without changing identity');
   document.getElementById('result').textContent = 'PASS';
 } catch (error) {
   document.getElementById('result').textContent = `FAIL: ${error.stack}`;

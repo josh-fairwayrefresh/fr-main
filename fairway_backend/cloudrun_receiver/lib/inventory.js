@@ -411,25 +411,42 @@ function staffCollection(db, customerId) {
 
 function staffModel(snapshot) {
   const value = snapshot.data();
-  return { staff_id: snapshot.id, name: value.name, role: value.role, active: value.active === true };
+  return { staff_id: snapshot.id, name: value.name, role: value.role, active: value.active === true,
+    ...(value.course_ids !== undefined ? { course_ids: value.course_ids } : {}) };
 }
 
-async function listStaff(db, customerId, { activeOnly = false } = {}) {
+function staffCourseIds(value) {
+  if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !id)) {
+    fail(400, 'invalid_input', 'course_ids must be an array of Course IDs');
+  }
+  return [...new Set(value.map((id) => identifier(id, 'course_id')))].sort();
+}
+
+async function validateStaffCourses(transaction, db, customerId, courseIds) {
+  const courses = await Promise.all(courseIds.map((id) => transaction.get(courseRef(db, customerId, id))));
+  if (courses.some((course) => !course.exists)) {
+    fail(400, 'invalid_staff_courses', 'Assign only existing Courses belonging to this Customer');
+  }
+}
+
+async function listStaff(db, customerId, { activeOnly = false, courseId } = {}) {
   const parent = await db.collection('customers').doc(customerId).get();
   if (!parent.exists) fail(404, 'customer_not_found', 'Customer not found');
   const snapshot = await staffCollection(db, customerId).get();
   return {
     staff: snapshot.docs.map(staffModel)
-      .filter((staff) => !activeOnly || canOperateInventory(staff))
+      .filter((staff) => (!activeOnly || canOperateInventory(staff)) &&
+        (courseId === undefined || canOperateInventory(staff, courseId)))
       .sort((a, b) => a.name.localeCompare(b.name) || a.staff_id.localeCompare(b.staff_id)),
   };
 }
 
-async function createStaff(db, customerId, body, actorUid, { operational = false } = {}) {
+async function createStaff(db, customerId, body, actorUid, { operational = false, courseId } = {}) {
   requireObject(body);
   const parent = db.collection('customers').doc(customerId);
   const operation = operationRef(parent, body.operation_id);
-  const hash = fingerprint(actorUid, operational ? 'staff_custom_create' : 'staff_create', body);
+  const hash = fingerprint(actorUid, operational ? 'staff_custom_create' : 'staff_create',
+    operational && courseId ? { ...body, course_id: courseId } : body);
   const staffRef = staffCollection(db, customerId).doc();
   return db.runTransaction(async (transaction) => {
     const [previous, customer] = await Promise.all([transaction.get(operation), transaction.get(parent)]);
@@ -438,13 +455,17 @@ async function createStaff(db, customerId, body, actorUid, { operational = false
     const name = normalizeLabel(body.name, 'name', 160);
     const role = operational ? 'cart_operator' : (body.role ?? 'cart_operator');
     if (!INVENTORY_STAFF_ROLES.includes(role)) fail(400, 'invalid_role', 'Invalid staff role');
-    if (operational && (body.role !== undefined || body.active !== undefined)) {
+    if (operational && (body.role !== undefined || body.active !== undefined || body.course_ids !== undefined)) {
       fail(400, 'invalid_input', 'Custom staff is created as an active cart_operator');
     }
     if (body.active !== undefined && typeof body.active !== 'boolean') fail(400, 'invalid_input', 'active must be boolean');
     if (!customer.exists) fail(404, 'customer_not_found', 'Customer not found');
+    const courseIds = staffCourseIds(operational ? [courseId] :
+      (body.course_ids === undefined ? [] : body.course_ids));
+    await validateStaffCourses(transaction, db, customerId, courseIds);
     const timestamp = new Date();
-    const result = { staff_id: staffRef.id, name, role, active: operational || body.active !== false };
+    const result = { staff_id: staffRef.id, name, role, active: operational || body.active !== false,
+      course_ids: courseIds };
     transaction.set(staffRef, { ...result, created_at: timestamp, created_by: actorUid, updated_at: timestamp, updated_by: actorUid });
     transaction.set(operation, { fingerprint: hash, result, actor_uid: actorUid, created_at: timestamp });
     return result;
@@ -452,8 +473,8 @@ async function createStaff(db, customerId, body, actorUid, { operational = false
 }
 
 async function updateStaff(db, customerId, staffId, body, actorUid) {
-  if (!body || Object.keys(body).length === 0 || Object.keys(body).some((key) => !['name', 'role', 'active'].includes(key))) {
-    fail(400, 'invalid_input', 'Only name, role, and active may be edited');
+  if (!body || Object.keys(body).length === 0 || Object.keys(body).some((key) => !['name', 'role', 'active', 'course_ids'].includes(key))) {
+    fail(400, 'invalid_input', 'Only name, role, active, and course_ids may be edited');
   }
   const patch = {};
   if (body.name !== undefined) patch.name = normalizeLabel(body.name, 'name', 160);
@@ -465,10 +486,12 @@ async function updateStaff(db, customerId, staffId, body, actorUid) {
     if (typeof body.active !== 'boolean') fail(400, 'invalid_input', 'active must be boolean');
     patch.active = body.active;
   }
+  if (body.course_ids !== undefined) patch.course_ids = staffCourseIds(body.course_ids);
   const ref = staffCollection(db, customerId).doc(identifier(staffId, 'staff_id'));
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) fail(404, 'staff_not_found', 'Staff member not found');
+    if (patch.course_ids !== undefined) await validateStaffCourses(transaction, db, customerId, patch.course_ids);
     const result = { ...staffModel(snapshot), ...patch };
     transaction.set(ref, { ...snapshot.data(), ...patch, updated_by: actorUid, updated_at: new Date() });
     return result;
@@ -517,7 +540,7 @@ async function selectShift(db, customerId, courseId, actorUid, body) {
       transaction.get(session), transaction.get(staffRef), transaction.get(parent),
     ]);
     if (!course.exists) fail(404, 'course_not_found', 'Course not found');
-    if (!staff.exists || !canOperateInventory(staff.data())) fail(409, 'staff_unavailable', 'Select an active staff member');
+    if (!staff.exists || !canOperateInventory(staff.data(), courseId)) fail(409, 'staff_unavailable', 'Select an active staff member assigned to this Course');
     const existingRef = currentSession.exists && currentSession.data().shift_id
       ? shiftsCollection(db, customerId, courseId).doc(currentSession.data().shift_id) : null;
     const existing = existingRef ? await transaction.get(existingRef) : null;
@@ -567,7 +590,7 @@ async function runMutation(db, customerId, courseId, actorUid, context, action, 
         transaction.get(sessionRef(db, customerId, courseId, actorUid, shift.session_id)),
       ]);
       if (!session.exists || session.data().shift_id !== shiftRef.id) fail(409, 'shift_unavailable', 'The shift is no longer selected');
-      if (!staff.exists || !canOperateInventory(staff.data())) fail(409, 'staff_unavailable', 'Select an active staff member');
+      if (!staff.exists || !canOperateInventory(staff.data(), courseId)) fail(409, 'staff_unavailable', 'Select an active staff member assigned to this Course');
       Object.assign(attribution, {
         shift_id: shiftRef.id,
         staff_id: shift.staff_id, staff_name: shift.staff_name, staff_role: shift.staff_role,
@@ -685,7 +708,7 @@ async function createAudit(db, customerId, courseId, body, actorUid) {
     if (!Number.isSafeInteger(body.inventory_revision) || body.inventory_revision !== revision) {
       fail(409, 'inventory_revision_conflict', 'Inventory changed. Review the new quantities and confirm the audit again.');
     }
-    if (!approver.exists || !canOperateInventory(approver.data())) fail(409, 'staff_unavailable', 'Select an active audit approver');
+    if (!approver.exists || !canOperateInventory(approver.data(), courseId)) fail(409, 'staff_unavailable', 'Select an active audit approver assigned to this Course');
     const snapshot = products.docs.map((product) => ({ product_id: product.id, ...product.data() }))
       .filter((product) => product.archived !== true && product.state === 'on_cart')
       .sort((a, b) => a.product_id.localeCompare(b.product_id))

@@ -113,6 +113,14 @@ Course-to-Cart hierarchy does not require competing balances now. Staff IDs
 belong to a Customer, not Firebase Auth. Existing `user_access` remains the
 sole login/Admin/Course entitlement authority. A small centralized operational
 role policy initially permits both Cart Operator and F&B Management equally.
+The same staff records hold explicit Customer-validated `course_ids`; both
+operator and approver lists/actions use that assignment policy. Missing
+assignments on legacy records preserve Customer-wide behavior without writes;
+new records use explicit assignments (empty means none). Custom entry assigns
+only the selected Course. Assignments grant no account access, never rewrite
+historical attribution, and cannot block closing/retrying existing committed
+work. The UX owner defines behavior; the Deployment Guide records publication
+and authorized production population.
 
 Balance/availability changes and their immutable attributed historical record
 form one transaction. Missing quantities mean zero without moving legacy tiles.

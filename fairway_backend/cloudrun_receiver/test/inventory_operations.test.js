@@ -85,7 +85,7 @@ async function fixture({ timezone = 'America/Los_Angeles' } = {}) {
   }
   const staff = await ok('POST', '/staff', { name: 'Test Operator', operation_id: operation() });
   const manager = await ok('POST', `/api/v1/admin/customers/${customerId}/staff`, {
-    name: 'Test Manager', role: 'fnb_management', operation_id: operation(),
+    name: 'Test Manager', role: 'fnb_management', course_ids: [courseId], operation_id: operation(),
   }, 'admin', true);
   async function select(staffId = staff.staff_id, sessionId = 'browser-one', token = 'operator') {
     return (await ok('POST', '/shifts/select', {
@@ -148,6 +148,79 @@ test('staff records are customer-owned, stable, admin-managed, and never authori
   assert.equal((await f.request('GET', '', undefined, 'outsider')).status, 403);
   assert.equal((await f.request('GET', `/api/v1/inventory/courses/${f.customerId}/course-b/staff`, undefined, 'operator', true)).status, 403);
   assert.equal((await db.collection('user_access').doc(custom.staff_id).get()).exists, false);
+});
+
+test('explicit staff assignments filter Courses, reject cross-Customer scope, and population is repeat safe', async () => {
+  const f = await fixture();
+  const adminPath = `/api/v1/admin/customers/${f.customerId}/staff`;
+  const body = { name: 'Assigned Manager', role: 'fnb_management', active: true,
+    course_ids: ['course-a', 'course-a'], operation_id: operation() };
+  const [person, retry] = await Promise.all([
+    f.ok('POST', adminPath, body, 'admin', true), f.ok('POST', adminPath, body, 'admin', true),
+  ]);
+  assert.deepEqual(retry, person);
+  assert.deepEqual(person.course_ids, ['course-a']);
+  assert.equal((await f.customer.collection('staff').get()).docs.filter(s => s.data().name === body.name).length, 1);
+  const unassigned = await f.ok('POST', adminPath, { name: 'Unassigned', operation_id: operation() }, 'admin', true);
+  assert.deepEqual(unassigned.course_ids, []);
+  assert.equal((await f.ok('GET', '/staff')).staff.some(s => s.staff_id === unassigned.staff_id), false);
+  assert.equal((await f.ok('GET', '/staff')).staff.some(s => s.staff_id === person.staff_id), true);
+  const otherCourse = `/api/v1/inventory/courses/${f.customerId}/course-b`;
+  assert.equal((await f.ok('GET', `${otherCourse}/staff`, undefined, 'admin', true)).staff.some(s => s.staff_id === person.staff_id), false);
+  const legacyRef = f.customer.collection('staff').doc(f.manager.staff_id);
+  const legacyRecord = { ...(await legacyRef.get()).data() };
+  delete legacyRecord.course_ids;
+  await legacyRef.set(legacyRecord);
+  assert.equal((await f.ok('GET', `${otherCourse}/staff`, undefined, 'admin', true)).staff.some(s => s.staff_id === f.manager.staff_id), true, 'legacy missing assignment remains Customer-wide');
+  assert.equal((await f.ok('GET', `${otherCourse}/staff`, undefined, 'admin', true)).staff.some(s => s.staff_id === f.staff.staff_id), false, 'custom creation assigns only its source Course');
+  assert.equal((await f.request('POST', `${otherCourse}/shifts/select`, {
+    session_id: 'wrong-course', staff_id: person.staff_id, operation_id: operation(),
+  }, 'admin', true)).body.error, 'staff_unavailable');
+  await f.customer.collection('courses').doc('course-c').set({ course_name: 'Third Course' });
+  assert.equal((await f.ok('GET', `/api/v1/inventory/courses/${f.customerId}/course-c/staff`, undefined, 'admin', true)).staff.some(s => s.staff_id === person.staff_id), false, 'future Courses are not assigned automatically');
+  await db.collection('customers').doc(`${f.customerId}-foreign`).set({ customer_name: 'Other Customer' });
+  await db.collection('customers').doc(`${f.customerId}-foreign`).collection('courses').doc('foreign').set({ course_name: 'Other Customer' });
+  for (const invalid of [['foreign'], ['missing'], null, 'course-a', ['course-a/b']]) {
+    assert.equal((await f.request('PATCH', `${adminPath}/${person.staff_id}`, { course_ids: invalid }, 'admin', true)).status, 400);
+  }
+  await f.ok('PATCH', `${adminPath}/${person.staff_id}`, { course_ids: [] }, 'admin', true);
+  assert.equal((await f.ok('GET', '/staff')).staff.some(s => s.staff_id === person.staff_id), false);
+  assert.equal((await f.ok('POST', adminPath, body, 'admin', true)).staff_id, person.staff_id, 'receipt retry never overwrites later assignment');
+  assert.deepEqual((await f.customer.collection('staff').doc(person.staff_id).get()).data().course_ids, []);
+  assert.equal((await db.collection('user_access').doc(person.staff_id).get()).exists, false);
+  const foreign = await inventory.listStaff(db, `${f.customerId}-foreign`, { activeOnly: true, courseId: 'foreign' });
+  assert.deepEqual(foreign.staff, []);
+});
+
+test('assignment changes reject stale actions while preserving historical attribution and exact retries', async () => {
+  const f = await fixture();
+  const id = await f.seedProduct('Snapshot product', 'on_cart', 4);
+  const saleBody = { ...f.context(), kind: 'sale', units: 1 };
+  const sale = await f.ok('POST', `/products/${id}/stock`, saleBody);
+  const current = await f.ok('GET', '');
+  const auditBody = { operation_id: operation(), authorized: true, inventory_revision: current.inventory_revision,
+    approver_staff_id: f.manager.staff_id };
+  const audit = await f.ok('POST', '/audits', auditBody);
+  const events = normalize((await f.course.collection('inventory_events').get()).docs.map(s => s.data()));
+  const shift = normalize((await f.course.collection('inventory_shifts').doc(f.shift.shift_id).get()).data());
+  const staffPath = `/api/v1/admin/customers/${f.customerId}/staff`;
+  await f.ok('PATCH', `${staffPath}/${f.staff.staff_id}`, { name: 'Renamed', role: 'fnb_management', course_ids: [] }, 'admin', true);
+  await f.ok('PATCH', `${staffPath}/${f.manager.staff_id}`, { name: 'Renamed Manager', role: 'cart_operator', course_ids: ['course-b'] }, 'admin', true);
+  assert.deepEqual(await f.ok('POST', `/products/${id}/stock`, saleBody), sale, 'committed sale retry survives unassignment');
+  assert.deepEqual(await f.ok('POST', '/audits', auditBody), audit, 'committed audit retry preserves snapshot');
+  assert.equal((await f.request('POST', `/products/${id}/stock`, { ...f.context(), kind: 'sale', units: 1 })).body.error, 'staff_unavailable');
+  assert.equal((await f.request('POST', '/audits', { ...auditBody, operation_id: operation(),
+    inventory_revision: (await f.ok('GET', '')).inventory_revision })).body.error, 'staff_unavailable');
+  assert.deepEqual(normalize((await f.course.collection('inventory_events').get()).docs.map(s => s.data())), events);
+  assert.deepEqual(normalize((await f.course.collection('inventory_shifts').doc(f.shift.shift_id).get()).data()), shift);
+  const savedAudit = (await f.course.collection('inventory_audits').doc(audit.audit_id).get()).data();
+  assert.equal(savedAudit.approver.name, 'Test Manager');
+  assert.equal(savedAudit.approver.role, 'fnb_management');
+  const close = await f.ok('POST', `/shifts/${f.shift.shift_id}/close`, {
+    session_id: 'browser-one', operation_id: operation(), amount_minor: 0,
+  });
+  assert.equal(close.staff_name, 'Test Operator');
+  assert.equal(close.staff_role, 'cart_operator', 'unassignment never prevents closing existing shift with original snapshots');
 });
 
 test('sessions scope actor and Course, allow free pre-activity changes, then require close', async () => {

@@ -5,8 +5,10 @@ const AUTHORIZATION_SCHEMA_VERSION = 2;
 const INVENTORY_STAFF_ROLES = Object.freeze(['cart_operator', 'fnb_management']);
 
 // Staff attribution is deliberately independent of account authorization.
-function canOperateInventory(staff) {
-  return staff?.active === true && INVENTORY_STAFF_ROLES.includes(staff.role);
+function canOperateInventory(staff, courseId) {
+  return staff?.active === true && INVENTORY_STAFF_ROLES.includes(staff.role) &&
+    (courseId === undefined || staff.course_ids === undefined ||
+      (Array.isArray(staff.course_ids) && staff.course_ids.includes(courseId)));
 }
 
 function normalizeAccessRecord(value) {

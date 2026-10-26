@@ -1751,10 +1751,10 @@ function createFairwayHandlers(db, {
         return res.status(200).json(await inventory.listInventory(db, customerId, courseId));
       }
       if (req.method === 'GET' && action === 'staff') {
-        return res.status(200).json(await inventory.listStaff(db, customerId, { activeOnly: true }));
+        return res.status(200).json(await inventory.listStaff(db, customerId, { activeOnly: true, courseId }));
       }
       if (req.method === 'POST' && action === 'staff') {
-        return res.status(201).json(await inventory.createStaff(db, customerId, req.body, identity.uid, { operational: true }));
+        return res.status(201).json(await inventory.createStaff(db, customerId, req.body, identity.uid, { operational: true, courseId }));
       }
       if (req.method === 'POST' && action === 'shifts/select') {
         return res.status(200).json(await inventory.selectShift(db, customerId, courseId, identity.uid, req.body));
