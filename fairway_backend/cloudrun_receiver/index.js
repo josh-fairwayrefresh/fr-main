@@ -1,4 +1,5 @@
 const functions = require('@google-cloud/functions-framework');
+const { publicReviewConfiguration, provisionPublicReviewer } = require('./lib/public_sandbox_review');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
@@ -43,7 +44,6 @@ const {
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
 const inventory = require('./lib/inventory');
 const crypto = require('crypto');
-const { publicReviewConfiguration, provisionPublicReviewer } = require('./lib/public_sandbox_review');
 const { courseOperation } = require('./lib/course_operation');
 const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
 const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
@@ -644,7 +644,7 @@ function createFairwayHandlers(db, {
         error.code = 'last_admin';
         throw error;
       }
-      transaction.set(accessRef, record);
+      transaction.set(accessRef, record, { merge: true });
     });
 
     const saved = await getUserAccess(db, authUser.uid);
@@ -1180,6 +1180,19 @@ function createFairwayHandlers(db, {
     }
 
     try {
+      const staffMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/staff(?:\/([^/]+))?$/);
+      if (staffMatch) {
+        const customerId = decodeURIComponent(staffMatch[1]);
+        if (req.method === 'GET' && !staffMatch[2]) {
+          return res.status(200).json(await inventory.listStaff(db, customerId));
+        }
+        if (req.method === 'POST' && !staffMatch[2]) {
+          return res.status(201).json(await inventory.createStaff(db, customerId, req.body, admin.uid));
+        }
+        if (req.method === 'PATCH' && staffMatch[2]) {
+          return res.status(200).json(await inventory.updateStaff(db, customerId, decodeURIComponent(staffMatch[2]), req.body, admin.uid));
+        }
+      }
       if (req.method === 'GET' && path === '/api/v1/admin/users') {
         return await listAdminUsers(req, res);
       }
@@ -1665,29 +1678,55 @@ function createFairwayHandlers(db, {
       if (req.method === 'GET' && action === '') {
         return res.status(200).json(await inventory.listInventory(db, customerId, courseId));
       }
-      if (req.method === 'GET' && action === 'preview') {
-        return res.status(200).json(await inventory.previewMenu(db, customerId, courseId));
+      if (req.method === 'GET' && action === 'staff') {
+        return res.status(200).json(await inventory.listStaff(db, customerId, { activeOnly: true, courseId }));
       }
-      if (req.method === 'POST' && action === 'publish') {
-        return res.status(200).json(await inventory.publishMenu(db, customerId, courseId, identity.uid));
+      if (req.method === 'POST' && action === 'staff') {
+        return res.status(201).json(await inventory.createStaff(db, customerId, req.body, identity.uid, { operational: true, courseId }));
+      }
+      if (req.method === 'POST' && action === 'shifts/select') {
+        return res.status(200).json(await inventory.selectShift(db, customerId, courseId, identity.uid, req.body));
+      }
+      if (req.method === 'GET' && action === 'shifts/session') {
+        return res.status(200).json(await inventory.getSessionShift(db, customerId, courseId, identity.uid, req.query?.session_id));
+      }
+      const closeShiftMatch = action.match(/^shifts\/([^/]+)\/close$/);
+      if (req.method === 'POST' && closeShiftMatch) {
+        return res.status(200).json(await inventory.closeShift(db, customerId, courseId, decodeURIComponent(closeShiftMatch[1]), req.body, identity.uid));
+      }
+      if (req.method === 'POST' && action === 'audits') {
+        return res.status(201).json(await inventory.createAudit(db, customerId, courseId, req.body, identity.uid));
+      }
+      if (req.method === 'GET' && action === 'audits') {
+        return res.status(200).json(await inventory.auditHistory(db, customerId, courseId));
+      }
+      const stockMatch = action.match(/^products\/([^/]+)\/stock$/);
+      if (req.method === 'POST' && stockMatch) {
+        return res.status(200).json(await inventory.updateStock(db, customerId, courseId, decodeURIComponent(stockMatch[1]), req.body, identity.uid));
+      }
+      if (action === 'preview' || action === 'publish') {
+        return res.status(410).json({
+          error: 'manual_publication_retired',
+          message: 'The golfer menu automatically reflects saved On Cart products. Refresh Inventory and use View golfer menu.',
+        });
       }
       if (req.method === 'POST' && action === 'categories') {
-        requireBodyFields(req.body, ['name']);
+        requireBodyFields(req.body, ['name', 'shift_id', 'operation_id']);
         return res.status(201).json(await inventory.createCategory(
-          db, customerId, courseId, req.body.name, identity.uid
+          db, customerId, courseId, req.body.name, identity.uid, req.body
         ));
       }
       const subcategoryMatch = action.match(/^categories\/([^/]+)\/subcategories$/);
       if (req.method === 'POST' && subcategoryMatch) {
-        requireBodyFields(req.body, ['name']);
+        requireBodyFields(req.body, ['name', 'shift_id', 'operation_id']);
         return res.status(201).json(await inventory.createSubcategory(
-          db, customerId, courseId, decodeURIComponent(subcategoryMatch[1]), req.body.name, identity.uid
+          db, customerId, courseId, decodeURIComponent(subcategoryMatch[1]), req.body.name, identity.uid, req.body
         ));
       }
       const categoryIdMatch = action.match(/^categories\/([^/]+)$/);
       if (req.method === 'DELETE' && categoryIdMatch) {
         return res.status(200).json(await inventory.deleteCategory(
-          db, customerId, courseId, decodeURIComponent(categoryIdMatch[1]), identity.uid
+          db, customerId, courseId, decodeURIComponent(categoryIdMatch[1]), identity.uid, req.body
         ));
       }
       if (req.method === 'POST' && action === 'products') {
@@ -1704,7 +1743,7 @@ function createFairwayHandlers(db, {
       const archiveMatch = action.match(/^products\/([^/]+)\/archive$/);
       if (archiveMatch && req.method === 'POST') {
         return res.status(200).json(await inventory.archiveProduct(
-          db, customerId, courseId, decodeURIComponent(archiveMatch[1]), identity.uid
+          db, customerId, courseId, decodeURIComponent(archiveMatch[1]), identity.uid, req.body
         ));
       }
       return res.status(404).json({ error: 'not_found' });

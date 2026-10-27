@@ -647,6 +647,7 @@ function App() {
       }
 
       if (!nextUser) {
+        window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
         if (publicReview) {
           setUser(null);
           setAuthState('checking');
@@ -664,7 +665,6 @@ function App() {
         setAuthState('signed_out');
         setOperatorConfig(null);
         setOperatorState('not_requested');
-        window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
         return;
       }
 
@@ -982,6 +982,7 @@ function App() {
     <OperatorApp
       user={user}
       apiBaseUrl={API_BASE_URL}
+      inventoryApiBaseUrl={adminApiBaseUrl}
       operatorConfig={operatorConfig}
       requests={activeRequests}
       loadState={loadState}

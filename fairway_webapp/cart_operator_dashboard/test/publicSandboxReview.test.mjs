@@ -14,6 +14,12 @@ test('automatic review is limited to explicitly enabled sandbox operator routes'
   assert.equal(publicSandboxReviewEnabled('production', config, location, 'true'), false);
   assert.equal(publicSandboxReviewEnabled('sandbox', config, location, undefined), false);
   assert.equal(publicSandboxReviewEnabled('sandbox', config, { ...location, origin: 'https://app.fairwayrefresh.com' }, 'true'), false);
+  for (const origin of ['https://app.fairwayrefresh.com', 'https://savvy-kit-496703-r5.web.app']) {
+    for (const environment of ['production', 'sandbox']) {
+      assert.equal(publicSandboxReviewEnabled(environment, { projectId: 'savvy-kit-496703-r5' },
+        { origin, pathname: '/inventory' }, 'true'), false);
+    }
+  }
 });
 test('access is provisioned before bootstrap and failure is explicit', async (t) => {
   let call;

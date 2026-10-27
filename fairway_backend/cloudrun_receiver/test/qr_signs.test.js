@@ -61,3 +61,23 @@ test('review sign generator rejects production origins and duplicate/missing ide
   await assert.rejects(generateSigns({ bays: wrongSide, origin: 'https://fairway-refresh-sandbox-test.web.app', outputDirectory: '.' }), /52 unique/);
   await assert.rejects(generateSigns({ bays, origin: 'https://fairway-refresh-sandbox-test.web.app/path', outputDirectory: '.' }), /sandbox signs only/);
 });
+
+test('explicit installation edition requires permanent production origin and Course mapping', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'fairway-qr-installation-'));
+  try {
+    const options = { bays, origin: 'https://app.fairwayrefresh.com', outputDirectory: directory, edition: 'production' };
+    await assert.rejects(generateSigns(options), /explicit Customer and Course/);
+    await assert.rejects(generateSigns({ ...options, customerId: 'CUST-0001', courseId: 'COURSE-0003',
+      origin: 'https://fairway-refresh-sandbox-test.web.app' }), /permanent production origin/);
+    const mapping = await generateSigns({ ...options, customerId: 'CUST-0001', courseId: 'COURSE-0003' });
+    assert.equal(mapping.length, 52);
+    assert.ok(mapping.every((row) => row.url.startsWith('https://app.fairwayrefresh.com/range/') &&
+      row.customer_id === 'CUST-0001' && row.course_id === 'COURSE-0003'));
+    const manifest = JSON.parse(await fs.readFile(path.join(directory, 'driving-range-bay-mapping.json')));
+    assert.equal(manifest.environment, 'production');
+    assert.equal(manifest.production_printing_authorized, true);
+    const pdf = await fs.readFile(path.join(directory, 'driving-range-installation.pdf'));
+    assert.equal((pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length, 26);
+    assert.ok(!(await fs.readdir(directory)).some((name) => name.startsWith('sandbox-')));
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});

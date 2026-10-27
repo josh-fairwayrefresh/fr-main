@@ -985,6 +985,10 @@ test('Admin User Management writes strict course-scoped access with empty meanin
     { uid: 'staff-uid', email: 'admin@example.test', disabled: false },
     { uid: 'customer-uid', email: 'customer@example.test', disabled: false },
   ]);
+  await db.collection('user_access').doc('customer-uid').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: ['COURSE-0001'],
+    preserved_metadata: { original: true },
+  });
 
   const response = await request({
     method: 'PUT',
@@ -997,6 +1001,7 @@ test('Admin User Management writes strict course-scoped access with empty meanin
   assert.strictEqual(stored.data().admin, false);
   assert.deepStrictEqual(stored.data().course_ids, []);
   assert.deepStrictEqual(stored.data().courses.map((course) => course.course_id), ['COURSE-0001', 'COURSE-0002']);
+  assert.deepStrictEqual(stored.data().preserved_metadata, { original: true });
 
   const invalid = await request({
     method: 'PUT',

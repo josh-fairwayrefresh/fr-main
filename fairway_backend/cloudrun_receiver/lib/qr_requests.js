@@ -10,6 +10,47 @@ const { RequestError } = require('./request_lifecycle');
 const BAY_ID = /^[A-Za-z0-9_-]{24,64}$/;
 const OPERATION_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
+function validateBayMappings(bays) {
+  if (!Array.isArray(bays) || bays.length !== 52 || new Set(bays.map((bay) => bay.id)).size !== 52 ||
+      bays.some((bay, index) => !BAY_ID.test(bay.id) ||
+        bay.bay_number !== Math.floor(index / 2) + 1 || bay.bay_side !== (index % 2 ? 'B' : 'A'))) {
+    throw new Error('Exactly 52 unique, ordered bay-side identities (1A, 1B through 26A, 26B) are required');
+  }
+}
+
+async function provisionQrBays(db, customerId, courseId, bays) {
+  validateBayMappings(bays);
+  return db.runTransaction(async (transaction) => {
+    const course = await transaction.get(coursesCollection(db, customerId).doc(courseId));
+    if (!course.exists || courseOperation(course.data()).kind !== 'driving_range' ||
+        resolveCourseServiceState(course.data()).active) {
+      throw new Error('Provisioning requires the owning Driving Range Course to be suspended');
+    }
+    const existing = await transaction.get(db.collection('qr_bays').where('course_id', '==', courseId));
+    const snapshots = await Promise.all(bays.map((bay) => transaction.get(bayRef(db, bay.id))));
+    if (existing.docs.some((doc) => !bays.some((bay) => bay.id === doc.id))) {
+      throw new Error('Course already has a different permanent bay register');
+    }
+    snapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists) return;
+      const current = snapshot.data();
+      const bay = bays[index];
+      if (current.customer_id !== customerId || current.course_id !== courseId ||
+          current.bay_number !== bay.bay_number || current.bay_side !== bay.bay_side) {
+        throw new Error('Permanent bay identity conflicts with existing configuration');
+      }
+    });
+    snapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists) transaction.set(snapshot.ref, {
+        customer_id: customerId, course_id: courseId,
+        bay_number: bays[index].bay_number, bay_side: bays[index].bay_side,
+        enabled: true, active_request_id: null,
+      });
+    });
+    return { customer_id: customerId, course_id: courseId, locations: bays.length };
+  });
+}
+
 function bayRef(db, id) {
   if (typeof id !== 'string' || !BAY_ID.test(id)) throw new RequestError(404, 'Bay not found');
   return db.collection('qr_bays').doc(id);
@@ -110,4 +151,4 @@ async function acceptQrRequest(db, id, operationId, networkId, now = new Date())
   });
 }
 
-module.exports = { publicBay, acceptQrRequest };
+module.exports = { publicBay, acceptQrRequest, validateBayMappings, provisionQrBays };

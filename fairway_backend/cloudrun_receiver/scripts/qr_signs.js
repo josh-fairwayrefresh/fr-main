@@ -6,27 +6,32 @@ const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 const jsQR = require('jsqr');
 const { PNG } = require('pngjs');
+const { validateBayMappings } = require('../lib/qr_requests');
 
 const repositoryRoot = path.resolve(__dirname, '../../..');
 const fairwayLogo = path.join(repositoryRoot, 'fairway_webapp/cart_operator_dashboard/public/icons/logo-and-name-row-banner.jpg');
 const monarchLogo = path.join(repositoryRoot, 'docs/logo_source_files/customers/monarch-bay-golf-club/monarch-bay-golf-club.png');
 
-async function generateSigns({ bays, origin, outputDirectory }) {
+async function generateSigns({ bays, origin, outputDirectory, edition = 'sandbox', customerId, courseId }) {
   const url = new URL(origin);
-  if (url.protocol !== 'https:' || !/^fairway-refresh-sandbox-[a-z0-9-]+\.web\.app$/.test(url.host) ||
+  const production = edition === 'production';
+  if (!['sandbox', 'production'].includes(edition) ||
+      (production && (!/^CUST-\d{4,}$/.test(customerId || '') || !/^COURSE-\d{4,}$/.test(courseId || '')))) {
+    throw new Error('Production signs require explicit Customer and Course identities');
+  }
+  if (url.protocol !== 'https:' ||
+      !(production ? url.host === 'app.fairwayrefresh.com' : /^fairway-refresh-sandbox-[a-z0-9-]+\.web\.app$/.test(url.host)) ||
       url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('This increment generates sandbox signs only');
+    throw new Error(production ? 'Installation signs require the permanent production origin' : 'This mode generates sandbox signs only');
   }
-  if (bays.length !== 52 || new Set(bays.map((bay) => bay.id)).size !== 52 ||
-      bays.some((bay, index) => bay.bay_number !== Math.floor(index / 2) + 1 ||
-        bay.bay_side !== (index % 2 ? 'B' : 'A') || !/^[A-Za-z0-9_-]{24,64}$/.test(bay.id))) {
-    throw new Error('Exactly 52 unique, ordered bay-side identities (1A, 1B through 26A, 26B) are required');
-  }
+  validateBayMappings(bays);
   for (const logo of [fairwayLogo, monarchLogo]) fs.accessSync(logo, fs.constants.R_OK);
   fs.mkdirSync(outputDirectory, { recursive: true });
   const pdf = new PDFDocument({ autoFirstPage: false, size: 'LETTER', margin: 48,
-    info: { Title: 'SANDBOX URLs — 26 Driving Range Review Signs, 52 Bay Sides' } });
-  const pdfFile = path.join(outputDirectory, 'sandbox-url-bay-signs.pdf');
+    info: { Title: production ? 'Driving Range — 26 Installation Signs, 52 Bay Sides' : 'SANDBOX URLs — 26 Driving Range Review Signs, 52 Bay Sides' } });
+  const pdfName = production ? 'driving-range-installation.pdf' : 'sandbox-url-bay-signs.pdf';
+  const mappingName = production ? 'driving-range-bay-mapping.json' : 'sandbox-bay-mapping.json';
+  const pdfFile = path.join(outputDirectory, pdfName);
   const stream = fs.createWriteStream(pdfFile);
   pdf.pipe(stream);
   const mapping = [];
@@ -36,7 +41,7 @@ async function generateSigns({ bays, origin, outputDirectory }) {
     const decodedPng = PNG.sync.read(png);
     const decoded = jsQR(new Uint8ClampedArray(decodedPng.data), decodedPng.width, decodedPng.height);
     if (decoded?.data !== target) throw new Error(`QR verification failed for bay ${bay.bay_number}`);
-    const stem = `sandbox-bay-${String(bay.bay_number).padStart(2, '0')}${bay.bay_side}`;
+    const stem = `${production ? 'production' : 'sandbox'}-bay-${String(bay.bay_number).padStart(2, '0')}${bay.bay_side}`;
     fs.writeFileSync(path.join(outputDirectory, `${stem}.png`), png);
     fs.writeFileSync(path.join(outputDirectory, `${stem}.svg`),
       await QRCode.toString(target, { type: 'svg', errorCorrectionLevel: 'M', margin: 4 }));
@@ -70,24 +75,31 @@ async function generateSigns({ bays, origin, outputDirectory }) {
       .text(`BAY ${bay.bay_number}${bay.bay_side}`, x, 360, { width: 246, align: 'center' });
     pdf.image(png, x, 430, { width: 246, height: 246 });
     mapping.push({ bay_number: bay.bay_number, bay_side: bay.bay_side,
+      ...(production ? { customer_id: customerId, course_id: courseId } : {}),
       url: target, qr_png: `${stem}.png`, qr_svg: `${stem}.svg`, decoded: true });
   }
   pdf.end();
   await new Promise((resolve, reject) => { stream.on('finish', resolve); stream.on('error', reject); });
-  fs.writeFileSync(path.join(outputDirectory, 'sandbox-bay-mapping.json'), JSON.stringify({
-    environment: 'sandbox', production_printing_authorized: false, signs: mapping,
+  fs.writeFileSync(path.join(outputDirectory, mappingName), JSON.stringify({
+    environment: edition, production_printing_authorized: production, signs: mapping,
   }, null, 2));
-  fs.writeFileSync(path.join(outputDirectory, 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sandbox bay signs</title><h1>Sandbox URL review signs</h1><p>These 26 signs contain 52 independent bay-side QR codes using SANDBOX URLs for Monarch field testing, not production launch. Each page has A on the left and B on the right. Existing links remain side A. Printed pages intentionally omit test footers at CPO direction. <a href="sandbox-url-bay-signs.pdf">Download sandbox-URL review PDF (26 Letter portrait pages)</a></p><ol>${mapping.map((bay) => `<li><a href="${bay.url}">Bay ${bay.bay_number}${bay.bay_side}</a> · <a href="${bay.qr_svg}">Raw QR image (not a complete sign)</a></li>`).join('')}</ol><p><a href="sandbox-bay-mapping.json">Verified 52-side bay-to-URL register</a></p>`);
+  const heading = production ? 'Driving Range installation signs' : 'Sandbox URL review signs';
+  const description = production
+    ? 'These 26 signs contain 52 independent bay-side QR codes using permanent production URLs. Each page has A on the left and B on the right. Service availability is controlled independently by restaurant staff.'
+    : 'These 26 signs contain 52 independent bay-side QR codes using SANDBOX URLs for Monarch field testing, not production launch. Each page has A on the left and B on the right. Existing links remain side A. Printed pages intentionally omit test footers at CPO direction.';
+  fs.writeFileSync(path.join(outputDirectory, 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading}</title><h1>${heading}</h1><p>${description} <a href="${pdfName}">Download ${production ? 'installation' : 'sandbox-URL review'} PDF (26 Letter portrait pages)</a></p><ol>${mapping.map((bay) => `<li><a href="${bay.url}">Bay ${bay.bay_number}${bay.bay_side}</a> · <a href="${bay.qr_svg}">Raw QR image (not a complete sign)</a></li>`).join('')}</ol><p><a href="${mappingName}">Verified 52-side bay-to-URL register</a></p>`);
   const legacyPdf = path.join(outputDirectory, 'sandbox-bay-signs.pdf');
   if (fs.existsSync(legacyPdf)) fs.unlinkSync(legacyPdf);
   return mapping;
 }
 
 if (require.main === module) {
-  const [fixtureFile, origin, outputDirectory] = process.argv.slice(2);
+  const [fixtureFile, origin, outputDirectory, edition = 'sandbox'] = process.argv.slice(2);
   if (!fixtureFile || !origin || !outputDirectory) throw new Error('Usage: node qr_signs.js private-fixture.json https://sandbox.web.app output-directory');
-  generateSigns({ bays: JSON.parse(fs.readFileSync(fixtureFile)).bays, origin, outputDirectory })
-    .then((mapping) => console.log(`Verified ${mapping.length} sandbox QR mappings`))
+  const fixture = JSON.parse(fs.readFileSync(fixtureFile));
+  generateSigns({ bays: fixture.bays, origin, outputDirectory, edition,
+    customerId: fixture.customer_id, courseId: fixture.range_course_id })
+    .then((mapping) => console.log(`Verified ${mapping.length} ${edition} QR mappings`))
     .catch((error) => { console.error(error); process.exitCode = 1; });
 }
 module.exports = { generateSigns };

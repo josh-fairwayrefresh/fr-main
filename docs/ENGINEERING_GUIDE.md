@@ -125,6 +125,142 @@ from Cart report aggregation. The shared operator screen hides Inventory and
 Cart metrics for Range Courses, while APIs also exclude them from inventory
 bootstrap/access. QR data and private controls remain deny-by-default in
 Firestore Rules. Deployment and review limits belong to the Deployment Guide.
+### Persistent cart inventory increment — production
+
+The CPO accepted release preparation and authorized production publication on
+2026-10-26 from reviewed head `545bcf2249b1c967a6062266ebd2057fe75c5bab`.
+PR #12 is merged and its stock-aware Admin and production Hosting are released.
+The [Deployment Guide](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26)
+owns source/publication identities, full product-ID/field/column preservation,
+authorization evidence and compatible recovery. No migration or
+quantity-initialization write was performed. The public menu's On Cart filter
+does not synchronize/prune operator inventory or archived records. After new
+records exist, recovery must retain the stock-aware transaction/idempotency
+owner; reverting to the pre-increment inventory writer is not compatible.
+
+The CPO resolved readiness on 2026-10-23 and authorized a single coherent
+increment from main `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`: persistent
+nonnegative quantities, whole-unit sales, Customer operational staff, immutable
+inventory audits and session-specific shift close. That initial authorization
+was sandbox-only; the later production authorization above covered Admin/Hosting
+only, not firmware, physical devices or artificial production transactions.
+Product requirements are owned by
+[the UX specification](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close).
+
+Extend the existing inventory owner under the Course; one shared inventory is
+the only supported scope. Keep its storage boundary localized so a future
+Course-to-Cart hierarchy does not require competing balances now. Staff IDs
+belong to a Customer, not Firebase Auth. Existing `user_access` remains the
+sole login/Admin/Course entitlement authority. A small centralized operational
+role policy initially permits both Cart Operator and F&B Management equally.
+The same staff records hold explicit Customer-validated `course_ids`; both
+operator and approver lists/actions use that assignment policy. Missing
+assignments on legacy records preserve Customer-wide behavior without writes;
+new records use explicit assignments (empty means none). Custom entry assigns
+only the selected Course. Assignments grant no account access, never rewrite
+historical attribution, and cannot block closing/retrying existing committed
+work. The UX owner defines behavior; the Deployment Guide records publication
+and authorized production population.
+
+Balance/availability changes and their immutable attributed historical record
+form one transaction. Missing quantities mean zero without moving legacy tiles.
+Sales apply deltas against current On Cart stock; excessive sales reject, never
+clamp or go negative. Sold Out always has zero quantity. Moving either On Cart
+or In Inventory to Sold Out with remaining stock confirms a sale
+of exactly the displayed units, using the same sale operation and idempotency
+owner, with an expected stock revision checked inside its transaction. Normal
+quick sales without this optional precondition retain concurrent delta semantics.
+Stale remaining-sale confirmations require explicit refresh/reconfirmation;
+positive stock in either source cannot bypass the sale via availability-only
+writes. The shared sale operation accepts a Sold Out target only with an exact
+remaining-unit count and expected stock revision; that bounded intent also permits
+In Inventory as a source without allowing ordinary quick sales off cart.
+Zero stock can change availability without a zero-unit sale.
+Absolute stock edits use expected stock revisions.
+Metadata autosaves cannot carry stale availability into this contract. Movement
+to In Inventory preserves quantity; no restaurant balance or automatic-zeroing
+adjustment exists. Stock totals and new audit snapshots select On Cart only,
+binding confirmed immutable data to a coherent inventory revision. Historical
+audits retain their original scope and contents.
+An adjustment to zero only applies the On Cart-to-Sold Out transition for
+On Cart products; restaurant-held stock remains In Inventory. Drag-and-drop
+and selectors share the same attributed stock endpoint, including staff
+selection/resumption and expected revisions. Conflicted moves refresh the
+confirmed view before retry, rather than leaving an unrepeatable stale card.
+One Pointer Events interaction owns mouse/touch/pen dragging, replacing native
+HTML drag-and-drop. Pointer capture, a movement threshold and coordinate-based
+column hit testing handle nested targets consistently. Only the visible
+product-name/grip reserves touch gestures; other card areas retain scrolling.
+Viewport-edge scrolling supports stacked columns. Cancellation and scope
+changes clear the interaction; a completed drop calls the same availability
+intent as the selector, including the remaining-sale confirmation. Adjacent
+columns stretch to the full grid-row height so lower-tile horizontal drops
+have a target even when the destination contains fewer products. Accepted
+mouse drag regions suppress competing native text dragging. Browser-generated mouse/touch regression evidence is
+distinct from synthetic handler tests and physical iPad/Safari acceptance.
+
+The browser's current-view Excel (.xlsx) exporter consumes the same confirmed inventory
+snapshot, visible-product filters and displayed Course-wide tally as the UI;
+it has no mutation/shift API. Bootstrap/snapshot responses expose canonical
+Customer names and Course timezone for report context. A Course-authorized
+`GET .../audits` reads durable completed audit summaries for today plus the
+preceding 13 Course-local dates, through the read time. A bounded single-field
+timestamp query plus local-date filtering includes DST boundaries without a
+new composite index. Historical approver names come from audit snapshots, not
+the current directory. The exporter fetches this unfiltered history and places
+it on a separately print-formatted Audit History worksheet; failure blocks
+download explicitly. Inventory Report retains its one-page layout.
+Exports explicitly name
+their filter scope; pending or unresolved writes disable them, and changed
+snapshot/submission context during generation rejects the download explicitly.
+The ExcelJS writer is loaded only for export, writes untrusted text as literal
+string cells and whole units as numbers, and owns readable report styling and
+one-page landscape print settings. Its scoped UUID override uses the patched
+CommonJS-compatible version; unrelated Firebase dependencies are unchanged.
+One reusable
+quantity input supplies direct entry and 48-pixel minus/plus buttons to stock
+dialogs; stepping changes only the draft, never confirms a transaction.
+
+Operational context is scoped to authenticated UID, browser operator session,
+Customer and Course. One open shift per session/Course allows staff correction
+before activity, requires close before a different operator after activity,
+and closes only with a durable submitted USD total. Both selected staff
+snapshots and authenticated UID are recorded. Stock/history commit together;
+stable operation identities make lost-response retries and shift close
+idempotent. Close-out entry opens an amount-bearing Are you sure? confirmation;
+Cancel preserves the draft/name, and only confirmed successful close clears it.
+Audits use the shared transaction/idempotency owner without a shift requirement:
+their selected active approver and authenticated submitting UID suffice.
+Submitting an audit never starts or marks a shift active; stock/catalog mutations
+still require operator attribution. Uncertain outcomes remain explicit and
+recoverable, not success.
+Completed stock/audit submissions keep a synchronous intent guard until their
+dialog closes, including post-commit refresh; late/repeated submit callbacks
+cannot start a new attribution request. Session forms ignore submission when
+neither selection nor close is open. A successful close clears chooser/context
+and invalidates older in-flight session reads so they cannot resurrect the
+closed identity. No new name prompt occurs until a subsequent attributed action.
+The CPO's 2026-10-24 follow-up supersedes manual publication: the anonymous
+menu transactionally reads the same committed Course inventory, selecting only
+active On Cart products through one public-product allowlist (including nested
+price projection). There is no second mutable menu projection or publication
+pointer. Old published snapshots/metadata remain historical and unmodified,
+not a serving source. Existing slug mappings and branded URLs are preserved;
+other configured Course slugs use the same public route. Anonymous responses
+are no-store; the public UI fetches only on page open/manual reload (or explicit
+error retry), with no interval/focus refresh. Categories initially collapse and
+expand only by selection. Scope-change/unmount cleanup aborts superseded
+requests so older responses cannot replace current state. Retired
+preview/publish endpoints explicitly return 410 without mutation or shift
+activity, directing cached clients to refresh. Current publication identities
+and release authority are owned by the Deployment Guide. No internal stock/staff/shift/audit data
+enters the golfer menu.
+
+K-001/K-002 readiness uses the CPO's resolved transitions rather than inventing
+new behavior. K-003 assigns each capability one owner; K-004 focuses evidence
+on lost responses, concurrency, authorization, audit revision coherence and
+unchanged adjacent accepted behavior. No speculative permissions framework,
+POS, offline queue, multiple carts, transfers or trend UI is introduced.
 
 ### Independent service groups sandbox increment
 

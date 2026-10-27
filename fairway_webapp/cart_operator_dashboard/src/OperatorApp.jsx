@@ -4,6 +4,7 @@ import {
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
 } from 'lucide-react';
 import NotificationSetup from './NotificationSetup';
+import { InventorySessionControls, useInventorySession } from './InventorySession';
 import { operatorRequest } from './lib/operator';
 import {
   courseContextUrl,
@@ -191,7 +192,7 @@ function HistoryView({ dashboard, cartMetrics = true }) {
 }
 
 export default function OperatorApp({
-  user, apiBaseUrl, operatorConfig, requests, loadState, loadError,
+  user, apiBaseUrl, inventoryApiBaseUrl, operatorConfig, requests, loadState, loadError,
   focusedRequestId, isAdmin, onOpenAdmin, onOpenInventory, onSignOut, onRequestAction,
 }) {
   const [tab, setTab] = useState('requests');
@@ -223,6 +224,7 @@ export default function OperatorApp({
   selectedCourseKeyRef.current = selectedCourseKeyValue;
   const course = mergeDashboardCourse(selectedCourse, dashboard?.courses);
   const operation = courseOperation(course);
+  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course);
   const selectedRequests = useMemo(() => requests.filter((request) => (
     !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
   )), [requests, course?.customer_id, course?.course_id]);
@@ -379,7 +381,8 @@ export default function OperatorApp({
     <div className="op-header-context">
       <div className="op-course-context">
         <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+        {operation.inventory && inventoryApiBaseUrl && <InventorySessionControls key={selectedCourseKeyValue} session={inventorySession} />}
+        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{courseOperation(item).kind === 'driving_range' ? 'Driving range service' : 'Cart service'}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
         {operation.physical_devices && course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />

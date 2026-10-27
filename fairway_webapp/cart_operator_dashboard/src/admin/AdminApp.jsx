@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { adminRequest, downloadBlob } from './adminApi';
 import AdminUserManagement from './AdminUserManagement';
+import CustomerStaff from './CustomerStaff';
 import { serviceCategories } from '../lib/serviceCategories.mjs';
 import './admin.css';
 
@@ -128,7 +129,18 @@ function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
 }
 function CustomersView({ user, apiBaseUrl, customers, refresh }) {
   const [editor, setEditor] = useState(null);
-  return <section className="a-view"><PageHeading eyebrow="ACCOUNT STRUCTURE" title="Customers & Courses" id="customers-title"><button className="a-primary" type="button" onClick={() => setEditor({ customer: null, course: null })}><Plus size={16} />Add customer</button></PageHeading><div className="a-customers">{customers.map((customer) => <article key={customer.customer_id}><header><div><span>{customer.customer_id}</span><h3>{customer.customer_name}</h3><p>{valueOrStatus(customer.comments, customer.field_status?.comments)}</p><FieldStatus status={customer.field_status?.comments} /></div><div><button type="button" onClick={() => setEditor({ customer, course: {} })}><Plus size={16} />Course</button><button className="a-icon" type="button" onClick={() => setEditor({ customer, course: null })} aria-label={`Edit ${customer.customer_name}`}><Wrench size={16} /></button></div></header><div className="a-courses">{(customer.courses || []).map((course) => <div className="a-course-row" key={course.course_id}><button type="button" className="a-course-edit" onClick={() => setEditor({ customer, course })}><MapPin size={17} /><span><strong>{course.course_name}</strong><small>{course.course_id} · {valueOrStatus(course.timezone, course.field_status?.timezone)}</small><small>Comments: {valueOrStatus(course.comments, course.field_status?.comments)}</small></span><ChevronRight size={16} /></button><button className="a-course-open-cart" type="button" onClick={() => { const query = new URLSearchParams({ customer_id: customer.customer_id, course_id: course.course_id }); window.location.assign(`/?${query}`); }}>Open Cart UI <ArrowUpRight size={15} /></button></div>)}{customer.courses?.length === 0 && <p>No courses configured.</p>}</div></article>)}{customers.length === 0 && <div className="a-empty">No customers are configured.</div>}</div>{editor && <CustomerModal user={user} apiBaseUrl={apiBaseUrl} customer={editor.customer} course={editor.course} close={() => setEditor(null)} refresh={refresh} />}</section>;
+  return <section className="a-view">
+    <PageHeading eyebrow="ACCOUNT STRUCTURE" title="Customers & Courses" id="customers-title"><button className="a-primary" type="button" onClick={() => setEditor({ customer: null, course: null })}><Plus size={16} />Add customer</button></PageHeading>
+    <div className="a-customers">{customers.map(customer => <article key={customer.customer_id}>
+      <header><div><span>{customer.customer_id}</span><h3>{customer.customer_name}</h3><p>{valueOrStatus(customer.comments, customer.field_status?.comments)}</p><FieldStatus status={customer.field_status?.comments} /></div><div><button type="button" onClick={() => setEditor({ customer, course: {} })}><Plus size={16} />Course</button><button className="a-icon" type="button" onClick={() => setEditor({ customer, course: null })} aria-label={`Edit ${customer.customer_name}`}><Wrench size={16} /></button></div></header>
+      <CustomerStaff user={user} apiBaseUrl={apiBaseUrl} customer={customer} />
+      <div className="a-courses">{(customer.courses || []).map(course => <div className="a-course-row" key={course.course_id}>
+        <button type="button" className="a-course-edit" onClick={() => setEditor({ customer, course })}><MapPin size={17} /><span><strong>{course.course_name}</strong><small>{course.course_id} · {valueOrStatus(course.timezone, course.field_status?.timezone)}</small><small>Comments: {valueOrStatus(course.comments, course.field_status?.comments)}</small></span><ChevronRight size={16} /></button>
+        <button className="a-course-open-cart" type="button" onClick={() => { const query = new URLSearchParams({ customer_id: customer.customer_id, course_id: course.course_id }); window.location.assign(`/?${query}`); }}>Open Cart UI <ArrowUpRight size={15} /></button>
+      </div>)}{customer.courses?.length === 0 && <p>No courses configured.</p>}</div>
+    </article>)}{customers.length === 0 && <div className="a-empty">No customers are configured.</div>}</div>
+    {editor && <CustomerModal user={user} apiBaseUrl={apiBaseUrl} customer={editor.customer} course={editor.course} close={() => setEditor(null)} refresh={refresh} />}
+  </section>;
 }
 
 function CredentialModal({ value, close }) {

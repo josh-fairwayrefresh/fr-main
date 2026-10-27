@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { FakeFirestore } = require('./fake_firestore');
-const { publicBay, acceptQrRequest } = require('../lib/qr_requests');
+const { publicBay, acceptQrRequest, provisionQrBays } = require('../lib/qr_requests');
 const { transitionRequest } = require('../lib/request_lifecycle');
 const { courseOperation } = require('../lib/course_operation');
 const { getInventoryBootstrap } = require('../lib/inventory');
@@ -38,6 +38,24 @@ async function fixture() {
 async function activeId(db) {
   return (await db.doc(`qr_bays/${id}`).get()).data().active_request_id;
 }
+
+test('permanent provisioning requires suspended Course ownership, preserves records and rejects alternate registers', async () => {
+  const db = await fixture();
+  const bays = Array.from({ length: 52 }, (_, index) => ({
+    id: `permanent_bay_${String(index + 1).padStart(12, '0')}`,
+    bay_number: Math.floor(index / 2) + 1, bay_side: index % 2 ? 'B' : 'A',
+  }));
+  await assert.rejects(provisionQrBays(db, 'customer', 'range', bays), /suspended/);
+  await db.runTransaction(async (transaction) => transaction.delete(db.doc(`qr_bays/${id}`)));
+  await db.doc(coursePath).update({ service_suspension: { suspended_at: new Date() } });
+  await assert.rejects(provisionQrBays(db, 'foreign', 'range', bays), /suspended/);
+  await provisionQrBays(db, 'customer', 'range', bays);
+  const before = JSON.stringify([...db._docs]);
+  await provisionQrBays(db, 'customer', 'range', bays);
+  assert.equal(JSON.stringify([...db._docs]), before);
+  const alternate = bays.map((bay, index) => index ? bay : { ...bay, id: 'alternate_bay_000000000001' });
+  await assert.rejects(provisionQrBays(db, 'customer', 'range', alternate), /different permanent/);
+});
 
 test('public bay allowlist exposes identity and availability only', async () => {
   const db = await fixture();

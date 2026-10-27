@@ -13,6 +13,11 @@ acceptance and publication evidence are retained in the
 not as open backlog items. This does not close the separate queue-volume,
 physical-phone/Safari, notification, or network-reliability work below.
 
+The CPO-accepted persistent inventory increment was merged through PR #12 and
+released to production Admin/Hosting on 2026-10-26. It is no longer open backlog
+work; accepted behavior and recovery evidence are owned by the UX specification
+and [release record](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26).
+
 ## Open and deferred work
 
 | Item | Status / boundary |

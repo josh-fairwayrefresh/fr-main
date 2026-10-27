@@ -67,7 +67,7 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
         {state === 'submitting' ? 'Sending…' : state === 'retry' ? 'Retry request' : 'Yes'}
       </button>{state === 'ready' && <button type="button" onClick={() => setState('declined')}>No</button>}</div>
     </>}
-    {state === 'accepted' && <section role="status"><h2>Your request has been received.</h2><p>A server has been requested for this bay.</p></section>}
+    {state === 'accepted' && <section role="status"><h2>Your request has been received.</h2><p>A server has been requested for Bay {bay.bay_number}{bay.bay_side || ''}.</p></section>}
     {state === 'declined' && <p>No request was sent.</p>}
     {state === 'unavailable' && <section role="status"><h2>Server requests are currently unavailable.</h2><p>Please visit the restaurant.</p></section>}
     {error && <p role="alert">{error}</p>}
