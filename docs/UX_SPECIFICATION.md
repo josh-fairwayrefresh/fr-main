@@ -2,14 +2,16 @@
 
 ## Authorized public sandbox review
 
-The isolated inventory review URL opens without entering an email/password
-or following a private sign-in link. Anyone with that URL can operate the
-CPO TEST inventory Course. An automatic anonymous Firebase session receives
-only that explicit non-Admin Customer/Course scope; all existing inventory,
-operator attribution and unresolved-submission behavior remains in force.
-Named accounts, protected Admin access and production are unchanged.
-Entry errors are explicit and can be retried by reload. See the Deployment
-Guide for the exact URL, configuration and revocation procedure.
+The two isolated review sandboxes support ordinary-browser entry without
+entering an email/password or following a private link. Anyone with their
+operator URLs can operate the explicitly scoped test Courses. Automatic
+anonymous Firebase sessions retain the existing non-Admin Course authorization,
+operator attribution and per-browser notification preferences; they do not
+grant production access. QR reviewers may switch between the synthetic Cart
+and Driving Range Courses. Inventory reviewers are limited to the CPO TEST
+inventory Course. Existing named sign-in remains available on protected routes.
+Entry failures are explicit and can be retried by reload, never presented as
+successful access. See the Deployment Guide for configuration and revocation.
 
 ## Purpose and scope
 
@@ -90,6 +92,83 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Internal transport retries and repeat presses within the originating demand window must not inflate service-request volume.
 - `repeat_press_count` belongs to the originating accepted request. The cart operator does not need to see each repeat press as a new request or notification.
 - How repeat presses are communicated from the marker and persisted against the originating request is an engineering/implementation decision, not specified by this document; see `docs/feature_backlog.md`.
+
+## Driving Range QR requests (review increment)
+
+- Driving Range is its own Course asset under a Customer, alongside golf
+  Courses such as Tony Lema. All 26 bays belong to that Driving Range Course,
+  with independently identified A and B sides (52 service locations).
+  Explicit immutable-at-creation `operation_kind: driving_range` configuration
+  identifies it; names, email addresses and IDs never determine behavior.
+  Missing operation configuration preserves existing Cart behavior.
+- Existing Customer/Course access and Course selection govern both operations.
+  The existing main-operator Course selector labels its operation choices
+  **Cart service** and **Driving range service**; it is not a second selector.
+  Production release extends existing authorized Monarch customer login
+  accounts to both Courses without Admin grants or provider/password changes.
+  Individual Course restrictions remain in the existing account-access owner.
+  Tony Lema's five operational staff assignments are not extended to the range.
+  Production operator entry requires normal authentication; public sandbox
+  anonymous/passwordless review cannot provision production access.
+  There is no additional Restaurant selector, user Service Type, role or
+  service-specific permission. Existing Course notification checkboxes permit
+  either Course, both or neither; a preference never grants access.
+- The Driving Range Course uses shared Requests, select-any-request,
+  Complete, Cancel and History. It has no Inventory or cart performance
+  controls. Its persistent Resume/Suspend state is independent of other
+  Courses. New Driving Range Courses start suspended until explicitly resumed.
+  Suspension rejects new submissions; existing requests remain actionable.
+- Each permanently identified bay side has its own static Fairway-hosted URL.
+  Existing 26 links are retained as side A; side B receives 26 additional links.
+  `qr_bays` remains the identity owner, with numeric `bay_number` and explicit
+  `bay_side: A | B`. The
+  anonymous mobile page identifies the Course and bay and asks:
+  **"Would you like a server to come and take your order?"**
+  The complete page uses a white background and dark readable text, including
+  the surrounding viewport and loading, confirmation and error states,
+  regardless of the phone's light/dark appearance setting.
+  No creates nothing. Yes confirms only server-acknowledged acceptance.
+  No golfer login, order entry or payment is required.
+- One outstanding request exists per bay side until Complete or Cancel;
+  A and B can request independently. Public pages, new request snapshots,
+  operator queues/History and notifications identify the full side, e.g.
+  **Bay 9A** or **Bay 9B**, including golfer acknowledgement. Historical unsuffixed snapshots remain unchanged.
+  Concurrent
+  scans and repeated Yes acknowledge that request without another request or
+  notification. A lost-response retry retains its original submission identity,
+  including across reload, completion or suspension; it cannot become a fresh
+  request. An explicit later submission after a terminal outcome can create one.
+  Failed/uncertain responses remain visible and provide safe retry.
+- QR requests are not devices. Their completion never generates a device
+  command. Terminal races have one winner; repeated identical actions are safe,
+  while an opposite terminal action reports the authoritative conflict.
+- Active queues retrieve all authorized active requests independently from
+  closed History; newer closed work cannot hide old active work behind a cap.
+  Restaurant requests and service time do not enter Cart performance metrics.
+- Public responses contain only bay number/side, Course display name, availability,
+  or a minimal acceptance acknowledgement. Private requests, account access,
+  staff, endpoints and operation receipts are not public.
+- Review signs use 26 US Letter portrait pages, one numbered bay per page with
+  two codes: A on the left and B on the right, white
+  background, strong contrast and comfortable printer-safe margins. A centered
+  banner reads Fairway Refresh logo / AT / Monarch Bay Golf Club logo, using
+  approved assets without distorting their proportions. Below it, centered:
+  **WANT FOOD OR DRINKS?** (larger headline), then
+  **Use your [camera icon] and point it at the code to request a server.**
+  (supporting instruction, centered across two lines with a drawn camera icon),
+  then prominent side labels **BAY 1A / BAY 1B** through **BAY 26A / BAY 26B**,
+  each above its large QR with a four-module white quiet zone. No extra instructions, URLs or technical information
+  appear on the signs.
+- CPO-authorized Monarch testing checkpoint: sandbox review pages omit the
+  **TEST — NOT FOR INSTALLATION** footer. The filename and download page
+  explicitly identify sandbox URLs. The verified mapping register contains
+  all 52 side-specific destinations; the existing 26 URLs remain side A.
+  Unmarked printed pages do not authorize production launch.
+  An installation edition must use approved permanent production URLs and
+  omit test markings, and may be generated only during authorized production
+  launch. Sandbox field-review signs are not a production installation edition.
+  Production Course/account changes, production signs, launch and physical
+  print acceptance remain separately authorized release work.
 
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 

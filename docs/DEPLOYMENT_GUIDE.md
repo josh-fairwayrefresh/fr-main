@@ -1,5 +1,107 @@
 # Deployment Guide
 
+## Driving Range production integration and controlled release — 2026-10-26
+
+The CPO authorized integrating reviewed PR #13 head
+`6e3afe55e55b0384dfa97c68bc7e6881dc843ce6` with current main
+`3aa8106605910e040bd71369eb22abe36a237aec`, validating before merge/publication,
+and provisioning Monarch's independent Driving Range Course and 52 permanent
+production locations. **Keep Driving Range suspended until separate explicit
+CPO activation.** Both existing sandboxes are protected from publication.
+
+Integration retains current main's stock-aware/assignment-aware inventory,
+staff editor and account owner rather than replacing them with older QR-branch
+versions. Range capability gates Cart inventory-session initialization and
+controls as well as Inventory/KPIs. The existing Course selector uses the
+accepted operation labels. Account updates preserve extra stored fields through
+the existing Admin access owner. Installation generation is an explicit mode
+restricted to the permanent production origin and an explicit Customer/Course
+mapping; default review generation remains sandbox-only.
+
+### Release gates and sequence
+
+1. Verify integrated source against main, reviewed-head ancestry and existing
+   production Admin `fairway-admin-staff-00ada00`, Receiver
+   `fairway-button-receiver-00028-827`, notifier
+   `fairway-request-notifier-00003-mah`, and Hosting `c2004110805c6599`.
+   Preserve current service identities, configuration, VAPID keys/subscriptions,
+   authentication providers and stock/assignment contracts.
+2. Before production changes, retain restricted consistent snapshots and
+   immutable prior source/image references. Refresh the snapshot before
+   cutover. Stop on unexplained pre-existing-data or runtime divergence.
+3. Validate integrated inventory/staff/Cart contracts, isolated native Firestore
+   QR concurrency/retry/terminal races, Course/notification scoping, full active
+   queues, normal-auth production entry and responsive service switching.
+   The production-configured build must keep sandbox review disabled.
+4. Merge using the established exact-head-guarded merge commit. Add only the
+   missing active-request composite index and QR rate-counter TTL policies;
+   preserve existing indexes/Rules. Create a production-only QR rate secret
+   accessible only to the existing receiver runtime identity as needed.
+5. Stage affected Admin, Receiver and notifier revisions at zero traffic,
+   preserving runtime identities/configuration and notifier trigger. Receiver
+   alone enables QR ingress and its server-only rate secret. Verify readiness,
+   immutable source and staged normal-auth/public-read gates before routing.
+   Keep the notifier's existing created-request Eventarc trigger and VAPID key;
+   no production synthetic notification/request is needed or authorized.
+6. Through normal authenticated Admin Course/account owners, create the
+   independent Course suspended and extend only real authorized Monarch
+   Customer accounts, preserving all current entitlements and fields. Existing
+   global Admins need no change; orphaned access records are not login accounts
+   and are not provisioned. Do not copy users or assign Tony Lema staff.
+7. Generate fresh production-only location identities and provision through
+   `lib/qr_requests.js` using `scripts/provision_qr_bays.js`. Provisioning requires
+   suspended Course ownership, rejects alternate/conflicting registers and
+   repeats without changing claims/history. Generate the 26-page installation
+   edition, decode both codes on every rendered page and verify live identity,
+   side, Course and permanent destination before Hosting publication.
+8. Publish only the compatible production-configured Hosting build and
+   installation artifacts. Verify served bytes, normal authenticated service
+   views, public suspended pages, complete product/staff/history preservation,
+   unchanged Cart service/preferences/subscriptions and both sandbox identities.
+   Do not submit production requests, sales, audits or shifts.
+
+### Recovery constraints
+
+After new Course entitlements/location records exist, retain stock-aware,
+assignment-aware **and Course-operation-aware** backend behavior and every
+record. Do not restore an older writer, remove new identities/entitlements,
+overwrite live history from snapshots, reseed locations or enable service as
+part of recovery. Prefer a compatible forward fix. Keep QR service suspended;
+if needed disable new public ingress explicitly while retaining operator
+handling of existing requests. Hosting may revert only to a compatible build
+with normal authentication, with compatible backends retained. Preserve
+notifier VAPID identity/subscriptions and the existing trigger. Snapshots are
+restricted local recovery/evidence artifacts, not automatic restore inputs;
+PITR remains disabled.
+
+## Public sandbox review access — shared scope
+
+The CPO now authorizes no-sign-in public operation of both isolated review
+sandboxes. This supersedes the private-only review instructions below.
+Anyone with the URLs may change test inventory/sales, service state and requests.
+No production access, passwords or permissions are changed.
+
+- QR operator: https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002
+- Inventory: https://fairway-refresh-sandbox-260930.web.app/inventory?customer_id=CUST-0005&course_id=COURSE-0007
+
+Ordinary browsers automatically establish a persistent Firebase anonymous
+session. The receiver verifies its token and transactionally provisions the
+existing schema-v2 non-Admin access record, restricted to deployment-configured
+synthetic Customer/Courses. Existing named accounts and their permissions are
+unchanged. Normal authorization, Firestore Rules, attribution, operator-name
+selection and per-browser notification preferences remain authoritative.
+No shared password, custom credential or public Firestore rule is introduced.
+Clearing browser storage creates a new review identity and notification choices.
+
+Enable Anonymous sign-in only in these two sandbox Auth projects. Build with
+`VITE_FAIRWAY_PUBLIC_REVIEW=true`; deploy the receiver with
+`FAIRWAY_PUBLIC_REVIEW=true` and JSON `FAIRWAY_PUBLIC_REVIEW_SCOPE` containing
+`customer_id` and an explicit nonempty `course_ids` list. QR scope is
+`CUST-0001` / `COURSE-0001, COURSE-0002`; inventory scope is
+`CUST-0005` / `COURSE-0007`. Server configuration refuses production and any
+other project. Caller-supplied scope is never used. The frontend enables auto
+entry only on the exact sandbox Hosting origin and operator/inventory routes.
+
 ## Course-assigned operational staff — 2026-10-26
 
 **Released and populated with explicit CPO authority.** The CPO authorized
@@ -514,10 +616,34 @@ operator/inventory route. Caller-supplied scope is ignored.
 To revoke public review, disable both build/runtime flags and Anonymous
 sign-in, and remove the specifically identified anonymous reviewers' access
 records (or disable those sandbox Auth identities). Disabling the entry flag
-alone does not revoke already-issued access. Do not remove named users.
-Clearing browser storage creates a new reviewer identity.
+alone does not revoke already-issued access. Do not remove named users or
+broaden this into production configuration.
 
-### Public-review publication — 2026-10-26
+### QR public-review publication — 2026-10-26
+
+- QR source `645ee899d80f466d7937692583ecc3a848ed2fee`; receiver
+  `fairway-button-receiver-sandbox-00003-z59`, Ready with 100% traffic.
+  Hosting version `52eadcbe3996a79d`, release `1793040054264000`
+  (`2026-10-26T18:40:54.264Z`).
+- The existing Admin `fairway-admin-sandbox-00002-zzf`, notifier, Rules,
+  bay identities and printed QR destinations are unchanged. The published
+  PDF is byte-identical, SHA-256
+  `4e727aa9bfbb8d518c333055cf5df63a0b908687c68a98c44b283b359610e436`.
+  All 75 live Hosting assets matched the validated build byte-for-byte.
+- Focused backend authorization checks: 11 passed per branch; QR frontend
+  entry checks: 16 passed; inventory frontend entry checks: 13 passed.
+  Both sandbox builds and edited-frontend diagnostics passed.
+- Fresh Chrome contexts entered both actual URLs without credentials,
+  received only the configured Course lists, reloaded and reopened with
+  persisted anonymous sessions at phone/tablet widths. QR Course switching
+  and per-identity notification preference write/read were verified.
+  Anonymous reviewers received 403 for Admin, other-Course inventory and
+  private direct Firestore reads; requests without tokens still received 401.
+- This increment verifies entry, access scope and notification preference
+  persistence, not a new physical-phone push-delivery acceptance. Browser
+  permission and iOS Home Screen requirements remain. No merge or production
+  changes; both PRs remain draft.
+### Inventory public-review publication — 2026-10-26
 
 - Source `d810b0f3c2d5347cdc87dfcfe8c03e66541d7e40`; receiver
   `fairway-button-receiver-sandbox-00026-qdp`, Ready with 100% traffic.
@@ -571,6 +697,399 @@ current owner documents. Dated records, including statements written as
 "current," "pending," or imperative instructions, apply to their recorded
 stage only; they cannot grant present operational authorization. Completed
 recoveries and one-time exceptions must not be repeated from this history.
+
+## Driving Range QR isolated review sandbox — 2026-10-24
+
+This review increment branches from accepted main
+`08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`. Driving Range is an
+independent Course asset, not an additional Cart category or permission tier.
+The UX owner defines product behavior; this section owns environment,
+provisioning, verification and release boundaries.
+
+### Current A/B bay-side review publication — 2026-10-26
+
+The CPO changed each of the 26 Letter portrait sheets to serve two independent
+practice locations: **A on the left, B on the right**. The CPO explicitly
+selected retaining all original URLs as side A, adding only side B URLs.
+The existing `qr_bays` owner now contains **52** identities, `1A/1B` through
+`26A/26B`, using numeric `bay_number` plus `bay_side`. There is no second
+register or request lifecycle. Historical unsuffixed request snapshots remain
+unchanged; new golfer pages, requests, operator History and notification labels
+identify the side. One outstanding request is enforced independently per side.
+
+- Deployed application/generator source:
+  **`c93aa1a0b221e96e29b9a03757ba8154c8469ff0`**.
+  Later browser-test/documentation commits do not change deployed runtime bytes.
+- Receiver **`fairway-button-receiver-sandbox-ab-c93aa1a`**, Ready at **100%**,
+  after zero-traffic staging. Runtime settings, service account, secrets and
+  authentication match the prior isolated revision; `bay-sides` targets the
+  new revision. Both staged and live public reads verified all 52 identities
+  and their minimal allowlists.
+- Hosting **`36cb8474ec83e15b`**, release **`1793057725746000`**,
+  `2026-10-26T23:35:25.746Z`. All **127 local publication files** match their
+  served bytes, including the PDF, register, 52 PNGs and 52 SVGs.
+- [Review/download page](https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html)
+  and [26-page sandbox-URL PDF](https://fairway-refresh-sandbox-qr1.web.app/qr-review/sandbox-url-bay-signs.pdf).
+  [Verified 52-side mapping register](https://fairway-refresh-sandbox-qr1.web.app/qr-review/sandbox-bay-mapping.json).
+  PDF SHA-256:
+  `36572eb5cd6e7355b27a8d44460c69a536314466b6b9a7632a008db15a766906`.
+- The approved logo banner and top camera instructions remain unchanged.
+  Each side has a prominent label and **246pt (3.42in)** square QR, including
+  the four-module white quiet zone; page margins remain 48pt. All **52 codes
+  decoded from the 26 rendered PDF pages** at 100dpi to the register.
+  Instructions, A/B positions and safe text/ink bounds passed. Bay 9 and the
+  all-page overview were visually inspected without clipping or distorted logos.
+  As previously authorized, no printed test footer is added; filename/download
+  page explicitly identify sandbox URLs. This is not a production installation
+  edition or production-launch authority.
+- **14 focused tests passed**, covering paired generation/rejected malformed
+  mappings, repeat-safe population, preserved claims/URLs, independent A/B
+  duplicate prevention, Complete/Cancel, legacy snapshots, Course scoping,
+  suspended service, retries and side-aware notification payload/deep links.
+  The deployed white-page/appearance browser check passed at
+  375/430/768/1024px in light/dark settings. The new deployed A/B browser
+  check passed: both public labels/Yes/No, repeated submissions, independent
+  queue entries, exact-side deep links, A Complete/B Cancel and History.
+  Early runner attempts exposed only test synchronization and unaccepted
+  confirmation-dialog issues; the corrected runner completed and closed its
+  synthetic requests. Original queue count was restored.
+- Before/after comparison preserved all **27 pre-existing requests**, all
+  original bay fields/claims except the intentional `bay_side: A` addition,
+  existing account access, Customer/Course records and service state.
+  Live browser verification added three terminal synthetic Bay 26 requests
+  (two A Complete, one B Cancel), including recovery of interrupted runner
+  attempts, and three ordinary narrowly scoped anonymous-review sessions.
+  No original request was actioned. Admin, notifier, Rules/indexes, production,
+  inventory sandbox, firmware and physical-device commands were not deployed
+  or changed. PR #13 remains draft and unmerged.
+
+The repeat-safe `scripts/assign_qr_bay_sides.js` requires the original private
+26-bay fixture and exact isolated sandbox project. It transactionally adds
+only `bay_side: A` to existing records and creates stable B identities, refusing
+missing originals or assignment conflicts. It never replaces existing URLs,
+claims, receipts or history. New sandbox seeding creates all 52 sides directly.
+Private before/staged/publication/renderer evidence is retained in session
+artifacts prefixed `qr-ab-`; original fixture credentials are not published.
+Recovery must preserve the 52 identities and side-aware receiver/page behavior;
+retain this publication and use a compatible forward fix, not an unsuffixed
+26-location rollback or reseed. Earlier records below are historical evidence.
+Physical laminated-sign scanning/phone notification acceptance has not been
+rerun; prior real notification evidence remains distinct from the new passing
+payload/lifecycle checks. Production Course/access setup and permanent
+production print links remain separately authorized.
+
+### Isolation and configuration
+
+- Separate project `fairway-refresh-sandbox-qr1` (number `125189268671`),
+  Firestore `(default)` in `nam5`, Firebase Auth/web application and Hosting.
+  It shares no application data, Auth accounts, service revisions, VAPID key
+  or Hosting releases with inventory project `fairway-refresh-sandbox-260930`.
+  PR #12 was unmerged at initial provisioning and has since been independently
+  released to production; its separate inventory sandbox remains protected
+  from QR deployments.
+- Hosting: https://fairway-refresh-sandbox-qr1.web.app.
+  `firebase.qr-sandbox.json` is the explicit deployment target; do not use
+  `firebase.sandbox.json`, whose site belongs to PR #12.
+- Receiver/Admin services run in `us-central1` using the existing environment
+  guards, Node 22 and `fairway-qr-sandbox` project-local runtime identity.
+  The receiver alone enables `FAIRWAY_QR_ENABLED=true`, with server-only
+  `FAIRWAY_QR_RATE_KEY` from Secret Manager `qr-rate-key:1`.
+- A separate generation-2 `fairway-request-notifier-sandbox` consumes created
+  `requests/{requestId}` events from this database. Its Eventarc identity has
+  Eventarc receive and service-scoped Run invoke permission. The notifier is
+  not public. It uses explicit matching runtime environment configuration and
+  Secret Manager `qr-vapid-private:1`; no production secrets are reused.
+- Runtime data access is project-local. Counter collection groups
+  `qr_request_limits` and `rate_windows` use `expires_at` TTL; immutable
+  submission receipts do not expire into fresh intents. The ingress permits
+  120 fresh intents per network/minute and 60 per bay/minute; a salted HMAC,
+  not raw IP, identifies the network bucket. Receipt replay is idempotent.
+  Shared networks may hit this coarse limit; static QR URLs do not enforce
+  physical presence.
+- Deploy Rules and indexes before UI acceptance; wait until the active
+  customer/Course/status/received-time composite index is READY.
+  No new direct public Firestore access is granted.
+
+### Synthetic review fixtures and signs
+
+#### Historical private passwordless operator review access
+
+The CPO initially selected private passwordless access rather than public operator
+access after password setup proved inconvenient. Only project
+`fairway-refresh-sandbox-qr1` enables Firebase Email Link sign-in alongside
+existing Email/Password sign-in. The two existing identities were resolved
+from authorized Auth records as `josh@fairwayrefresh.com` and
+`admin@fairwayrefresh.com`. Their separate sandbox identities have schema-v2,
+non-Admin access restricted to the synthetic Cart and Driving Range Courses.
+No production password hash, credential or authorization is copied.
+
+For tomorrow's phone/iPad review, open the clean operator URL
+https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002.
+Enter `josh@fairwayrefresh.com` or `admin@fairwayrefresh.com` in **Review email**
+and select **Email me a sign-in link**. Firebase sends a fresh private link
+on demand; check inbox/spam. Open it in the desired Safari/Chrome browser,
+enter the same email and select **Finish private sign-in**. Use a normal,
+not private/incognito browser to retain the session. Revisit the clean URL
+afterward; sign-out or a different browser can request another fresh email.
+No local file, pre-issued expiring link or VS Code session is required.
+Mail delivery/inbox receipt and physical iPad behavior must be distinguished
+from successful Firebase send responses and fresh-browser source verification.
+
+Authorized project administration can also generate Firebase `EMAIL_SIGNIN` action
+links for these accounts. Deliver them privately, never through Hosting,
+Git, PR text or printed signs. The review URL carries email and the action
+link in its fragment so Hosting requests do not receive the sign-in code.
+The UI accepts this entry only on the exact isolated QR project/host and root
+operator route, removes the fragment immediately, and exchanges the single-use,
+time-limited code through Firebase `signInWithEmailLink`. Existing backend
+authorization, Rules and per-user notification preferences remain authoritative.
+Invalid/expired/reused links show an explicit error; they never grant a public
+session. Issue a fresh private link when needed. Browser sessions persist
+normally; sign-out or a different browser may require a new link.
+
+This is not anonymous operator access or a bypass. Ordinary unauthenticated
+visitors still see sign-in. Other sandbox projects, PR #12, production Auth,
+accounts, permissions and deployments are unchanged.
+
+Passwordless review publication: frontend source
+`d293df3725806420d10989bfd5a51bdb3614cf0e`, Hosting version
+`1dfd6e1740a2f939`, release `1792901425189000`
+(`2026-10-25T04:10:25.189Z`). Backend, notifier, Rules and indexes remain at
+the earlier QR publication below. All 71 frontend checks and sandbox build
+passed. Real deployed Chrome verified private link sign-in, Course switching,
+session persistence after reload, immediate fragment removal, ordinary
+anonymous sign-in protection and reused-link rejection. The actual Josh
+identity opened the operator workspace in the CPO's shared integrated browser;
+the Admin identity also completed real passwordless sign-in. That integrated
+browser reports notification permission blocked, which is a browser/platform
+acceptance limit, not an authentication failure. Fresh unconsumed review links
+are retained in a mode-600 local file, never in Hosting or the PR.
+
+`scripts/seed_qr_sandbox.js` creates only synthetic Customer/Courses/account
+fixtures in a separate sandbox and explicitly refuses the inventory sandbox.
+It retains permanent bay identities and refuses to replace a completed seed.
+Its private credential output must stay outside Git; tooling may use ADC or
+an explicitly supplied short-lived authorized access token.
+
+The review Customer is **SYNTHETIC QR Review Club**, with **TEST Cart Course**
+and independent **TEST Driving Range**. The test account is not the intended
+production Monarch account. No production Course or account was changed.
+Driving Range Course creation requires `operation_kind: driving_range`;
+existing Courses default to Cart and are not converted by ordinary edits.
+The existing authenticated Admin Course-creation API accepts this configuration.
+New Range Courses start suspended; synthetic review was explicitly resumed.
+
+`scripts/qr_signs.js` generates only sandbox artifacts, requires exactly 26
+unique ordered bay identities, decodes every generated QR back to its expected
+URL, and emits a 26-page Letter PDF plus numbered PNG/SVG files and the mapping.
+Review links/signs: https://fairway-refresh-sandbox-qr1.web.app/qr-review/index.html.
+For the CPO-authorized Monarch field-testing checkpoint, printed review pages
+omit **TEST — NOT FOR INSTALLATION**. The download page and filename
+`sandbox-url-bay-signs.pdf` explicitly identify sandbox URLs. All 26 existing
+bay destinations remain unchanged. Pages are US Letter portrait
+with 48-point (2/3-inch) margins, approved proportional logo banner, centered
+headline (**WANT FOOD OR DRINKS?** at 30 points), followed by the centered
+22-point instruction **Use your [camera icon] and point it at the code to
+request a server.** on two lines with a vector camera icon, 64-point bay
+identification and a 4.5-inch QR
+including its four-module white quiet zone. No destination URL or extra
+instructions are printed. Rendered PDF pages must be checked for clipping,
+readability and correctly decoded bay destinations, not just raw QR images.
+The generator continues to reject production origins; enabling an installation
+edition requires separately authorized launch work and approved permanent
+production destinations, with test markings removed only for that edition.
+Production Course/access
+provisioning, permanent production URL binding, final production signs and
+launch remain separately authorized. Do not print sandbox signs for launch.
+
+Field-layout review refinement (2026-10-25 UTC): generator source
+`ac42e206ede561f1e6c656e499ede43586c02bd9`, QR Hosting version
+`f98e0fa3c882ef34`, release `1792902563443000`
+(`2026-10-25T04:29:23.443Z`). The two focused generator checks passed,
+including exactly 26 Letter pages, white four-module quiet zones and rejection
+of production destinations and duplicate/missing bay identities. All 26 PDF
+pages were rendered at 100 dpi and decoded to the existing exact bay mapping.
+Text bounding boxes and rendered margins were checked on every page; full-page
+Bay 1/Bay 26 and the all-page overview were visually inspected for readable
+type, proportional logos, clipping and consistent spacing. The served PDF
+SHA-256 is `d30ed08fe97c3627a47a9f98b7df8faf6c97d6bcaf30560167da5e4338e80411`;
+all 75 served files matched local output. QR backend/notifier revisions,
+PR #12 backend revisions and its Hosting version were unchanged. Physical
+printer/lamination/phone-scan acceptance remains pending. Only review Hosting
+changed; no installation edition or production artifact was generated.
+
+### Verification and recovery boundaries
+
+#### Camera instruction and white bay page — 2026-10-26 UTC
+
+Reviewed frontend/generator source `cc6f87706285634d47cdd72e15c35c3f8e0be812`
+(incorporating generator refinement `e5d38d0e86eb7f8ab2f68d5918be8387a221c71c`).
+Only QR Hosting changed: version `ca10c5b38c55348b`, release
+`1793037616161000`, `2026-10-26T18:00:16.161Z`.
+Firebase publication initially failed on expired credentials, then succeeded
+after the CPO reauthenticated the existing Firebase CLI account.
+
+- The 26-page PDF retains its sandbox-only filename/destinations and no printed
+  test footer. It now reads **Use your [vector camera icon] and point it at the
+  code to request a server.** below **WANT FOOD OR DRINKS?**. Approved logo
+  banner, 64-point bay labels and 4.5-inch QRs are unchanged.
+- All 26 final PDF pages rendered at 100 dpi decoded to the existing bay mapping;
+  exact instruction text, safe margins and absent footer passed. Bay 1/Bay 26
+  full-page renders were visually inspected for camera alignment, clipping and
+  readability. Served PDF SHA-256:
+  `4e727aa9bfbb8d518c333055cf5df63a0b908687c68a98c44b283b359610e436`.
+- Bay-only root styling is applied before lazy loading, so the loading screen,
+  page and surrounding viewport stay white, including dark-device appearance.
+  No operator or request-lifecycle behavior changes. The deployed browser
+  appearance test passed light/dark settings at 375/430/768/1024px, blocked-module
+  loading, real No interaction and stubbed confirmation/unavailable/error states
+  without creating requests. A screenshot of the actual public Bay 1 page
+  confirmed the white background and readable controls.
+- 71 frontend checks, two focused sign-generator checks, two rendered existing
+  operator/category regression cases, sandbox build and diagnostics passed.
+  Existing bundle-size warning remains. All 75 served files match local build
+  hashes. QR backends, notifier, Rules and access records were not redeployed or
+  changed. PR #12 remains untouched; its Hosting version was rechecked as
+  `7c21c25b1899c0e6`. No merge or production action occurred.
+
+#### Saved Monarch testing checkpoint — 2026-10-25 UTC
+
+CPO confirms the feature works. Saved reviewed frontend/generator source:
+`a92998c32fbdf11c669d4f60d595f23ad3c83a54`. The following evidence-only
+documentation commit is not a different application build. QR Hosting version
+`855e24c6db9ca420`, release `1792903551153000`
+(`2026-10-25T04:45:51.153Z`); all 75 served files matched local output.
+This is a sandbox testing checkpoint, not a production release.
+
+- Clean operator URL:
+  https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002.
+  In ordinary Safari/Chrome, use **Review email** with
+  `josh@fairwayrefresh.com` or `admin@fairwayrefresh.com`, then **Email me a
+  sign-in link**. Open the fresh email in the intended browser, enter the same
+  email, and choose **Finish private sign-in**. No sandbox password is needed.
+  Return to the clean URL while signed in; a new browser or signed-out session
+  can request another link at any time. Do not rely on an old expiring link.
+- Both actual identities completed fresh-browser hosted-email-action sign-in,
+  selected both synthetic Courses, and retained their sessions across a full
+  browser close/restart. This used the established Firebase Email Link
+  capability with unchanged schema-v2 Course access and protected operator APIs.
+  New user-delivered email links were requested through the rendered page for
+  both addresses and left unconsumed. Firebase accepted both sends; inbox/spam
+  receipt and physical phone/iPad acceptance are not independently verified.
+- Review PDF:
+  https://fairway-refresh-sandbox-qr1.web.app/qr-review/sandbox-url-bay-signs.pdf.
+  **All destinations are still sandbox URLs.** The CPO-authorized footer removal
+  affects all 26 pages, not production-launch authorization. Existing logo
+  banner, two-line headline, bay labels, QR size and safe margins are unchanged.
+  All 26 PDF pages rendered and decoded to the original bay destinations;
+  exact headline, safe bounds and absence of test/footer text passed.
+  Full-page samples were visually inspected. Downloaded/build PDF SHA-256:
+  `10bdae83f09c22d120175af9db0f2a54f8d9f72c732b50a437d94aaad041c755`.
+- 71 frontend checks, two focused generator checks and sandbox build passed.
+  Only affected Hosting was rebuilt/redeployed. Receiver remains
+  `fairway-button-receiver-sandbox-00002-d26`, Admin
+  `fairway-admin-sandbox-00002-zzf`, notifier
+  `fairway-request-notifier-sandbox-00002-riv`; their shipped backend source
+  remains `0a5b153399c5e3c8a90cf53c273172a9c7833913`.
+  Rules/indexes, account permissions and bay data were not changed.
+- PR #13 remains draft/unmerged. PR #12 remains unchanged: receiver
+  `fairway-button-receiver-sandbox-00025-9lr`, Admin
+  `fairway-admin-sandbox-00024-4wb`, Hosting `7c21c25b1899c0e6`.
+  No production deployment, account/credential change, firmware work or
+  physical-device command occurred.
+
+Two-line headline refinement (2026-10-25 UTC): generator source
+`5b2b2556b6e1c3462a2ff26852e446a9ed1f7566`, Hosting version
+`c0c07ab2925d2248`, release `1792903107379000`
+(`2026-10-25T04:38:27.379Z`). All 26 rendered pages retain safe margins,
+correct bay QR destinations and test markings; both focused generator checks
+passed. Full-page Bay 1/Bay 26 were visually inspected. The downloaded PDF
+matched local SHA-256 `c43fc82fbdce7ec67d7d4de5de1bdbb4d9c6c40f8abbaf57991e43eb0bee33d0`.
+Only sign wording/type hierarchy and owner documentation changed; application
+behavior and backends were not changed. PR #12 Hosting remained
+`7c21c25b1899c0e6`; no production action or installation edition occurred.
+
+- Local suites retain Cart request, category, reporting, access and command
+  correlation regressions, plus transactional QR acceptance/lifecycle tests.
+- Deployed HTTP/Firestore checks cover all 26 public allowlists/mappings,
+  concurrent scans, one outstanding request, terminal races, same-action
+  retries, receipt replay after completion, Course isolation, suspension,
+  deny-by-default private data and zero device commands.
+- `npm run test:qr:browser` uses private synthetic fixture input and real
+  Chrome touch/mouse input against the isolated deployment: Yes/No,
+  Course selection, Complete/Cancel, History, independent service controls,
+  notification destination routing, safe lost-response/reload retries and
+  375/430/768/1024px layout. It must not target production or PR #12.
+- Real Web Push reached the persistent Chrome service worker and produced
+  its notification with the correct Course/request URL. An incognito attempt
+  was rejected by Chrome; that is not delivery evidence. Physical phone/iPad
+  display, installed-PWA user enablement and laminated-sign scans remain CPO
+  acceptance limits. Source tests are not substitutes for those observations.
+- Rollback/recovery is confined to this project. Suspend the Range Course to
+  reject new intents while leaving existing requests actionable. Preserve bay
+  IDs, receipts and outstanding claims; do not reset identity/data or deploy
+  older non-QR-aware lifecycle code against active QR requests.
+
+Exact reviewed source and publication identities are recorded with the
+completed review release evidence below. No production deployment, merge,
+firmware work or physical-device command is authorized by this record.
+
+### Completed isolated publication evidence — 2026-10-25 UTC
+
+Application source: `0a5b153399c5e3c8a90cf53c273172a9c7833913`.
+The subsequent evidence-only commit changes documentation, not shipped code.
+Each ready backend revision records this source in `FAIRWAY_SOURCE_REVISION`
+and serves 100% of its service traffic.
+
+| Surface | Final publication identity |
+| --- | --- |
+| Receiver | `fairway-button-receiver-sandbox-00002-d26`; image digest `sha256:8fa785d16755bdbe28717b8a4c684db11411996d25746c8846766632cfdc7542` |
+| Admin/access | `fairway-admin-sandbox-00002-zzf`; image digest `sha256:d485e0aa313c574807433a39f3bf905c301ee5ce084bef2ba308ad7373288f20` |
+| Notifier | `fairway-request-notifier-sandbox-00002-riv`; image digest `sha256:18104fe422599680ae675c072942c385f02bbd56e672995bfecdbe9547eb4404` |
+| Hosting | Version `efe009c66f88c365`; release `1792899908273000`, `2026-10-25T03:45:08.273Z` |
+| Rules | `projects/fairway-refresh-sandbox-qr1/rulesets/dbd64cd3-e67d-49d2-bfeb-ff56bcd84710`; source matched |
+| Eventarc | `projects/fairway-refresh-sandbox-qr1/locations/nam5/triggers/fairway-request-notifier-sandbox-003147`; created `requests/{requestId}`, `(default)`, retry enabled |
+
+- Receiver: https://fairway-button-receiver-sandbox-125189268671.us-central1.run.app.
+  Admin: https://fairway-admin-sandbox-125189268671.us-central1.run.app.
+  Notifier remains private; trigger/runtime identity is
+  `fairway-qr-sandbox@fairway-refresh-sandbox-qr1.iam.gserviceaccount.com`.
+- Operator review:
+  https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002.
+  Synthetic `qr-review@example.test` credentials are delivered privately,
+  never in this document, the PR or printed signs.
+- Local checks: 145 backend checks, 68 frontend checks and two existing
+  real-rendered Cart/category regression cases passed; sandbox build passed.
+  Existing large-bundle warning remains; no new build error.
+- Final deployed verification passed: 16 concurrent fresh intents produced
+  one request; simultaneous terminal actions returned 200/409; retries,
+  suspension, Course access, public field allowlists, all 26 bay mappings,
+  no QR device commands, and all 101 active records behind 105 newer closed
+  records were checked against real Firestore/Rules.
+- Real Chrome touch/mouse acceptance passed Yes/No, Course switching,
+  Complete/Cancel, History, independent service control, deep-link routing,
+  lost response followed by reload/retry after completion, and no overflow
+  at 375/430/768/1024px. Range inventory/KPI exclusion passed.
+- Final headed persistent Chrome received **Server requested — Bay 11** via
+  Eventarc and Web Push with the correct Customer/Course/request destination.
+  No synthetic PushEvent was used. Incognito rejected registration and a
+  headless repeat timed out despite transport acceptance; browser/platform
+  limits are not passing physical delivery evidence.
+- All 75 served files matched local SHA-256, including the 26-page Letter
+  PDF and the 26 decoded QR mappings. Five composite indexes were READY;
+  both counter TTL policies were ACTIVE. Synthetic active requests were
+  closed through the shared authorized lifecycle after testing.
+- Read-only preservation check: PR #12 stayed draft/open at
+  `4a02b47a4d5a63bc61cd877f3b3901ff04386bfa`, with a clean worktree.
+  Its receiver `fairway-button-receiver-sandbox-00025-9lr`, Admin
+  `fairway-admin-sandbox-00024-4wb` and Hosting version `7c21c25b1899c0e6`
+  were unchanged. Accepted remote main remained `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`.
+
+Remaining acceptance: physical phone/iPad/installed-PWA notification
+enablement and display, laminated-sign scans and CPO review. Production
+Monarch Driving Range Course creation, intended-account access, final
+production signs, release integration with PR #12 and launch are not done
+or authorized by this sandbox publication.
 
 ## Latest verified production alignment — 2026-10-23
 

@@ -14,8 +14,8 @@ const access = publicReviewConfiguration(env);
 const identity = { uid: 'reviewer', firebase: { sign_in_provider: 'anonymous' } };
 async function fixture() {
   const db = new FakeFirestore();
-  await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Synthetic' });
-  for (const id of access.course_ids) await db.collection('customers').doc('CUST-0001').collection('courses').doc(id).set({ course_name: id });
+  await db.doc('customers/CUST-0001').set({ customer_name: 'Synthetic' });
+  for (const id of access.course_ids) await db.doc(`customers/CUST-0001/courses/${id}`).set({ course_name: id });
   return db;
 }
 function response() {
@@ -36,13 +36,13 @@ test('anonymous provisioning is concurrent-safe, scoped and never overwrites exi
   const db = await fixture();
   assert.equal(await provisionPublicReviewer(db, { ...identity, firebase: { sign_in_provider: 'password' } }, access), false);
   await Promise.all(Array.from({ length: 10 }, () => provisionPublicReviewer(db, identity, access)));
-  assert.deepEqual((await db.collection('user_access').doc('reviewer').get()).data(), access);
-  await db.collection('user_access').doc('reviewer').set({ schema_version: 2, admin: true, customer_id: null, course_ids: [] });
+  assert.deepEqual((await db.doc('user_access/reviewer').get()).data(), access);
+  await db.doc('user_access/reviewer').set({ schema_version: 2, admin: true, customer_id: null, course_ids: [] });
   await assert.rejects(provisionPublicReviewer(db, identity, access), /does not match/);
-  assert.equal((await db.collection('user_access').doc('reviewer').get()).data().admin, true);
+  assert.equal((await db.doc('user_access/reviewer').get()).data().admin, true);
   await assert.rejects(provisionPublicReviewer(db, { ...identity, uid: 'missing-course' },
     { ...access, course_ids: ['COURSE-9999'] }), /configuration is unavailable/);
-  assert.equal((await db.collection('user_access').doc('missing-course').get()).exists, false);
+  assert.equal((await db.doc('user_access/missing-course').get()).exists, false);
 });
 test('receiver requires verified anonymous tokens, fixed configuration and POST', async () => {
   const db = await fixture();
@@ -58,7 +58,7 @@ test('receiver requires verified anonymous tokens, fixed configuration and POST'
       body: { customer_id: 'CUST-9999', admin: true }, get: () => token ? `Bearer ${token}` : '' }, res);
     assert.equal(res.statusCode, status);
   }
-  assert.deepEqual((await db.collection('user_access').doc('reviewer').get()).data(), access);
+  assert.deepEqual((await db.doc('user_access/reviewer').get()).data(), access);
   const res = response();
   await createFairwayHandlers(db, { publicReviewAccess: null }).fairwayButtonReceiver(
     { path: '/api/v1/sandbox/review-access', method: 'POST' }, res);

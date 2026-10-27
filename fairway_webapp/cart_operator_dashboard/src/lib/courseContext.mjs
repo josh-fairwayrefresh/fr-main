@@ -5,12 +5,16 @@ export function courseKey(course) {
 export function selectedCourseFromLocation(courses, search = '') {
   const params = new URLSearchParams(search);
   const customerId = params.get('customer_id');
-  const courseId = params.get('course_id');
+  const courseId = params.get('course_id') || params.get('course');
   if (customerId && courseId) {
     const requested = courses.find((course) => (
       course.customer_id === customerId && course.course_id === courseId
     ));
     if (requested) return requested;
+  }
+  if (!customerId && courseId) {
+    const matches = courses.filter((course) => course.course_id === courseId);
+    if (matches.length === 1) return matches[0];
   }
   return courses[0] || null;
 }

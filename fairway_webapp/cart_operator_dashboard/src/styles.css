@@ -13,6 +13,17 @@ body {
   margin: 0;
 }
 
+:root.public-bay-page {
+  color-scheme: light;
+  background: #fff;
+  color: #163c2c;
+}
+
+.public-bay-page body {
+  min-height: 100vh;
+  background: #fff;
+}
+
 button {
   font: inherit;
 }

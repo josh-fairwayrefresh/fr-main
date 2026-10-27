@@ -16,6 +16,7 @@ import {
 } from './lib/courseContext.mjs';
 import { requestLocationLabel } from './lib/requestLocation.mjs';
 import { serviceCategories, serviceCategory } from './lib/serviceCategories.mjs';
+import { courseOperation } from './lib/courseOperation.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -116,7 +117,7 @@ function RecentHistory({ history, onOpen }) {
   return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>{requestLocationLabel(item)}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
 }
 
-function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, actionPending, requestActionInFlight, actionedRequestIds, summary, history, onOpenHistory, serviceActive, hidden }) {
+function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, actionPending, requestActionInFlight, actionedRequestIds, summary, history, onOpenHistory, serviceActive, hidden, cartMetrics = true }) {
   const [selectedRequestId, setSelectedRequestId] = useState('');
   const selectedRequestIdRef = useRef('');
   const manualSelectionVersion = useRef(0);
@@ -174,20 +175,20 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
     {loadState === 'ready' && !selectedRequest && <EmptyQueue serviceActive={serviceActive} />}
     {selectedRequest && <RequestFocus request={selectedRequest} queueLength={requests.length} onAction={onAction} pending={pending === selectedRequest.id} actionBlocked={Boolean(pending)} actioned={actionedRequestIds.has(selectedRequest.id)} />}
     {otherRequests.length > 0 && <section className="op-up-next" aria-labelledby="other-active-requests-heading"><div><span id="other-active-requests-heading">Other active requests</span><strong>{otherRequests.length} more {otherRequests.length === 1 ? 'request' : 'requests'}</strong></div>{otherRequests.map((request, index) => <button className="op-queue-row" type="button" key={request.id} disabled={actionPending} aria-label={`Select request ${requestLocationLabel(request)}`} onClick={() => selectRequest(request.id)}><span>{index + 1}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} aria-hidden="true" /></button>)}</section>}
-  </section><aside className="op-summary"><Performance summary={summary} /><RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
+  </section><aside className="op-summary">{cartMetrics && <Performance summary={summary} />}<RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
 
-function HistoryView({ dashboard }) {
+function HistoryView({ dashboard, cartMetrics = true }) {
   const [period, setPeriod] = useState('daily');
   const report = dashboard?.reports?.[period] || {};
   const summary = report.summary || {};
   const history = report.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics">
+  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>{cartMetrics ? 'Performance & outcomes' : 'Request outcomes'}</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header>{cartMetrics && <div className="op-metrics">
     <div><BarChart3 size={18} aria-hidden="true" /><span>Completed Requests</span><strong>{summary.completed_requests ?? 0}</strong></div>
     <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
     <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
     <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
-  </div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  </div>}<section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
 }
 
 export default function OperatorApp({
@@ -222,7 +223,8 @@ export default function OperatorApp({
   selectedCourseRef.current = selectedCourse;
   selectedCourseKeyRef.current = selectedCourseKeyValue;
   const course = mergeDashboardCourse(selectedCourse, dashboard?.courses);
-  const inventorySession = useInventorySession(inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course);
+  const operation = courseOperation(course);
+  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course);
   const selectedRequests = useMemo(() => requests.filter((request) => (
     !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
   )), [requests, course?.customer_id, course?.course_id]);
@@ -338,7 +340,7 @@ export default function OperatorApp({
     if (!course || requestActionInFlight.current || serviceActionInFlight.current || pending) return;
     const state = group === 'on_premise' ? course.on_premise_service_state : course.service_state;
     const action = state?.suspended ? 'resume' : 'suspend';
-    const groupLabel = course.has_on_premise_devices ? `${serviceCategory(group).display_name} service` : 'service';
+    const groupLabel = operation.physical_devices && course.has_on_premise_devices ? `${serviceCategory(group).display_name} service` : 'service';
     const prompt = action === 'suspend'
       ? `Turn ${groupLabel} OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
       : `Turn ${groupLabel} ON for ${course.course_name} until an operator suspends it?`;
@@ -367,7 +369,7 @@ export default function OperatorApp({
   return <main className="operator-app"><header className="op-header">
     <div className="op-header-main">
       <Brand />
-      <nav aria-label="Cart Operator navigation">
+      <nav aria-label="Course Operator navigation">
         <button className={tab === 'requests' ? 'active' : ''} type="button" aria-pressed={tab === 'requests'} onClick={() => setTab('requests')}>Requests</button>
         <button className={tab === 'history' ? 'active' : ''} type="button" aria-pressed={tab === 'history'} onClick={() => setTab('history')}>History</button>
       </nav>
@@ -379,18 +381,18 @@ export default function OperatorApp({
     <div className="op-header-context">
       <div className="op-course-context">
         <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {inventoryApiBaseUrl && <InventorySessionControls key={selectedCourseKeyValue} session={inventorySession} />}
-        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+        {operation.inventory && inventoryApiBaseUrl && <InventorySessionControls key={selectedCourseKeyValue} session={inventorySession} />}
+        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} disabled={Boolean(pending && pending !== 'service')} onChange={(event) => { if (requestActionInFlight.current) return; const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; refreshSequence.current += 1; setDashboard(null); setSelectedCourseKey(courseKey(selected)); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{courseOperation(item).kind === 'driving_range' ? 'Driving range service' : 'Cart service'}</option>)}</select></label>}
       </div>
       <div className="op-service-controls">
-        {course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
+        {operation.physical_devices && course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
         <button className="op-suspend" type="button" onClick={() => toggleService()} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
           <span>{serviceActionLabel}</span>
         </button></>}
         {serviceError && <p role="alert">{serviceError}</p>}
-        <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
+        {operation.inventory && <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>}
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} />{tab === 'history' && <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Course history unavailable: {dashboardError}</p>}</div><RequestsView key={selectedCourseKeyValue} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={dashboard?.reports?.daily?.summary} history={dashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} cartMetrics={operation.cart_metrics} />{tab === 'history' && <HistoryView key={selectedCourseKeyValue} dashboard={dashboard} cartMetrics={operation.cart_metrics} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

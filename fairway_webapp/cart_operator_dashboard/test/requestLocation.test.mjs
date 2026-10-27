@@ -24,7 +24,7 @@ test('missing or invalid location data has a neutral fallback', () => {
 });
 
 test('the request listener passes persisted device labels to the Cart Operator view model', () => {
-  assert.match(entrySource, /location_label:\s*data\.device_label/);
+  assert.match(entrySource, /location_label:\s*data\.location_label \|\| data\.device_label/);
 });
 
 test('active, queued, completed, and action-feedback request surfaces use the shared location label', () => {

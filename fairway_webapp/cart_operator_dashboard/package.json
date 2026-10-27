@@ -5,12 +5,16 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "test:browser": "node --test test/*.browser.mjs",
+    "test:qr:browser": "node --test test/qrCourse.browser.mjs",
     "validate:sandbox": "node --env-file-if-exists=.env.sandbox scripts/validate_frontend_config.js",
     "validate:production": "node --env-file-if-exists=.env.production scripts/validate_frontend_config.js",
     "dev:sandbox": "npm run validate:sandbox && vite --mode sandbox --host 0.0.0.0",
     "build:sandbox": "npm run validate:sandbox && vite build --mode sandbox",
     "build:production": "npm run validate:production && vite build --mode production",
     "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

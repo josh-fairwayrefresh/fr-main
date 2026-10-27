@@ -1,17 +1,21 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { collection, onSnapshot, orderBy, query, limit, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import {
   getRedirectResult,
+  isSignInWithEmailLink,
+  sendSignInLinkToEmail,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInAnonymously,
+  signInWithEmailLink,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import { CheckCircle, Grid2X2, History, Settings, Map as MapIcon, Circle, ShieldCheck } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
 import { adminApiBaseUrl, apiBaseUrl, fairwayEnvironment, firebaseConfig } from './lib/environment';
+import { isQrReviewEntry, sandboxReviewSignIn } from './lib/sandboxReviewSignIn.mjs';
 import { preparePublicReviewer, publicSandboxReviewEnabled } from './lib/publicSandboxReview.mjs';
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
@@ -38,6 +42,7 @@ const FRESH_SIGN_IN_STORAGE_KEY = 'fairway.freshSignIn';
 
 const InventoryApp = lazy(() => import('./InventoryApp'));
 const PublicMenuApp = lazy(() => import('./PublicMenuApp'));
+const BayRequestApp = lazy(() => import('./BayRequestApp'));
 
 function timestampToDate(timestamp) {
   if (!timestamp?.toDate) {
@@ -144,7 +149,36 @@ async function updateRequestStatus(requestId, action) {
 function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [linkState, setLinkState] = useState('idle');
+  const [linkError, setLinkError] = useState('');
+  const qrReview = isQrReviewEntry(window.location.href, fairwayEnvironment, firebaseConfig);
+  const completingEmailLink = qrReview && isSignInWithEmailLink(auth, window.location.href);
   const isAdminEntry = mode === APP_MODE.ADMIN;
+
+  async function handlePasswordlessSubmit(event) {
+    event.preventDefault();
+    if (linkState === 'sending') return;
+    setLinkState('sending');
+    setLinkError('');
+    try {
+      if (completingEmailLink) {
+        await signInWithEmailLink(auth, email.trim(), window.location.href);
+        window.history.replaceState(null, '', '/?customer_id=CUST-0001&course_id=COURSE-0002');
+      } else {
+        await sendSignInLinkToEmail(auth, email.trim(), {
+          url: 'https://fairway-refresh-sandbox-qr1.web.app/?customer_id=CUST-0001&course_id=COURSE-0002',
+          handleCodeInApp: true,
+        });
+        setLinkState('sent');
+      }
+    } catch (error) {
+      console.error('Sandbox email-link authentication failed:', error.code);
+      setLinkError(completingEmailLink
+        ? 'Unable to sign in. Check the email address, or open the operator page and request a fresh link.'
+        : 'Unable to send a sign-in email. Please try again shortly.');
+      setLinkState('error');
+    }
+  }
 
   async function handleEmailSubmit(event) {
     event.preventDefault();
@@ -162,16 +196,29 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
       <div className="auth-layout">
         <section className="auth-intro" aria-labelledby="auth-title">
           <p>{isAdminEntry ? 'INTERNAL ADMINISTRATION' : 'CUSTOMER COURSE ACCESS'}</p>
-          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Cart access'}</h1>
+          <h1 id="auth-title">{isAdminEntry ? 'Administration access' : 'Course access'}</h1>
           <span>{isAdminEntry ? 'Authorized Fairway Refresh personnel only.' : 'Sign in to access your assigned course.'}</span>
         </section>
         <div className="auth-entry">
-          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Cart sign in'}>
+          <section className="auth-panel" aria-label={isAdminEntry ? 'Admin sign in' : 'Course sign in'}>
             <div className="auth-panel-heading">
               <span>AUTHORIZED ACCESS</span>
-              <h2>{isAdminEntry ? 'Admin sign in' : 'Cart sign in'}</h2>
+              <h2>{isAdminEntry ? 'Admin sign in' : 'Course sign in'}</h2>
             </div>
-            <form className="login-form" onSubmit={handleEmailSubmit}>
+            {qrReview && <form className="login-form" onSubmit={handlePasswordlessSubmit}>
+              <label>
+                Review email
+                <input type="email" autoComplete="email" value={email}
+                  onChange={(event) => setEmail(event.target.value)} required />
+              </label>
+              <button className="google-button" type="submit" disabled={linkState === 'sending'}>
+                {completingEmailLink ? 'Finish private sign-in' : 'Email me a sign-in link'}
+              </button>
+              <p>Use your approved review email. No sandbox password is needed. Open the email link in the browser you want to use, then enter the same email to finish.</p>
+              {linkState === 'sent' && <p role="status">Sign-in email sent. Check your inbox and spam folder. You can request a fresh link here whenever needed.</p>}
+              {linkError && <p role="alert" className="login-error">{linkError}</p>}
+            </form>}
+            {!completingEmailLink && <form className="login-form" onSubmit={handleEmailSubmit}>
               <label>
                 Email
                 <input
@@ -197,7 +244,7 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
               <button className="google-button" type="submit">
                 Sign in
               </button>
-            </form>
+            </form>}
 
             <div className="login-divider">or</div>
 
@@ -562,6 +609,9 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [claimsReady, setClaimsReady] = useState(false);
   const [authState, setAuthState] = useState('checking');
+  const [reviewSignInState, setReviewSignInState] = useState(() => (
+    new URLSearchParams(window.location.hash.slice(1)).has('review_sign_in') ? 'checking' : null
+  ));
   const [requests, setRequests] = useState([]);
   const [loadState, setLoadState] = useState('loading');
   const [loadError, setLoadError] = useState('');
@@ -580,6 +630,16 @@ function App() {
 
   useEffect(() => {
     let isMounted = true;
+    let reviewSignIn = null;
+    try {
+      reviewSignIn = sandboxReviewSignIn(window.location.href, fairwayEnvironment, firebaseConfig);
+    } catch (error) {
+      console.error('Private review sign-in rejected:', error.message);
+      setReviewSignInState('error');
+    }
+    if (new URLSearchParams(window.location.hash.slice(1)).has('review_sign_in')) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       if (!isMounted) {
@@ -587,6 +647,7 @@ function App() {
       }
 
       if (!nextUser) {
+        window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
         if (publicReview) {
           setUser(null);
           setAuthState('checking');
@@ -604,7 +665,6 @@ function App() {
         setAuthState('signed_out');
         setOperatorConfig(null);
         setOperatorState('not_requested');
-        window.sessionStorage.removeItem(FRESH_SIGN_IN_STORAGE_KEY);
         return;
       }
 
@@ -650,7 +710,16 @@ function App() {
       setAuthState('signed_in');
     });
 
-    getRedirectResult(auth)
+    if (reviewSignIn) {
+      signInWithEmailLink(auth, reviewSignIn.email, reviewSignIn.link)
+        .then(() => {
+          if (isMounted) setReviewSignInState(null);
+        })
+        .catch((error) => {
+          console.error('Private review sign-in failed:', error.code);
+          if (isMounted) setReviewSignInState('error');
+        });
+    } else getRedirectResult(auth)
       .then((result) => {
         if (!isMounted || !result?.user) {
           return;
@@ -740,6 +809,7 @@ function App() {
 
     let active = true;
     const { requestsByCourse, loadedCourses } = createCourseRequestState();
+    const failedCourses = new Set();
     setLoadState('loading');
     setLoadError('');
 
@@ -749,11 +819,11 @@ function App() {
           const leftTime = left.received_at?.toMillis?.() ?? new Date(left.received_at).getTime();
           const rightTime = right.received_at?.toMillis?.() ?? new Date(right.received_at).getTime();
           return rightTime - leftTime;
-        })
-        .slice(0, 100);
+        });
       if (active) {
         setRequests(nextRequests);
-        if (loadedCourses.size === courses.length) setLoadState('ready');
+        if (failedCourses.size > 0) setLoadState('error');
+        else if (loadedCourses.size === courses.length) { setLoadState('ready'); setLoadError(''); }
       }
     }
 
@@ -762,8 +832,8 @@ function App() {
         collection(db, 'requests'),
         where('customer_id', '==', course.customer_id),
         where('course_id', '==', course.course_id),
-        orderBy('received_at', 'desc'),
-        limit(100)
+        where('status', 'in', ['new', 'confirmed']),
+        orderBy('received_at', 'asc')
       ),
       (snapshot) => {
         const nextCourseRequests = snapshot.docs.map((doc) => {
@@ -778,7 +848,7 @@ function App() {
             completed_at: data.completed_at,
             cancelled_at: data.cancelled_at,
             device_id: data.device_id,
-            location_label: data.device_label,
+            location_label: data.location_label || data.device_label,
             customer_id: data.customer_id,
             course_id: data.course_id,
             course_name: data.course_name,
@@ -786,12 +856,14 @@ function App() {
           };
         });
         const key = `${course.customer_id}/${course.course_id}`;
+        failedCourses.delete(key);
         requestsByCourse.set(key, nextCourseRequests);
         loadedCourses.add(key);
         updateRequests();
       },
       (error) => {
         console.error('Failed to load requests:', error);
+        failedCourses.add(`${course.customer_id}/${course.course_id}`);
         if (active) {
           setLoadError(error.code || 'unknown');
           setLoadState('error');
@@ -850,11 +922,24 @@ function App() {
     inventoryState,
   });
 
+  if (entry === 'public_bay') {
+    const match = window.location.pathname.match(/^\/range\/([A-Za-z0-9_-]+)\/?$/);
+    return <Suspense fallback={<EntryStatus title="Server request" message="Loading bay…" />}>
+      <BayRequestApp apiBaseUrl={API_BASE_URL} bayId={match?.[1] || ''} sandbox={fairwayEnvironment === 'sandbox'} />
+    </Suspense>;
+  }
+
   if (entry === 'public_menu') {
     const match = window.location.pathname.match(/^\/cartmenus\/([^/]+)\/?$/);
     let slug = '';
     try { slug = match ? decodeURIComponent(match[1]) : ''; } catch { slug = ''; }
     return <Suspense fallback={<EntryStatus title="Today’s Cart Menu" message="Loading menu…" />}><PublicMenuApp apiBaseUrl={adminApiBaseUrl} slug={slug} /></Suspense>;
+  }
+
+  if (reviewSignInState) {
+    return <EntryStatus title="Private sandbox access" message={reviewSignInState === 'checking'
+      ? 'Opening your private review session...'
+      : 'This private sign-in link is invalid, expired, or already used. Open a fresh private review link.'} />;
   }
 
   if (!user) {
@@ -955,4 +1040,7 @@ function App() {
 }
 
 const root = createRoot(document.getElementById('root'));
+if (modeForPath(window.location.pathname) === APP_MODE.PUBLIC_BAY) {
+  document.documentElement.classList.add('public-bay-page');
+}
 root.render(window.location.pathname === '/operator-design' ? <OperatorDesignReview /> : <App />);

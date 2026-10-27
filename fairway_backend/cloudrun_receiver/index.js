@@ -8,6 +8,7 @@ const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = 
 const { resolveCourseServiceState, resolveServiceGroup } = require('./lib/course_service');
 const {
   aggregateCourseReports,
+  historyRequestsInRange,
   periodBounds,
   reportCoursePeriods,
 } = require('./lib/service_reporting');
@@ -42,6 +43,10 @@ const {
 } = require('./lib/fleet/schema');
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
 const inventory = require('./lib/inventory');
+const crypto = require('crypto');
+const { courseOperation } = require('./lib/course_operation');
+const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
+const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
 const {
   getOperatorAssignment,
   getNotificationPreferences,
@@ -135,10 +140,6 @@ async function verifyFirebaseIdToken(token) {
   return getAuth().verifyIdToken(token);
 }
 
-function completeCommandId(requestId) {
-  return `${COMPLETE_COMMAND_TYPE}__${requestId}`;
-}
-
 function toDate(value) {
   if (value instanceof Date) {
     return value;
@@ -176,6 +177,8 @@ function createFairwayHandlers(db, {
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
+  qrEnabled = process.env.FAIRWAY_QR_ENABLED === 'true',
+  qrRateKey = process.env.FAIRWAY_QR_RATE_KEY,
   publicReviewAccess = publicReviewConfiguration(),
   protectedSystemAdminUids = resolveProtectedSystemAdminUids(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
@@ -641,7 +644,7 @@ function createFairwayHandlers(db, {
         error.code = 'last_admin';
         throw error;
       }
-      transaction.set(accessRef, record);
+      transaction.set(accessRef, record, { merge: true });
     });
 
     const saved = await getUserAccess(db, authUser.uid);
@@ -736,6 +739,7 @@ function createFairwayHandlers(db, {
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
+      operation_kind: courseOperation(course).kind,
       service_state: resolveCourseServiceState(course),
       on_premise_service_state: resolveCourseServiceState(course, 'on_premise'),
       has_on_premise_devices: assignedDevices.docs.some((document) => (
@@ -824,9 +828,19 @@ function createFairwayHandlers(db, {
     const courseRequests = requestSnapshots.map((snapshot) => (
       snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
     ));
-    const courseReports = await Promise.all(courses.map((course, index) =>
-      courseReportingSummary(course, requestTime, courseRequests[index])));
-    const reports = aggregateCourseReports(courseReports);
+    const courseReports = await Promise.all(courses.map((course, index) => {
+      if (courseOperation(course).cart_metrics) {
+        return courseReportingSummary(course, requestTime, courseRequests[index]);
+      }
+      const bounds = periodBounds(requestTime, course.timezone);
+      return Object.fromEntries(Object.entries(bounds).map(([period, range]) => [period, {
+        history: historyRequestsInRange(courseRequests[index], range),
+      }]));
+    }));
+    const cartReports = courseReports.filter((_, index) => courseOperation(courses[index]).cart_metrics);
+    const reports = aggregateCourseReports(cartReports.length ? cartReports : courseReports, {
+      includeSummaries: cartReports.length > 0,
+    });
     const summaries = Object.fromEntries(Object.entries(reports)
       .map(([period, report]) => [period, report.summary]));
     return res.status(200).json({
@@ -849,6 +863,9 @@ function createFairwayHandlers(db, {
     const courseId = req.body?.course_id;
     const course = await authorizedCourse(operator, courseId, req.body?.customer_id);
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
+    if (!courseOperation(course).physical_devices && group !== 'on_course') {
+      return res.status(400).send('This Course has one service control\n');
+    }
     const requestTime = now();
     const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
     const suspended = action === 'suspend';
@@ -996,6 +1013,7 @@ function createFairwayHandlers(db, {
           course_id: courseSnap.id,
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
+          operation_kind: courseOperation(courseSource).kind,
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
         };
@@ -1048,11 +1066,12 @@ function createFairwayHandlers(db, {
   }
 
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule', 'operation_kind']);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
+      operationKind: req.body.operation_kind,
       comments: req.body.comments,
     });
     return res.status(201).json(course);
@@ -1328,129 +1347,15 @@ function createFairwayHandlers(db, {
   }
 
   async function updateRequestStatus(req, res, requestId, action) {
-    const validActions = {
-      confirm: {
-        status: 'confirmed',
-        timestampField: 'confirmed_at'
-      },
-      complete: {
-        status: 'completed',
-        timestampField: 'completed_at'
-      },
-      cancel: {
-        status: 'cancelled',
-        timestampField: 'cancelled_at'
-      }
-    };
-
-    const actionConfig = validActions[action];
-
-    if (!actionConfig) {
-      return res.status(404).send('Not Found\n');
-    }
-
     const operator = await authorizeOperator(req, res);
-
-    if (!operator) {
-      return res;
+    if (!operator) return res;
+    try {
+      const result = await transitionRequest(db, requestId, action, operator.assignment, operator.identity.uid);
+      return res.status(200).send(`OK ${requestId} ${result.status}\n`);
+    } catch (error) {
+      if (error instanceof RequestError) return res.status(error.status).json({ error: error.message });
+      throw error;
     }
-
-    const requestRef = db.collection('requests').doc(requestId);
-
-    if (action === COMPLETE_COMMAND_TYPE) {
-      const result = await db.runTransaction(async (transaction) => {
-        const requestSnap = await transaction.get(requestRef);
-
-        if (!requestSnap.exists) {
-          return { notFound: true };
-        }
-
-        const requestData = requestSnap.data();
-        if (!operator.assignment.courses.some((course) => (
-          course.customer_id === requestData.customer_id &&
-          course.course_id === requestData.course_id
-        ))) {
-          return { forbidden: true };
-        }
-        const expiresAt = toDate(requestData.demand_window_expires_at);
-
-        if (typeof requestData.device_id !== 'string' || !expiresAt) {
-          return { invalid: true };
-        }
-
-        const commandId = completeCommandId(requestId);
-        const commandRef = db.collection('devices').doc(requestData.device_id)
-          .collection('commands').doc(commandId);
-        const commandSnap = await transaction.get(commandRef);
-
-        if (requestData.status !== actionConfig.status) {
-          transaction.update(requestRef, {
-            status: actionConfig.status,
-            [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-            operator_id: operator.identity.uid,
-          });
-        }
-
-        if (!commandSnap.exists) {
-          transaction.set(commandRef, {
-            command_id: commandId,
-            device_id: requestData.device_id,
-            type: COMPLETE_COMMAND_TYPE,
-            request_id: requestId,
-            status: 'pending',
-            created_at: FieldValue.serverTimestamp(),
-            expires_at: requestData.demand_window_expires_at,
-            created_by: operator.identity.uid,
-            acknowledged_at: null,
-          });
-        }
-
-        return { commandId, created: !commandSnap.exists, deviceId: requestData.device_id };
-      });
-
-      if (result.notFound) {
-        return res.status(404).send('Request not found\n');
-      }
-      if (result.forbidden) {
-        return res.status(403).send('Operator is not authorized for this Course\n');
-      }
-      if (result.invalid) {
-        return res.status(422).send('Request is missing command correlation data\n');
-      }
-
-      console.log('COMPLETE command correlation:', {
-        request_id: requestId,
-        command_id: result.commandId,
-        device_id: result.deviceId,
-        created: result.created,
-      });
-    } else {
-      const requestSnap = await requestRef.get();
-
-      if (!requestSnap.exists) {
-        return res.status(404).send('Request not found\n');
-      }
-
-      if (!operator.assignment.courses.some((course) => (
-        course.customer_id === requestSnap.data().customer_id &&
-        course.course_id === requestSnap.data().course_id
-      ))) {
-        return res.status(403).send('Operator is not authorized for this Course\n');
-      }
-
-      await requestRef.update({
-        status: actionConfig.status,
-        [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-        operator_id: operator.identity.uid,
-      });
-    }
-
-    console.log('Fairway request status updated:', {
-      request_id: requestId,
-      status: actionConfig.status
-    });
-
-    return res.status(200).send(`OK ${requestId} ${actionConfig.status}\n`);
   }
 
   async function pollDeviceCommand(req, res) {
@@ -1620,6 +1525,25 @@ function createFairwayHandlers(db, {
         }
         return res.status(200).json({ status: 'ready' });
       }
+      const publicBayMatch = path.match(/^\/api\/v1\/public\/bays\/([A-Za-z0-9_-]+)(\/requests)?$/);
+      if (publicBayMatch) {
+        res.set('Cache-Control', 'no-store');
+        if (!qrEnabled) return res.status(404).json({ error: 'Bay not found' });
+        if (req.method === 'GET' && !publicBayMatch[2]) {
+          return res.status(200).json(await publicBay(db, publicBayMatch[1]));
+        }
+        if (req.method === 'POST' && publicBayMatch[2]) {
+          if (!qrRateKey) throw new RequestError(503, 'Request protection is unavailable');
+          if (!req.body || Object.keys(req.body).length !== 1 || !req.body.operation_id) {
+            throw new RequestError(400, 'Only a submission ID is accepted');
+          }
+          const networkId = crypto.createHmac('sha256', qrRateKey).update(req.ip || req.socket?.remoteAddress || 'unknown').digest('hex');
+          return res.status(200).json(await acceptQrRequest(
+            db, publicBayMatch[1], req.body.operation_id, networkId, now()
+          ));
+        }
+        return res.status(405).send('Method Not Allowed\n');
+      }
       if (path.startsWith('/api/v1/admin/')) {
         return res.status(404).send('Not Found\n');
       }
@@ -1670,6 +1594,10 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error instanceof RequestError) {
+        if (error.status === 429) res.set('Retry-After', '60');
+        return res.status(error.status).json({ error: error.message });
+      }
       if (error && error.type === 'entity.parse.failed') {
         return res.status(400).send('Invalid JSON\n');
       }

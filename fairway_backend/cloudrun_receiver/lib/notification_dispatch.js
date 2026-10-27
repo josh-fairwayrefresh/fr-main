@@ -16,14 +16,14 @@ function notificationTopic(requestId) {
 }
 
 function notificationPayload(requestId, request) {
-  const location = request.device_label || (request.hole ? `Hole ${request.hole}` : request.course_name);
+  const location = request.location_label || request.device_label || (request.hole ? `Hole ${request.hole}` : request.course_name);
   return {
     title: 'Fairway Refresh',
-    body: `Refresh requested — ${location || 'Course request'}`,
+    body: `${request.source === 'qr' ? 'Server' : 'Refresh'} requested — ${location || 'Course request'}`,
     tag: requestId,
     request_id: requestId,
     course_id: request.course_id,
-    url: `/requests/${encodeURIComponent(requestId)}?course=${encodeURIComponent(request.course_id)}`,
+    url: `/requests/${encodeURIComponent(requestId)}?customer_id=${encodeURIComponent(request.customer_id)}&course_id=${encodeURIComponent(request.course_id)}`,
   };
 }
 
@@ -73,7 +73,7 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
   if (!requestSnapshot.exists) return { skipped: 'missing_request' };
 
   const request = requestSnapshot.data();
-  if (request.event_type !== 'button_press' || typeof request.course_id !== 'string') {
+  if (!['button_press', 'server_request'].includes(request.event_type) || typeof request.course_id !== 'string') {
     return { skipped: 'not_course_request' };
   }
 
@@ -95,7 +95,7 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
     const currentlyAuthorized = assignment?.courses.some((course) => (
       course.course_id === request.course_id && course.customer_id === subscription.customer_id
     ));
-    if (!currentlyAuthorized || !(await isNotificationEnabled(
+    if (subscription.customer_id !== request.customer_id || !currentlyAuthorized || !(await isNotificationEnabled(
       db, subscription.operator_uid, request.customer_id, request.course_id
     ))) {
       continue;

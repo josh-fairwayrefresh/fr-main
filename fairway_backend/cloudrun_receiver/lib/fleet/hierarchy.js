@@ -1,6 +1,7 @@
 'use strict';
 
 const { getCourseForCustomer } = require('./courses');
+const { courseOperation } = require('../course_operation');
 
 function getLocalDateParts(instant, timeZone) {
 	const formatter = new Intl.DateTimeFormat('en-US', {
@@ -47,7 +48,8 @@ async function resolveDeviceHierarchy(db, device) {
 
 	const course = await getCourseForCustomer(db, device.customer_id, device.course_id);
 
-	return course ? { valid: true, course } : { valid: false, course: null };
+	return course && courseOperation(course).physical_devices
+		? { valid: true, course } : { valid: false, course: null };
 }
 
 module.exports = {

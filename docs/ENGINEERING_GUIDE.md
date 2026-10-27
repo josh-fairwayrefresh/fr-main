@@ -85,6 +85,46 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ## Change and Validation Discipline
 
+### Course-owned Driving Range QR request increment
+
+Product behavior is owned by [UX Specification](UX_SPECIFICATION.md#driving-range-qr-requests-review-increment).
+The independent Course boundary reuses Customer/Course authorization, Course
+selection, persistent service state and existing notification preferences.
+`lib/course_operations.json` is the shared capability owner: legacy/missing
+configuration means Cart; `driving_range` has no inventory, Cart KPIs or
+physical-device capability. New Course creation validates explicit configuration;
+ordinary editing does not convert an existing Course's operation.
+
+Both sources persist in `requests`. `lib/request_lifecycle.js` is the single
+transactional action owner for authorization, transitions and attribution.
+Only physical requests create correlated COMPLETE commands. QR terminal
+actions clear only the matching bay pointer. Opposite terminal actions conflict;
+same-action replay preserves the first outcome and actor.
+
+`lib/qr_requests.js` owns minimal public reads and atomic anonymous acceptance:
+Course availability, per-bay outstanding pointer, immutable submission receipts
+and request creation commit together. A receipt replay cannot create a new
+request after completion. `qr_bays` owns permanent bay-side identity/configuration:
+26 numbered bays each have independent A/B records and outstanding pointers
+(52 URLs). Existing URLs remain side A; new request/notification labels include
+the side without rewriting historical snapshots.
+Private nested receipts preserve acceptance identity. Short-lived server-side
+rate counters limit each network/bay window; raw IP addresses are not persisted.
+The ingress requires explicit enablement and a server-only HMAC rate key.
+Static URLs are identifiers, not secrets or proof of physical presence.
+
+Existing `course_service` owns availability and `operator_notifications` owns
+Course preferences. The existing dispatcher handles device and QR creation;
+no channel-preference layer or second delivery workflow exists. Delivery is
+asynchronous with durable per-request/subscription attempts and browser collapse
+identity, not a guarantee of exactly-once physical display.
+
+Active Firestore listeners filter active status before retrieval with no
+arbitrary cap. Course configuration excludes Range requests and service time
+from Cart report aggregation. The shared operator screen hides Inventory and
+Cart metrics for Range Courses, while APIs also exclude them from inventory
+bootstrap/access. QR data and private controls remain deny-by-default in
+Firestore Rules. Deployment and review limits belong to the Deployment Guide.
 ### Persistent cart inventory increment — production
 
 The CPO accepted release preparation and authorized production publication on
