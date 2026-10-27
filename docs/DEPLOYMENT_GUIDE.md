@@ -2,7 +2,8 @@
 
 ## Operator Customer/service hierarchy correction — 2026-10-26
 
-**Prepared; not yet published.** Bounded frontend follow-up to the Driving
+**Released through merged [PR #19](https://github.com/josh-fairwayrefresh/fr-main/pull/19).**
+Bounded frontend follow-up to the Driving
 Range release below, based on main
 `ab5b394d699f05a2fb1376197485f128557a058a`. Admin Customer names and the
 Customer-filtered existing Service selector derive from the authorized Course
@@ -33,15 +34,61 @@ defines URL/deep-link, mutation-lock and stale-response behavior.
   subscriptions and service states are included in preservation checks.
 - Publication order: commit/push, exact-head guarded merge, production build
   from merged source; retain the byte-identical installation-sign directory
-  from the verified prior release, then deploy **Hosting only**. Verify served
-  assets, normal authenticated read-only switching and preservation before
-  closeout. No Admin/Receiver/notifier, Auth, Rules/indexes, firmware or sandbox
+  from the verified prior release, then deploy **Hosting only**. This sequence
+  completed; all **128** custom-domain served files match local artifacts;
+  entry/PDF/register also match the secondary `web.app` origin.
+  No Admin/Receiver/notifier, Auth, Rules/indexes, firmware or sandbox
   publication, production transactions, preference writes or service actions.
 - Recovery: republish the retained compatible previous Hosting artifact
   (including its permanent signs/register), or use a compatible forward fix.
   Keep all current stock/assignment/Course-aware backends and every live record.
   Never restore older writers or overwrite live history with a snapshot.
   Physical Safari/iPad/PWA delivery limits remain as documented below.
+
+### Deployed identities and read-only closeout
+
+- Reviewed feature head **`676da88662c4ca8183dfefb091f2dc8dd1fe6a1c`** merged
+  as **`e8793db058bf34b8a9a976dbea07b7b91769b93e`**, the deployed frontend
+  source. Merge tree equals the validated feature tree; merged and candidate
+  production application builds are byte-identical.
+- Hosting **`8ee4867beb77d9fa`**, release **`1793062793254000`**,
+  **`2026-10-27T00:59:53.254Z`** (October 26 PDT).
+  Operator: **https://app.fairwayrefresh.com/**.
+  No backend publication: Admin **`fairway-admin-qr-db9001e`**, Receiver
+  **`fairway-button-receiver-qr-db9001e`**, notifier
+  **`fairway-request-notifier-qr-db9001e`** remain unchanged at **100%**.
+- Normal existing authenticated Admin session restored on the new build.
+  Monarch offers Cart/Driving Range; Placeholder Hills offers only its own
+  service. Live dashboard reads for all three return **200**. Selection,
+  History and inventory links stay scoped; only one Requests DOM remains.
+  Live 375/430/768/1024/1440 viewport measurements equal document width.
+  Selected phone labels fit their controls; this is browser evidence, not
+  new physical-phone/Safari acceptance. Read-only staff picker displays Alex,
+  Christina, Michael, Michaela and Wendy; it was cancelled without selection.
+  Seven observed operator/inventory API calls in the settled live checks
+  were **GET**; no production mutation or customer test push was performed.
+  Cart remains **ON**, Driving Range **suspended**; notification choices
+  remain Tony Lema on, Range/Placeholder off for the checked Admin session.
+- Consistent snapshot at **`2026-10-27T01:00:03.302400Z`** matches the baseline
+  exactly across **33** protected surfaces: document IDs, every stored field,
+  create/update timestamps, full catalog, account access, staff, histories,
+  preferences/subscriptions, Auth configuration, runtime configuration and
+  both sandbox deployments. All **58** products are unchanged; Monarch's
+  **57** remain **43 On Cart / 14 Sold Out / 0 In Inventory / 0 archived**.
+  Missing quantities were neither initialized nor used to move tiles.
+  The **94** inventory events, **4** historical menus, **5** staff,
+  **91** requests, **68** commands and **441** subscription descendants remain.
+- The prior permanent installation directory is byte-identical, including
+  all 52 bay-side destinations/register and the 26-page
+  [installation PDF](https://app.fairwayrefresh.com/driving-range-signs/driving-range-installation.pdf),
+  SHA256 **`f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`**.
+  No new QR identity, PDF generation, entitlement addition or service activation.
+- Detailed restricted artifacts: private session
+  `customer-context-release/{before,final,merged-hosting}/`,
+  `verification.json`, `production-build-verification.json`;
+  final frontend gate `customer-context-regression-serial.log`.
+  Recovery artifacts are retained locally, not a claimed off-machine data
+  backup; source and canonical release records are GitHub-backed.
 
 ## Driving Range production integration and controlled release — 2026-10-26
 
@@ -2404,6 +2451,31 @@ FRB-0003 sequence and failure handling are owned by
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Production Operator Customer/Service Hierarchy — 2026-10-26
+
+- **Current frontend:** Admin Customer names and Customer-scoped authorized
+  services share the existing selected Course context. Ordinary-user scope,
+  deep links, Cart inventory/staff and Driving Range behavior are preserved.
+  Mutation locks and scoped async/DOM updates prevent cross-Customer context.
+- **Source/Hosting:** [PR #19](https://github.com/josh-fairwayrefresh/fr-main/pull/19),
+  reviewed head `676da88662c4ca8183dfefb091f2dc8dd1fe6a1c`, merged/deployed
+  **`e8793db058bf34b8a9a976dbea07b7b91769b93e`**; Hosting
+  **`8ee4867beb77d9fa`**, release **`1793062793254000`**,
+  **`2026-10-27T00:59:53.254Z`**. This supersedes only the prior Hosting
+  identity, not the current Driving Range backend/data baseline below.
+- **Preservation/limits:** all three `qr-db9001e` backends remain at **100%**;
+  normal authentication, entitlements, full inventory/history, five Tony Lema
+  staff, preferences/subscriptions, permanent signs, firmware and both sandboxes
+  are unchanged. Cart remains ON; Driving Range remains suspended.
+  No production transactions or customer test notifications. Existing physical
+  phone/Safari/PWA/OS delivery/print acceptance limits remain.
+- **Evidence and recovery:** the
+  [bounded release record](#operator-customerservice-hierarchy-correction--2026-10-26)
+  owns 86 passing checks, actual production build, live authenticated/viewport
+  checks, 128 served-file matches, exact 33-surface preservation and compatible
+  Hosting-only recovery to `1be3937a43d1c771`. Preserve current stock-aware,
+  assignment-aware and Course-operation-aware writers and every live record.
 
 ### Production Driving Range QR and Service Switching — 2026-10-26
 

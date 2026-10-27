@@ -39,9 +39,15 @@ the existing owners. Only the two existing Monarch Customer login accounts
 gained the new Course entitlement; Tony Lema's staff, all inventory/history,
 authentication and both sandboxes are preserved. The
 [current release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26)
-and top Alignment Register entry own current Admin/Receiver/notifier/Hosting
-identities, installation links, preservation evidence, recovery and acceptance
-limits. The older inventory/staff-only runtime identities below are historical.
+owns current Admin/Receiver/notifier identities, installation links, preservation,
+recovery and acceptance limits. The subsequent
+[Customer/service hierarchy correction](DEPLOYMENT_GUIDE.md#operator-customerservice-hierarchy-correction--2026-10-26)
+was merged through PR #19 and published from
+`e8793db058bf34b8a9a976dbea07b7b91769b93e` to Hosting
+`8ee4867beb77d9fa`. Admins choose a named Customer and its authorized service;
+ordinary-user scope, inventory/staff, notification choices and all backends/data
+remain unchanged. The top Alignment Register entry owns that current frontend
+alignment. Older Hosting and inventory/staff-only runtime identities are historical.
 The CPO_stats_fix reporting and persistent
 Resume/Suspend behavior was CPO-accepted, merged, and deployed to production
 on 2026-10-22. The CPO-accepted select-any-request queue and independent
