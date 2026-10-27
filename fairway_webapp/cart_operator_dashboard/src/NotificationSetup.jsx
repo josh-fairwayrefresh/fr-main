@@ -13,7 +13,7 @@ function isInstalled() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
 
-export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) {
+export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, onMutationPending }) {
   const [preferences, setPreferences] = useState(operatorConfig.notification_preferences || {});
   const [busyCourse, setBusyCourse] = useState('');
   const [error, setError] = useState('');
@@ -60,6 +60,7 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
   }, [apiBaseUrl, installed, operatorConfig, supported, user]);
 
   async function changePreference(course, enabled) {
+    onMutationPending?.(true);
     const key = courseKey(course);
     setBusyCourse(key);
     setError('');
@@ -90,6 +91,7 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig }) 
     } catch (reason) {
       setError(reason.message);
     } finally {
+      onMutationPending?.(false);
       setBusyCourse('');
     }
   }

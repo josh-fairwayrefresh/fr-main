@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  authorizedCustomers,
   courseContextUrl,
   courseDisplayLabel,
   courseKey,
@@ -41,6 +42,24 @@ test('Cart and Inventory links preserve the selected course context', () => {
     '/inventory?customer_id=CUST-0003&course_id=COURSE-0002'
   );
   assert.equal(courseContextUrl('/', null), '/');
+});
+
+test('Customer hierarchy is derived only from authorized Courses without a directory', () => {
+  assert.deepEqual(authorizedCustomers([...courses, { ...courses[0], course_id: 'COURSE-0003' }]), [
+    { customer_id: 'CUST-0001', customer_name: 'Monarch Bay GC' },
+    { customer_id: 'CUST-0003', customer_name: 'Sandbox Links Golf' },
+  ]);
+  assert.deepEqual(authorizedCustomers([]), []);
+  assert.deepEqual(authorizedCustomers([{ customer_id: 'CUST-0004' }]), [
+    { customer_id: 'CUST-0004', customer_name: 'Customer name unavailable' },
+  ]);
+});
+
+test('valid Customer URL context chooses its own Course when Course is missing or unauthorized', () => {
+  assert.equal(selectedCourseFromLocation(courses, '?customer_id=CUST-0003'), courses[1]);
+  assert.equal(selectedCourseFromLocation(courses, '?customer_id=CUST-0003&course_id=COURSE-0001'), courses[1]);
+  assert.equal(selectedCourseFromLocation(courses, '?course=COURSE-0002'), courses[1]);
+  assert.equal(selectedCourseFromLocation([courses[0]], '?customer_id=CUST-0003&course_id=COURSE-0002'), courses[0]);
 });
 
 test('bootstrap course identity is displayed before dashboard data is available', () => {

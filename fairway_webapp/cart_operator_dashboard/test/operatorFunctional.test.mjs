@@ -35,12 +35,13 @@ test('request selection remains stable and notification focus is one-shot', () =
 });
 
 test('Assigned customer users have an Inventory link into the shared authenticated session', () => {
-  assert.match(source, /<a className="op-inventory" href=\{courseContextUrl\('\/inventory', course\)\}/);
+  assert.match(source, /<a className="op-inventory" href=\{contextPending \? undefined : courseContextUrl\('\/inventory', course\)\}/);
   assert.doesNotMatch(source, /canManageInventory/);
 });
 
 test('course matching in OperatorApp matches on customer_id and course_id', () => {
-  assert.match(source, /mergeDashboardCourse\(selectedCourse, dashboard\?\.courses\)/);
+  assert.match(source, /mergeDashboardCourse\(selectedCourse, currentDashboard\?\.courses\)/);
+  assert.match(source, /dashboard\?\.key === selectedCourseKeyValue \? dashboard\.data : null/);
   assert.match(source, /\{courseDisplayLabel\(course\)\}/);
 });
 

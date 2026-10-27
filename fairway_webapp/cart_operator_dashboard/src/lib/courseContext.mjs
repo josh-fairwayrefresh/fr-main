@@ -12,6 +12,10 @@ export function selectedCourseFromLocation(courses, search = '') {
     ));
     if (requested) return requested;
   }
+  if (customerId) {
+    const customerCourse = courses.find((course) => course.customer_id === customerId);
+    if (customerCourse) return customerCourse;
+  }
   if (!customerId && courseId) {
     const matches = courses.filter((course) => course.course_id === courseId);
     if (matches.length === 1) return matches[0];
@@ -23,6 +27,13 @@ function usableDisplayName(value) {
   if (typeof value !== 'string') return null;
   const name = value.trim();
   return name && !['undefined', 'null'].includes(name.toLowerCase()) ? name : null;
+}
+
+export function authorizedCustomers(courses) {
+  return [...new Map(courses.map((course) => [course.customer_id, {
+    customer_id: course.customer_id,
+    customer_name: usableDisplayName(course.customer_name) || 'Customer name unavailable',
+  }])).values()];
 }
 
 export function mergeDashboardCourse(authorizedCourse, dashboardCourses) {
