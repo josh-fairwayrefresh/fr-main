@@ -1,10 +1,54 @@
 # Deployment Guide
 
+## Operator Customer/service hierarchy correction — 2026-10-26
+
+**Prepared; not yet published.** Bounded frontend follow-up to the Driving
+Range release below, based on main
+`ab5b394d699f05a2fb1376197485f128557a058a`. Admin Customer names and the
+Customer-filtered existing Service selector derive from the authorized Course
+list and one selected Customer/Course pair. No permissions/directory, account
+entitlement, stored service-state or backend contract changes are included.
+The [UX owner](UX_SPECIFICATION.md#driving-range-qr-requests-review-increment)
+defines URL/deep-link, mutation-lock and stale-response behavior.
+
+- Isolated frontend validation passes **86/86** checks (final serial runner),
+  including Admin
+  Monarch/Placeholder switching, ordinary-user isolation, exact deep links,
+  stale dashboard delivery and History DOM removal, request/Resume/staff/
+  notification mutation locks, unchanged notification choices on navigation,
+  inventory operations and operator-tab regressions. Widths **375, 430, 768,
+  1024 and 1440 px** have no horizontal overflow. Distinct per-context sibling
+  React keys prevent old hidden Requests/History DOM surviving a switch.
+  Overlapping explicit notification writes keep navigation locked until both
+  finish. One concurrent inventory fixture run reached its fixed-time assertion
+  while still RUNNING; the unchanged fixture passes in the serial release gate.
+- The actual production configuration passes its validator and production
+  build; sandbox review remains disabled. No backend tests are repeated for
+  this frontend-only diff. Existing bundle-size warnings are unchanged.
+- Read-only consistent recovery baseline captured at
+  `2026-10-27T00:55:13.772163Z` under private session artifacts
+  `customer-context-release/before/`; prior compatible Hosting version
+  **`1be3937a43d1c771`** and all three `qr-db9001e` backend revisions at **100%**
+  are retained. The complete catalog, staff, histories, accounts, preferences,
+  subscriptions and service states are included in preservation checks.
+- Publication order: commit/push, exact-head guarded merge, production build
+  from merged source; retain the byte-identical installation-sign directory
+  from the verified prior release, then deploy **Hosting only**. Verify served
+  assets, normal authenticated read-only switching and preservation before
+  closeout. No Admin/Receiver/notifier, Auth, Rules/indexes, firmware or sandbox
+  publication, production transactions, preference writes or service actions.
+- Recovery: republish the retained compatible previous Hosting artifact
+  (including its permanent signs/register), or use a compatible forward fix.
+  Keep all current stock/assignment/Course-aware backends and every live record.
+  Never restore older writers or overwrite live history with a snapshot.
+  Physical Safari/iPad/PWA delivery limits remain as documented below.
+
 ## Driving Range production integration and controlled release — 2026-10-26
 
 **Released through merged PR #13.** Production publication completed at
-`2026-10-27T00:19:45.305Z` (October 26 PDT). This is the current application
-baseline, superseding the inventory/staff-only runtime identities below.
+`2026-10-27T00:19:45.305Z` (October 26 PDT). This establishes the current backend
+and data baseline, superseding inventory/staff-only runtime identities below.
+The bounded frontend correction above owns subsequent Hosting publication.
 **Driving Range remains suspended; activation still requires explicit CPO
 direction.** No production request, sale, audit, shift or test notification
 was created by this release.

@@ -22,6 +22,8 @@
 .op-header nav { order: 1; }
 .op-inventory { order: 2; }
 .op-course-select { order: 3; }
+.op-context-selectors { order: 3; display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.op-context-selectors .op-course-select { min-width: 0; flex: 1; }
 .op-current-course { order: 4; }
 .op-status { order: 5; }
 .op-suspend { order: 6; }
@@ -128,7 +130,7 @@
   .op-header-context { display: grid; grid-column: 1; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-width: 0; }
   .op-header-main > *, .op-header-context > *, .op-course-context > *, .op-service-controls > * { order: initial; }
   .op-course-context { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 220px); align-items: center; gap: 12px; min-width: 0; }
-  .op-course-select select { width: 100%; max-width: none; }
+  .op-course-select select { width: 100%; min-width: 0; max-width: none; }
   .op-service-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
   .op-header-account { display: flex; align-items: center; gap: 8px; }
   .op-header nav { display: flex; order: 0; }

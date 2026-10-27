@@ -126,6 +126,21 @@ The heading's review-increment anchor is retained for existing document links.
   controls. Its persistent Resume/Suspend state is independent of other
   Courses. New Driving Range Courses start suspended until explicitly resumed.
   Suspension rejects new submissions; existing requests remain actionable.
+- The main operator context is one authorized Customer/Course pair. Admins
+  first select a **Customer** by name; the existing **Service** selector shows
+  only that Customer's authorized Courses, using **Cart service** and
+  **Driving range service** labels. Ordinary Customer users have no Customer
+  chooser and retain their existing authorized Course scope. Both selectors
+  derive solely from the existing authorized Course list, not a second
+  directory or permissions model.
+  Valid URL/deep-link pairs are preserved; a valid Customer-only link selects
+  an authorized Course within that Customer. Changing Customer selects a
+  valid Course there and updates the URL. Previous requests, History,
+  inventory context and late dashboard responses must not cross that boundary.
+  Context navigation is blocked during request, Resume/Suspend, inventory/
+  staff and explicit notification mutations, including browser-history
+  navigation. Selection alone never writes notification preferences or
+  subscriptions, account entitlements or stored service state.
 - Each permanently identified bay side has its own static Fairway-hosted URL.
   In the existing sandbox, the original 26 links remain side A and side B has
   26 additional links. Production uses a fresh permanent 52-side register

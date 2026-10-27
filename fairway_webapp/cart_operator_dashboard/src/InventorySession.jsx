@@ -162,6 +162,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
     const [signature, operationId] = entry;
     const [method, suffix, payload] = JSON.parse(signature);
     requestInFlight.current = true;
+    setSubmitting(true);
     try {
       await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
         method, body: { ...payload, operation_id: operationId },
@@ -173,7 +174,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
         setPendingVersion(version => version + 1);
       }
       throw error;
-    } finally { requestInFlight.current = false; }
+    } finally { requestInFlight.current = false; setSubmitting(false); }
     delete session.pending[signature];
     if (suffix.endsWith('/close')) session.close_amount = '';
     sessionStorage.setItem(key, JSON.stringify(session));
@@ -184,6 +185,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
 
   return {
     ...value, sessionId, request, select, close, choosing, resolvePending, submitting,
+    isSubmitting: () => requestInFlight.current,
     closeDraft: stored?.close_amount || '',
     saveCloseDraft: amount => {
       const session = storeSession();
