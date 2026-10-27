@@ -2,6 +2,13 @@
 
 ## Driving Range production integration and controlled release — 2026-10-26
 
+**Released through merged PR #13.** Production publication completed at
+`2026-10-27T00:19:45.305Z` (October 26 PDT). This is the current application
+baseline, superseding the inventory/staff-only runtime identities below.
+**Driving Range remains suspended; activation still requires explicit CPO
+direction.** No production request, sale, audit, shift or test notification
+was created by this release.
+
 The CPO authorized integrating reviewed PR #13 head
 `6e3afe55e55b0384dfa97c68bc7e6881dc843ce6` with current main
 `3aa8106605910e040bd71369eb22abe36a237aec`, validating before merge/publication,
@@ -18,7 +25,184 @@ the existing Admin access owner. Installation generation is an explicit mode
 restricted to the permanent production origin and an explicit Customer/Course
 mapping; default review generation remains sandbox-only.
 
-### Release gates and sequence
+### Source and deployed identities
+
+- Reviewed QR/A-B head: **`6e3afe55e55b0384dfa97c68bc7e6881dc843ce6`**.
+  Integration merge **`c749d18ce060eb515160bf030cdf166066598b34`** incorporates
+  main **`3aa8106605910e040bd71369eb22abe36a237aec`**, preserving its inventory
+  and staff owners. [PR #13](https://github.com/josh-fairwayrefresh/fr-main/pull/13)
+  merged as **`db9001ecba79b88f6584a6d407de355dc0c63d75`**, the deployed source.
+  The merge tree equals the validated integration tree; its production build
+  is byte-identical to the validated candidate's 21 application files.
+- All affected backends were staged Ready at **zero traffic**; their source
+  archives each matched all 62 uploaded files against merged source. Prior
+  revisions retained 100% until normal authenticated reads, unsigned-access
+  gates, source/configuration and preservation checks passed. Each new
+  revision was then explicitly routed to **100%**:
+
+  | Surface | Current revision | Preserved runtime identity |
+  |---|---|---|
+  | Admin | `fairway-admin-qr-db9001e` | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
+  | Receiver | `fairway-button-receiver-qr-db9001e` | `936892386735-compute@developer.gserviceaccount.com` |
+  | Notifier | `fairway-request-notifier-qr-db9001e` | `fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
+
+  `qr-release` tags point to these revisions. The old Admin `staff-release`
+  tag was removed so its Course-operation-unaware writer is not separately
+  reachable. Existing resources, origins, ingress/invocation settings and
+  environment remain unchanged except Receiver QR enablement and the
+  production-only rate-secret reference.
+- Immutable images:
+  - Admin:
+    `us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:a431901cc87198f1053ceae8813a1222ac706c11f3316fdd75d763156cacd530`.
+  - Receiver:
+    `us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-button-receiver@sha256:c9024dd2017975040a1b66a16bda1f341637682540b22db95333a286fa9f0cca`.
+  - Notifier:
+    `us-central1-docker.pkg.dev/savvy-kit-496703-r5/gcf-artifacts/fairway-request-notifier@sha256:02e34559d106f4e646040238044db25b9a4c8f86837cbd6c3ba2e4c136e276ea`.
+- Immutable source archives, each SHA256
+  **`a108559ed42427eb602ef2c7afa60cf5d9ca963d5f3e84d3f85c640dc30c4f09`**:
+  - Admin:
+    `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-admin/1793059634.530355-a718d6aca33e4155acad0222bf870b8b.zip#1793059634745191`.
+  - Receiver:
+    `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-button-receiver/1793059770.355177-c38fdde5262446599ba1eb174195527f.zip#1793059770570491`.
+  - Notifier:
+    `gs://gcf-v2-sources-936892386735-us-central1/services/fairway-request-notifier/1793059634.237152-a265f45e981d45bc91bccc9ec4a96671.zip#1793059634513118`.
+- Hosting: **`1be3937a43d1c771`**, release **`1793060385305000`**,
+  `2026-10-27T00:19:45.305Z`. All **128** served files match the verified
+  application/sign artifacts on the custom domain; entry, PDF and register
+  also match on `savvy-kit-496703-r5.web.app`. Hosting-only publication
+  did not deploy Rules, indexes or other Firebase surfaces.
+- Existing Eventarc trigger
+  **`projects/savvy-kit-496703-r5/locations/nam5/triggers/fairway-request-notifier-108760`**
+  is unchanged, including timestamps, request-created filter, protobuf
+  format, topic/subscription, Cloud Function destination and trigger identity
+  `fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com`.
+  The underlying existing Run function service was staged/published without
+  replacing the trigger. Its existing Cloud Function audience and production
+  VAPID secret/key were retained.
+- Added only active-request index **`CICAgJjF9oIK`**, collection scope:
+  `customer_id ASC, course_id ASC, status ASC, received_at ASC`
+  (and implicit `__name__ ASC`). All five request indexes are **READY**;
+  the four existing indexes and Rules are unchanged. TTL `expires_at`
+  policies on `qr_request_limits` and `rate_windows` are both **ACTIVE**.
+  Receiver alone references fresh production secret
+  `fairway-qr-rate-key:1`; accessor grant is scoped to that secret and its
+  unchanged runtime identity. No sandbox secret or credential was copied.
+
+### Production Course, accounts and permanent sign register
+
+- Monarch **`CUST-0001 / COURSE-0003`**, display name **Driving Range**,
+  timezone `America/Los_Angeles`, explicit `operation_kind: driving_range`.
+  Normal authenticated Admin Course creation at
+  `2026-10-27T00:14:26.155Z` initialized its persistent suspension. No Resume
+  action was issued. Tony Lema's existing service state is unchanged.
+- Existing normal Admin account-access owner extended only:
+  - `monarch_fnb@fairwayrefresh.com`
+    (`OA9uda9K2HZodm2DQwz9vHkLe6Z2`);
+  - `monarch_cart@fairwayrefresh.com`
+    (`zfyFXF9GmQNeVEesqcbRSp8wEeu2`).
+
+  Both remain non-Admin Monarch customer accounts. Their exact Course lists
+  are now `COURSE-0001, COURSE-0003`; prior access and unrelated stored fields
+  are preserved. No Auth account, password or provider was changed. Global
+  Admins needed no entitlement update. The existing orphaned access record
+  was not extended. No operational staff was created or reassigned:
+  Alex, Wendy, Christina, Michaela and Michael remain Tony Lema-only.
+- `qr_bays` contains **52 fresh production-only identities**, ordered
+  `1A, 1B` through `26A, 26B`, owned by this Course. The existing QR owner
+  rejects another register and transactionally creates missing records only.
+  Repeated population returned the same 52-location register without changing
+  claims/history; every final claim is null. No sandbox location, user,
+  request, credential or operational record was copied.
+- Operator:
+  **https://app.fairwayrefresh.com/?customer_id=CUST-0001&course_id=COURSE-0003**.
+  Use the existing email/password or existing Google sign-in, as applicable
+  to the account; no new password/setup link is required. The existing selector
+  offers **Cart service** and **Driving range service** for Monarch accounts.
+  Global Admins retain their other authorized Courses. Normal authentication
+  is required; sandbox review returns 404 and unsigned private APIs return 401.
+- Installation download page:
+  **https://app.fairwayrefresh.com/driving-range-signs/**.
+  Final [26-page production installation PDF](https://app.fairwayrefresh.com/driving-range-signs/driving-range-installation.pdf)
+  and [52-side permanent register](https://app.fairwayrefresh.com/driving-range-signs/driving-range-bay-mapping.json).
+  Every destination is `https://app.fairwayrefresh.com/range/{permanentId}`.
+  PDF SHA256:
+  **`f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`**.
+  All 52 codes decoded from the rendered final 26 Letter portrait pages at
+  100 dpi and matched the live private identity/Course records and anonymous
+  suspended public responses. Exact accepted wording, A-left/B-right labels,
+  246pt QR squares/four-module quiet zones and 48pt printer margins were
+  checked; all-page contact sheet plus pages 9 and 26 were visually inspected.
+  Approved logo proportions and camera artwork are unchanged; no test footer.
+
+### Validation and preservation evidence
+
+- Full integrated backend suite passed, including inventory/staff/API,
+  attribution, legacy requests, authorization, notifications and QR ownership/
+  concurrency contracts; **79** frontend checks passed.
+- Native isolated Firestore integration under actual production runtime guards
+  verified 52-location provisioning/repeat safety; 16 concurrent A intents
+  and eight B intents produced exactly two requests; independent claims,
+  duplicate-safe submission, lost-response receipt replay after completion,
+  fresh later intent, competing terminal actions, suspension, Customer/Course
+  isolation and zero QR physical commands. Four concurrent isolated dispatches
+  produced one stubbed send; explicit opt-in, disabled/revoked access and Cart
+  preference/state preservation were covered by the shared owner's tests.
+  All **101 active requests** remained retrievable despite 105 newer closed.
+- Production-configured candidate and exact merged build passed. Rendered
+  inventory attribution/sale/retry/audit/shift-close, Cart queue/categories,
+  public menu and integrated service-switch checks passed using isolated data.
+  One initial concurrent browser-harness export timing failure passed when
+  rerun independently, without an inventory-source change. Existing bundle-size
+  warnings remain; there is no build or runtime-error blocker.
+- Live normal signed-in Admin session verified both service views, Cart
+  Inventory/performance/operator picker and Range's absence of inventory,
+  inventory session and Cart KPIs. Both service views had no document overflow
+  at 375/430/768/1024px. Tony Lema's normal picker showed exactly the five
+  assigned staff; opening/cancelling it did not select a name or start a shift.
+  Range notifications remained unchecked, existing Cart choice checked.
+  The two customer account entitlement records were verified through normal
+  Admin reads; their individual password sessions were not impersonated.
+- Fresh ordinary browser verified normal production sign-in, retained signed-out
+  deep-link path/Course and no anonymous-signup/review provisioning calls.
+  Anonymous real 9A/9B pages were white, side-specific, suspended, without
+  request buttons or overflow at all four widths. All 52 public identity reads
+  returned the expected side, Driving Range name and unavailable state.
+  Exact-side signed-in request/deep-link behavior reuses prior real isolated
+  A/B browser evidence; isolated dispatch verified the Course-specific URL.
+- Consistent restricted snapshots: initial
+  `2026-10-26T23:57:54.329390Z`, refreshed precutover
+  `2026-10-27T00:06:23.580143Z`, staged/backend-live checkpoints, provisioned
+  `2026-10-27T00:18:43.347106Z`, final
+  **`2026-10-27T00:27:28.693648Z`**. Every original document was compared by
+  path/ID, all fields and updateTime. Only authorized original changes were
+  the Course allocation counter and two Customer login access records;
+  additions were exactly one suspended Course and 52 locations.
+- All **58 production products** are unchanged, including Monarch's full
+  **57**: **43 On Cart, 14 Sold Out, zero In Inventory/archived** at this
+  baseline. No defaults, quantities, fields, IDs or columns were written/moved.
+  All-column/archived representative behavior remains covered by isolated
+  inventory tests. Existing **94 inventory events**, four historical menus,
+  five staff/creation receipts, **91 requests**, **68 commands**, categories,
+  sessions/shifts/audits, account permissions outside the authorized additions,
+  Cart Course/service state and all **441 subscription descendant records**
+  and existing Course preferences are unchanged.
+- Existing golfer URL
+  `https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`
+  remains anonymous/usable, with six initially collapsed categories and no
+  mobile overflow. Its canonical API slug is `monarch-bay`, not the legacy
+  URL's underscore-separated route text. It returns exactly the original
+  43 On Cart IDs and only the owner-defined public product fields. This
+  filtered response never replaces or prunes the operator's complete catalog.
+- Authentication provider/domain configuration, firmware and both sandbox
+  Hosting identities are unchanged. Sandbox service revisions match their
+  existing release records: inventory Admin `fairway-admin-sandbox-00024-4wb`
+  and Receiver `fairway-button-receiver-sandbox-00026-qdp`; QR Admin
+  `fairway-admin-sandbox-00002-zzf`, Receiver
+  `fairway-button-receiver-sandbox-ab-c93aa1a` and notifier
+  `fairway-request-notifier-sandbox-00002-riv`. No sandbox deployment occurred.
+  No new-revision ERROR logs were present at final verification.
+
+### Executed release gates and sequence
 
 1. Verify integrated source against main, reviewed-head ancestry and existing
    production Admin `fairway-admin-staff-00ada00`, Receiver
@@ -62,6 +246,18 @@ mapping; default review generation remains sandbox-only.
 
 ### Recovery constraints
 
+Restricted local evidence/recovery root:
+`/Users/DuplexLoop/.copilot/session-state/937dc64a-d76a-44ab-9ebd-392a14f06f80/files/qr-production-release-20261026/`.
+It retains consistent snapshots, all six prior/current backend source archives,
+immutable image/service manifests, `source-verification.json`,
+`provisioned-preservation.json`, `final-preservation.json`, final index/TTL/
+trigger identities, production bay fixture, rendered PDF verification,
+production build, served-file hashes and fresh-browser/menu evidence.
+These private artifacts are **local-only**, not committed or a managed backup.
+Current source is on GitHub, source/images remain in production artifact
+storage and final installation files/register are on Hosting. Existing
+inventory/staff recovery references below remain retained historical evidence.
+
 After new Course entitlements/location records exist, retain stock-aware,
 assignment-aware **and Course-operation-aware** backend behavior and every
 record. Do not restore an older writer, remove new identities/entitlements,
@@ -73,6 +269,24 @@ with normal authentication, with compatible backends retained. Preserve
 notifier VAPID identity/subscriptions and the existing trigger. Snapshots are
 restricted local recovery/evidence artifacts, not automatic restore inputs;
 PITR remains disabled.
+
+**Operational recovery:** keep `COURSE-0003` suspended and the verified current
+backends/records; prefer a forward fix from deployed `db9001e`. If an ingress
+containment change is needed, stage the same compatible Receiver source with
+`FAIRWAY_QR_ENABLED=false`, preserve its existing secrets/configuration and
+operator lifecycle, verify and route explicitly. Do not recover by restoring
+the old inventory/staff-only writer, reseeding/removing permanent URLs,
+revoking the authorized additions, rotating VAPID, resuming service or copying
+a snapshot over legitimate history. The old Hosting version is a historical
+baseline, not a preapproved Course-compatible rollback; use only a verified
+compatible Hosting build while retaining compatible backends.
+
+**Acceptance limits:** physical phone/iPad/Safari, installed-PWA/OS delivery,
+laminated-sign scans and native office-print quality were not newly accepted.
+Prior real sandbox Eventarc/Web Push/browser evidence is retained; isolated
+dispatch plus unchanged production trigger/configuration do not claim new
+production customer-device delivery. No customer test push was sent.
+Existing inventory/Excel/firmware reliability limits remain unchanged.
 
 ## Public sandbox review access — shared scope
 
@@ -2147,7 +2361,56 @@ FRB-0003 sequence and failure handling are owned by
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Production Driving Range QR and Service Switching — 2026-10-26
+
+- **Current production milestone:** independent Monarch Driving Range Course
+  **`CUST-0001 / COURSE-0003`**, still **suspended** pending separate CPO
+  activation; 52 permanent production bay-side locations on 26 paired Letter
+  signs, A left/B right. Existing Course selector, Requests/Complete/Cancel,
+  History, independent service state and explicit Course notification choices
+  are reused; Range has no Inventory/session/Cart KPI panels.
+- **Source/provenance:** reviewed PR #13 head
+  `6e3afe55e55b0384dfa97c68bc7e6881dc843ce6` integrated current main
+  `3aa8106605910e040bd71369eb22abe36a237aec` in
+  `c749d18ce060eb515160bf030cdf166066598b34`; merged/deployed source
+  **`db9001ecba79b88f6584a6d407de355dc0c63d75`**. PR #13 is merged, no
+  longer a separate unmerged review increment. Accepted PRs #12/#14/#15/#16/#17
+  inventory/staff ownership and recovery contracts survive integration.
+- **Runtime:** Admin **`fairway-admin-qr-db9001e`**, Receiver
+  **`fairway-button-receiver-qr-db9001e`**, notifier
+  **`fairway-request-notifier-qr-db9001e`**, each Ready at **100%** after
+  zero-traffic verification. Hosting **`1be3937a43d1c771`**, release
+  **`1793060385305000`**, `2026-10-27T00:19:45.305Z` (October 26 PDT).
+  Existing trigger/VAPID/runtime identities retained; one active-query index
+  added READY and two scoped QR TTL policies ACTIVE; Rules unchanged.
+- **Account/staff boundary:** only existing `monarch_cart@fairwayrefresh.com`
+  and `monarch_fnb@fairwayrefresh.com` gained `COURSE-0003` alongside their
+  existing Tony Lema entitlement. No Admin/password/provider changes,
+  orphan provisioning or staff reassignment. Alex, Wendy, Christina,
+  Michaela and Michael (F&B Management) remain assigned only to Tony Lema.
+- **Preservation and checks:** all original product IDs/fields/columns/
+  quantities, staff/history, Cart service state/preferences/subscriptions,
+  normal authentication, firmware and both sandboxes are preserved.
+  Shared lifecycle/notification isolation, retries/races, full active queues,
+  production build, authenticated service switching, public-menu compatibility
+  and all 52 rendered production QR destinations passed proportionate checks.
+  No artificial production operational records or customer test pushes.
+- **Links, detailed evidence and recovery:** the
+  [canonical release record](#driving-range-production-integration-and-controlled-release--2026-10-26)
+  owns exact source/images, Course/account scope, 128 served-file matches,
+  consistent preservation snapshots, operator URL and
+  [final installation PDF](https://app.fairwayrefresh.com/driving-range-signs/driving-range-installation.pdf).
+  Retain stock-aware, assignment-aware and Course-operation-aware backends,
+  all new identities/entitlements and legitimate history; no old-writer or
+  stale-snapshot restore. Private recovery artifacts are local-only; physical
+  scans/phone/PWA/OS delivery/print acceptance and existing inventory/firmware
+  limits remain explicit rather than implied by publication.
+
 ### Production Inventory and Course-Assigned Operators — 2026-10-26
+
+Historical milestone: its runtime identities and unmerged-PR #13 status are
+superseded by the Driving Range production milestone above. Its accepted
+inventory/staff behavior, detailed evidence and recovery requirements remain.
 
 - **Accepted production scope:** persistent inventory, attributed sales,
   immutable audits, session-specific shift close, genuine Excel export and the
@@ -2176,7 +2439,7 @@ The Alignment Register is the canonical record mapping release milestones across
   [PR #16](https://github.com/josh-fairwayrefresh/fr-main/pull/16) recorded
   its closeout in merge `4f92f55a01a3cf34cddf5f41df0b3496e2383d40`.
   These documentation merges do not change deployed application bytes.
-- **Current production baseline:** Admin **`fairway-admin-staff-00ada00`**,
+- **Baseline at this milestone (now historical):** Admin **`fairway-admin-staff-00ada00`**,
   Ready at **100%**, with `staff-release` pointing to it; Hosting version
   **`c2004110805c6599`**, release **`1793056093222000`**
   (`2026-10-26T23:08:13.222Z`). Source/image identities and all 19 served-file
