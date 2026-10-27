@@ -28,7 +28,21 @@ course or marker-location assignments are recorded in engineering SoTs.
 Current accepted source describes implementation, not proof of deployment.
 Use the Deployment Guide's latest verified production alignment for dated
 runtime evidence; older release records are historical, not competing current
-states or standing authorizations. The CPO_stats_fix reporting and persistent
+states or standing authorizations.
+The CPO-authorized Driving Range release is now merged through PR #13 and
+published from `db9001ecba79b88f6584a6d407de355dc0c63d75`, integrated with the
+current stock-aware and Course-assigned staff owners. Monarch's independent
+Driving Range Course has 52 permanent production bay sides and a 26-page
+installation PDF; it remains **suspended pending separate CPO activation**.
+Normal authenticated service switching and explicit notification opt-in use
+the existing owners. Only the two existing Monarch Customer login accounts
+gained the new Course entitlement; Tony Lema's staff, all inventory/history,
+authentication and both sandboxes are preserved. The
+[current release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26)
+and top Alignment Register entry own current Admin/Receiver/notifier/Hosting
+identities, installation links, preservation evidence, recovery and acceptance
+limits. The older inventory/staff-only runtime identities below are historical.
+The CPO_stats_fix reporting and persistent
 Resume/Suspend behavior was CPO-accepted, merged, and deployed to production
 on 2026-10-22. The CPO-accepted select-any-request queue and independent
 On-course / Amenity Areas categories were merged and deployed on 2026-10-23.

@@ -10,13 +10,20 @@ queue selection and independent Amenity Areas controls on 2026-10-23.
 That increment and its reporting/service-control prerequisite are closed;
 acceptance and publication evidence are retained in the
 [existing release record](DEPLOYMENT_GUIDE.md#cpo-production-acceptance-and-closeout--2026-10-23),
-not as open backlog items. This does not close the separate queue-volume,
+not as open backlog items. This does not close the separate
 physical-phone/Safari, notification, or network-reliability work below.
 
 The CPO-accepted persistent inventory increment was merged through PR #12 and
 released to production Admin/Hosting on 2026-10-26. It is no longer open backlog
 work; accepted behavior and recovery evidence are owned by the UX specification
 and [release record](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26).
+
+PR #13's authorized production release now closes active-queue promotion and
+the notifier source/deployment divergence. Current shared request/notification
+owners, the active-query index and exact production identities are recorded
+in the [Driving Range release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26).
+This does not close physical notification/phone/print acceptance or authorize
+Driving Range activation; its service remains suspended.
 
 ## Open and deferred work
 
@@ -32,8 +39,7 @@ and [release record](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
-| Active queue production promotion | Corrected and verified in the isolated QR review increment; production remains unchanged pending authorized release. [Details](#active-queue-truncation). |
-| Production notifier source/deployment gap | QR-only sandbox delivery is verified in Chrome; production delivery filtering and physical-platform acceptance remain unverified. [Details](#notification-release-gap). |
+| Notification physical-platform acceptance | Matched production notifier source is released; customer-device/installed-PWA/OS delivery remains unverified. No production customer test push was sent. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
 | Provisioning policy and automation | Transactional allocation and prepared rotations exist; manufacturing, compromise/revocation, secret delivery, and end-to-end automation remain incomplete. [Details](#provisioning-policy-and-automation). |
 
@@ -41,50 +47,28 @@ and [release record](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release
 
 Evidence below is accepted source at
 `11feb67696e69e504592908a8ffafcdcb7271bd0` or explicitly dated evidence in
-the linked owner. No new production/device investigation was performed.
+the linked owner, including the authorized PR #13 production release.
 These form a queue for prioritization, not implementation authorization.
 "Blocks" identifies an affected acceptance/release claim, not a newly asserted
 whole-product shutdown.
 
-### Active queue truncation
-
-- **Prior production mechanism:** latest-100 mixed request retrieval can hide
-  older open work behind newer closed requests.
-- **Review implementation:** the QR increment's shared listener filters active
-  status before retrieval and removes both caps. Isolated deployed Firestore
-  and Rules returned all 101 active records despite 105 newer closed records.
-  Course switching, notification deep links and real rendered actions passed.
-- **Remaining boundary:** merge/production promotion and physical acceptance
-  are not authorized by the QR review increment. Keep the correction paired
-  with its active-query index; reverting to a larger arbitrary cap is not a fix.
-
 ### Notification release gap
 
-The independent QR sandbox now has its own Firestore-triggered notifier and
-project-specific VAPID secret. A real persistent Chrome subscription received
-the actual "Server requested" notification through Eventarc, the deployed
-sender and browser service worker. This does not close physical phone/iPad,
-installed-PWA/OS delivery acceptance or change the production deployment gap.
+The reviewed shared notifier is now deployed as
+`fairway-request-notifier-qr-db9001e`, retaining the existing production
+Eventarc trigger and VAPID identity. The source/deployment gap is closed.
+Prior real isolated QR sandbox Chrome/Eventarc/Web Push evidence and current
+isolated preference/access/idempotent dispatch/deep-link tests remain valid.
 
-- **Evidence/mechanism:** [Deployment Guide](DEPLOYMENT_GUIDE.md#cart-operator-web-push)
-  records source delivery-time entitlement/preference checks absent from
-  last-inspected notifier `fairway-request-notifier-00003-mah` (source archive
-  generation `1790840128801876`). That earlier record did not establish a
-  sandbox notifier/VAPID deployment; the independent QR publication above
-  now supplies sandbox evidence without changing production or PR #12.
-  This is established source/deployment divergence, not evidence of a
-  specific unauthorized notification incident.
-- **Impact/blocking:** Revocation/preference delivery claims are not
-  production-verified; local tests cannot substitute for browser/OS evidence.
-  Blocks release acceptance of changed delivery filtering, not request
-  persistence or Cart access.
-- **Durable outcome/dependencies/acceptance:** Separately authorize a
-  matched reviewed production release after sandbox/physical acceptance.
-  Depend on environment/IAM/secret isolation and preference/access
-  contracts. Verify enabled, disabled, revoked, retried, failed, and
-  deep-linked delivery without duplicate dispatches, including missing-parent
-  descendant handling. Record exact source/configuration/revision and
-  physical delivery coverage; no production deployment is authorized here.
+- **Remaining boundary:** physical phone/iPad/Safari, installed-PWA/OS delivery
+  and production customer-device notification acceptance are not newly proven.
+  No customer test notification was authorized or sent during publication.
+  Local dispatcher checks and unchanged routing cannot replace platform proof.
+- **Acceptance:** separately authorize real-device/recipient testing for
+  enabled, disabled/revoked, retried/failed and deep-linked delivery, recording
+  exact source/configuration and platform coverage. Driving Range requires
+  explicit user notification opt-in and separate CPO service activation.
+  Do not auto-enable it or change existing Cart subscriptions/preferences.
 
 ### Review enforcement gap
 

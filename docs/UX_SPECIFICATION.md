@@ -95,6 +95,14 @@ Request A may still be active when Request B is created; that is valid. The oper
 
 ## Driving Range QR requests (review increment)
 
+**Released:** PR #13 is merged and published to production, including the
+accepted A/B refinement and current inventory/staff integration. Monarch's
+Driving Range remains suspended until separate explicit CPO activation.
+Environment identities, verified production sign register and remaining
+physical/browser-notification acceptance limits belong to the
+[current release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26).
+The heading's review-increment anchor is retained for existing document links.
+
 - Driving Range is its own Course asset under a Customer, alongside golf
   Courses such as Tony Lema. All 26 bays belong to that Driving Range Course,
   with independently identified A and B sides (52 service locations).
@@ -119,7 +127,9 @@ Request A may still be active when Request B is created; that is valid. The oper
   Courses. New Driving Range Courses start suspended until explicitly resumed.
   Suspension rejects new submissions; existing requests remain actionable.
 - Each permanently identified bay side has its own static Fairway-hosted URL.
-  Existing 26 links are retained as side A; side B receives 26 additional links.
+  In the existing sandbox, the original 26 links remain side A and side B has
+  26 additional links. Production uses a fresh permanent 52-side register
+  under its own Course, not copied sandbox identities.
   `qr_bays` remains the identity owner, with numeric `bay_number` and explicit
   `bay_side: A | B`. The
   anonymous mobile page identifies the Course and bay and asks:
@@ -148,7 +158,7 @@ Request A may still be active when Request B is created; that is valid. The oper
 - Public responses contain only bay number/side, Course display name, availability,
   or a minimal acceptance acknowledgement. Private requests, account access,
   staff, endpoints and operation receipts are not public.
-- Review signs use 26 US Letter portrait pages, one numbered bay per page with
+- Signs use 26 US Letter portrait pages, one numbered bay per page with
   two codes: A on the left and B on the right, white
   background, strong contrast and comfortable printer-safe margins. A centered
   banner reads Fairway Refresh logo / AT / Monarch Bay Golf Club logo, using
@@ -167,8 +177,10 @@ Request A may still be active when Request B is created; that is valid. The oper
   An installation edition must use approved permanent production URLs and
   omit test markings, and may be generated only during authorized production
   launch. Sandbox field-review signs are not a production installation edition.
-  Production Course/account changes, production signs, launch and physical
-  print acceptance remain separately authorized release work.
+  The subsequent CPO-authorized production release completed Course/account
+  provisioning and permanent-URL installation signs through the same owners.
+  This does not activate Driving Range service or claim physical print/scan
+  acceptance. Existing sandbox review signs and destinations remain unchanged.
 
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 

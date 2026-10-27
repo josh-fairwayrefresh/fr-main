@@ -65,6 +65,10 @@ physical marker button → nRF9151 firmware → LTE-M → HTTPS → Cloud Run re
 
 Each physical marker has a permanent device identity and unique credential. The receiver validates identity and authentication, applies the course service and request rules, and persists accepted requests for authorized Cart Operators.
 
+Anonymous permanent Driving Range bay-side pages also feed the same receiver,
+Course-owned request lifecycle and operator UI. They have no physical-device
+identity or command path; operator access still requires normal authentication.
+
 ## Current Pilot Baseline
 
 - Firmware milestone base: `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`. The incorporated `1.1_tempfix` and device-specific artifact provenance are owned by [the firmware specification](FIRMWARE_SPECIFICATION.md#purpose-and-current-baseline); this base is not an exact installed-image identity.
@@ -87,6 +91,16 @@ Each physical marker has a permanent device identity and unique credential. The 
 
 ### Course-owned Driving Range QR request increment
 
+Merged and released through PR #13 from integrated source
+`db9001ecba79b88f6584a6d407de355dc0c63d75`. Monarch's independent production
+Course and 52 bay-side identities are provisioned; **service remains suspended
+pending separate CPO activation**. The
+[current release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26)
+owns deployed identities, exact entitlement additions, production installation
+register/PDF, preservation and stock/assignment/Course-aware recovery.
+Production uses normal operator authentication; both review sandboxes remain
+unchanged. No Tony Lema operational staff was assigned to Driving Range.
+
 Product behavior is owned by [UX Specification](UX_SPECIFICATION.md#driving-range-qr-requests-review-increment).
 The independent Course boundary reuses Customer/Course authorization, Course
 selection, persistent service state and existing notification preferences.
@@ -106,7 +120,8 @@ Course availability, per-bay outstanding pointer, immutable submission receipts
 and request creation commit together. A receipt replay cannot create a new
 request after completion. `qr_bays` owns permanent bay-side identity/configuration:
 26 numbered bays each have independent A/B records and outstanding pointers
-(52 URLs). Existing URLs remain side A; new request/notification labels include
+(52 URLs). Existing sandbox URLs remain side A; production uses a fresh
+permanent 52-side register. New request/notification labels include
 the side without rewriting historical snapshots.
 Private nested receipts preserve acceptance identity. Short-lived server-side
 rate counters limit each network/bay window; raw IP addresses are not persisted.
