@@ -2454,6 +2454,10 @@ FRB-0003 sequence and failure handling are owned by
 Branch `feat/admin-button-activity-report` began from clean main and matching
 `origin/main`, **`94fafa7e95292e0aa11b210df807a3ecd57d3d42`**. The production
 alignment below is unchanged; this is not a new production milestone.
+Draft review is [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21);
+implementation and committed sample source is
+**`4f6af99d0fa28fc42bd7a0b0724016d0a4864dd7`**. Later review-record-only commits
+do not change that validated implementation.
 
 ### Owners and isolated evidence
 
@@ -2574,7 +2578,9 @@ The Alignment Register is the canonical record mapping release milestones across
 
 - **Source scope:** `feat/admin-button-activity-report` from verified main
   `94fafa7e95292e0aa11b210df807a3ecd57d3d42`. Admin reporting only; no merge or
-  production publication. Exact review head is the draft PR head.
+  production publication. [Draft PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21)
+  identifies the exact review head; implementation/sample source is
+  `4f6af99d0fa28fc42bd7a0b0724016d0a4864dd7`.
 - **Evidence:** 116/63 accepted-reference reconciliation, all daily/point
   records, existing backend regressions, 83 frontend checks, actual
   production-configured build and rendered landscape Letter/continuation PDFs.
