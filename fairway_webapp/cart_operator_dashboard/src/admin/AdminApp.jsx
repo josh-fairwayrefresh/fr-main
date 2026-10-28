@@ -8,6 +8,7 @@ import {
 import { adminRequest, downloadBlob } from './adminApi';
 import AdminUserManagement from './AdminUserManagement';
 import CustomerStaff from './CustomerStaff';
+import ButtonActivityReport from './ButtonActivityReport';
 import { serviceCategories } from '../lib/serviceCategories.mjs';
 import './admin.css';
 
@@ -16,6 +17,7 @@ const NAVIGATION = [
   ['customers', 'Customers & Courses', Building2],
   ['provision', 'Provision Device', Plus],
   ['export', 'Device-to-SIM Export', FileDown],
+  ['reports', 'Reports', FileDown],
   ['users', 'User Management', Users],
 ];
 const STATES = ['in_inventory', 'deployed', 'maintenance', 'retired'];
@@ -168,6 +170,7 @@ export default function AdminApp({ user, apiBaseUrl, onSignOut }) {
   const selected = fleet.devices.find((device) => device.device_id === deviceId);
   const navigation = <>{NAVIGATION.map(([id, label, Icon]) => <button type="button" key={id} className={section === id ? 'active' : ''} onClick={() => setSection(id)} title={label}><Icon size={18} /><span>{label}</span></button>)}</>;
   const isSandbox = import.meta.env.MODE === 'sandbox';
-  return <main className="admin-app"><aside className="a-sidebar"><Brand /> <nav aria-label="Admin sections">{navigation}</nav><footer><span>{user.email}</span><button type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></footer></aside><div className="a-main"><header className="a-mobile-head"><Brand /><button className="a-icon" type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={19} /></button></header><nav className="a-mobile-nav" aria-label="Admin sections">{navigation}</nav><div className="a-admin-banner"><ShieldCheck size={16} /><strong>{isSandbox ? 'Sandbox environment' : 'Live production fleet'}</strong><span>Authorized administration</span></div>{section === 'overview' && <FleetView fleet={fleet} loading={status === 'loading'} error={error} refresh={refresh} openDevice={setDeviceId} />}{section === 'customers' && <CustomersView user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} refresh={refresh} />}{section === 'provision' && <ProvisionView user={user} apiBaseUrl={apiBaseUrl} refresh={refresh} />}{section === 'export' && <ExportView user={user} apiBaseUrl={apiBaseUrl} />}{section === 'users' && <AdminUserManagement user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} />}</div>{selected && <DeviceDetail key={selected.device_id} user={user} apiBaseUrl={apiBaseUrl} device={selected} customers={fleet.customers} close={() => setDeviceId(null)} refresh={refresh} />}</main>;
+  const reportView = section === 'reports' && <ButtonActivityReport user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} directoryError={error} />;
+  return <main className="admin-app"><aside className="a-sidebar"><Brand /> <nav aria-label="Admin sections">{navigation}</nav><footer><span>{user.email}</span><button type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></footer></aside><div className="a-main"><header className="a-mobile-head"><Brand /><button className="a-icon" type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={19} /></button></header><nav className="a-mobile-nav" aria-label="Admin sections">{navigation}</nav><div className="a-admin-banner"><ShieldCheck size={16} /><strong>{isSandbox ? 'Sandbox environment' : 'Live production fleet'}</strong><span>Authorized administration</span></div>{reportView}{section === 'overview' && <FleetView fleet={fleet} loading={status === 'loading'} error={error} refresh={refresh} openDevice={setDeviceId} />}{section === 'customers' && <CustomersView user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} refresh={refresh} />}{section === 'provision' && <ProvisionView user={user} apiBaseUrl={apiBaseUrl} refresh={refresh} />}{section === 'export' && <ExportView user={user} apiBaseUrl={apiBaseUrl} />}{section === 'users' && <AdminUserManagement user={user} apiBaseUrl={apiBaseUrl} customers={fleet.customers} />}</div>{selected && <DeviceDetail key={selected.device_id} user={user} apiBaseUrl={apiBaseUrl} device={selected} customers={fleet.customers} close={() => setDeviceId(null)} refresh={refresh} />}</main>;
 }
 function Brand() { return <div className="a-brand"><i><ShieldCheck size={20} /></i><div><strong>Fairway Refresh</strong><small>Internal Admin</small></div></div>; }

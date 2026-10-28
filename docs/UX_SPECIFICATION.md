@@ -197,6 +197,62 @@ The heading's review-increment anchor is retained for existing document links.
   This does not activate Driving Range service or claim physical print/scan
   acceptance. Existing sandbox review signs and destinations remain unchanged.
 
+## Admin Button Activity Report (Review Increment)
+
+Prepared for review, not deployed. Existing global Admin authorization gates
+**Admin → Reports → Customer → Course → date range → Generate → Download PDF**.
+The selectors reuse Admin's existing Customer/Course directory; the backend
+validates the Course's selected Customer parent before reading report sources.
+Ordinary Customer accounts cannot call the report endpoint. No account,
+entitlement, service state or operational data is changed.
+
+- Preserve the accepted one-off scatterplot: dates horizontally, Course-local
+  time vertically; device-colored filled dots for received service-unavailable
+  rejection attempts, including each separate transport retry. Larger open
+  circles represent accepted physical-button requests completed by the explicit
+  as-of boundary, once per request, plotted at **receipt**, not completion.
+  Cancelled/open requests and QR activity are excluded. This does not change
+  existing Service History's completion-time metrics.
+- The PDF is landscape US Letter, with a three-column device legend, daily
+  empty/completed counts above date columns, observed totals, exact local
+  window/as-of boundaries including milliseconds, timezone and explanatory
+  notes. Original and replacement devices keep distinct identities/colors;
+  numeric FRB colors preserve the reference and other IDs have deterministic
+  colors independent of the selected date range. Overlapping events remain
+  counted even when individual marks overlap.
+- Location labels must not be inferred from current deployment or unverified
+  request label snapshots. Current retained sources have no verified historical
+  assignment timeline. Product output therefore identifies each device and
+  explicitly labels its historical location unverified. The CPO's supplied
+  reference hole/replacement labels remain documented fixture evidence only;
+  they are not application mappings or proof of historical effective dates.
+- Dates are 1–31 inclusive Course-local calendar days using its IANA timezone,
+  including daylight-saving changes. The end boundary is the next local
+  midnight, exclusive, or the generation as-of instant, inclusive, if earlier.
+  Future-only ranges fail. Subsequent future dates in a selected range are
+  marked outside the window rather than counted as zero.
+- Charts continue after 12 dates per landscape page, without dropping records.
+  Up to 18 devices are supported subject to measured text/chart fit; excessive
+  headings, labels or content fail explicitly rather than clip. Source caps
+  are 20,000 records **per source**, 200 Logging pages and a 45-second source
+  read budget. Exceeding a practical limit returns an error asking for a
+  shorter range, never a partial successful PDF.
+  The current standard PDF font supports Latin-1 and common typographic
+  punctuation; unsupported name characters are an explicit error, never
+  silently substituted or emitted as unreadable labels.
+- Current bucket retention is read at generation time. Dates outside that
+  window show **N/A**, not zero, for empty attempts; partly retained days use
+  an asterisk. Any older records still returned are observed partial evidence,
+  not proof of full coverage. Completion counts use the consistent as-of
+  Firestore snapshot and can change on subsequent generation after additional
+  completions. Retention does not prove historical routing/exclusion coverage;
+  ingestion delay may omit attempts. Zero means no observed matching records,
+  not proof that no physical pushes occurred or reached the server.
+- A query, metadata, ownership or permission failure is an error, never a
+  zero-activity report. Changing inputs clears the downloadable result;
+  stale/unmounted generations cannot replace the selected report. Download
+  uses the already generated PDF without querying again.
+
 ## Cart Inventory Management and Golfer Menu (Approved Product Behavior)
 
 The current implementation and deployment status are owned by

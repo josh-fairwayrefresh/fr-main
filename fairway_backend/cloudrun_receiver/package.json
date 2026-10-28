@@ -10,13 +10,13 @@
     "@google-cloud/firestore": "^7.0.0",
     "@google-cloud/functions-framework": "^3.0.0",
     "firebase-admin": "^13.0.0",
+    "google-auth-library": "^9.15.1",
+    "pdfkit": "^0.17.2",
     "web-push": "3.6.7"
   },
   "devDependencies": {
     "qrcode": "^1.5.4",
-    "pdfkit": "^0.17.2",
     "jsqr": "^1.4.0",
-    "google-auth-library": "^9.15.1",
     "pngjs": "^7.0.0"
   }
 }
