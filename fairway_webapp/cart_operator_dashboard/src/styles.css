@@ -154,56 +154,83 @@ button {
 }
 
 .notification-setup {
-  margin-bottom: 18px;
-  padding: 12px;
-  border: 1px solid #4b4b4b;
-  border-radius: 8px;
-  background: #282828;
+  color-scheme: light;
+  min-height: 56px;
+  padding: 5px 24px;
+  border-top: 1px solid #e1e8db;
+  border-bottom: 1px solid #dce5d5;
+  background: #f5f8f1;
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  color: #d8d8d8;
-  font-size: 13px;
+  gap: 0 24px;
+  color: #43583c;
+  font-size: 12px;
 }
 
 .notification-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-basis: 100%;
-}
-
-.notification-heading div {
-  display: grid;
-  gap: 3px;
-}
-
-.notification-heading span {
-  color: #a9a9a9;
+  gap: 9px;
+  color: #31593f;
+  flex-shrink: 0;
+  min-height: 28px;
 }
 
 .notification-course-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  align-items: center;
+  gap: 0 22px;
+  padding-left: 24px;
+  border-left: 1px solid #d7e1d0;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 .notification-course-options label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 44px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  cursor: pointer;
 }
 
-.notification-setup [role="alert"] {
+.notification-setup [role="alert"], .notification-guidance {
   flex-basis: 100%;
   margin: 0;
-  color: #ff9b9b;
+  padding: 10px 0;
+  overflow-wrap: anywhere;
+  color: #8c382b;
 }
 
 .notification-course-options input {
   width: 18px;
   height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: #006b43;
+}
+
+.notification-course-options label:focus-visible,
+.notification-course-options input:focus-visible {
+  outline: 3px solid rgba(0,107,67,.35);
+  outline-offset: 2px;
+}
+
+@media (min-width: 741px) and (max-width: 900px) {
+  .notification-setup { padding-inline: 16px; gap: 0 14px; font-size: 11px; }
+  .notification-course-options { padding-left: 14px; gap: 0 14px; }
+}
+
+@media (max-width: 740px) {
+  .notification-setup { display: block; padding: 12px 16px; }
+  .notification-course-options { display: block; border: 0; padding: 4px 0 0; }
+  .notification-course-options label { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+  .notification-course-options label + label { border-top: 1px solid #e1e8db; }
 }
 
 .request-header {

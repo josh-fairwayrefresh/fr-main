@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Bell, BellOff, Smartphone } from 'lucide-react';
+import React, { useEffect, useId, useState } from 'react';
+import { Bell } from 'lucide-react';
 import { operatorRequest } from './lib/operator';
 import { courseKey } from './lib/courseContext.mjs';
 
@@ -17,6 +17,8 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, on
   const [preferences, setPreferences] = useState(operatorConfig.notification_preferences || {});
   const [busyCourse, setBusyCourse] = useState('');
   const [error, setError] = useState('');
+  const [guidanceVisible, setGuidanceVisible] = useState(false);
+  const guidanceId = useId();
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const installed = isInstalled();
   const canEnable = supported && installed && Boolean(operatorConfig.push?.vapid_public_key);
@@ -97,40 +99,48 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, on
   }
 
   const permission = supported ? Notification.permission : 'unsupported';
-  const permissionText = permission === 'granted'
-    ? 'Browser permission granted'
-    : permission === 'denied'
-      ? 'Browser permission blocked'
-      : permission === 'unsupported'
-        ? 'Web Push unavailable on this device'
-        : 'Browser permission not yet granted';
+  const guidance = !supported
+    ? 'Web Push is unavailable on this device. Use a browser that supports push notifications.'
+    : !installed
+      ? 'Install Fairway and open the installed application to enable push notifications.'
+      : !operatorConfig.push?.vapid_public_key
+        ? 'Push notifications are unavailable in this environment.'
+        : permission === 'denied'
+          ? 'Notifications are blocked. Allow notifications in your browser or device settings, then try again.'
+          : '';
 
   return (
     <section className="notification-setup" aria-label="New request notifications">
       <div className="notification-heading">
-        {!supported ? <BellOff size={18} /> : installed ? <Bell size={18} /> : <Smartphone size={18} />}
-        <div>
-          <strong>New request notifications</strong>
-          <span>{permissionText}{!installed && supported ? ' · install Fairway to enable push' : ''}</span>
-        </div>
+        <Bell size={17} aria-hidden="true" />
+        <strong>New request notifications</strong>
       </div>
       <div className="notification-course-options">
         {operatorConfig.courses.map((course) => {
           const key = courseKey(course);
           const enabled = preferences[key] === true;
+          const unavailable = !enabled && !canEnable;
           return (
-            <label key={key}>
+            <label key={key}
+              tabIndex={unavailable ? 0 : undefined}
+              aria-describedby={unavailable ? guidanceId : undefined}
+              onFocus={() => setGuidanceVisible(Boolean(guidance))}
+              onClick={() => setGuidanceVisible(Boolean(guidance))}
+              onBlur={() => setGuidanceVisible(false)}
+            >
+              <span>{course.course_name}</span>
               <input
                 type="checkbox"
                 checked={enabled}
-                disabled={busyCourse === key || (!enabled && !canEnable)}
+                disabled={busyCourse === key || unavailable}
+                aria-describedby={unavailable ? guidanceId : undefined}
                 onChange={(event) => changePreference(course, event.target.checked)}
               />
-              <span>{course.course_name}</span>
             </label>
           );
         })}
       </div>
+      {guidance && <p id={guidanceId} className="notification-guidance" hidden={!guidanceVisible}>{guidance}</p>}
       {error && <p role="alert">{error}</p>}
     </section>
   );

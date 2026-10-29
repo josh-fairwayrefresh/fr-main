@@ -635,6 +635,24 @@ for Admin/Hosting only.
 
 ## Cart Operator Push Notifications (Source behavior and dated physical validation)
 
+- **CPO-approved responsive notification strip (2026-10-28):** one
+   `NotificationSetup` owner presents the title and Course preferences in page
+   flow immediately below the existing Requests banner, never as a floating
+   desktop overlay. Desktop and iPad use a 56 CSS pixel single row for the
+   standard two-Course example: title, Course label then checkbox, next Course
+   label then checkbox. Compact widths up to 740 CSS pixels place the title
+   above full-width Course rows, with right-aligned checkboxes, readable
+   14-pixel labels and at least 44-pixel tap targets. Long names and additional
+   authorized Courses wrap rather than clip or disappear.
+   The approved references are the compact desktop, iPad portrait/landscape
+   and stacked mobile prototypes. Permanent permission/installation subtitles
+   are removed. Focusing or tapping a preference reveals relevant capability
+   guidance only when needed; unavailable unchecked preferences remain
+   disabled, with their labels keyboard-focusable for explanation. Explicit
+   mutation errors remain visible. There is no new notification dismissal,
+   automatic preference change or altered push permission/install lifecycle.
+   The accepted banner, request, operator, Inventory and account flows are
+   unchanged. Deployment identity is owned by the Deployment Guide.
 - The Cart Operator installs Fairway from Safari as an iPhone Home Screen web
    application, signs in with an approved Fairway account, and independently
    enables new-request notifications for each authorized Course.
