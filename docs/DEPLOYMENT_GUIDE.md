@@ -1,5 +1,97 @@
 # Deployment Guide
 
+## Shared operator-session correction - implementation review (2026-10-28)
+
+**Draft review only: no merge, deployment, runtime IAM or production-data
+mutation.** Branch `fix/shared-operator-session` starts at verified clean
+main/origin main **`3ec5a8df4a0da4c992f850be567839b95c21f32e`**.
+The current production Admin/Hosting and both sandboxes remain the released
+baseline below. The [UX owner](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close)
+owns behavior; the [engineering owner](ENGINEERING_GUIDE.md#change-and-validation-discipline)
+describes the single session-owner mechanism.
+
+### Confirmed cause and bounded correction
+
+- Both pages already used `InventorySession.jsx` and the same scoped
+  `inventory-session:<UID>:<Customer>:<Course>` sessionStorage record.
+  Full-page navigation remounted independent React projections initialized
+  without the stored shift. Reads and mutation completions could overwrite
+  newer selection/activity/draft/retry state. The concrete closeout defect
+  gated the shared control on `has_activity` rather than a selected shift,
+  withholding closeout from a selected name before inventory activity.
+  Ordinary same-tab navigation was not a different session UUID/login.
+- The existing owner now hydrates the record directly, signals scoped local
+  changes, and guards server reads with mount/read generations plus a revision
+  on that same record. Read failures remain explicit and preserve the cached
+  operator. Server reads cannot replace pending-operation attribution.
+  Successful mutation/recovery updates re-read the latest record, match the
+  operation ID and update only that operation's fields. Selection/closeout
+  are applied atomically with pending-receipt removal.
+- Closeout is available on both pages for any selected name. Pre-activity
+  Change operator remains available; post-activity attribution restrictions
+  remain server-owned and unchanged. Successful close clears both projections
+  and draft, leaves the UUID intact and stays idle. Cancel/failure/uncertainty
+  retains name, amount and existing retry identity. Inventory navigation,
+  Course selection and account controls lock during a submission; an unresolved
+  retry remains navigable and recoverable on either page.
+- Course/account keys, full-page scoped links, notification destinations,
+  inventory attribution, independent audit approval, historical snapshots,
+  backend session/operation contracts and Driving Range capability gates are
+  unchanged. No cleanup closes a shift. No new login/store/provider, framework,
+  API, dependency, migration, permissions or production data repair is added.
+
+### Isolated evidence and release boundary
+
+- `test/operatorSession.browser.mjs` renders the actual Requests and Inventory
+  components through real links at `/` and `/inventory` with synthetic accounts,
+  Course directories, read responses and transactional receipt fixtures.
+  It exercises selection on both pages, actual navigation/reload/back/forward,
+  immediate cached-name hydration while server reads are held, exact USD draft
+  cancellation, no-activity closeout, one UUID/shift, and idle successful close.
+  Existing records without the new local revision field retain their UUID,
+  selected shift and draft; no storage migration or rotation is needed.
+- Known rejected close, committed/lost close response and retry across actual
+  navigation/reload use one operation ID and exact cents, creating one closure.
+  Course switching and destination/request deep links restore only their own
+  sessions; other Customers, accounts and new windows do not inherit names.
+  Driving Range creates no session/controls. Failed staff loading still permits
+  Complete/Cancel; a cached selected name remains closable. An approver-only
+  audit succeeds without a shift.
+- Delayed-response barriers prove an old null read cannot erase a selection;
+  an old active read cannot restore a closed shift; an unmounted selection
+  callback cannot overwrite a newer operator/pending sale/draft; and a stock
+  response cannot overwrite a draft edited while it was in flight. Uncertain
+  stock retry commits once and preserves post-activity name locking.
+  No notification preference/subscription writes occur in these fixtures.
+  Phone/iPad/desktop widths **375/430/768/1024/1440 px** retain visible closeout
+  controls; Requests has no horizontal overflow.
+- Final validation: **94/94 local frontend tests**, including the four focused
+  navigation/race cases, existing inventory activity/audit/closeout, stock/export,
+  Customer/service, QR capability, report and notification-context regressions.
+  Actual production configuration passes its validator and Vite build to a
+  private artifact directory. No dependency changes; existing chunk-size
+  warnings remain. Changed source/test editor diagnostics and diff checks pass.
+  The initial broad test glob also selected three **deployed-sandbox** suites
+  requiring private `FAIRWAY_QR_FIXTURE`; they failed before running without
+  that input. They were not given credentials or rerun against either sandbox.
+  A source-shape assertion was updated for the intentional guarded Inventory
+  return link; the final local suite excludes only those three external suites.
+- Evidence remains in private session artifacts:
+  `operator-session-regression-local.log`, focused final log and
+  `operator-session-final-production-build{,.log}`. Browser fixtures use local
+  intercepted sources, not production operations. Backend source/contracts
+  are unchanged; accepted backend transaction/authorization evidence is reused.
+- **Future affected deployment surface: Hosting only**, after separate release
+  authorization and review. Keep current stock/staff/Course-compatible backends,
+  runtime IAM, permanent signs and both sandboxes. Preserve then-current
+  operational data and the byte-identical installation directory; recover with
+  compatible prior Hosting or a forward fix, never delete local/server shifts
+  or overwrite history to repair presentation.
+  Native Safari/iPad/PWA/BFCache delivery and the particular reported production
+  device are not validated by these isolated Chromium checks. No live operator
+  selection, inventory transaction, shift close, service action or customer
+  test notification was performed.
+
 ## Admin Button Activity Report controlled production release - 2026-10-28
 
 **Released through merged [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21).**

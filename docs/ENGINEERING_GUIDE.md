@@ -277,6 +277,22 @@ cannot start a new attribution request. Session forms ignore submission when
 neither selection nor close is open. A successful close clears chooser/context
 and invalidates older in-flight session reads so they cannot resurrect the
 closed identity. No new name prompt occurs until a subsequent attributed action.
+The [shared-session draft-review correction](DEPLOYMENT_GUIDE.md#shared-operator-session-correction---implementation-review-2026-10-28)
+retains `InventorySession.jsx` as the sole frontend session owner and the
+existing `inventory-session:<UID>:<Customer>:<Course>` sessionStorage key,
+session UUID, pending-operation signatures and backend contracts. React views
+hydrate from that same stored record; scoped change events invalidate their
+projections, not a second store. A revision on the existing record and
+per-mount/read generations reject superseded reads. Mutation completion
+re-reads the latest record and applies only its still-matching operation ID,
+preserving newer drafts/retries and never resurrecting an already closed shift.
+Unmount rejects only unfinished UI continuations and invalidates reads; it
+does not clear session data or close server shifts. Focus/pageshow revalidate.
+Known close rejection and uncertain transport outcomes preserve their retry
+identity and amount; normal definitive non-close inventory validation errors
+retain the existing correction/retry behavior. No authentication, audit approval,
+historical-attribution or server persistence changes. This correction is
+isolated-review source only, not a production release.
 The CPO's 2026-10-24 follow-up supersedes manual publication: the anonymous
 menu transactionally reads the same committed Course inventory, selecting only
 active On Cart products through one public-product allowlist (including nested
