@@ -6,7 +6,17 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
-The latest [Refresh App release](DEPLOYMENT_GUIDE.md#user-initiated-refresh-app---production-release-2026-10-29)
+The latest [Refresh App header-icon release](DEPLOYMENT_GUIDE.md#refresh-app-header-icon---production-release-2026-10-29)
+is live from `be70a5e3064624d23709bd48187f4ce2f79f89bc`, merged through PR #31,
+at Hosting **`2e923bc2314454f4`**. The shared refresh control is icon-only in
+both top header rows, immediately left of available Admin/Sign out controls.
+The exact validated tree retains the 102-check gate; integrated focused tests,
+production build, 127-file verification and authenticated icon-refresh smoke pass.
+Behavior, caching, operational ownership and backends remain unchanged.
+The release record owns verified rollback to `8d70fcfa6287e4cb` and remaining
+CPO installed-home-screen visual acceptance.
+
+The preceding [Refresh App release](DEPLOYMENT_GUIDE.md#user-initiated-refresh-app---production-release-2026-10-29)
 is live from `818e0dae4f9c6c0b43c7efd6b60510acf55074a2`, merged through PR #29,
 at Hosting **`8d70fcfa6287e4cb`**. One shared user-initiated control safely
 reloads Inventory and Cart Requests; entry responses now revalidate and
