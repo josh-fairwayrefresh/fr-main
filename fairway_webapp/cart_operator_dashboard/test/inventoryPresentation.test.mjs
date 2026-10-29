@@ -17,7 +17,7 @@ test('Inventory is a feature within Cart UI: no independent auth system and a cl
   assert.match(inventorySource, /className="inv-brand" title="Return to Cart Operations"/);
   assert.match(inventorySource, /fairway-refresh-stacked-transparent\.png/);
   assert.match(inventorySource, /src=\{fairwayRefreshStackedLogo\} alt="Fairway Refresh"/);
-  assert.match(inventorySource, /className="inv-cart-link" href=\{courseContextUrl\('\/', course\)\} title="Return to Cart Operations"/);
+  assert.match(inventorySource, /className="inv-cart-link" href=\{contextPending \? undefined : courseContextUrl\('\/', course\)\} aria-disabled=\{contextPending \|\| undefined\} title="Return to Cart Operations"/);
   assert.match(inventorySource, /replaceCourseContext\('\/inventory', selected\)/);
   assert.match(inventorySource, /onOpenAdmin/);
   assert.match(inventorySource, />Cart Operations<\/a>/);

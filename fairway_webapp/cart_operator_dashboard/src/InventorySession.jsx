@@ -7,20 +7,26 @@ export function inventoryCoursePath(course, suffix = '') {
   return `/api/v1/inventory/courses/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.course_id)}${suffix}`;
 }
 
+const SESSION_CHANGED = 'inventory-session-changed';
+
 export function useInventorySession(user, apiBaseUrl, course) {
   const key = user && course ? `inventory-session:${user.uid}:${course.customer_id}:${course.course_id}` : '';
-  const [state, setState] = useState({ key: '', shift: null, staff: [], error: '', ready: false });
+  const [state, setState] = useState({ key: '', staff: [], error: '', ready: false });
   const [choosing, setChoosing] = useState(false);
   const [, setPendingVersion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const continuation = useRef(null);
   const requestInFlight = useRef(false);
   const loadVersion = useRef(0);
+  const lifetime = useRef(0);
   const currentKey = useRef(key);
   currentKey.current = key;
   const stored = key ? JSON.parse(sessionStorage.getItem(key) || 'null') : null;
   const sessionId = stored?.session_id;
-  const value = state.key === key ? state : { shift: null, staff: [], error: '', ready: false };
+  const value = {
+    ...(state.key === key ? state : { staff: [], error: '', ready: false }),
+    shift: stored?.shift || null,
+  };
 
   function storeSession() {
     const existing = JSON.parse(sessionStorage.getItem(key) || 'null');
@@ -30,35 +36,88 @@ export function useInventorySession(user, apiBaseUrl, course) {
     return session;
   }
 
+  function updateSession(update) {
+    const latest = storeSession();
+    const previousShift = latest.shift;
+    update(latest);
+    latest.revision = (latest.revision || 0) + 1;
+    sessionStorage.setItem(key, JSON.stringify(latest));
+    window.dispatchEvent(new CustomEvent(SESSION_CHANGED, {
+      detail: { key, closed: Boolean(previousShift && !latest.shift) },
+    }));
+  }
+
   async function load() {
     if (!key) return;
     const version = ++loadVersion.current;
+    const started = lifetime.current;
     const session = storeSession();
-    const [directory, selected] = await Promise.all([
+    const [directory, selected] = await Promise.allSettled([
       inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, '/staff')),
       inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, `/shifts/session?session_id=${encodeURIComponent(session.session_id)}`)),
     ]);
-    if (currentKey.current !== key || version !== loadVersion.current) return;
+    if (currentKey.current !== key || started !== lifetime.current || version !== loadVersion.current) return;
     const latest = storeSession();
-    const closingUncertain = Object.keys(latest.pending || {}).some(signature => JSON.parse(signature)[1].endsWith('/close'));
-    const shift = selected.shift || (closingUncertain ? latest.shift : null);
-    latest.shift = shift;
-    sessionStorage.setItem(key, JSON.stringify(latest));
-    setState({ key, staff: directory.staff, shift, error: '', ready: true });
+    // A read begun before a local transition cannot undo it, including on remount.
+    if ((latest.revision || 0) === (session.revision || 0) &&
+        selected.status === 'fulfilled' && !Object.keys(latest.pending || {}).length) {
+      updateSession(record => { record.shift = selected.value.shift || null; });
+    }
+    const failures = [directory, selected].filter(result => result.status === 'rejected');
+    setState({
+      key, staff: directory.status === 'fulfilled' ? directory.value.staff : [],
+      error: failures.map(result => result.reason.message).join(' '),
+      ready: failures.length === 0,
+    });
   }
 
   useEffect(() => {
+    lifetime.current++;
     setChoosing(false);
+    setSubmitting(false);
     if (continuation.current) continuation.current.reject(new Error('Course or account changed. Please retry the action.'));
     continuation.current = null;
     if (!key) return;
-    const refresh = () => load().catch(error => {
-      if (currentKey.current === key) setState({ key, staff: [], shift: null, error: error.message, ready: false });
-    });
+    const refresh = () => { void load(); };
+    const changed = event => {
+      if (event.detail.key !== key) return;
+      setPendingVersion(version => version + 1);
+      if (event.detail.closed) {
+        setChoosing(false);
+        continuation.current?.reject(new Error('Shift closed. Start a new action to select an operator.'));
+        continuation.current = null;
+      }
+    };
+    window.addEventListener(SESSION_CHANGED, changed);
     refresh();
     window.addEventListener('focus', refresh);
-    return () => window.removeEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    return () => {
+      lifetime.current++;
+      loadVersion.current++;
+      continuation.current?.reject(new Error('Course or page changed. Please retry the action.'));
+      continuation.current = null;
+      window.removeEventListener(SESSION_CHANGED, changed);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+    };
   }, [key, apiBaseUrl]);
+
+  function finishOperation(signature, operationId, result) {
+    const [, suffix, payload] = JSON.parse(signature);
+    if (suffix === '/shifts/select' && !result.shift) throw new Error('The server did not confirm the selected shift. Retry the same submission.');
+    updateSession(latest => {
+      if (latest.pending?.[signature] !== operationId) return;
+      delete latest.pending[signature];
+      if (suffix === '/shifts/select') latest.shift = result.shift;
+      else if (suffix.endsWith('/close') && suffix === `/shifts/${encodeURIComponent(latest.shift?.shift_id)}/close`) {
+        latest.shift = null;
+        latest.close_amount = '';
+      } else if (payload.shift_id && latest.shift?.shift_id === payload.shift_id) {
+        latest.shift = { ...latest.shift, has_activity: true };
+      }
+    });
+  }
 
   async function submitRequest(suffix, body, method, requireShift, shift) {
     if (!navigator.onLine) throw new Error('Connectivity is required. Nothing has been submitted.');
@@ -69,29 +128,22 @@ export function useInventorySession(user, apiBaseUrl, course) {
     const unresolved = pendingEntries.find(([other]) => other !== signature);
     if (unresolved) throw new Error('A previous submission is unresolved. Retry that unchanged action before starting another.');
     const operationId = session.pending?.[signature] || crypto.randomUUID();
-    session.pending = { ...session.pending, [signature]: operationId };
-    sessionStorage.setItem(key, JSON.stringify(session));
-    setPendingVersion(version => version + 1);
+    updateSession(latest => { latest.pending = { ...latest.pending, [signature]: operationId }; });
     try {
       const result = await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
         method, body: { ...payload, operation_id: operationId },
       });
-      delete session.pending[signature];
-      sessionStorage.setItem(key, JSON.stringify(session));
-      setPendingVersion(version => version + 1);
-      if (requireShift && currentKey.current === key) setState(previous => ({
-        ...previous, shift: { ...shift, has_activity: true },
-      }));
-      if (requireShift) {
-        session.shift = { ...shift, has_activity: true };
-        sessionStorage.setItem(key, JSON.stringify(session));
-      }
+      finishOperation(signature, operationId, result);
       return result;
     } catch (error) {
       if (error.status && error.status < 500) {
-        delete session.pending[signature];
-        sessionStorage.setItem(key, JSON.stringify(session));
-        setPendingVersion(version => version + 1);
+        if (suffix.endsWith('/close')) {
+          error.message = `${error.message} Close out was not completed; the operator, amount and retry identity are retained.`;
+        } else {
+          updateSession(latest => {
+            if (latest.pending?.[signature] === operationId) delete latest.pending[signature];
+          });
+        }
       } else {
         error.message = `${error.message} Submission is not confirmed; retry the same action to resolve it safely.`;
       }
@@ -101,35 +153,38 @@ export function useInventorySession(user, apiBaseUrl, course) {
 
   async function request(suffix, body = {}, method = 'POST', requireShift = true) {
     if (requestInFlight.current) throw new Error('Wait for the current submission before continuing.');
-    let shift = value.shift;
+    const started = lifetime.current;
+    let shift = storeSession().shift;
     if (requireShift && !shift) {
       if (!value.ready) throw new Error(value.error || 'Staff context is still loading. Please retry.');
       if (continuation.current) throw new Error('Select an operator to finish the current action first.');
       setChoosing(true);
       shift = await new Promise((resolve, reject) => { continuation.current = { resolve, reject }; });
-      if (currentKey.current !== key) throw new Error('Course changed. Please retry.');
+      if (currentKey.current !== key || started !== lifetime.current) throw new Error('Course or page changed. Please retry.');
     }
     requestInFlight.current = true;
     setSubmitting(true);
     try { return await submitRequest(suffix, body, method, requireShift, shift); }
-    finally { requestInFlight.current = false; setSubmitting(false); }
+    finally {
+      requestInFlight.current = false;
+      if (currentKey.current === key && started === lifetime.current) setSubmitting(false);
+    }
   }
 
   async function select(staffId, name) {
+    const started = lifetime.current;
     let id = staffId;
     if (id === 'custom') {
       const person = await request('/staff', { name }, 'POST', false);
       id = person.staff_id;
     }
+    if (currentKey.current !== key || started !== lifetime.current) throw new Error('Course or page changed. Please retry.');
     const result = await request('/shifts/select', {
       session_id: storeSession().session_id, staff_id: id,
     }, 'POST', false);
     const shift = result.shift;
     if (!shift) throw new Error('The server did not confirm the selected shift.');
-    const selectedSession = storeSession();
-    selectedSession.shift = shift;
-    sessionStorage.setItem(key, JSON.stringify(selectedSession));
-    await load();
+    if (currentKey.current !== key || started !== lifetime.current) return;
     setChoosing(false);
     continuation.current?.resolve(shift);
     continuation.current = null;
@@ -138,20 +193,11 @@ export function useInventorySession(user, apiBaseUrl, course) {
   async function close(amount) {
     const parsed = usdPriceFromInput(amount);
     if (parsed.error || !parsed.price) throw new Error(parsed.error || 'Enter the shift total in dollars.');
-    await request(`/shifts/${encodeURIComponent(value.shift.shift_id)}/close`, {
+    const shift = storeSession().shift;
+    if (!shift) throw new Error('No operator shift is selected.');
+    await request(`/shifts/${encodeURIComponent(shift.shift_id)}/close`, {
       session_id: storeSession().session_id, amount_minor: parsed.price.amount_minor,
     }, 'POST', false);
-    const closedSession = storeSession();
-    closedSession.shift = null;
-    closedSession.close_amount = '';
-    sessionStorage.setItem(key, JSON.stringify(closedSession));
-    if (currentKey.current === key) {
-      loadVersion.current++;
-      setChoosing(false);
-      if (continuation.current) continuation.current.reject(new Error('Shift closed. Start a new action to select an operator.'));
-      continuation.current = null;
-      setState(previous => ({ ...previous, shift: null }));
-    }
   }
 
   async function resolvePending() {
@@ -161,25 +207,26 @@ export function useInventorySession(user, apiBaseUrl, course) {
     if (!entry) return;
     const [signature, operationId] = entry;
     const [method, suffix, payload] = JSON.parse(signature);
+    const started = lifetime.current;
     requestInFlight.current = true;
     setSubmitting(true);
     try {
-      await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
+      const result = await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
         method, body: { ...payload, operation_id: operationId },
       });
+      finishOperation(signature, operationId, result);
     } catch (error) {
-      if (error.status && error.status < 500) {
-        delete session.pending[signature];
-        sessionStorage.setItem(key, JSON.stringify(session));
-        setPendingVersion(version => version + 1);
+      if (error.status && error.status < 500 && !suffix.endsWith('/close')) {
+        updateSession(latest => {
+          if (latest.pending?.[signature] === operationId) delete latest.pending[signature];
+        });
       }
       throw error;
-    } finally { requestInFlight.current = false; setSubmitting(false); }
-    delete session.pending[signature];
-    if (suffix.endsWith('/close')) session.close_amount = '';
-    sessionStorage.setItem(key, JSON.stringify(session));
-    setPendingVersion(version => version + 1);
-    await load();
+    } finally {
+      requestInFlight.current = false;
+      if (currentKey.current === key && started === lifetime.current) setSubmitting(false);
+    }
+    if (currentKey.current === key && started === lifetime.current) await load();
     window.dispatchEvent(new Event('inventory-updated'));
   }
 
@@ -188,15 +235,15 @@ export function useInventorySession(user, apiBaseUrl, course) {
     isSubmitting: () => requestInFlight.current,
     closeDraft: stored?.close_amount || '',
     saveCloseDraft: amount => {
-      const session = storeSession();
-      session.close_amount = amount;
-      sessionStorage.setItem(key, JSON.stringify(session));
-      setPendingVersion(version => version + 1);
+      updateSession(session => { session.close_amount = amount; });
     },
     unresolved: Object.keys(stored?.pending || {}).length > 0,
     pendingCloseAmount: (() => {
       const entry = Object.keys(stored?.pending || {}).map(signature => JSON.parse(signature)).find(([, suffix]) => suffix.endsWith('/close'));
-      return entry ? (entry[2].amount_minor / 100).toFixed(2) : null;
+      if (!entry) return null;
+      const draft = usdPriceFromInput(stored?.close_amount || '');
+      return draft.price?.amount_minor === entry[2].amount_minor
+        ? stored.close_amount : (entry[2].amount_minor / 100).toFixed(2);
     })(),
     choose: () => setChoosing(true), reload: load,
     cancel: () => {
@@ -217,6 +264,12 @@ export function InventorySessionControls({ session, actions }) {
   const [error, setError] = useState('');
   const submitting = useRef(false);
   useEffect(() => {
+    if (!session.shift) {
+      setClosing(false);
+      setConfirmingClose(false);
+      setAmount('');
+      return;
+    }
     if (session.pendingCloseAmount !== null && session.shift) {
       setClosing(true);
       setAmount(session.pendingCloseAmount);
@@ -241,12 +294,15 @@ export function InventorySessionControls({ session, actions }) {
     finally { submitting.current = false; setPending(false); }
   }
   return <div className="inventory-session">
-    <span>Operator: <strong>{session.shift?.staff_name || 'Not selected'}</strong></span>
-    <div className="inventory-session-actions"><button className={session.shift?.has_activity ? 'inventory-close-out' : undefined} type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
-      setError(''); setConfirmingClose(false); setClosing(Boolean(session.shift?.has_activity));
+    <span>Operator: <strong>{session.shift?.staff_name || (session.error ? 'Unavailable' : session.ready ? 'Not selected' : 'Loading…')}</strong></span>
+    <div className="inventory-session-actions"><button className={session.shift ? 'inventory-close-out' : undefined} type="button" disabled={(!session.shift && !session.ready) || pending || session.submitting || session.unresolved} onClick={() => {
+      setError(''); setConfirmingClose(false); setClosing(Boolean(session.shift));
       setAmount(session.closeDraft);
-      if (!session.shift?.has_activity) session.choose();
-    }}>{session.shift?.has_activity ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
+      if (!session.shift) session.choose();
+    }}>{session.shift ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
+    {session.shift && !session.shift.has_activity && <button type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
+      setError(''); setClosing(false); setConfirmingClose(false); session.choose();
+    }}>Change operator</button>}
     {actions}</div>
     {session.unresolved && <button type="button" disabled={pending} onClick={async () => {
       setPending(true); setError('');
@@ -260,7 +316,7 @@ export function InventorySessionControls({ session, actions }) {
       <form onSubmit={submit}>
         {closing ? confirmingClose
           ? <p>Close {session.shift?.staff_name}’s shift with final sales of <strong>${(usdPriceFromInput(amount).price.amount_minor / 100).toFixed(2)}</strong>?</p>
-          : <><p>Close {session.shift?.staff_name}’s shift before selecting another operator. Stock and today’s sales remain unchanged.</p><label>Total sales ($)<input autoFocus type="number" min="0" step="0.01" required value={amount} onChange={event => { setAmount(event.target.value); session.saveCloseDraft(event.target.value); }} disabled={pending} /></label></> : <>
+          : <><p>Close {session.shift?.staff_name}’s shift before selecting another operator. Stock and today’s sales remain unchanged.</p><label>Total sales ($)<input autoFocus type="number" min="0" step="0.01" required value={amount} onChange={event => { setAmount(event.target.value); session.saveCloseDraft(event.target.value); }} disabled={pending || session.unresolved} /></label></> : <>
           <label>Staff name<select required value={staffId} onChange={event => setStaffId(event.target.value)} disabled={pending}><option value="">Select a name</option>{session.staff.filter(person => person.active !== false).map(person => <option key={person.staff_id} value={person.staff_id}>{person.name}</option>)}<option value="custom">Custom</option></select></label>
           {staffId === 'custom' && <label>New name<input autoFocus required maxLength="160" value={name} onChange={event => setName(event.target.value)} disabled={pending} /></label>}
         </>}

@@ -570,6 +570,22 @@ for Admin/Hosting only.
   corrected freely; after activity, selecting a different person requires
   successful shift close. Operational records preserve selected staff snapshots
   and the authenticated submitting UID.
+  The shared-session correction is **implemented for draft review, not
+  deployed**; its [review record](DEPLOYMENT_GUIDE.md#shared-operator-session-correction---implementation-review-2026-10-28)
+  owns evidence and publication status. Both pages hydrate the same existing
+  browser-tab session/UID/Customer/Course record before reconciling server state;
+  selection survives their ordinary links, reload and back/forward navigation.
+  Loading or failed staff/session reads are explicit, not a false cleared name.
+  Requests, Complete/Cancel and service controls never require staff selection
+  or a successful staff lookup. Attribution-required inventory actions retain
+  their existing selection requirement.
+  Both pages offer Close out whenever a name is selected, including before
+  inventory activity; Change operator remains available only before activity.
+  Course switching retains each Course's own session without closing it.
+  Direct/notification URLs restore only the authorized destination Course's
+  session, never another Course's name. New browser-tab sessions and accounts
+  remain independent; this is not cross-device operator login. Driving Range
+  has no inventory-session controls.
 - An explicit audit says "Record your cart inventory at the start and end of a shift."
   Its backcheck displays and snapshots only current On Cart products, independent
   of filters, excluding Sold Out, In Inventory and archives. Revision details
@@ -595,6 +611,15 @@ for Admin/Hosting only.
   Not selected and no dialog, including after delayed refresh or repeated
   completion callbacks. Only a subsequent user-initiated attributed action
   prompts for a name; completed work never resumes a new action implicitly.
+  The draft-review correction preserves the original exact dollar-entry text
+  in the existing session record, along with the same operation ID/payload
+  across failed or uncertain close retries and page navigation. While an
+  unresolved close exists, its amount is fixed to that pending operation;
+  use the unchanged confirmation or Resolve last submission to recover.
+  Cancellation sends no close and does not erase the draft. Leaving a page
+  never closes or forgets an active shift. In-flight inventory/session mutations
+  temporarily lock Inventory navigation/Course/account controls, matching
+  Requests; an unresolved outcome may be carried safely to the other page.
 - Successful confirmed changes into/out of On Cart automatically change the
   golfer menu, including a sale/adjustment that moves zero stock to Sold Out.
   Saved public-facing metadata for On Cart products also appears automatically.

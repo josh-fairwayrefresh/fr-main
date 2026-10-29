@@ -298,6 +298,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const course = courses.find((item) => courseKey(item) === selectedKey)
     || selectedCourseFromLocation(courses, window.location.search);
   const session = useInventorySession(user, apiBaseUrl, course);
+  const contextPending = Boolean(session.submitting || busyId);
   const categories = inventory?.categories || [];
   const products = (inventory?.products || []).filter((product) => product.archived !== true);
   const categoryFilteredProducts = useMemo(() => (
@@ -456,12 +457,12 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No course access</h1><p>This account is not assigned to a customer course.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
 
   return <main className="inventory-app">
-    <header className="inv-header"><a href={courseContextUrl('/', course)} className="inv-brand" title="Return to Cart Operations"><img src={fairwayRefreshStackedLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
-      <a className="inv-cart-link" href={courseContextUrl('/', course)} title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
-      {isAdmin && <button className="inv-icon-button" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
+    <header className="inv-header"><a href={contextPending ? undefined : courseContextUrl('/', course)} aria-disabled={contextPending || undefined} className="inv-brand" title="Return to Cart Operations"><img src={fairwayRefreshStackedLogo} alt="Fairway Refresh" /><span>INVENTORY MANAGEMENT</span></a><div className="inv-header-controls">
+      <a className="inv-cart-link" href={contextPending ? undefined : courseContextUrl('/', course)} aria-disabled={contextPending || undefined} title="Return to Cart Operations"><ArrowLeft size={15} />Cart Operations</a>
+      {isAdmin && <button className="inv-icon-button" type="button" disabled={contextPending} onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
       <button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport || exporting}>{exporting ? 'Preparing export…' : 'Export'}</button>
-      {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
-      <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+      {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select disabled={contextPending} value={course ? courseKey(course) : ''} onChange={(event) => { if (session.isSubmitting() || busyId) return; const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+      <span className="inv-user-label">{user.email}</span><button className="inv-icon-button" type="button" disabled={contextPending} onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
     </div></header>
     <div className="inv-main">
       <section className="inv-title-row">
