@@ -6,7 +6,18 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
-The latest [responsive Inventory banner release](DEPLOYMENT_GUIDE.md#responsive-inventory-banner---production-release-2026-10-28)
+The latest [Refresh App release](DEPLOYMENT_GUIDE.md#user-initiated-refresh-app---production-release-2026-10-29)
+is live from `818e0dae4f9c6c0b43c7efd6b60510acf55074a2`, merged through PR #29,
+at Hosting **`8d70fcfa6287e4cb`**. One shared user-initiated control safely
+reloads Inventory and Cart Requests; entry responses now revalidate and
+fingerprinted assets retain immutable caching. All 102 relevant regressions,
+production builds, 127-file verification and authenticated refresh smoke pass.
+Open shifts/session state are preserved; existing workflow guards prevent
+interruption of edits and unresolved submissions. The release record owns
+verified recovery and remaining installed-iPad/Safari acceptance. Older Hosting
+identities and entry-cache limitations below are historical.
+
+The preceding [responsive Inventory banner release](DEPLOYMENT_GUIDE.md#responsive-inventory-banner---production-release-2026-10-28)
 is live from `376350de83a6acdcd3a92313737d60224264209b`, merged through PR #27,
 at Hosting **`192d0bce8df085dd`**. The CPO confirmed physical iPad/Safari
 validation completed and authorized this release. All 100 relevant regressions,

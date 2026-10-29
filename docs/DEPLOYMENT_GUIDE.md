@@ -1,5 +1,85 @@
 # Deployment Guide
 
+## User-initiated Refresh App - production release (2026-10-29)
+
+**CPO-authorized frontend and Hosting-cache correction; live for acceptance.**
+This supersedes earlier entry-cache limitations and Hosting identity, not
+Inventory ownership, notification architecture or operational contracts.
+
+- Baseline main `de7fcc26589c54914597265fcf134a99bce9e074`.
+  Implementation **`9b953f2f363acaa8c167817a6253fea6348d6a24`**, merged
+  through [PR #29](https://github.com/josh-fairwayrefresh/fr-main/pull/29).
+  **Deployed main `818e0dae4f9c6c0b43c7efd6b60510acf55074a2`** has exactly
+  the tested implementation tree. Production-configured builds pass before
+  and after integration; existing large-bundle warnings remain.
+- **Hosting `8d70fcfa6287e4cb`**, release **`1793288702309000`**,
+  **`2026-10-29T15:45:02.309Z`** (08:45 AM PDT),
+  **https://app.fairwayrefresh.com/**. All **127** live files hash-match
+  published artifacts. Permanent signs and all non-bundle public resources,
+  including the existing push-only `sw.js`, remain byte-identical.
+- Entry/deep-link responses previously had `Cache-Control: max-age=3600`.
+  They now have **`Cache-Control: no-cache`**: browsers may store an entry
+  but must revalidate before reuse. Fingerprinted `/assets/**` responses use
+  **`public,max-age=31536000,immutable`**. Actual root, scoped Inventory,
+  Admin, request deep-link, service-worker and versioned-asset headers were
+  checked after publication. Only Hosting was deployed. The private release
+  configuration is asserted equal to tracked `firebase.json`'s Hosting owner,
+  apart from the isolated publication-directory path.
+- One `AppRefresh` component owns the user-initiated network probe, guarded
+  same-URL reload and explicit failure UI in both Inventory and Cart Requests.
+  Existing workflow state supplies interruption guards; `InventorySession`
+  checks this account's persisted pending submissions across Courses.
+  Open shifts are allowed without closeout. No storage clearing, logout,
+  subscription removal, shift mutation or automatic reload is introduced.
+  [UX ownership and safety behavior](UX_SPECIFICATION.md#user-initiated-refresh-app)
+  are canonical.
+- **102/102** relevant frontend regressions pass. New evidence includes a
+  warm-browser two-release entry/versioned-asset transition with simulated
+  standalone mode, retained URL/auth cookie/Inventory UUID/open shift/draft,
+  storage/preferences, offline/HTTP-error retention, safety recheck after
+  a delayed network probe, corrupt storage and another Course's pending
+  submission. Actual Inventory guards protect product edits and closeout;
+  actual Requests guards protect request, service and notification mutations.
+  Existing reporting, request, operator/closeout/sign-out, notification and
+  responsive mouse/touch workflows pass unchanged.
+- Authenticated nondestructive production smoke passes the actual Refresh App
+  button in **both interfaces** without cache disabling or reinstall.
+  Inventory retains the same scoped URL, account and stored session, loads
+  **93** products and enables Export. Requests retains scoped URL, read-only
+  attribution, notification checkbox preferences and service state.
+  Requests/History, Inventory and Admin Button Activity report navigation remain
+  accessible. Phone/iPad/desktop checks at 375/390/430/768/1024/1440 show no
+  overflow or clipped controls and maintain 44-pixel targets. New bundle:
+  **`index-Ccrjmwgi.js`**. No new application/API errors observed.
+- No production operator selection, closeout, stock/audit mutation, request
+  completion/cancellation, service toggle, preference change or sign-out was
+  used for smoke. Open-shift and interruption behavior is isolated automated
+  evidence, not a live operational transaction. Backend revisions remain
+  `fairway-admin-report-5396b69`, `fairway-button-receiver-qr-db9001e` and
+  `fairway-request-notifier-qr-db9001e`. No backend, database, Auth configuration,
+  firmware or infrastructure outside the authorized Hosting policy changed.
+- **Rollback:** prior finalized Hosting **`192d0bce8df085dd`**, release
+  **`1793251411572000`**, application source
+  **`376350de83a6acdcd3a92313737d60224264209b`**. All **127** actual
+  previous files were downloaded and hash-verified before publication.
+  Hosting Release history rollback restores that version's original content
+  **and cache configuration**; the retained Hosting-only recovery configuration
+  can alternatively republish those exact bytes with the original policy.
+  No data rollback is required. Rollback was not executed.
+- Private `app-refresh-release` artifacts retain before/after Hosting manifests,
+  hashes/recovery files, cache-header evidence, build/test/deploy logs and
+  Hosting-only release/recovery configurations. The original working copy
+  remains unchanged and clean; its former seven optional harness/stale-note
+  edits were already abandoned under separate CPO direction.
+- **Remaining physical acceptance:** on the actual installed iPad/Safari app,
+  obtain this increment once, then use Refresh App across a subsequent release
+  without reinstalling. Check authentication, Course, push delivery and an open
+  shift under normal CPO operations. Also check offline retention and interrupted
+  work guards. Desktop automation simulates standalone mode; it is not iOS
+  installation, lifecycle or physical push-delivery proof. An already-running
+  pre-increment client cannot show the new control until it first loads the new
+  entry. No claim is made that technical smoke closes physical CPO acceptance.
+
 ## Responsive Inventory banner - production release (2026-10-28)
 
 **CPO-approved and Hosting-only released.** The CPO confirmed physical
