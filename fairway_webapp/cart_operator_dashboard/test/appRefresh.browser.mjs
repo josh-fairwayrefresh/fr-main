@@ -74,7 +74,7 @@ test('manual standalone refresh retrieves a new release, preserves storage and f
     let unblock;
     hold = new Promise(resolve => { unblock = resolve; });
     await page.getByRole('button', { name: 'Refresh App', exact: true }).click();
-    await page.getByRole('button', { name: 'Checking...' }).waitFor();
+    await page.locator('button[aria-label="Refresh App"][aria-busy="true"]').waitFor();
     await page.evaluate(() => { window.refreshGuard = 'A submission started during the check.'; });
     unblock();
     await page.getByRole('alert').getByText(/submission started/).waitFor();

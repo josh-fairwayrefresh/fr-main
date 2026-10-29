@@ -410,6 +410,12 @@ export default function OperatorApp({
       <div className="op-header-utilities">
         {operation.inventory && <a className="op-inventory" href={contextPending ? undefined : courseContextUrl('/inventory', course)} aria-disabled={contextPending || undefined} title="Inventory management"><Package size={17} />Inventory</a>}
         <div className="op-header-account">
+          <AppRefresh className="op-icon" user={user} getBlockReason={() => (
+            requestActionInFlight.current || serviceActionInFlight.current ||
+            inventorySession.isSubmitting() || notificationActionsInFlight.current > 0
+              ? 'Wait for the request, service or notification update to finish before refreshing.'
+              : ''
+          )} />
           {isAdmin && <button className="op-icon" type="button" disabled={contextPending} onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
           <button className="op-icon" type="button" disabled={contextPending} onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
@@ -439,12 +445,6 @@ export default function OperatorApp({
         </div>
       </div>
       <div className="op-service-controls">
-        <AppRefresh user={user} getBlockReason={() => (
-          requestActionInFlight.current || serviceActionInFlight.current ||
-          inventorySession.isSubmitting() || notificationActionsInFlight.current > 0
-            ? 'Wait for the request, service or notification update to finish before refreshing.'
-            : ''
-        )} />
         {operation.physical_devices && course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
         <button className="op-suspend" type="button" onClick={() => toggleService()} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}

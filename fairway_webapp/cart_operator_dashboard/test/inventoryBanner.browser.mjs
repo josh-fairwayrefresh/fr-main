@@ -34,6 +34,20 @@ test('Inventory banner matches the approved responsive hierarchy without changin
     await page.locator('.inv-brand img').evaluate(image => image.decode());
     async function layout(width) {
       await page.setViewportSize({ width, height: 1100 });
+      const refresh = page.getByRole('button', { name: 'Refresh App', exact: true });
+      assert.equal(await refresh.getAttribute('title'), 'Refresh App');
+      assert.equal(await refresh.innerText(), '', 'refresh is icon-only');
+      assert.equal(await refresh.locator('svg[aria-hidden="true"][width="18"][height="18"]').count(), 1);
+      const account = page.locator('.inv-header-main .inv-header-account');
+      assert.deepEqual(await account.locator('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+        await page.getByRole('button', { name: 'Open Admin', exact: true }).count()
+          ? ['Refresh App', 'Open Admin', 'Sign out'] : ['Refresh App', 'Sign out']);
+      const boxes = await account.locator('button').evaluateAll(buttons => buttons.map(button => {
+        const box = button.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height };
+      }));
+      assert.ok(boxes.every(box => box.y === boxes[0].y && box.width === 44 && box.height === 44), `${width}: aligned account targets`);
+      assert.ok(boxes.every((box, index) => !index || box.x >= boxes[index - 1].x + 44), `${width}: refresh precedes account controls`);
       return page.locator('.inv-header').evaluate(header => {
         const box = element => {
           const rect = element.getBoundingClientRect();
@@ -72,7 +86,7 @@ test('Inventory banner matches the approved responsive hierarchy without changin
       assert.ok(state.account.x >= state.logo.right, `${width}: account right of brand`);
       if (width <= 740) {
         assert.ok(state.nav.y >= state.logo.bottom);
-        assert.equal(state.logo.width, 168);
+        assert.equal(state.logo.width, Math.min(168, width - 192));
       } else {
         assert.ok(state.nav.x >= state.logo.right);
         assert.equal(state.logo.width, width <= 900 ? 190 : 210);

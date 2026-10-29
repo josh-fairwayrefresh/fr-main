@@ -77,6 +77,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           exportHelp:Boolean(document.querySelector('#inv-export-help')),
           adminIcon:Boolean(admin?.querySelector('svg')) && !admin.textContent,
           logo:box(document.querySelector('.inv-brand img')),
+          header:box(document.querySelector('.inv-header-main')),
           operatorInPanel:Boolean(panel.querySelector('.inventory-session')),
           accountActions:[...document.querySelectorAll('.inv-header-account button')].map(box),
           targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action .inv-secondary,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
@@ -95,7 +96,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank', text: 'Golfer-View Menu', font: true });
       assert.equal(layout.compactTotal, 'Sales Today0 units sold');
       assert.equal(layout.detailedTally, false);
-      assert.equal(layout.logo.width, width <= 740 ? 168 : width <= 900 ? 190 : 210, 'Approved horizontal branding dimensions');
+      assert.equal(layout.logo.width, width <= 740 ? Math.min(168, layout.header.width - 192) : width <= 900 ? 190 : 210, 'Horizontal branding yields to 44px account controls within available header width');
       assert.equal(layout.logo.height, width <= 740 ? 46 : 54);
       for (const box of layout.targets) {
         assert.ok(box.height >= 44 && box.width >= 44, `${width}px: controls retain finger-sized targets`);
