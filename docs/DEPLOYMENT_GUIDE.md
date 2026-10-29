@@ -1,5 +1,149 @@
 # Deployment Guide
 
+## Admin Button Activity Report controlled production release - 2026-10-28
+
+**Released through merged [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21).**
+This record supersedes the earlier report-review status and the previous
+Admin/Hosting identities below, not the existing inventory, staff or
+Course-operation contracts. Publication completed October 28 PDT
+(`2026-10-29T00:38:20.546Z`). Only **Admin and Hosting** were deployed.
+
+### Source, runtime and Hosting identities
+
+- Accepted starting head `d6a990b3990f72ebf053a91efa856c10ac4b1bc7`;
+  corrected review head **`eee363bfdafaf982e35bf68482d342d8a2edaaea`**.
+  The sole presentation correction removes the uncertainty suffix from each
+  legend label: device IDs only, unchanged stable colors and historical data.
+  Verified main/origin main remained `94fafa7e95292e0aa11b210df807a3ecd57d3d42`
+  before the exact-head guarded merge; no intervening integration was required.
+- Merge and deployed application source:
+  **`5396b69366c8cbd64142fac1c0f0b8403295246d`**. Merge tree equals the
+  validated corrected tree; candidate and merged production builds match.
+  All **66** uploaded tracked backend files match that merge byte-for-byte;
+  historical test fixtures are excluded from the runtime upload.
+- Admin **`fairway-admin-report-5396b69`**, Ready at **100%**.
+  Image:
+  `us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:75d12aa9138a16f6a6c4f6127be83a2a44c6281429b3e18a9c664abf0ae03d6c`.
+  Source:
+  `gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-admin/1793233316.798025-4ab50c3b002e4d169639577bfd079fdd.zip#1793233317049602`.
+  Existing runtime identity
+  `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`,
+  production environment, origins, concurrency, timeout, resources, scaling,
+  ingress and application-level Firebase authorization are unchanged.
+  It was staged at **0%** with tag `button-report-release`; verified report
+  generation and access denials preceded traffic cutover.
+- Hosting **`e51a5e6d10cd84ac`**, live release **`1793234300546000`**,
+  **`2026-10-29T00:38:20.546Z`**. All **128** served custom-domain files match
+  the local merged production artifacts. Entry, installation PDF and register
+  also match the secondary `web.app` origin. Existing CLI login/ADC refreshes
+  were expired; publication used the existing authorized gcloud identity's
+  short-lived access token through Firebase Tools with explicit production
+  quota project. No credential, provider or runtime authorization replacement.
+- Receiver **`fairway-button-receiver-qr-db9001e`** and notifier
+  **`fairway-request-notifier-qr-db9001e`** remain unchanged at **100%**.
+  No trigger, Rules, index, firmware, Auth, entitlement or sandbox deployment.
+  The existing five request indexes are Ready; the report reuses
+  `customer_id ASC, course_id ASC, received_at DESC` with implicit descending
+  document name. Existing trigger identities and notification contracts remain.
+
+### Actual-runtime permissions and release gates
+
+The staged real Admin request initially failed explicitly, rather than
+returning a zero report. The runtime lacked the documented Logging reads.
+Only the following grants were added to its existing service account:
+
+1. `roles/logging.viewAccessor` on exactly
+   `projects/savvy-kit-496703-r5/locations/global/buckets/_Default/views/_AllLogs`.
+2. Custom project role
+   `projects/savvy-kit-496703-r5/roles/buttonReportRetentionReader`, containing
+   only `logging.buckets.get`, with binding condition
+   `resource.name == 'projects/savvy-kit-496703-r5/locations/global/buckets/_Default'`
+   (title `button-report-default-retention`).
+
+No project-wide log-reader, writer/Admin, impersonation, new view or ingestion
+pipeline grant was added. Existing `_Default` retention is **30 days**.
+After IAM propagation, generation through the **actual attached runtime**
+and a normal existing authenticated Admin session returned **200**.
+No impersonation or interactive user's Logging credential supplied runtime
+access. Unsigned requests returned **401**; a normal signed-in ordinary
+Customer returned **403 Admin access required**; a forged Customer/Course
+pair returned **404**. The live canonical endpoint also rejects unsigned
+requests with **401**. Access checks made no operational transactions.
+
+- Reused accepted validation: 13 report tests, existing backend regressions,
+  83 serial frontend checks, DST/pagination/failure/limit cases and rendered
+  continuation layouts. Correction-specific tests, browser workflow and
+  production-configured build pass. The original fixture still reconciles
+  **116 / 63**, all 12 daily pairs and **179** receipt identities/coordinates
+  at its original start/as-of boundaries. The committed sample now has
+  device-only labels, not supplied hole labels.
+- Before cutover, actual staged production PDF at
+  **`2026-10-29T00:26:33.080Z`** reconciled **120 suspended attempts / 63
+  completed requests** against independent read-only queries.
+- After publication, normal Admin **Reports -> Customer -> Course -> dates ->
+  Generate -> Download PDF** succeeded without a stubbed backend. The actual
+  downloaded landscape Letter PDF is **792 x 612 points**, one page, 15,006
+  bytes, as-of **`2026-10-29T00:38:52.006Z`** (October 28, 17:38:52.006 PDT).
+  Monarch/Tony Lema, October 17-28: **120 / 63**. All **120** matching log rows
+  and **83** request-source rows were retrieved (one request page); filtering
+  yields **183** plotted records. Independently queried finished-model
+  rendering has the identical complete 1600-pixel PNG hash as the actual
+  runtime PDF, verifying every plotted point, daily count and label.
+  Daily empty/completed pairs:
+  `0/19, 8/12, 30/3, 2/1, 6/3, 4/3, 18/6, 10/9, 26/5, 6/1, 4/1, 6/0`.
+  The four additional October 28 attempts occurred after the reference as-of;
+  the UI also starts at local midnight, not the original deployment-time cutoff.
+  These changed query boundaries are explicit, not a fixture mismatch.
+- Device-only legends, six stable colors, dots/open circles, local receipt
+  axis, retention/as-of/uncertainty notes and readability were visually
+  inspected in the actual rendered PDF. All **280** words fit printable
+  bounds. Live report form at **375/430/768/1024/1440 px** has no horizontal
+  overflow or clipped input/select/button controls.
+
+### Preservation, access and compatible recovery
+
+- Consistent recovery snapshot: **`2026-10-29T00:19:18.884693Z`**;
+  refreshed pre-cutover: **`2026-10-29T00:28:52.234032Z`**;
+  closeout: **`2026-10-29T00:38:29.660043Z`**. All **31** other protected
+  data/configuration surfaces match exactly, with unchanged document counts:
+  97 products, 7 staff, 94 requests, 69 commands, 52 bays and 462 subscription
+  descendants. The full stock/history/access/staff/service documents, Auth
+  configuration, Receiver/notifier and both sandbox deployments are preserved.
+  One existing Cart subscription's `updated_at` and `last_seen_at` changed
+  through normal browser registration; its identity, creation time, endpoint,
+  keys, status, preferences and all other fields are unchanged. No preference
+  rewrite, new subscription, test request, sale, audit, shift or customer test
+  notification was initiated. Do not roll back this legitimate heartbeat.
+- Cart was **OFF** at this release's baseline and remains OFF; Driving Range
+  remains **suspended**. Older records' Cart-ON observations are historical,
+  not a directive to restore service state. Permanent installation files are
+  byte-identical; PDF SHA256 remains
+  `f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`.
+- Production access: **https://app.fairwayrefresh.com/admin**, normal Admin
+  sign-in, **Reports -> Customer -> Course -> Start/End date -> Generate ->
+  Download PDF**. Ordinary Customer users have no report access. Existing
+  1-31-day, source/layout limits and retained-coverage caveats in the
+  [UX owner](UX_SPECIFICATION.md#admin-button-activity-report-review-increment)
+  apply. Older unavailable log dates are not evidence of zero pushes.
+- Compatible recovery baseline: Admin **`fairway-admin-qr-db9001e`** and
+  Hosting **`8ee4867beb77d9fa`**, with its exact installation directory.
+  Retained `qr-release` tag points to the compatible prior Admin at **0%**;
+  the report revision is **100%**. If recovery is required, route Admin to
+  that compatible revision and republish the retained compatible Hosting
+  artifact, or use a compatible forward fix. Keep current Receiver/notifier,
+  stock/assignment/Course owners, all live records and permanent identities.
+  A code rollback removes Reports; it does not restore data or require
+  removing these bounded read grants. Never restore an old snapshot over
+  legitimate post-release history or route to older incompatible writers.
+- Restricted evidence/recovery: private session `button-report-release/`
+  (`before/`, `precutover/`, `final/`, immutable previous Admin source,
+  prior/merged Hosting, IAM snapshots, `verification.json`,
+  staged/live PDFs and exact-as-of reconciliation records).
+  These are local restricted artifacts, not a managed/off-machine data backup.
+  Canonical records/source are GitHub-backed. No new physical-device,
+  physical Safari/iPad/PWA, notification-delivery or print/scan acceptance is
+  claimed; no customer-device test notification was sent.
+
 ## Operator Customer/service hierarchy correction — 2026-10-26
 
 **Released through merged [PR #19](https://github.com/josh-fairwayrefresh/fr-main/pull/19).**
@@ -2450,7 +2594,8 @@ FRB-0003 sequence and failure handling are owned by
 
 ## Admin Button Activity Report — Implementation Review (2026-10-28)
 
-**Original review evidence; controlled release now authorized by the CPO.**
+**Historical review evidence; production release is recorded
+[above](#admin-button-activity-report-controlled-production-release---2026-10-28).**
 The accepted presentation correction shows only device IDs in the legend,
 preserving stable colors and separate original/replacement IDs. No historical
 location evidence or counting definition changes. The sample and assertions
@@ -2462,8 +2607,9 @@ staged actual-runtime/authenticated-read gates before traffic.
 The original implementation authorization was isolated validation only.
 Branch `feat/admin-button-activity-report` began from clean main and matching
 `origin/main`, **`94fafa7e95292e0aa11b210df807a3ecd57d3d42`**. The production
-alignment below is unchanged; this is not a new production milestone.
-Draft review is [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21);
+alignment at that original review stage was unchanged.
+The originally draft [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21)
+is now merged;
 implementation and committed sample source is
 **`4f6af99d0fa28fc42bd7a0b0724016d0a4864dd7`**. Later review-record-only commits
 do not change that validated implementation.
@@ -2528,8 +2674,11 @@ do not change that validated implementation.
 
 ### Precise future runtime permissions and publication scope
 
-No grants, production reads through the new endpoint, deployment, merge,
-production writes or customer notifications were performed.
+At the original isolated review stage, no grants, production reads through
+the new endpoint, deployment, merge, production writes or customer notifications
+were performed. Actual authorized runtime grants/publication are recorded
+in the current production release above; the requirements below explain
+their original review rationale.
 
 For production runtime
 `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`, verify:
@@ -2585,7 +2734,42 @@ remediated by this bounded report increment.
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
 
+### Production Admin Button Activity Report - 2026-10-28
+
+- **Source:** accepted PR #21 head `d6a990b3990f72ebf053a91efa856c10ac4b1bc7`,
+  device-only label correction reviewed at
+  **`eee363bfdafaf982e35bf68482d342d8a2edaaea`**;
+  merge/deployed application **`5396b69366c8cbd64142fac1c0f0b8403295246d`**.
+- **Runtime/Hosting:** Admin **`fairway-admin-report-5396b69`**, Ready,
+  **100%** after zero-traffic actual-runtime gates; Hosting
+  **`e51a5e6d10cd84ac`**, release **`1793234300546000`**,
+  **`2026-10-29T00:38:20.546Z`**. Receiver/notifier remain their
+  **`qr-db9001e`** revisions at **100%**; existing indexes/triggers, firmware
+  and both sandboxes are unchanged.
+- **Authorization:** existing stored Admin access and Customer/Course owner.
+  Added only exact-view `logging.viewAccessor` and a bucket-conditioned
+  custom role containing solely `logging.buckets.get` to existing Admin
+  runtime. Actual staged Admin **200**, ordinary Customer **403**, unsigned
+  **401**, invalid parent **404**; live unsigned **401**.
+- **Evidence:** original fixture **116/63**, all daily/point matches;
+  live normal Admin UI Generate/Download **120/63** at
+  `2026-10-29T00:38:52.006Z`, exact-as-of independent query/render match.
+  Device-only legend, stable colors, landscape Letter, all 280 words within
+  printable bounds, live 375-1440 px controls without clipping/overflow;
+  all 128 served files match the merged production build.
+- **Preservation/recovery:** operational records, full inventory, staff,
+  service state, entitlements, preferences, permanent signs and both sandboxes
+  preserved; one normal subscription heartbeat changed only timestamp fields.
+  Cart remains **OFF** as observed at this release; Range **suspended**.
+  Compatible recovery is Admin **`fairway-admin-qr-db9001e`** plus Hosting
+  **`8ee4867beb77d9fa`**, never old incompatible writers/stale-data restore.
+  The [release record](#admin-button-activity-report-controlled-production-release---2026-10-28)
+  owns image/source/IAM identities, query boundaries, detailed preservation,
+  recovery and existing physical-device/notification acceptance limits.
+
 ### Admin Button Activity Report — Draft Review Only (2026-10-28)
+
+Historical pre-release checkpoint, superseded by the production entry above.
 
 - **Source scope:** `feat/admin-button-activity-report` from verified main
   `94fafa7e95292e0aa11b210df807a3ecd57d3d42`. Admin reporting only; no merge or

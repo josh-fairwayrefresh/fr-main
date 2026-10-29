@@ -199,7 +199,10 @@ The heading's review-increment anchor is retained for existing document links.
 
 ## Admin Button Activity Report (Review Increment)
 
-Prepared for review, not deployed. Existing global Admin authorization gates
+Released through merged PR #21; the
+[current deployment record](DEPLOYMENT_GUIDE.md#admin-button-activity-report-controlled-production-release---2026-10-28)
+owns source/runtime identities, production verification and recovery.
+Existing global Admin authorization gates
 **Admin → Reports → Customer → Course → date range → Generate → Download PDF**.
 The selectors reuse Admin's existing Customer/Course directory; the backend
 validates the Course's selected Customer parent before reading report sources.

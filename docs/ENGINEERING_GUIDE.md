@@ -102,9 +102,14 @@ from Service History's completion-time grouping.
 The [UX owner](UX_SPECIFICATION.md#admin-button-activity-report-review-increment)
 owns selection, counting, coverage and output behavior. The
 [Deployment Guide](DEPLOYMENT_GUIDE.md#admin-button-activity-report--implementation-review-2026-10-28)
-owns isolated evidence, runtime permission requirements and bounded future
-publication surfaces. This increment is **prepared for draft review only**:
-no production deployment, IAM or data mutation is authorized or performed.
+owns the original isolated evidence and runtime permission rationale.
+The [controlled production release](DEPLOYMENT_GUIDE.md#admin-button-activity-report-controlled-production-release---2026-10-28)
+is live through merged PR #21 from
+`5396b69366c8cbd64142fac1c0f0b8403295246d`: Admin and Hosting only, with
+device-only legend labels and narrowly scoped runtime log/retention reads.
+Actual authenticated report generation, access denials, exact-as-of
+query/render reconciliation and preservation passed before closeout.
+No operational data, service-state, entitlement or notification changes.
 
 ### Course-owned Driving Range QR request increment
 

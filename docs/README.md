@@ -46,8 +46,16 @@ was merged through PR #19 and published from
 `e8793db058bf34b8a9a976dbea07b7b91769b93e` to Hosting
 `8ee4867beb77d9fa`. Admins choose a named Customer and its authorized service;
 ordinary-user scope, inventory/staff, notification choices and all backends/data
-remain unchanged. The top Alignment Register entry owns that current frontend
-alignment. Older Hosting and inventory/staff-only runtime identities are historical.
+remain unchanged. That release's dated record owns its frontend alignment.
+The subsequent [Admin Button Activity Report release](DEPLOYMENT_GUIDE.md#admin-button-activity-report-controlled-production-release---2026-10-28)
+is live through PR #21 from `5396b69366c8cbd64142fac1c0f0b8403295246d`.
+It publishes Admin and Hosting only, with device-only legend labels and
+bounded runtime Logging reads; the normal authenticated Admin workflow and
+exact-as-of report reconciliation pass. Operational data, inventory/staff,
+service state, entitlements, notifications, permanent signs and both sandboxes
+are preserved. The top Alignment Register entry owns current Admin/Hosting
+identities and compatible recovery. Older Hosting and inventory/staff-only
+runtime identities are historical.
 The CPO_stats_fix reporting and persistent
 Resume/Suspend behavior was CPO-accepted, merged, and deployed to production
 on 2026-10-22. The CPO-accepted select-any-request queue and independent
