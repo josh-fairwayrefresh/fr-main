@@ -5,6 +5,9 @@
 **Draft review only: no merge, deployment, runtime IAM or production-data
 mutation.** Branch `fix/shared-operator-session` starts at verified clean
 main/origin main **`3ec5a8df4a0da4c992f850be567839b95c21f32e`**.
+Validated implementation commit:
+**`9f5c0328637d9b88ce78bde0faf3da6d8c068c9f`**. Later review-record-only
+commits do not change the validated application/test tree.
 The current production Admin/Hosting and both sandboxes remain the released
 baseline below. The [UX owner](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close)
 owns behavior; the [engineering owner](ENGINEERING_GUIDE.md#change-and-validation-discipline)
@@ -2825,6 +2828,28 @@ remediated by this bounded report increment.
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Shared Operator Session - Draft Review Only (2026-10-28)
+
+- **Source:** `fix/shared-operator-session`, based on verified main
+  `3ec5a8df4a0da4c992f850be567839b95c21f32e`; validated implementation
+  **`9f5c0328637d9b88ce78bde0faf3da6d8c068c9f`**. Draft review only;
+  no merge, Hosting/backend deployment, IAM or production-data changes.
+- **Behavior/evidence:** existing InventorySession owner, storage key, UUID
+  and backend contracts retained. Both pages hydrate the same scoped operator,
+  preserve navigation/reload and retries, offer pre-activity closeout, and
+  stay idle after successful close. **94 local frontend tests pass**, including
+  actual page links and delayed callbacks; production-configured build passes.
+  Requests without staff, Course/account isolation, independent audits,
+  post-activity attribution and Range capability exclusions are preserved.
+- **Production remains:** Admin `fairway-admin-report-5396b69` at 100%;
+  Hosting `e51a5e6d10cd84ac`, source
+  `5396b69366c8cbd64142fac1c0f0b8403295246d`; Receiver/notifier retain
+  their accepted `qr-db9001e` revisions. Both sandboxes are untouched.
+  The [review record](#shared-operator-session-correction---implementation-review-2026-10-28)
+  owns detailed evidence and limits. Any future publication is Hosting-only
+  and requires separate authorization; no live operator closeout acceptance
+  or physical Safari/iPad/PWA acceptance is claimed.
 
 ### Production Admin Button Activity Report - 2026-10-28
 
