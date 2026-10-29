@@ -32,7 +32,7 @@
 .inv-course-identity > strong { display: block; margin-top: 5px; color: #243f2e; font: 400 24px/1.2 Georgia, serif; }
 .inv-course-picker { display: grid; gap: 5px; min-width: 0; color: #74806e; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .inv-course-picker select { width: 280px; max-width: 100%; min-height: 44px; padding: 0 28px 0 10px; border: 1px solid #d5dfd0; border-radius: 5px; background: #fbfcf9; color: #3a533f; font-size: 11px; font-weight: 400; letter-spacing: normal; text-transform: none; }
-.inv-header-tools { display: flex; align-items: center; gap: 18px; padding-left: 24px; border-left: 1px solid #e3e8df; min-width: 0; }
+.inv-header-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding-left: 24px; border-left: 1px solid #e3e8df; min-width: 0; }
 .inv-user-label { max-width: 230px; color: #6c796a; font-size: 11px; overflow-wrap: anywhere; }
 .inv-header-tools > .inv-secondary { min-height: 44px; padding: 0 16px; border-color: #cedbcd; background: #f9fbf7; color: #31593f; font-size: 12px; font-weight: 700; }
 .inv-header a:focus-visible, .inv-header button:focus-visible, .inv-header select:focus-visible { outline: 3px solid rgba(0,107,67,.35); outline-offset: 2px; }

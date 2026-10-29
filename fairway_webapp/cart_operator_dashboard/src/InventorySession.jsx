@@ -31,6 +31,17 @@ function writeSession(key, session) {
   window.dispatchEvent(new CustomEvent(SESSION_CHANGED, { detail: { key } }));
 }
 
+export function inventoryRefreshBlocker(user) {
+  const prefix = `inventory-session:${user.uid}:`;
+  for (let index = 0; index < sessionStorage.length; index++) {
+    const key = sessionStorage.key(index);
+    if (key.startsWith(prefix) && Object.keys(readSession(key)?.pending || {}).length) {
+      return 'Resolve the unconfirmed Inventory submission in its Course before refreshing.';
+    }
+  }
+  return '';
+}
+
 // Authentication checks every Course visited by this browser session, not just
 // the currently displayed Course. The server remains the authority for closure.
 export async function inventorySignOutBlocker(user, apiBaseUrl, { signal } = {}) {
@@ -304,7 +315,7 @@ export function useInventorySession(user, apiBaseUrl, course, { readOnly = false
   };
 }
 
-export function InventorySessionControls({ session, actions }) {
+export function InventorySessionControls({ session, actions, onEditingChange }) {
   const [staffId, setStaffId] = useState('');
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -313,6 +324,10 @@ export function InventorySessionControls({ session, actions }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const submitting = useRef(false);
+  useEffect(() => {
+    onEditingChange?.(Boolean(session.choosing || closing || pending));
+    return () => onEditingChange?.(false);
+  }, [session.choosing, closing, pending, onEditingChange]);
   useEffect(() => {
     if (session.pendingCloseAmount !== null && session.shift) {
       setClosing(true);

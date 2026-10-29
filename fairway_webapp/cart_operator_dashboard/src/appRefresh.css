@@ -1,0 +1,5 @@
+.app-refresh { position: relative; flex-shrink: 0; }
+.app-refresh > button { min-height: 44px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #cedbcd; border-radius: 6px; background: #f9fbf7; color: #31593f; font-family: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.app-refresh > button:disabled { opacity: .6; cursor: wait; }
+.app-refresh > button:focus-visible { outline: 3px solid rgba(0,107,67,.35); outline-offset: 2px; }
+.app-refresh > p { position: absolute; z-index: 20; top: 100%; right: 0; width: min(280px, calc(100vw - 32px)); padding: 12px; border: 1px solid #d6b7ad; border-radius: 6px; background: #fff1ee; color: #8c382b; font-size: 13px; overflow-wrap: anywhere; box-shadow: 0 4px 14px #0002; }

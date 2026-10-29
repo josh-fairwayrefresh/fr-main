@@ -108,7 +108,8 @@ test('Inventory owns selection/change/close; real links and reload preserve one 
   await page.locator('.inventory-session').getByText('Bob', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: /Select operator|Change operator|Close out|Resolve last submission/ }).count(), 0);
   const directoryReads = state.calls.filter(call => call.path.endsWith('/staff')).length;
-  await page.reload();
+  await Promise.all([page.waitForEvent('load'),
+    page.getByRole('button', { name: 'Refresh App', exact: true }).click()]);
   await page.locator('.inventory-session').getByText('Bob', { exact: true }).waitFor();
   assert.equal(state.calls.filter(call => call.path.endsWith('/staff')).length, directoryReads, 'Requests never needs staff loading');
   assert.equal((await stored()).session_id, sessionId);
@@ -164,6 +165,43 @@ test('all account sign-out surfaces check every scoped shift; no shift permits n
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.waitForFunction(() => window.testSignOuts === 1);
   assert.equal(state.closes, 1, 'Sign out never closes a shift itself');
+}));
+
+test('Refresh App protects Inventory edits and closeout, but permits an open shift without mutations', { timeout: 90000 }, async () => fixture(async ({ page, go, stored, state }) => {
+  await go('/inventory?customer_id=TEST-C&course_id=A');
+  await select(page);
+  const before = await stored();
+  await Promise.all([page.waitForEvent('load'),
+    page.getByRole('button', { name: 'Refresh App', exact: true }).click()]);
+  await page.getByRole('button', { name: 'Close out Enter final sales' }).waitFor();
+  assert.equal((await stored()).session_id, before.session_id);
+  assert.equal((await stored()).shift.shift_id, before.shift.shift_id);
+  assert.equal(state.closes, 0);
+  const attempt = () => page.getByRole('button', { name: 'Refresh App', exact: true }).evaluate(button => button.click());
+  await page.getByRole('button', { name: '+ Add Product', exact: true }).click();
+  await page.getByLabel('Product name', { exact: true }).fill('Unsaved product');
+  await attempt();
+  await page.locator('.app-refresh [role="alert"]').getByText(/Finish or cancel/).waitFor();
+  assert.equal(await page.getByLabel('Product name', { exact: true }).inputValue(), 'Unsaved product');
+  await page.getByRole('button', { name: 'Close product editor' }).click();
+  await page.getByRole('button', { name: 'Close out Enter final sales' }).click();
+  await page.getByLabel('Total sales ($)').fill('012.30');
+  await attempt();
+  await page.locator('.app-refresh [role="alert"]').getByText(/Finish or cancel/).waitFor();
+  assert.equal(await page.getByLabel('Total sales ($)').inputValue(), '012.30');
+  await page.getByRole('button', { name: 'Submit shift total' }).click();
+  state.rejectClose = true;
+  await page.getByRole('button', { name: 'Confirm close out' }).click();
+  await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'Synthetic close rejected' }).waitFor();
+  await attempt();
+  await page.locator('.app-refresh [role="alert"]').getByText(/unconfirmed submission/).waitFor();
+  assert.ok(Object.keys((await stored()).pending).length);
+  assert.equal((await stored()).close_amount, '012.30');
+  await go('/?customer_id=TEST-C&course_id=B');
+  await attempt();
+  await page.locator('.app-refresh [role="alert"]').getByText(/unconfirmed Inventory submission/).waitFor();
+  assert.equal(state.closes, 0);
+  assert.equal(await page.evaluate(() => window.testSignOuts), 0);
 }));
 
 test('unselected or failed operator reads do not gate requests; failures cannot bypass sign-out', { timeout: 90000 }, async () => fixture(async ({ page, go, state }) => {
