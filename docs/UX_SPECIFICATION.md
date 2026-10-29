@@ -411,11 +411,25 @@ simplifies the sales header. Those initial sandbox decisions did not authorize
 production; the separate 2026-10-26 release authorization superseded that limit
 for Admin/Hosting only.
 
-- The Inventory banner displays the Fairway Refresh logo at 150% of its prior
-  displayed dimensions at each responsive breakpoint, an accessible Admin
-  shield for entitled users, and Export without explanatory prose. Export
-  retains the same confirmed-view report contents, download and pending/unresolved
-  submission protection.
+- **CPO-approved Inventory banner alignment (2026-10-28):** the CPO confirmed
+  physical iPad/Safari validation completed and authorized commit, integration
+  and production release. The approved desktop, iPad landscape/portrait and mobile
+  prototype supersedes Inventory's enlarged stacked logo and dark banner.
+  One Inventory header uses the same horizontal Fairway logo asset, white
+  surface, thin gold accent and green navigation hierarchy as Cart Requests.
+  Cart Operations returns to the scoped Requests page; Inventory is identified
+  as the current page. Entitled Admin and guarded sign-out remain grouped on
+  the right. Customer/Course identity, the existing combined Course selector,
+  account email and Export sit in the context tier. Desktop/landscape use two
+  tiers; up to 900 CSS pixels email/Export wrap below scope, and up to 740 pixels
+  navigation sits below branding/account actions with stacked Course context.
+  Names and email wrap without hiding controls; targets remain at least 44
+  pixels tall. The horizontal logo replaces the prior 150%-sized stacked logo
+  intentionally, as approved. No new Customer/service selection behavior or
+  Inventory notification preferences are introduced. Export retains the same
+  confirmed-view report contents, download and pending/unresolved submission
+  protection. Sales Today/operator selection, closeout and audit remain in the
+  existing workspace panel, without duplicated banner management controls.
 - Sales Today sits horizontally beside Cart Inventory Management Dashboard
   on iPad/desktop. The same compact panel clearly identifies the selected
   operator and contains Select operator/Close out and submission recovery.
