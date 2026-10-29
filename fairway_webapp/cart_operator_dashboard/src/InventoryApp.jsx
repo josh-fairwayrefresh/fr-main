@@ -466,6 +466,11 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
           <span aria-current="page">Inventory</span>
         </nav>
         <div className="inv-header-account">
+          <AppRefresh className="inv-icon-button" user={user} getBlockReason={() => {
+            if (session.isSubmitting() || session.unresolved || busyId || exporting) return 'Wait for Inventory submissions or export to finish, and resolve any unconfirmed submission before refreshing.';
+            if (editor || categoryEditor || categoryManager || stockAction || auditing || sessionEditing || session.choosing || movement.drag) return 'Finish or cancel the open Inventory dialog or move before refreshing. Your edits have not been discarded.';
+            return '';
+          }} />
           {isAdmin && <button className="inv-icon-button" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
           <button className="inv-icon-button" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
@@ -475,11 +480,6 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={courseKey(course)} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
         <div className="inv-header-tools">
           <span className="inv-user-label">{user.email}</span>
-          <AppRefresh user={user} getBlockReason={() => {
-            if (session.isSubmitting() || session.unresolved || busyId || exporting) return 'Wait for Inventory submissions or export to finish, and resolve any unconfirmed submission before refreshing.';
-            if (editor || categoryEditor || categoryManager || stockAction || auditing || sessionEditing || session.choosing || movement.drag) return 'Finish or cancel the open Inventory dialog or move before refreshing. Your edits have not been discarded.';
-            return '';
-          }} />
           <button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport || exporting}>{exporting ? 'Preparing export…' : 'Export'}</button>
         </div>
       </div>

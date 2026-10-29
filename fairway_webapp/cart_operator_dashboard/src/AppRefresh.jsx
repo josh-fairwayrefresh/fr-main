@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { inventoryRefreshBlocker } from './InventorySession';
 import './appRefresh.css';
 
-export default function AppRefresh({ user, getBlockReason }) {
+export default function AppRefresh({ user, getBlockReason, className }) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
@@ -46,8 +46,9 @@ export default function AppRefresh({ user, getBlockReason }) {
   }
 
   return <div className="app-refresh">
-    <button type="button" onClick={refresh} disabled={checking}>
-      <RefreshCw size={16} aria-hidden="true" />{checking ? 'Checking...' : 'Refresh App'}
+    <button className={className} type="button" onClick={refresh} disabled={checking}
+      aria-label="Refresh App" title="Refresh App" aria-busy={checking}>
+      <RefreshCw size={18} aria-hidden="true" />
     </button>
     {error && <p role="alert">{error}</p>}
   </div>;

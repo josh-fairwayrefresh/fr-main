@@ -30,7 +30,11 @@ Deployment evidence and environment-specific acceptance limits are owned by
 ## User-initiated Refresh App
 
 Inventory and Cart Requests expose the same **Refresh App** control in their
-existing responsive banner context/tools area. One shared component owns the
+topmost responsive banner row, immediately left of the role-appropriate Admin
+and Sign out controls. It uses an 18-pixel circular-arrow icon, matching adjacent
+header controls, with a 44-by-44-pixel touch target and no visible label.
+Its accessible name and tooltip are both **Refresh App**; a busy state is exposed
+while checking. One shared component owns the
 network check, error presentation and same-URL reload. Refresh is never automatic.
 It checks that the current application entry is reachable before reload and
 rechecks workflow safety immediately before navigation. Failure leaves the

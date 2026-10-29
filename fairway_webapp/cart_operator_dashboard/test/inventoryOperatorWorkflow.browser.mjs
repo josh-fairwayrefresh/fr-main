@@ -182,6 +182,11 @@ test('Refresh App protects Inventory edits and closeout, but permits an open shi
   await page.getByLabel('Product name', { exact: true }).fill('Unsaved product');
   await attempt();
   await page.locator('.app-refresh [role="alert"]').getByText(/Finish or cancel/).waitFor();
+  for (const width of [320, 375, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1100 });
+    const alert = await page.locator('.app-refresh [role="alert"]').boundingBox();
+    assert.ok(alert.x >= 0 && alert.x + alert.width <= width, `${width}: refresh warning is not clipped`);
+  }
   assert.equal(await page.getByLabel('Product name', { exact: true }).inputValue(), 'Unsaved product');
   await page.getByRole('button', { name: 'Close product editor' }).click();
   await page.getByRole('button', { name: 'Close out Enter final sales' }).click();
