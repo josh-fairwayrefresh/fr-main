@@ -127,6 +127,31 @@ test('History rows use the same Course-local period and outcome timestamps', () 
     .map((request) => request.request_id), reports.daily.history.map((request) => request.request_id));
 });
 
+test('service-suspended rejections remain in history without changing completed metrics', () => {
+  const course = { timezone: 'America/Los_Angeles' };
+  const asOf = new Date('2026-10-22T20:00:00.000Z');
+  const completed = {
+    request_id: 'completed',
+    status: 'completed',
+    received_at: new Date('2026-10-22T18:50:00.000Z'),
+    completed_at: new Date('2026-10-22T19:10:00.000Z'),
+  };
+  const rejected = {
+    request_id: 'rejected-cleared',
+    status: 'rejected',
+    rejection_reason: 'service_suspended',
+    rejected_cleared_at: new Date('2026-10-22T19:20:00.000Z'),
+    received_at: new Date('2026-10-22T19:15:00.000Z'),
+  };
+  const reports = reportCoursePeriods(course, [], [completed], [completed, rejected], asOf);
+
+  assert.deepStrictEqual(reports.daily.history.map((request) => request.request_id), [
+    'rejected-cleared', 'completed',
+  ]);
+  assert.strictEqual(reports.daily.summary.completed_requests, 1);
+  assert.strictEqual(reports.daily.summary.average_completion_minutes, 20);
+});
+
 test('Course-wide totals include both service groups equally and exclude cancellations', () => {
   const course = { timezone: 'America/Los_Angeles' };
   const asOf = new Date('2026-10-22T20:00:00.000Z');

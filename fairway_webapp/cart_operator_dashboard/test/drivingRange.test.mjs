@@ -25,7 +25,8 @@ test('public bay routes require no login; notification links select the exact en
 test('active queue retrieval is status-scoped before retrieval and has no arbitrary cap', async () => {
   const source = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8');
   const listener = source.slice(source.indexOf('const unsubscribers = courses.map'), source.indexOf('async function handleGoogleSignIn'));
-  assert.match(listener, /where\('status', 'in', \['new', 'confirmed'\]\)/);
+  assert.match(listener, /where\('status', 'in', \['new', 'confirmed', 'rejected'\]\)/);
+  assert.match(source, /!request\.rejected_cleared_at/);
   assert.doesNotMatch(listener, /limit\(/);
   assert.doesNotMatch(source, /\.slice\(0, 100\)/);
 });

@@ -188,28 +188,30 @@ function createFairwayHandlers(db, {
   ),
 } = {}) {
   /* Persists a golfer request using the validated demand-window suppression. */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
-    const existingOpenRequests = await db.collection('requests')
-      .where('device_id', '==', deviceId)
-      .where('status', 'in', ['new', 'confirmed'])
-      .where('demand_window_expires_at', '>', now)
-      .limit(1)
-      .get();
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now, rejection = null) {
+    if (!rejection) {
+      const existingOpenRequests = await db.collection('requests')
+        .where('device_id', '==', deviceId)
+        .where('status', 'in', ['new', 'confirmed'])
+        .where('demand_window_expires_at', '>', now)
+        .limit(1)
+        .get();
 
-    if (!existingOpenRequests.empty) {
-      const existingRequest = existingOpenRequests.docs[0];
+      if (!existingOpenRequests.empty) {
+        const existingRequest = existingOpenRequests.docs[0];
 
-      console.log('Suppressed duplicate button request because its demand window remains active:', {
-        device_id: deviceId,
-        existing_request_id: existingRequest.id,
-      });
+        console.log('Suppressed duplicate button request because its demand window remains active:', {
+          device_id: deviceId,
+          existing_request_id: existingRequest.id,
+        });
 
-      return res.status(200).json({
-        status: 'accepted',
-        event_type: EVENT_TYPES.BUTTON_PRESS,
-        request_id: existingRequest.id,
-        duplicate: true,
-      });
+        return res.status(200).json({
+          status: 'accepted',
+          event_type: EVENT_TYPES.BUTTON_PRESS,
+          request_id: existingRequest.id,
+          duplicate: true,
+        });
+      }
     }
 
     const courseLocalDateHour = course
@@ -225,7 +227,7 @@ function createFairwayHandlers(db, {
       service_group: resolveServiceGroup(device.service_group),
       hole: deriveHoleFromLocation(device.location),
       event_type: eventType,
-      status: 'new',
+      status: rejection ? 'rejected' : 'new',
       source: 'nrf9151',
       received_at: FieldValue.serverTimestamp(),
       confirmed_at: null,
@@ -233,11 +235,20 @@ function createFairwayHandlers(db, {
       operator_id: null,
       repeat_press_count: 0,
       last_repeat_press_at: null,
-      demand_window_expires_at: new Date(now.getTime() + DEMAND_WINDOW_MS),
+      demand_window_expires_at: rejection ? null : new Date(now.getTime() + DEMAND_WINDOW_MS),
       device_state_at_request: device.state,
       course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
       course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
-      raw_payload: body
+      raw_payload: body,
+      ...(rejection ? {
+        rejection_reason: 'service_suspended',
+        rejected_at: FieldValue.serverTimestamp(),
+        service_state_at_receipt: {
+          active: rejection.active,
+          suspended: rejection.suspended,
+          service_group: resolveServiceGroup(device.service_group),
+        },
+      } : {}),
     };
 
     const docRef = await db.collection('requests').add(requestDoc);
@@ -247,6 +258,15 @@ function createFairwayHandlers(db, {
       device_id: deviceId,
       event_type: eventType
     });
+
+    if (rejection) {
+      return res.status(503).json({
+        status: 'service_unavailable',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+        request_id: docRef.id,
+        rejection_reason: 'service_suspended',
+      });
+    }
 
     return res.status(200).json({
       status: 'accepted',
@@ -329,15 +349,17 @@ function createFairwayHandlers(db, {
       console.warn('Rejected device request with invalid stored service group:', { device_id: deviceId });
       return res.status(422).send(`${error.message}\n`);
     }
-    if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, serviceGroup).active) {
+    const serviceState = hierarchy.course
+      ? resolveCourseServiceState(hierarchy.course, serviceGroup)
+      : null;
+    if (serviceState && !serviceState.active) {
       console.log('Rejected golfer request because Course service is unavailable:', {
         device_id: deviceId,
         course_id: device.course_id,
       });
-      return res.status(503).json({
-        status: 'service_unavailable',
-        event_type: EVENT_TYPES.BUTTON_PRESS,
-      });
+      return persistButtonPressRequest(
+        res, deviceId, device, body, eventType, hierarchy.course, requestTime, serviceState
+      );
     }
 
     return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.course, requestTime);
@@ -1595,10 +1617,10 @@ function createFairwayHandlers(db, {
         return await acknowledgeDeviceCommand(req, res, commandAckMatch[1]);
       }
 
-      const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete|cancel)$/);
+      const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete|cancel|clear-rejected)$/);
       if (statusMatch) {
         const requestId = statusMatch[1];
-        const action = statusMatch[2];
+        const action = statusMatch[2] === 'clear-rejected' ? 'clear_rejected' : statusMatch[2];
 
         return await updateRequestStatus(req, res, requestId, action);
       }

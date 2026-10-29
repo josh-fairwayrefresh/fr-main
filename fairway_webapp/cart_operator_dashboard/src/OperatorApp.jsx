@@ -81,6 +81,7 @@ function EmptyQueue({ serviceActive }) {
 
 function RequestFocus({ request, queueLength, onAction, pending, actionBlocked, actioned }) {
   const [error, setError] = useState(null);
+  const rejected = request.status === 'rejected' && request.rejection_reason === 'service_suspended';
   async function act(action) {
     if (action === 'cancel' && !window.confirm(`Cancel the request for ${requestLocationLabel(request)}?`)) return;
     setError(null);
@@ -90,11 +91,13 @@ function RequestFocus({ request, queueLength, onAction, pending, actionBlocked, 
       setError({ requestId: request.id, message: reason?.message || `Unable to ${action} request.` });
     }
   }
-  return <article id={`request-${request.id}`} className="op-priority">
-    <div className="op-time"><Clock3 size={20} /><span>Waiting</span><strong>{requestAge(request.received_at)}</strong></div>
-    <div className="op-place" aria-live="polite"><span>Selected request</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
-    <div className="op-actions"><button className="op-complete" type="button" disabled={actionBlocked || actioned} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : actioned ? 'Submitted' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={actionBlocked || actioned} onClick={() => act('cancel')}>Cancel request</button></div>
-    <footer><CheckCircle2 size={18} /><span>{queueLength > 1 ? 'On completion, the oldest remaining request becomes selected.' : 'Completing this request clears the active queue.'}</span>{error?.requestId === request.id && <strong role="alert">{error.message}</strong>}</footer>
+  return <article id={`request-${request.id}`} className={`op-priority${rejected ? ' rejected' : ''}`}>
+    <div className="op-time"><Clock3 size={20} /><span>{rejected ? 'Request rejected' : 'Waiting'}</span><strong>{requestAge(request.received_at)}</strong>{rejected && <small>Received {clockTime(request.received_at)}</small>}</div>
+    <div className="op-place" aria-live="polite"><span className={rejected ? 'op-rejection-label' : ''}>{rejected ? 'Request Rejected — Service Suspended' : 'Selected request'}</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
+    <div className="op-actions">{rejected
+      ? <button className="op-clear-rejected" type="button" disabled={actionBlocked || actioned} onClick={() => act('clear-rejected')}>{pending ? 'Clearing...' : 'Clear Rejected Request'}</button>
+      : <><button className="op-complete" type="button" disabled={actionBlocked || actioned} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : actioned ? 'Submitted' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={actionBlocked || actioned} onClick={() => act('cancel')}>Cancel request</button></>}</div>
+    <footer><CheckCircle2 size={18} /><span>{rejected ? 'This rejected attempt is not an actionable service request.' : queueLength > 1 ? 'On completion, the oldest remaining request becomes selected.' : 'Completing this request clears the active queue.'}</span>{error?.requestId === request.id && <strong role="alert">{error.message}</strong>}</footer>
   </article>;
 }
 
@@ -177,7 +180,10 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
     {loadState === 'ready' && !selectedRequest && <EmptyQueue serviceActive={serviceActive} />}
     {selectedRequest && <RequestFocus request={selectedRequest} queueLength={requests.length} onAction={onAction} pending={pending === selectedRequest.id} actionBlocked={Boolean(pending)} actioned={actionedRequestIds.has(selectedRequest.id)} />}
-    {otherRequests.length > 0 && <section className="op-up-next" aria-labelledby="other-active-requests-heading"><div><span id="other-active-requests-heading">Other active requests</span><strong>{otherRequests.length} more {otherRequests.length === 1 ? 'request' : 'requests'}</strong></div>{otherRequests.map((request, index) => <button className="op-queue-row" type="button" key={request.id} disabled={actionPending} aria-label={`Select request ${requestLocationLabel(request)}`} onClick={() => selectRequest(request.id)}><span>{index + 1}</span><div><strong>{requestLocationLabel(request)}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} aria-hidden="true" /></button>)}</section>}
+    {otherRequests.length > 0 && <section className="op-up-next" aria-labelledby="other-active-requests-heading"><div><span id="other-active-requests-heading">Other active requests</span><strong>{otherRequests.length} more {otherRequests.length === 1 ? 'request' : 'requests'}</strong></div>{otherRequests.map((request, index) => {
+      const rejected = request.status === 'rejected' && request.rejection_reason === 'service_suspended';
+      return <button className={`op-queue-row${rejected ? ' rejected' : ''}`} type="button" key={request.id} disabled={actionPending} aria-label={`Select ${rejected ? 'rejected ' : ''}request ${requestLocationLabel(request)}`} onClick={() => selectRequest(request.id)}><span>{index + 1}</span><div><strong>{requestLocationLabel(request)}</strong>{rejected && <small className="op-rejected-row-label">Request Rejected — Service Suspended</small>}<small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} aria-hidden="true" /></button>;
+    })}</section>}
   </section><aside className="op-summary">{cartMetrics && <Performance summary={summary} />}<RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
 
@@ -191,7 +197,7 @@ function HistoryView({ dashboard, cartMetrics = true }) {
     <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
     <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
     <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
-  </div>}<section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  </div>}<section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : item.status === 'cancelled' ? 'Cancelled' : 'Service Suspended'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed, cancelled, or rejected requests yet.</div>}</section></section>;
 }
 
 export default function OperatorApp({

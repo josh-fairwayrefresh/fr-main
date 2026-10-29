@@ -11,7 +11,7 @@ const operatorStyles = await readFile(new URL('../src/operator.css', import.meta
 test('functional Option C operator surface keeps the approved workflow contract', () => {
   assert.match(source, /Selected request/);
   assert.match(source, /Other active requests/);
-  assert.match(source, /aria-label=\{`Select request \$\{requestLocationLabel\(request\)\}`\}/);
+  assert.match(source, /aria-label=\{`Select \$\{rejected \? 'rejected ' : ''\}request \$\{requestLocationLabel\(request\)\}`\}/);
   assert.match(source, /onRequestAction\(request, action\)/);
   assert.match(source, /Complete service/);
   assert.match(source, /Cancel request/);
@@ -21,6 +21,18 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.doesNotMatch(source, /NEXT REQUEST/);
   assert.doesNotMatch(source, /op-intro/);
   assert.doesNotMatch(source, />CONFIRM</);
+});
+
+test('service-suspended attempts have a durable-clear-only dashboard action and red history outcome', () => {
+  assert.match(entrySource, /request\.status === 'rejected' && request\.rejection_reason === 'service_suspended'/);
+  assert.match(entrySource, /!request\.rejected_cleared_at/);
+  assert.match(source, /Request Rejected — Service Suspended/);
+  assert.match(source, /Clear Rejected Request/);
+  assert.match(source, /act\('clear-rejected'\)/);
+  assert.match(source, /item\.status === 'cancelled' \? 'Cancelled' : 'Service Suspended'/);
+  assert.match(operatorStyles, /\.op-priority\.rejected/);
+  assert.match(operatorStyles, /\.op-outcome\.rejected/);
+  assert.match(operatorStyles, /@media \(max-width: 620px\)[\s\S]*\.op-priority \{ grid-template-columns: 1fr;/);
 });
 
 test('request selection remains stable and notification focus is one-shot', () => {
