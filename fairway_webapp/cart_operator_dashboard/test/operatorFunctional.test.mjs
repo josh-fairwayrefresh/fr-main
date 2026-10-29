@@ -28,7 +28,7 @@ test('request selection remains stable and notification focus is one-shot', () =
   assert.match(source, /pendingNotificationSelection\.current = \{\s*requestId: focusedRequestId/);
   assert.match(source, /notificationSelection\.selectionVersion !== manualSelectionVersion\.current/);
   assert.match(source, /selectedRequestIdRef\.current = oldestRequestId/);
-  assert.match(source, /key=\{selectedCourseKeyValue\}/);
+  assert.match(source, /key=\{`requests:\$\{selectedCourseKeyValue\}`\}/);
   assert.match(source, /disabled=\{actionPending\}/);
   assert.match(source, /requestActionInFlight\.current \|\| actionedRequestIdsRef\.current\.has\(request\.id\)/);
   assert.match(source, /requestLocationLabel\(request\)/);

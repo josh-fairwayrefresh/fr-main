@@ -562,14 +562,33 @@ for Admin/Hosting only.
   Name/role/assignment edits never rewrite historical sales, shifts or audit
   snapshots. Stable staff IDs and existing operation receipts make creation
   retries duplicate-safe; no login accounts or account permissions are involved.
-- Cart's banner and Inventory's Sales Today panel share a session/Course operator selection, isolated
-  from other sessions/accounts and Customer/Course contexts. The first inventory
+- Inventory's Sales Today panel is the sole interface for operator selection,
+  name correction and shift closeout. Cart Requests displays that same
+  session/Course operator name read-only, with no selection, change, opening,
+  closeout or inventory-retry controls. It does not create an operator identity
+  or require staff-directory loading. Requests remain actionable without a
+  selected operator or a successful operator-status read.
+  Selection is isolated from other browser sessions/accounts and Customer/Course contexts. The first inventory
   action requiring operator attribution without a selection prompts and resumes
   that action; audit submission is expressly exempt. One shift is active
   per operator session and Course. Before inventory activity, the name can be
   corrected freely; after activity, selecting a different person requires
   successful shift close. Operational records preserve selected staff snapshots
   and the authenticated submitting UID.
+- Application account sign-out is separate from inventory shift closeout.
+  Every account sign-out control, including Admin and access-status screens,
+  checks this authenticated browser session's recorded Course sessions against
+  the existing server shift owner. An open shift or unresolved inventory
+  submission prevents sign-out and links to the correctly scoped Inventory
+  page for recovery/closeout; switching to another Course or Driving Range
+  does not bypass this check. Sign-out never closes a shift or clears
+  reconciliation, attribution or retry state. No open shift and no unresolved
+  submission permit normal account sign-out. Read/storage failures explicitly
+  prevent unverified sign-out; the operator can stay signed in or retry.
+  Cancelling a delayed status check cannot sign out later.
+  Existing browser-session storage/UUID persistence is retained across
+  same-tab navigation, reload and browser session restoration; this does not
+  introduce account-wide shifts or cross-tab identity sharing.
 - An explicit audit says "Record your cart inventory at the start and end of a shift."
   Its backcheck displays and snapshots only current On Cart products, independent
   of filters, excluding Sold Out, In Inventory and archives. Revision details
@@ -595,6 +614,10 @@ for Admin/Hosting only.
   Not selected and no dialog, including after delayed refresh or repeated
   completion callbacks. Only a subsequent user-initiated attributed action
   prompts for a name; completed work never resumes a new action implicitly.
+  Closeout is available in Inventory whenever a name is selected, including
+  before stock/catalog activity, so an otherwise idle open shift does not
+  trap account sign-out. Before activity, a separate Change operator control
+  preserves free name correction. Audit approval remains independent.
 - Successful confirmed changes into/out of On Cart automatically change the
   golfer menu, including a sale/adjustment that moves zero stock to Sold Out.
   Saved public-facing metadata for On Cart products also appears automatically.

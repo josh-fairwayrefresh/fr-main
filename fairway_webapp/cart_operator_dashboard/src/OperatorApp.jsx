@@ -4,7 +4,7 @@ import {
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
 } from 'lucide-react';
 import NotificationSetup from './NotificationSetup';
-import { InventorySessionControls, useInventorySession } from './InventorySession';
+import { useInventorySession } from './InventorySession';
 import { operatorRequest } from './lib/operator';
 import {
   authorizedCustomers,
@@ -230,7 +230,7 @@ export default function OperatorApp({
   const customers = authorizedCustomers(operatorConfig.courses);
   const customerCourses = operatorConfig.courses.filter((item) => item.customer_id === selectedCourse?.customer_id);
   const operation = courseOperation(course);
-  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course);
+  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course, { readOnly: true });
   const selectedRequests = useMemo(() => requests.filter((request) => (
     course && request.customer_id === course.customer_id && request.course_id === course.course_id
   )), [requests, course?.customer_id, course?.course_id]);
@@ -412,7 +412,10 @@ export default function OperatorApp({
     <div className="op-header-context">
       <div className="op-course-context">
         <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operation.inventory && inventoryApiBaseUrl && <InventorySessionControls key={selectedCourseKeyValue} session={inventorySession} />}
+        {operation.inventory && inventoryApiBaseUrl && <div className="inventory-session" aria-live="polite">
+          <span>Operator: <strong>{inventorySession.shift?.staff_name || (inventorySession.ready ? 'Not selected' : 'Unavailable')}</strong></span>
+          {inventorySession.error && <span role="alert">Unable to verify operator: {inventorySession.error} Open Inventory to retry.</span>}
+        </div>}
         <div className="op-context-selectors">
           {isAdmin && customers.length > 0 && <label className="op-course-select"><span>Customer</span><select
             value={selectedCourse?.customer_id || ''} disabled={contextPending}
