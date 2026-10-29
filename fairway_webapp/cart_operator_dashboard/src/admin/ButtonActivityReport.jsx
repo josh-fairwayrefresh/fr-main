@@ -51,7 +51,7 @@ export default function ButtonActivityReport({ user, apiBaseUrl, customers, dire
         <label>End date<input type="date" required min={start || undefined} value={end} onChange={event => change(setEnd, event.target.value)} /></label>
       </div>
       <p>Dates use the Course timezone{course?.timezone ? `: ${course.timezone}` : ' (select a Course)'}. Maximum 31 calendar days; charts continue after 12 days per landscape Letter page.</p>
-      <p>Retained logs are queried at generation time. Unavailable/partial history is marked, not treated as zero. Historical locations without verified evidence are labeled uncertain.</p>
+      <p>Retained logs are queried at generation time. Unavailable/partial history is marked, not treated as zero. Legend labels show device IDs only; historical locations are not inferred.</p>
       {(error || directoryError) && <div className="a-notice a-error" role="alert">{error || directoryError}</div>}
       <button className="a-primary" type="submit" disabled={pending || !course || Boolean(directoryError)}>
         {pending ? 'Generating...' : 'Generate'}

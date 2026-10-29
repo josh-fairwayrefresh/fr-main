@@ -2450,7 +2450,16 @@ FRB-0003 sequence and failure handling are owned by
 
 ## Admin Button Activity Report — Implementation Review (2026-10-28)
 
-**Implementation and isolated validation only; not merged or deployed.**
+**Original review evidence; controlled release now authorized by the CPO.**
+The accepted presentation correction shows only device IDs in the legend,
+preserving stable colors and separate original/replacement IDs. No historical
+location evidence or counting definition changes. The sample and assertions
+are regenerated accordingly; all 116/63 records, 12 daily pairs and 179 original
+point coordinates still reconcile. The actual rendered device-only sample
+retains all coverage/history notes. Production publication must pass the
+staged actual-runtime/authenticated-read gates before traffic.
+
+The original implementation authorization was isolated validation only.
 Branch `feat/admin-button-activity-report` began from clean main and matching
 `origin/main`, **`94fafa7e95292e0aa11b210df807a3ecd57d3d42`**. The production
 alignment below is unchanged; this is not a new production milestone.
@@ -2507,9 +2516,11 @@ do not change that validated implementation.
   three pages. Poppler rendering/text inspection verifies legend, circles/dots,
   daily counts, exact boundary text and all explanatory notes without clipping.
   Reproduce the sample with `BUTTON_REPORT_SAMPLE_DIR=<private-output>` and the
-  report test under the established sandbox test environment. The sample with
-  supplied hole labels is explicitly marked **reference fixture only**; ordinary
-  generated output uses uncertain device-only historical labels.
+  report test under the established sandbox test environment. The initial review
+  sample used supplied hole labels as **reference fixture only**. The CPO's
+  controlled-release correction supersedes that presentation: the committed
+  sample and product now show device IDs only; historical label evidence
+  remains unchanged in the fixture JSON and explanatory notes.
   The [committed sample PDF](../fairway_backend/cloudrun_receiver/test/fixtures/button_activity_reference.pdf)
   is review evidence, not a separately generated production report. All extracted
   words in the reference, uncertainty, 31-day and 18-device samples fit within

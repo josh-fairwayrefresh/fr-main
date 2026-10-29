@@ -114,7 +114,7 @@ function buildButtonReport({ customer, course, bounds, asOf, logs, requests, ret
   points.sort((a, b) => a.received_at.localeCompare(b.received_at) || a.id.localeCompare(b.id));
   const floor = dateValue(retentionStart);
   const devices = [...new Set(points.map(point => point.device_id))].sort().map(id => ({
-    device_id: id, color: deviceColor(id), label: `${id} - historical location unverified`,
+    device_id: id, color: deviceColor(id), label: id,
   }));
   const days = bounds.days.map(day => {
     const parts = parseDay(day);

@@ -222,8 +222,11 @@ entitlement, service state or operational data is changed.
   counted even when individual marks overlap.
 - Location labels must not be inferred from current deployment or unverified
   request label snapshots. Current retained sources have no verified historical
-  assignment timeline. Product output therefore identifies each device and
-  explicitly labels its historical location unverified. The CPO's supplied
+  assignment timeline. Per the CPO's accepted release correction, legend labels
+  show **only the device ID**, such as `FRB-0002`. Original/replacement units
+  remain distinct through their separate IDs and stable colors. Historical
+  uncertainty remains explained in the notes, not appended to each label.
+  The CPO's supplied
   reference hole/replacement labels remain documented fixture evidence only;
   they are not application mappings or proof of historical effective dates.
 - Dates are 1–31 inclusive Course-local calendar days using its IANA timezone,

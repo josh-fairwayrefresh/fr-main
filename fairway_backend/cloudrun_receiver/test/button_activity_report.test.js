@@ -37,7 +37,9 @@ test('accepted exports reconcile all 116/63 records, 12 daily totals and 179 ori
     expected.splice(match, 1);
   }
   assert.equal(expected.length, 0);
-  assert.ok(report.devices.every(device => device.label.includes('historical location unverified')));
+  assert.ok(report.devices.every(device => device.label === device.device_id));
+  assert.equal(report.devices.find(device => device.device_id === 'FRB-0002').color, '#D55E00');
+  assert.equal(report.devices.find(device => device.device_id === 'FRB-0006').color, '#6B51A3');
   assert.equal(report.start, fixture.start);
   assert.equal(report.as_of, fixture.asOf);
 });
@@ -229,14 +231,10 @@ test('renderer produces landscape Letter reference and continuation PDFs without
   const report = reference();
   const pdf = await renderButtonReport(report);
   assert.ok(pdf.includes(Buffer.from('/MediaBox [0 0 792 612]')));
-  const evidence = JSON.parse(JSON.stringify(report));
-  evidence.devices.forEach(device => { device.label = fixture.locationEvidence.labels[device.device_id]; });
-  evidence.notes[evidence.notes.length - 1] = 'Reference fixture only: CPO-supplied hole labels; historical assignment dates not established. Original/replacement devices retain separate colors.';
   if (process.env.BUTTON_REPORT_SAMPLE_DIR) {
     const root = process.env.BUTTON_REPORT_SAMPLE_DIR;
     fs.mkdirSync(root, { recursive: true });
-    fs.writeFileSync(path.join(root, 'button-activity-reference.pdf'), await renderButtonReport(evidence));
-    fs.writeFileSync(path.join(root, 'button-activity-unverified-locations.pdf'), pdf);
+    fs.writeFileSync(path.join(root, 'button-activity-reference.pdf'), pdf);
     fs.writeFileSync(path.join(root, 'reference-model.json'), JSON.stringify(report, null, 2));
   }
   const asOf = new Date('2026-11-01T08:00:00Z');
@@ -248,7 +246,7 @@ test('renderer produces landscape Letter reference and continuation PDFs without
   if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-31-day-layout.pdf'), longPdf);
   const eighteen = { ...report, devices: [...report.devices, ...Array.from({ length: 12 }, (_, i) => {
     const id = `FRB-${String(i + 7).padStart(4, '0')}`;
-    return { device_id: id, color: deviceColor(id), label: `${id} - historical location unverified` };
+    return { device_id: id, color: deviceColor(id), label: id };
   })] };
   const eighteenPdf = await renderButtonReport(eighteen);
   assert.equal(eighteenPdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);
