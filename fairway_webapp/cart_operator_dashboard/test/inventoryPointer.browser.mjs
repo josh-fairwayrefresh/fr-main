@@ -78,7 +78,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           adminIcon:Boolean(admin?.querySelector('svg')) && !admin.textContent,
           logo:box(document.querySelector('.inv-brand img')),
           operatorInPanel:Boolean(panel.querySelector('.inventory-session')),
-          headerActions:[...document.querySelectorAll('.inv-header button,.inv-header .inv-cart-link,.inv-course-picker select')].map(box),
+          accountActions:[...document.querySelectorAll('.inv-header-account button')].map(box),
           targets:[...document.querySelectorAll('.inv-catalog-actions button,.inv-audit-action .inv-secondary,.inv-category-filters button,.inv-header button,.inv-course-picker select,.inventory-session button')].map(box),
           overflow:document.documentElement.scrollWidth>innerWidth
         };
@@ -95,14 +95,14 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank', text: 'Golfer-View Menu', font: true });
       assert.equal(layout.compactTotal, 'Sales Today0 units sold');
       assert.equal(layout.detailedTally, false);
-      assert.equal(layout.logo.width, width <= 380 ? 90 : width <= 680 ? 108 : 156, 'Logo is 150% of its previous displayed width');
-      assert.equal(layout.logo.height, width <= 680 ? 72 : 96);
+      assert.equal(layout.logo.width, width <= 740 ? 168 : width <= 900 ? 190 : 210, 'Approved horizontal branding dimensions');
+      assert.equal(layout.logo.height, width <= 740 ? 46 : 54);
       for (const box of layout.targets) {
         assert.ok(box.height >= 44 && box.width >= 44, `${width}px: controls retain finger-sized targets`);
         assert.ok(box.x >= 0 && box.right <= width, `${width}px: controls not clipped`);
       }
       if (width >= 768) {
-        assert.ok(layout.headerActions.every(b=>Math.abs(b.y - layout.headerActions[0].y) < 1), `${width}px: banner actions have no orphaned sign-out row: ${JSON.stringify(layout.headerActions)}`);
+        assert.ok(layout.accountActions.every(b=>Math.abs(b.y - layout.accountActions[0].y) < 1), `${width}px: account actions remain grouped`);
         assert.ok(layout.panel.x >= layout.title.right, `${width}px: Sales Today beside title`);
         assert.ok(layout.panel.y < layout.title.bottom && layout.title.y < layout.panel.bottom);
         assert.ok(layout.actionBoxes.every(b=>b.y === layout.actionBoxes[0].y), `${width}px: catalog actions share one row`);
