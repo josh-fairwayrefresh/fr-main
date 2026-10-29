@@ -1,5 +1,58 @@
 # Deployment Guide
 
+## Refresh App header icon - production release (2026-10-29)
+
+**CPO-authorized presentation-only refinement; Hosting-only released.**
+The prior release below remains the behavior/cache baseline and rollback.
+
+- Baseline main `40afee7296a9b87b5470dc7f7d34f333df9b3467`.
+  Implementation **`dd063350c72971f4f97b030242201fad969683ab`**, merged
+  through [PR #31](https://github.com/josh-fairwayrefresh/fr-main/pull/31).
+  **Deployed main `be70a5e3064624d23709bd48187f4ce2f79f89bc`** has exactly
+  the validated tree; current main had not diverged before integration.
+- **Hosting `2e923bc2314454f4`**, release **`1793289751660000`**,
+  at **https://app.fairwayrefresh.com/**. All **127** live files hash-match
+  published artifacts. Permanent signs and all non-bundle public resources
+  remain byte-identical. Entry/deep-link/service-worker `no-cache` and
+  fingerprinted-asset immutable caching were reverified unchanged.
+- The same shared refresh owner now renders an 18-pixel circular-arrow icon
+  in each topmost header row, immediately left of the available Admin/Sign out
+  controls. No visible label; accessible name and tooltip remain **Refresh App**,
+  with an exposed busy state and 44-by-44-pixel targets. Existing responsive
+  flexible branding yields on very narrow phones rather than wrapping controls.
+  Refresh logic, workflow guards, session ownership and push worker are unchanged.
+- The prior **102/102** passing checks and production build apply to this exact
+  source tree. After integration, **12/12** focused refresh/banner/operator
+  checks and a fresh production-configured build pass. Existing bundle warnings
+  remain. Coverage includes Admin/non-Admin control order, icon/accessibility,
+  touch targets, desktop/iPad/mobile, warning placement, open-shift reload,
+  persisted identity/drafts and interruption guards.
+- Authenticated nondestructive production smoke used the actual icon in both
+  interfaces. Inventory retains account/context/stored session and its **93**
+  products, with Export enabled. Requests retains scoped URL, read-only operator,
+  notification preferences and service state; Requests/History navigation passes.
+  Both top headers show Refresh App, Admin, Sign out in that order, with no text
+  inside the refresh button. At 320/375/430/768/1024/1440, controls align on
+  one account row with 44-pixel targets and no clipping or document overflow.
+  Bundle **`index-AIk2tkds.js`** is served. No new application/API errors observed.
+- No production transactions, shift selection/closeout, stock/audit changes,
+  preference writes, service toggles or sign-out were performed. Backends remain
+  `fairway-admin-report-5396b69`, `fairway-button-receiver-qr-db9001e` and
+  `fairway-request-notifier-qr-db9001e`. No backend/data/firmware/credential or
+  unrelated infrastructure changes.
+- **Rollback: `8d70fcfa6287e4cb`**, release **`1793288702309000`**,
+  source **`818e0dae4f9c6c0b43c7efd6b60510acf55074a2`**. All **127**
+  actual previous files were downloaded and hash-verified before publication.
+  Use Hosting Release history rollback, or the retained Hosting-only recovery
+  config with those exact bytes and the same no-cache/immutable policy.
+  Rollback was not executed; no operational-data rollback is needed.
+- Private `refresh-header-release` evidence retains production manifests,
+  verified rollback bytes, deployment/build/integrated-test logs and cache
+  checks; `refresh-header-icon` retains the 102-check gate and rendered screenshots.
+  The original working copy remains clean and unchanged. CPO final visual
+  acceptance on the installed home-screen iPad app remains pending; automated
+  standalone testing and desktop production smoke are not physical Safari proof.
+
 ## User-initiated Refresh App - production release (2026-10-29)
 
 **CPO-authorized frontend and Hosting-cache correction; live for acceptance.**
