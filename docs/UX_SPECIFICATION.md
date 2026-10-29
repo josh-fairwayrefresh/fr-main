@@ -687,6 +687,32 @@ and [open defects](feature_backlog.md#material-readiness-items).
    name is unavailable, the UI shows an explicit unavailable label rather
    than `null` or `undefined`.
 - The application is a full-surface, landscape-iPad-first responsive workspace. The responsive phone-layout release is live; authenticated physical-phone/Safari usability and CPO mobile acceptance remain pending as recorded in `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
+- **CPO-approved Requests banner refinement (2026-10-28), review source only:**
+   after approving the three-format visual prototype, the CPO explicitly chose
+   its revised iPad banner as the reference and authorized the associated iPad
+   visual changes. This supersedes the earlier requirement to preserve the
+   previous live iPad banner pixel-for-pixel; it does not authorize deployment.
+   One Requests banner renders the same brand/navigation/context hierarchy
+   at every width, with no device-specific business logic or duplicated views.
+   The existing horizontal Fairway logo, warm white surface, green navigation
+   and thin gold top accent identify the workspace. Requests/History lead;
+   Inventory is a separate destination followed by the entitled Admin control
+   and guarded account sign-out. Below, the Customer eyebrow and prominent
+   readable Course name precede read-only operator attribution, authorized
+   Customer/Service selectors and separate service status/actions.
+   Desktop and landscape iPad use the two-tier composition. At intermediate
+   widths the service controls wrap below scope; compact widths up to 740 CSS
+   pixels put account actions beside branding, Requests/History and Inventory
+   on the next row, then stack Course/operator, scope and service rows.
+   Breakpoints are content-driven, not iPad/aspect-ratio detection.
+   All banner controls retain at least 44 CSS pixel touch targets, including
+   selectors slightly taller than the static prototype. Long names and errors
+   remain readable without document overflow. Existing ordinary-user/Admin
+   entitlement differences, independent On-course/Amenity Areas actions,
+   pending-operation guards, scoped navigation, operator ownership, sign-out
+   protection and request actions remain unchanged. Driving Range still has
+   no inventory/operator controls. Inventory, authentication and Admin/report
+   banners retain their legitimate existing page-specific presentation.
 - The active queue remains ordered by request age, oldest first. Initially the
    oldest active request is selected in the action card. Each other row is an
    accessible selection button under “Other active requests”; choosing one

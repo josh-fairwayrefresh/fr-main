@@ -42,7 +42,7 @@ test('Assigned customer users have an Inventory link into the shared authenticat
 test('course matching in OperatorApp matches on customer_id and course_id', () => {
   assert.match(source, /mergeDashboardCourse\(selectedCourse, currentDashboard\?\.courses\)/);
   assert.match(source, /dashboard\?\.key === selectedCourseKeyValue \? dashboard\.data : null/);
-  assert.match(source, /\{courseDisplayLabel\(course\)\}/);
+  assert.match(source, /aria-label=\{courseDisplayLabel\(course\)\}/);
 });
 
 test('mobile operator header preserves navigation, course selection, and labeled service actions', () => {
