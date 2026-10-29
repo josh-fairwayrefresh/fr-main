@@ -17,9 +17,12 @@ function notificationTopic(requestId) {
 
 function notificationPayload(requestId, request) {
   const location = request.location_label || request.device_label || (request.hole ? `Hole ${request.hole}` : request.course_name);
+  const rejected = request.status === 'rejected' && request.rejection_reason === 'service_suspended';
   return {
-    title: 'Fairway Refresh',
-    body: `${request.source === 'qr' ? 'Server' : 'Refresh'} requested — ${location || 'Course request'}`,
+    title: rejected ? 'Request Rejected — Service Suspended' : 'Fairway Refresh',
+    body: rejected
+      ? `Service-suspended request — ${location || 'Course request'}`
+      : `${request.source === 'qr' ? 'Server' : 'Refresh'} requested — ${location || 'Course request'}`,
     tag: requestId,
     request_id: requestId,
     course_id: request.course_id,

@@ -836,7 +836,7 @@ function App() {
         collection(db, 'requests'),
         where('customer_id', '==', course.customer_id),
         where('course_id', '==', course.course_id),
-        where('status', 'in', ['new', 'confirmed']),
+        where('status', 'in', ['new', 'confirmed', 'rejected']),
         orderBy('received_at', 'asc')
       ),
       (snapshot) => {
@@ -851,6 +851,10 @@ function App() {
             confirmed_at: data.confirmed_at,
             completed_at: data.completed_at,
             cancelled_at: data.cancelled_at,
+            rejection_reason: data.rejection_reason,
+            service_state_at_receipt: data.service_state_at_receipt,
+            rejected_at: data.rejected_at,
+            rejected_cleared_at: data.rejected_cleared_at,
             device_id: data.device_id,
             location_label: data.location_label || data.device_label,
             customer_id: data.customer_id,
@@ -909,7 +913,9 @@ function App() {
 
   const activeRequests = useMemo(() => {
     return requests
-      .filter((request) => ['new', 'confirmed'].includes(request.status))
+      .filter((request) => ['new', 'confirmed'].includes(request.status) ||
+        (request.status === 'rejected' && request.rejection_reason === 'service_suspended' &&
+          !request.rejected_cleared_at))
       .sort((left, right) => {
         const leftDate = timestampToDate(left.received_at);
         const rightDate = timestampToDate(right.received_at);

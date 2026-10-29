@@ -128,6 +128,9 @@ function completedRequestsInRange(requests, range) {
 function outcomeTime(request) {
   if (request.status === 'completed') return toDate(request.completed_at);
   if (request.status === 'cancelled') return toDate(request.cancelled_at);
+  if (request.status === 'rejected' && request.rejection_reason === 'service_suspended') {
+    return toDate(request.received_at);
+  }
   return null;
 }
 

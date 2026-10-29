@@ -20,6 +20,28 @@ function completeCommandId(requestId) {
 }
 
 async function transitionRequest(db, requestId, action, assignment, uid) {
+  if (action === 'clear_rejected') {
+    const ref = db.collection('requests').doc(requestId);
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) throw new RequestError(404, 'Request not found');
+      const request = snapshot.data();
+      if (!assignment.courses.some((course) => (
+        course.customer_id === request.customer_id && course.course_id === request.course_id
+      ))) throw new RequestError(403, 'Operator is not authorized for this Course');
+      if (request.status !== 'rejected' || request.rejection_reason !== 'service_suspended') {
+        throw new RequestError(409, 'Only service-suspended rejected requests can be cleared');
+      }
+      if (request.rejected_cleared_at) return { status: 'rejected', cleared: true };
+
+      transaction.update(ref, {
+        rejected_cleared_at: FieldValue.serverTimestamp(),
+        rejected_cleared_by: uid,
+      });
+      return { status: 'rejected', cleared: true };
+    });
+  }
+
   const config = actions[action];
   if (!config) throw new RequestError(404, 'Unknown request action');
   const ref = db.collection('requests').doc(requestId);

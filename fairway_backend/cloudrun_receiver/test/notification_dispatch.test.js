@@ -73,6 +73,28 @@ test('dispatch sends one useful notification and does not mutate the request', a
   assert.deepStrictEqual(after, before);
 });
 
+test('service-suspended rejected requests use the established push path with clear identification', async () => {
+  const db = new FakeFirestore();
+  await seedRequestAndSubscription(db);
+  await db.collection('requests').doc('request-a').update({
+    status: 'rejected',
+    rejection_reason: 'service_suspended',
+    service_state_at_receipt: { active: false, suspended: true },
+  });
+  const sends = [];
+
+  const result = await dispatchRequestNotifications(db, 'request-a', async (...args) => {
+    sends.push(args);
+  });
+
+  assert.deepStrictEqual(result, { accepted: 1, subscriptions: 1 });
+  const payload = JSON.parse(sends[0][1]);
+  assert.strictEqual(payload.title, 'Request Rejected — Service Suspended');
+  assert.strictEqual(payload.body, 'Service-suspended request — Hole 7');
+  assert.strictEqual(payload.tag, 'request-a');
+  assert.strictEqual(payload.url, '/requests/request-a?customer_id=CUST-0001&course_id=COURSE-0001');
+});
+
 test('disabled per-course preference prevents push delivery', async () => {
   const db = new FakeFirestore();
   await seedRequestAndSubscription(db);

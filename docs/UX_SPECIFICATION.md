@@ -710,7 +710,17 @@ for Admin/Hosting only.
    Course's preference.
 - Accepted source sends one visible notification per newly accepted request for each
    active subscription whose user still has Course access and has enabled that
-   Course's preference. The notification identifies the request location.
+   Course's preference. A received button press while its assigned service group
+   is suspended is durably recorded in the existing `requests` collection with
+   `status: rejected`, `rejection_reason: service_suspended`, and the service
+   state observed at receipt. The receiver keeps its service-unavailable failure
+   response to the marker; the existing request-created notification workflow
+   sends one identified push per stored rejected request to eligible subscribed
+   users, without requiring an active operator shift. It respects the existing
+   Course authorization, saved preference, and browser/device permission
+   behavior. The request card and notification identify **Request Rejected —
+   Service Suspended**; the notification links to the originating Course and
+   request.
 - In current accepted source, revoking a user's Course access or disabling their
    saved preference prevents subsequent delivery even if the push subscription
    remains stored. The last-inspected production notifier does not yet enforce
@@ -718,8 +728,9 @@ for Admin/Hosting only.
    production revocation/preference enforcement from source tests.
    Push delivery failures are asynchronous and do not block Cart Operations.
 - Tapping the notification opens or focuses the authenticated Fairway
-   application at the originating request and course. The request remains
-   actionable through the normal operator workflow.
+   application at the originating request and course. Accepted requests remain
+   actionable through the normal operator workflow; rejected requests remain
+   non-actionable.
 - A press suppressed by the marker's active demand window does not
    produce another request or notification.
 - Physical production acceptance on 2026-10-01 confirmed one notification for
@@ -793,6 +804,17 @@ and [open defects](feature_backlog.md#material-readiness-items).
    selection to that Course's oldest active request. A notification targeting
    an active request selects it; a later manual selection is not overridden by
    subsequent refreshes.
+- Service-suspended rejected requests use the shared active queue and existing
+  request card, styled red and prominently labeled **Request Rejected —
+  Service Suspended**. They retain marker identification and receipt time and
+  offer only **Clear Rejected Request**. Clearing stores an authorized operator
+  and durable clear timestamp without deleting or changing the rejected
+  outcome. Cleared requests stay out of the active queue after refresh,
+  reconnect, or subsequent login, but remain visible in Service History.
+  Rejected requests cannot be completed or cancelled and remain rejected if
+  service resumes. Each received rejected button request is a separate event
+  and notification; this increment does not distinguish retransmissions from
+  separate physical presses.
 - History hides the entire Requests view, including Complete and Cancel
    controls. Returning to Requests restores the prior active selection.
 - **CPO-accepted, production-deployed increment (2026-10-23, PRs #8/#9):**
@@ -859,12 +881,11 @@ and [open defects](feature_backlog.md#material-readiness-items).
 - Cancel Request is subordinate and requires operator confirmation. It closes
    the request without creating a marker command.
 - There is no Cart Operator CONFIRM interaction.
-- Course service availability follows the Course-owned recurring local schedule.
-   An authorized operator may suspend new golfer requests until the next
-   scheduled service start and may resume earlier. Existing requests remain
-   actionable while suspended. A
-   valid marker press rejected during suspension shows the normal red failure
-   response and creates no operator request.
+- Course service availability follows persistent Resume/Suspend state.
+   Suspension rejects new golfer requests; previously accepted requests remain
+   actionable. A valid marker press received while suspended still shows the
+   normal red service-unavailable response, and additionally creates a durable
+   non-actionable rejected request for the Cart Operator workflow.
 - Current Day/Week/Month summary selectors use rolling 24-hour/7-day/30-day
    periods, not local calendar periods. The history tally is the same last
    100 completed/cancelled requests, independent of the selected period;
@@ -923,7 +944,11 @@ Deployment Guide.
   request count, not an unweighted average of daily averages.
 - History rows use the same selected Course and calendar period as the KPIs:
   completed rows are selected by completion time and cancelled rows by
-  cancellation time. Refresh reporting when request outcomes change, including
+  cancellation time. Service-suspended rejected attempts also appear, in red
+  and identified as **Service Suspended**, selected by receipt time and retained
+  after dashboard clearing. Rejected attempts are not completed or cancelled
+  and do not affect completion, duration, request-rate, or service-hours
+  calculations. Refresh reporting when request outcomes change, including
   changes made by another operator, and at minute-level intervals so ongoing
   active time and local calendar-period boundaries become current. Return every
   matching outcome for the selected period; do not silently truncate History.
