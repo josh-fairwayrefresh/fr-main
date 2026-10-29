@@ -1,5 +1,73 @@
 # Deployment Guide
 
+## Responsive Inventory banner - production release (2026-10-28)
+
+**CPO-approved and Hosting-only released.** The CPO confirmed physical
+iPad/Safari validation completed before authorizing commit, push, integration
+and deployment. This record supersedes the previous Hosting identity, not
+notification, operator, backend or data contracts.
+
+- Baseline main `eb370a77d5c2044afd4af89486bd8f4f823dc09e`.
+  Implementation **`a90e5adf7507ec4c34981b90d08101ae36c28b09`**, merged
+  through [PR #27](https://github.com/josh-fairwayrefresh/fr-main/pull/27).
+  **Deployed main: `376350de83a6acdcd3a92313737d60224264209b`.**
+  Merge tree equals the tested implementation tree; no intervening main work
+  or conflict resolution was incorporated.
+- **Hosting `192d0bce8df085dd`**, release **`1793251411572000`**,
+  **`2026-10-29T05:23:31.572Z`** (October 28, 10:23 PM PDT), at
+  **https://app.fairwayrefresh.com/**. An explicit production project and
+  Hosting-only configuration publish the integrated production build.
+  All **127** served files match the published artifacts. The former unused
+  stacked-logo bundle asset is no longer emitted; all existing non-bundle
+  public resources, permanent Driving Range signs, mapping and installation
+  PDF are preserved byte-for-byte.
+- One Inventory header implements the approved desktop, iPad and mobile
+  white/gold/green design with horizontal branding. Course selection, scoped
+  Cart Operations navigation, entitled Admin, account email and guarded
+  sign-out remain intact. Export uses the same handler and pending/unresolved
+  guards. Sales Today/operator selection, closeout and audit remain in the
+  existing workspace panel. Cart Requests and its notification strip are not
+  redesigned. The [UX owner](UX_SPECIFICATION.md#persistent-cart-stock-staff-audits-and-shift-close)
+  records accepted presentation and responsibilities.
+- **100/100** relevant frontend regressions pass, including 320-1920 CSS pixel
+  Inventory banner geometry, long Customer/Course names and account email,
+  entitlement/single-Course variants, scope navigation and existing trusted
+  mouse/touch drag workflows. Existing notification, request, operator,
+  closeout, guarded sign-out and reporting regressions pass.
+  Production-configured builds pass before and after integration; existing
+  bundle-size warnings remain. No source diagnostics or diff whitespace errors.
+- Authenticated nondestructive production smoke passes session restoration,
+  Inventory layout at 375/390/430/768/1024/1440, controls at least 44 pixels
+  tall with no document overflow/clipping, the existing **93** product
+  articles, idle operator and scoped Cart Operations return. Requests/History,
+  read-only operator attribution, approved notification heading and Admin
+  Button Activity report generation pass on the new bundle
+  `index-CO5im2Qf.js`. No new observed application errors or failed API responses.
+  Navigation-aborted Firestore listeners are not application/API failures.
+  Existing entry caching may require refresh/revalidation, as documented below;
+  smoke used cache-disabled navigation to verify the released bundle.
+- **No production transactions or preference changes:** no operator selected,
+  shift opened/closed, audit submitted, stock changed, request completed,
+  service toggled or account signed out. Those mutation flows retain passing
+  isolated regressions. CPO-confirmed physical iPad/Safari validation is recorded
+  as supplied; automated smoke is not a new physical-device delivery test.
+- Backends unchanged: Admin **`fairway-admin-report-5396b69`**, Receiver
+  **`fairway-button-receiver-qr-db9001e`**, notifier
+  **`fairway-request-notifier-qr-db9001e`**. No schema, Auth, firmware or
+  infrastructure changes.
+- **Rollback:** prior finalized Hosting **`8e2bb1f419075003`**, release
+  **`1793249285768000`**, application source
+  **`26f8927a634f373ec2f5927f5b8a162a7c2f0864`**. It retains the accepted
+  notification and operator workflows. All **128** actual prior served files
+  were downloaded and hash-verified before publication. Use the existing
+  Hosting Release history rollback for that version; a retained Hosting-only
+  recovery configuration can alternatively republish those exact bytes.
+  No data rollback is required. Rollback was not executed.
+- Private `inventory-banner-release` evidence retains before/after Hosting
+  manifests, verified recovery/published files, tests/build/deploy logs and
+  explicit Hosting-only production/recovery configurations. All seven unrelated
+  dirty harness/release-note files and prior worktree checkouts are preserved.
+
 ## Responsive notification strip - production release (2026-10-28)
 
 **Hosting only; the newer CPO-approved notification prototypes are implemented
