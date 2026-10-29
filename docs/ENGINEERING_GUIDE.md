@@ -89,6 +89,23 @@ identity or command path; operator access still requires normal authentication.
 
 ## Change and Validation Discipline
 
+### Admin Button Activity Report review increment
+
+The bounded Admin report uses one model/counting owner,
+`lib/button_activity_report.js`, with read-only adapters for the existing
+retained receiver logs and `requests`. `lib/button_report_pdf.js` consumes
+that finished model; it does not query or recount. No ingestion pipeline,
+reporting database, new account model, request writer or scheduled delivery
+is introduced. Course-local receipt-time grouping is intentionally distinct
+from Service History's completion-time grouping.
+
+The [UX owner](UX_SPECIFICATION.md#admin-button-activity-report-review-increment)
+owns selection, counting, coverage and output behavior. The
+[Deployment Guide](DEPLOYMENT_GUIDE.md#admin-button-activity-report--implementation-review-2026-10-28)
+owns isolated evidence, runtime permission requirements and bounded future
+publication surfaces. This increment is **prepared for draft review only**:
+no production deployment, IAM or data mutation is authorized or performed.
+
 ### Course-owned Driving Range QR request increment
 
 Merged and released through PR #13 from integrated source

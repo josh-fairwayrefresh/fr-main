@@ -47,6 +47,8 @@ const crypto = require('crypto');
 const { courseOperation } = require('./lib/course_operation');
 const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
 const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
+const { generateButtonReport, ButtonReportError } = require('./lib/button_activity_report');
+const { renderButtonReport } = require('./lib/button_report_pdf');
 const {
   getOperatorAssignment,
   getNotificationPreferences,
@@ -174,6 +176,7 @@ function createFairwayHandlers(db, {
   verifyOperatorToken = verifyFirebaseIdToken,
   firebaseAuth = null,
   now = () => new Date(),
+  buttonReportSource,
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
@@ -910,6 +913,9 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof ButtonReportError) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
     if (error instanceof CredentialLifecycleError) {
       return res.status(error.status).json({
         error: error.code,
@@ -1180,6 +1186,15 @@ function createFairwayHandlers(db, {
     }
 
     try {
+      if (req.method === 'POST' && path === '/api/v1/admin/reports/button-activity') {
+        requireBodyFields(req.body, ['customer_id', 'course_id', 'start_date', 'end_date']);
+        const report = await generateButtonReport(db, req.body, { asOf: now(), source: buttonReportSource });
+        const pdf = await renderButtonReport(report);
+        res.set('Cache-Control', 'no-store');
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `attachment; filename="button-activity-${req.body.start_date}-${req.body.end_date}.pdf"`);
+        return res.status(200).send(pdf);
+      }
       const staffMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/staff(?:\/([^/]+))?$/);
       if (staffMatch) {
         const customerId = decodeURIComponent(staffMatch[1]);

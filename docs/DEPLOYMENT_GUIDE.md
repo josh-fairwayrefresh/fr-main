@@ -2448,9 +2448,158 @@ separately authorized replacement rotation and firmware cutover. The complete
 FRB-0003 sequence and failure handling are owned by
 `docs/DEVICE_PROVISIONING_GUIDE.md`.
 
+## Admin Button Activity Report — Implementation Review (2026-10-28)
+
+**Original review evidence; controlled release now authorized by the CPO.**
+The accepted presentation correction shows only device IDs in the legend,
+preserving stable colors and separate original/replacement IDs. No historical
+location evidence or counting definition changes. The sample and assertions
+are regenerated accordingly; all 116/63 records, 12 daily pairs and 179 original
+point coordinates still reconcile. The actual rendered device-only sample
+retains all coverage/history notes. Production publication must pass the
+staged actual-runtime/authenticated-read gates before traffic.
+
+The original implementation authorization was isolated validation only.
+Branch `feat/admin-button-activity-report` began from clean main and matching
+`origin/main`, **`94fafa7e95292e0aa11b210df807a3ecd57d3d42`**. The production
+alignment below is unchanged; this is not a new production milestone.
+Draft review is [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21);
+implementation and committed sample source is
+**`4f6af99d0fa28fc42bd7a0b0724016d0a4864dd7`**. Later review-record-only commits
+do not change that validated implementation.
+
+### Owners and isolated evidence
+
+- `lib/button_activity_report.js` is the report model/counting owner;
+  `lib/button_report_sources.js` reads the existing sources and retrieves all
+  pages; `lib/button_report_pdf.js` renders only the finished model.
+  `POST /api/v1/admin/reports/button-activity` uses the existing stored Admin
+  access owner, strict Customer/Course validation and `Cache-Control: no-store`.
+- Logs: direct `entries:list` against the runtime project's
+  `locations/global/buckets/_Default/views/_AllLogs`, filtered to receiver
+  Cloud Run rejections, exact Course and receipt window. Empty continuation
+  pages are followed. Log identity deduplicates retrieval, not distinct retries.
+  Bucket `get` supplies current retention metadata; no sink, view, pipeline
+  or reporting store is created. Legacy messages lack Customer identity, so
+  the existing globally allocated Course-ID contract is checked for unique
+  ownership before attribution; ambiguity or over 10,000 directory records
+  fails rather than mixing Customers.
+- Requests: root `requests`, exact Customer/Course and receipt range, descending
+  receipt/document-ID cursor pages of 500, projected report fields only, within
+  one read-only transaction pinned to generation as-of. This reuses the tracked
+  `customer_id ASC, course_id ASC, received_at DESC` collection index (document
+  name inherits descending order). No new index definition/deployment is needed;
+  confirm the existing index is Ready during an authorized release.
+- `test/fixtures/button_activity_reference.json` contains sanitized retained
+  exports, original SVG point coordinates and explicitly attributed CPO
+  location-label evidence. Credentials, account actors and raw request payloads
+  are excluded. Fixtures are excluded from Cloud Run source upload.
+- Exact reference boundaries: **2026-10-17T16:39:35.270Z** through
+  **2026-10-28T17:30:04.899Z**, inclusive. This is the original post-deployment
+  receipt interval and as-of boundary, not the later Firestore export read time.
+  Reconciliation reproduces **116 suspended attempts / 63 completed requests**,
+  all 12 daily pairs and all **179 original point coordinates**, preserving
+  receipt-time grouping and the original six colors.
+  Daily pairs (empty/completed), October 17–28:
+  `0/19, 8/12, 30/3, 2/1, 6/3, 4/3, 18/6, 10/9, 26/5, 6/1, 4/1, 2/0`.
+- Thirteen isolated report tests cover Admin denial, parent validation/ambiguous ownership,
+  all-page retrieval, token loops/caps, source failures, snapshot/cursor arguments,
+  DST/invalid dates/exclusive midnight, as-of completions, retry/duplicate handling,
+  wrong Customer/Course and QR/open/cancelled exclusion, retention and PDF limits.
+  Existing backend regression suite passes, including stock, staff, QR/lifecycle
+  and authorization owners.
+- Production-configured frontend build passes; **83 frontend checks** pass
+  serially including actual Admin Reports generation/download, stale/error
+  handling and operator Customer/service regression. Browser checks cover
+  375/430/768/1024/1440 px without unintended overflow.
+- Reference PDF is 792 × 612 points, one page; the 31-day layout continues across
+  three pages. Poppler rendering/text inspection verifies legend, circles/dots,
+  daily counts, exact boundary text and all explanatory notes without clipping.
+  Reproduce the sample with `BUTTON_REPORT_SAMPLE_DIR=<private-output>` and the
+  report test under the established sandbox test environment. The initial review
+  sample used supplied hole labels as **reference fixture only**. The CPO's
+  controlled-release correction supersedes that presentation: the committed
+  sample and product now show device IDs only; historical label evidence
+  remains unchanged in the fixture JSON and explanatory notes.
+  The [committed sample PDF](../fairway_backend/cloudrun_receiver/test/fixtures/button_activity_reference.pdf)
+  is review evidence, not a separately generated production report. All extracted
+  words in the reference, uncertainty, 31-day and 18-device samples fit within
+  the 792 × 612 point printable bounds; no notes or legend text are clipped.
+
+### Precise future runtime permissions and publication scope
+
+No grants, production reads through the new endpoint, deployment, merge,
+production writes or customer notifications were performed.
+
+For production runtime
+`fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`, verify:
+
+1. `logging.views.access` on
+   `projects/savvy-kit-496703-r5/locations/global/buckets/_Default/views/_AllLogs`
+   for this view-scoped `entries:list` request. The bounded predefined grant is
+   `roles/logging.viewAccessor` **on this view**, not all project views.
+2. `logging.buckets.get` for that `_Default` bucket's retention metadata,
+   through a narrowly scoped custom read role on the owning project if absent.
+   No logging writer/admin, private-log project-wide reader or IAM administration
+   privilege is required. Project-container `logging.logEntries.list` is an
+   alternative query authority, not a reason to grant broad access when the
+   implementation explicitly targets the view.
+3. Existing Firestore Customer/Course/list/query and read-only transaction
+   permissions remain necessary; this feature performs no Firestore writes.
+   ADC uses the attached runtime identity and cloud-platform OAuth scope;
+   never use an interactive user's credentials or expose Logging access to
+   the browser.
+
+IAM semantics: [entries.list](https://cloud.google.com/logging/docs/reference/v2/rest/v2/entries/list),
+[log-view access](https://cloud.google.com/logging/docs/logs-views#control-access),
+and [bucket get](https://cloud.google.com/logging/docs/reference/v2/rest/v2/projects.locations.buckets/get).
+Live runtime permission verification is a **future release gate**, not claimed
+by isolated adapter tests.
+
+Affected publication surfaces are **Admin Cloud Run and Hosting only**.
+`pdfkit` and `google-auth-library`, already present at the same locked versions,
+are runtime dependencies for Admin PDF/ADC execution. Receiver, notifier,
+Eventarc, firmware, Firestore Rules, Auth/entitlements, permanent signs and both
+sandboxes are unchanged. No new index is proposed. Before any separately
+authorized release, capture the then-current compatible recovery baseline,
+stage Admin without traffic and verify normal Admin authorization, retained
+reads and actual PDF generation before shifting traffic; publish compatible
+Hosting afterward. Preserve stock/assignment/Course-aware writers and every
+legitimate post-release record. Recovery must not restore data or older
+inventory/staff writers; use a compatible forward correction or the captured
+compatible Admin/Hosting versions. No migration or backfill is required.
+
+### Acceptance limits
+
+No new production endpoint/IAM acceptance is claimed. Current retention cannot
+recover already expired attempts, prove historical log exclusions or establish
+unreceived physical pushes. Verified historical assignments are unavailable
+in the retained source contract; current placement is intentionally unused.
+The fixture's CPO labels are not a production assignment timeline. Native
+office printing and physical Safari/iPad/PWA acceptance remain unverified.
+The existing Vite chunk-size warning remains; dependency promotion does not
+change locked package versions. Existing dependency-audit findings are not
+remediated by this bounded report increment.
+
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Admin Button Activity Report — Draft Review Only (2026-10-28)
+
+- **Source scope:** `feat/admin-button-activity-report` from verified main
+  `94fafa7e95292e0aa11b210df807a3ecd57d3d42`. Admin reporting only; no merge or
+  production publication. [Draft PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21)
+  identifies the exact review head; implementation/sample source is
+  `4f6af99d0fa28fc42bd7a0b0724016d0a4864dd7`.
+- **Evidence:** 116/63 accepted-reference reconciliation, all daily/point
+  records, existing backend regressions, 83 frontend checks, actual
+  production-configured build and rendered landscape Letter/continuation PDFs.
+  [The implementation review record](#admin-button-activity-report--implementation-review-2026-10-28)
+  owns reproduction, permissions, future publication and acceptance limits.
+- **Production preserved:** Hosting `8ee4867beb77d9fa` and all three existing
+  `qr-db9001e` backends remain the recorded deployment baseline. No runtime
+  IAM, data, service state, entitlement, notification or sandbox changes.
 
 ### Production Operator Customer/Service Hierarchy — 2026-10-26
 

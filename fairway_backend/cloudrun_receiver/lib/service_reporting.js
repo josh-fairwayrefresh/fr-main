@@ -259,6 +259,8 @@ function aggregateCourseReports(reportsByCourse, { includeSummaries = true } = {
 }
 
 module.exports = {
+  addLocalDays,
+  localMidnightUtc,
   activeSecondsByLocalDay,
   aggregateCourseReports,
   aggregateSummaries,
