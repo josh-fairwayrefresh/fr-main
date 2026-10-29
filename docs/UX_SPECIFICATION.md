@@ -705,11 +705,13 @@ and [open defects](feature_backlog.md#material-readiness-items).
    name is unavailable, the UI shows an explicit unavailable label rather
    than `null` or `undefined`.
 - The application is a full-surface, landscape-iPad-first responsive workspace. The responsive phone-layout release is live; authenticated physical-phone/Safari usability and CPO mobile acceptance remain pending as recorded in `docs/DEPLOYMENT_GUIDE.md` and `docs/feature_backlog.md`.
-- **CPO-approved Requests banner refinement (2026-10-28), review source only:**
+- **CPO-approved Requests banner refinement (2026-10-28):**
    after approving the three-format visual prototype, the CPO explicitly chose
    its revised iPad banner as the reference and authorized the associated iPad
    visual changes. This supersedes the earlier requirement to preserve the
-   previous live iPad banner pixel-for-pixel; it does not authorize deployment.
+   previous live iPad banner pixel-for-pixel. Its subsequent authorized
+   deployment/integration is recorded in the Deployment Guide; design approval
+   alone is not deployment authorization.
    One Requests banner renders the same brand/navigation/context hierarchy
    at every width, with no device-specific business logic or duplicated views.
    The existing horizontal Fairway logo, warm white surface, green navigation

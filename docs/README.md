@@ -56,6 +56,16 @@ service state, entitlements, notifications, permanent signs and both sandboxes
 are preserved. The top Alignment Register entry owns current Admin/Hosting
 identities and compatible recovery. Older Hosting and inventory/staff-only
 runtime identities are historical.
+The subsequent [responsive notification-strip release](DEPLOYMENT_GUIDE.md#responsive-notification-strip---production-release-2026-10-28)
+is live from `26f8927a634f373ec2f5927f5b8a162a7c2f0864`, merged through PR #25.
+It preserves the Inventory-owned operator workflow and responsive Requests
+banner integrated through PR #24. The newer approved desktop/iPad notification
+row and stacked mobile choices are implemented in one owner and published to
+Hosting **`8e2bb1f419075003`**. All 99 relevant frontend regressions,
+production build, live artifact checks and authenticated nondestructive smoke
+pass. The release record owns current Hosting identity, verified recovery,
+unchanged backend identities and existing browser-cache/physical-device limits.
+Older frontend review-only and Hosting identities are historical.
 The CPO_stats_fix reporting and persistent
 Resume/Suspend behavior was CPO-accepted, merged, and deployed to production
 on 2026-10-22. The CPO-accepted select-any-request queue and independent
