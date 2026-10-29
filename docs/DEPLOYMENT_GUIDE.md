@@ -49,9 +49,11 @@ The prior release below remains the behavior/cache baseline and rollback.
 - Private `refresh-header-release` evidence retains production manifests,
   verified rollback bytes, deployment/build/integrated-test logs and cache
   checks; `refresh-header-icon` retains the 102-check gate and rendered screenshots.
-  The original working copy remains clean and unchanged. CPO final visual
-  acceptance on the installed home-screen iPad app remains pending; automated
-  standalone testing and desktop production smoke are not physical Safari proof.
+  The original working copy remains clean and unchanged. After release, the CPO
+  confirmed "looks good. approved" on 2026-10-29 at 09:06 PDT, closing the
+  requested final visual acceptance. The consolidated
+  [UI-ALIGN-01 milestone](#ui-align-01--cross-form-factor-ui-alignment--operational-stability-2026-10-29)
+  distinguishes that acceptance from broader physical Safari/push testing.
 
 ## User-initiated Refresh App - production release (2026-10-29)
 
@@ -3055,6 +3057,85 @@ remediated by this bounded report increment.
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### UI-ALIGN-01 — Cross-Form-Factor UI Alignment & Operational Stability (2026-10-29)
+
+- **Status: COMPLETE — implemented, integrated, deployed and CPO-accepted for
+  the coordinated UI alignment scope.** The final Refresh App icon refinement
+  was deployed before the CPO's **2026-10-29 09:06 PDT** confirmation,
+  **"looks good. approved"**. This confirmation closes its final visual
+  acceptance condition for the demonstrated UI scope. Authorization to deploy,
+  passing tests and Hosting publication are not physical acceptance evidence.
+- **Consolidated scope:** Cart Requests, Driving Range and Inventory share
+  responsive desktop/tablet/mobile presentation standards, consistent
+  Customer/Course navigation and authorized controls. The shared Requests
+  interface retains the Driving Range's Course-owned request/history/service
+  behavior without introducing Inventory, operator management or Cart KPI
+  panels into Range. Inventory alone owns operator selection and shift
+  management; Requests attribution stays read-only. Reporting, authentication,
+  request handling and notification ownership remain intact.
+- **Accepted implementation and release references:** the
+  [Driving Range integration](#driving-range-production-integration-and-controlled-release--2026-10-26)
+  (PR #13, source `db9001ecba79b88f6584a6d407de355dc0c63d75`) and
+  [Customer/service hierarchy correction](#operator-customerservice-hierarchy-correction--2026-10-26)
+  establish the service/navigation dependencies. The
+  [responsive Requests banner and notification release record](#responsive-notification-strip---production-release-2026-10-28)
+  records accepted operator workflow `59384bbda49445f160273576249fa598f25d7824`,
+  banner `496a6f726485c66d157ba17e5d62c50d6bbdca8d` integrated through
+  PR #24, and compact responsive notification strip through PR #25.
+  The [Inventory banner release](#responsive-inventory-banner---production-release-2026-10-28)
+  (PR #27) completes the corresponding Inventory presentation.
+  [Refresh App](#user-initiated-refresh-app---production-release-2026-10-29)
+  (PR #29) adds one guarded, user-initiated reload owner and entry revalidation;
+  its [final header-icon release](#refresh-app-header-icon---production-release-2026-10-29)
+  (PR #31) places the accessible icon immediately left of available Admin/
+  Sign out controls in both top header rows. These dated owner records retain
+  exact provenance and evidence; this entry is not another release register.
+- **Current deployed functionality:** frontend source
+  **`be70a5e3064624d23709bd48187f4ce2f79f89bc`**, Hosting
+  **`2e923bc2314454f4`**, release **`1793289751660000`**, at
+  **https://app.fairwayrefresh.com/**. Main
+  `b080efa2089a2a29f38b76a60d817725dfe77892` adds release documentation
+  only over that deployed application. Refresh retains authentication, scope,
+  persisted operator/shift state and notification settings; open shifts do
+  not require closeout. Existing owners block interruption of edits, in-flight
+  operations and unresolved Inventory submissions. No automatic reload,
+  implicit logout, shift close or service-state mutation is introduced.
+- **Validation evidence:** the final exact application tree has **102/102**
+  relevant passing frontend regressions; **12/12** focused checks and a
+  production-configured build pass after integration. All **127** live files
+  match published artifacts. Responsive automation covers desktop, iPad and
+  phones, including 320-1920-pixel banner checks, Admin/non-Admin order,
+  44-pixel targets and no clipping/overflow. Isolated workflows cover operator
+  selection, request actions, notification mutations, shift/closeout recovery,
+  protected sign-out, unsaved edits and two-release standalone-mode refresh.
+  Authenticated nondestructive production smoke verifies both actual refresh
+  controls, scope/session/preferences/service preservation, Inventory's **93**
+  products and Export availability, and Requests/History navigation.
+- **CPO physical/visual evidence and limits:** the CPO explicitly confirmed
+  completed physical iPad/Safari validation before the Inventory banner
+  release, as recorded there. The subsequent 09:06 PDT approval accepts the
+  deployed final refresh-icon presentation after publication; it is not an
+  explicit report of a new physical iPad/Safari test. The earlier Inventory
+  physical validation was predeployment evidence, not proof of physical
+  acceptance of every subsequent deployed increment. Neither approval asserts an unreported
+  second-release physical iOS update test, live shift transactions, all-phone/
+  Safari qualification, physical push delivery or QR scan/print validation.
+  Automated standalone simulation is not physical-device proof. Those
+  narrower existing evidence limits remain in their owner records and are
+  not reopened as blockers to this accepted UI milestone. Driving Range
+  service activation remains a separately authorized operational decision.
+- **Preservation/recovery:** current backends remain
+  **`fairway-admin-report-5396b69`**, **`fairway-button-receiver-qr-db9001e`**
+  and **`fairway-request-notifier-qr-db9001e`**. The final release's verified
+  rollback remains Hosting **`8d70fcfa6287e4cb`**, release
+  **`1793288702309000`**, with all **127** previous files retained and the
+  same entry-revalidation/immutable-asset policy. Follow its release record;
+  no backend or operational-data rollback is implied. Existing production
+  identities, recovery references and historical register entries are retained.
+- **Remaining milestone acceptance condition: none.** This documentation-only
+  closeout changes no application behavior, production infrastructure, data,
+  firmware, credentials or independent product/field qualification status.
 
 ### Inventory-owned operator workflow - review branch only (2026-10-28)
 

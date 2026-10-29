@@ -13,8 +13,12 @@ both top header rows, immediately left of available Admin/Sign out controls.
 The exact validated tree retains the 102-check gate; integrated focused tests,
 production build, 127-file verification and authenticated icon-refresh smoke pass.
 Behavior, caching, operational ownership and backends remain unchanged.
-The release record owns verified rollback to `8d70fcfa6287e4cb` and remaining
-CPO installed-home-screen visual acceptance.
+The release record owns verified rollback to `8d70fcfa6287e4cb`.
+The CPO accepted the deployed final icon presentation on 2026-10-29 at 09:06 PDT.
+The existing Alignment Register's consolidated
+[UI-ALIGN-01 milestone](DEPLOYMENT_GUIDE.md#ui-align-01--cross-form-factor-ui-alignment--operational-stability-2026-10-29)
+records completion, release dependencies and the distinction between accepted
+UI scope and remaining broader physical-device evidence limits.
 
 The preceding [Refresh App release](DEPLOYMENT_GUIDE.md#user-initiated-refresh-app---production-release-2026-10-29)
 is live from `818e0dae4f9c6c0b43c7efd6b60510acf55074a2`, merged through PR #29,
