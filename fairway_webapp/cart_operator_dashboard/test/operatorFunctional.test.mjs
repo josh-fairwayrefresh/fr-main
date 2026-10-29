@@ -50,7 +50,7 @@ test('mobile operator header preserves navigation, course selection, and labeled
   assert.match(source, /aria-label="Select course"/);
   assert.match(source, /aria-label=\{`\$\{serviceActionLabel\} for \$\{course\?\.course_name/);
   assert.match(source, /<span>\{serviceActionLabel\}<\/span>/);
-  assert.match(operatorStyles, /@media \(max-width: 1180px\)/);
+  assert.match(operatorStyles, /@media \(max-width: 740px\)/);
   assert.match(operatorStyles, /\.op-course-context \{ display: grid;/);
   assert.match(operatorStyles, /\.op-service-controls \{ display: flex; flex-wrap: wrap;/);
   assert.match(operatorStyles, /\.op-notifications \{ position: static;/);
