@@ -4,6 +4,7 @@ import {
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
 } from 'lucide-react';
 import NotificationSetup from './NotificationSetup';
+import AppRefresh from './AppRefresh';
 import { useInventorySession } from './InventorySession';
 import { operatorRequest } from './lib/operator';
 import {
@@ -438,6 +439,12 @@ export default function OperatorApp({
         </div>
       </div>
       <div className="op-service-controls">
+        <AppRefresh user={user} getBlockReason={() => (
+          requestActionInFlight.current || serviceActionInFlight.current ||
+          inventorySession.isSubmitting() || notificationActionsInFlight.current > 0
+            ? 'Wait for the request, service or notification update to finish before refreshing.'
+            : ''
+        )} />
         {operation.physical_devices && course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
         <button className="op-suspend" type="button" onClick={() => toggleService()} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}

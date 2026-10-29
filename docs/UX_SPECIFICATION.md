@@ -27,6 +27,36 @@ acceptance pending.
 Deployment evidence and environment-specific acceptance limits are owned by
 `docs/DEPLOYMENT_GUIDE.md`.
 
+## User-initiated Refresh App
+
+Inventory and Cart Requests expose the same **Refresh App** control in their
+existing responsive banner context/tools area. One shared component owns the
+network check, error presentation and same-URL reload. Refresh is never automatic.
+It checks that the current application entry is reachable before reload and
+rechecks workflow safety immediately before navigation. Failure leaves the
+current application open with an explicit error.
+
+The existing workflow owners supply safety state: request/service/notification
+mutations, Inventory submissions, export and open Inventory editing, audit,
+operator/closeout dialogs or moves prevent refresh until finished or cancelled.
+All this account's browser-session Inventory records are checked by the existing
+Inventory session owner; unconfirmed submissions in another Course and unreadable
+session storage prevent refresh too. There is no separate version/session store.
+An open shift alone does not block refresh or require closeout.
+
+Refresh keeps the current URL, Customer/Course, authentication persistence,
+operator session UUID, open shift, saved closeout draft, notification preferences
+and subscription. It does not clear storage, sign out, close/reconcile a shift,
+change service state, submit/cancel requests or unregister the push service worker.
+Unsaved dialog edits are protected by requiring the dialog to be finished or
+cancelled, not by silently discarding them.
+
+The entry page revalidates with Hosting on reload; fingerprinted assets retain
+immutable caching. Existing pre-release installations must first receive this
+increment once before they can expose its control. Automated standalone-mode
+coverage is not physical iPad/Safari acceptance; the Deployment Guide records
+that remaining device check.
+
 Purpose of the button marker UX
 -------------------------------
 - Provide a simple, immediate way for a golfer in the field to create a service request.

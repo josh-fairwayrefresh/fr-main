@@ -74,6 +74,8 @@ test('authorized Customer/service context, deep links, stale reads and mutation 
     await page.evaluate(() => { heldPaths = ['/resume']; });
     await page.getByRole('button', { name: 'Resume Service for Driving Range', exact: true }).click();
     await waitForHeld();
+    await page.getByRole('button', { name: 'Refresh App', exact: true }).click();
+    await page.locator('.app-refresh [role="alert"]').getByText(/Wait for the request, service or notification update/).waitFor();
     assert.equal(await customer.isDisabled(), true);
     assert.equal(await service.isDisabled(), true);
     await page.evaluate(() => {
@@ -87,6 +89,8 @@ test('authorized Customer/service context, deep links, stale reads and mutation 
 
     await page.getByRole('button', { name: 'Complete service', exact: true }).click();
     await waitForHeld();
+    await page.getByRole('button', { name: 'Refresh App', exact: true }).click();
+    await page.locator('.app-refresh [role="alert"]').getByText(/Wait for the request, service or notification update/).waitFor();
     assert.equal(await customer.isDisabled(), true);
     assert.equal(await service.isDisabled(), true);
     await release();
@@ -102,6 +106,8 @@ test('authorized Customer/service context, deep links, stale reads and mutation 
     await waitForHeld();
     await page.getByRole('checkbox', { name: 'Test Links 18', exact: true }).click();
     await page.waitForFunction(() => pendingResponses.length === 2);
+    await page.getByRole('button', { name: 'Refresh App', exact: true }).click();
+    await page.locator('.app-refresh [role="alert"]').getByText(/Wait for the request, service or notification update/).waitFor();
     await page.evaluate(() => pendingResponses.shift()());
     await page.waitForFunction(() => [...document.querySelectorAll('input[type="checkbox"]')]
       .find(input => input.closest('label')?.textContent === 'Tony Lema')?.checked === false);

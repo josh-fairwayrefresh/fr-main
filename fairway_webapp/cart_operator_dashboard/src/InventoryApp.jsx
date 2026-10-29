@@ -8,6 +8,7 @@ import { downloadBlob } from './admin/adminApi';
 import { InventoryDragFeedback, useInventoryDrag } from './InventoryDrag';
 import { InventorySessionControls, useInventorySession } from './InventorySession';
 import { AuditDialog, StockDialog } from './InventoryOperations';
+import AppRefresh from './AppRefresh';
 import { courseContextUrl, courseDisplayNames, courseKey, replaceCourseContext, selectedCourseFromLocation } from './lib/courseContext.mjs';
 import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, INVENTORY_STATES, INVENTORY_STATE_LABELS as STATE_LABELS, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from './lib/inventoryModel.mjs';
 import { publicMenuPath } from './lib/courseMenuConfig';
@@ -292,6 +293,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const [stockAction, setStockAction] = useState(null);
   const [auditing, setAuditing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [sessionEditing, setSessionEditing] = useState(false);
   const exportStateRef = useRef(null);
   const refreshRef = useRef(async () => {});
   const course = courses.find((item) => courseKey(item) === selectedKey)
@@ -473,6 +475,11 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={courseKey(course)} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
         <div className="inv-header-tools">
           <span className="inv-user-label">{user.email}</span>
+          <AppRefresh user={user} getBlockReason={() => {
+            if (session.isSubmitting() || session.unresolved || busyId || exporting) return 'Wait for Inventory submissions or export to finish, and resolve any unconfirmed submission before refreshing.';
+            if (editor || categoryEditor || categoryManager || stockAction || auditing || sessionEditing || session.choosing || movement.drag) return 'Finish or cancel the open Inventory dialog or move before refreshing. Your edits have not been discarded.';
+            return '';
+          }} />
           <button className="inv-secondary" type="button" onClick={exportView} disabled={!canExport || exporting}>{exporting ? 'Preparing export…' : 'Export'}</button>
         </div>
       </div>
@@ -485,6 +492,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
             <span>{inventory ? `${inventory.daily_sales?.total_units ?? 0} units sold` : 'Loading…'}</span>
           </div>
           <InventorySessionControls key={`${user.uid}:${selectedKey}`} session={session}
+            onEditingChange={setSessionEditing}
             actions={<button className="inv-secondary" type="button" disabled={!hasCurrentInventory || loadStatus !== 'ready' || session.submitting || session.unresolved} onClick={() => setAuditing(true)}>Confirm Inventory Audit</button>} />
         </section>
       </section>
