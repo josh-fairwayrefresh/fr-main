@@ -20,6 +20,7 @@ import { preparePublicReviewer, publicSandboxReviewEnabled } from './lib/publicS
 import AdminApp from './admin/AdminApp';
 import NotificationSetup from './NotificationSetup';
 import OperatorApp from './OperatorApp';
+import { AccountSignOutProvider, useAccountSignOut } from './AccountSignOut';
 import OperatorDesignReview from './operator-design/OperatorDesignReview';
 import { APP_MODE, modeForPath, resolveEntry, shouldRedirectFreshSignInToCartOperations } from './lib/appEntry.mjs';
 import { createCourseRequestState } from './lib/courseRequestState.mjs';
@@ -275,6 +276,7 @@ function LoginScreen({ authState, mode, onGoogleSignIn, onEmailSignIn }) {
 }
 
 function EntryStatus({ title, message, showAdminLink = false }) {
+  const requestSignOut = useAccountSignOut();
   return (
     <main className="auth-page">
       <header className="auth-header">
@@ -288,7 +290,7 @@ function EntryStatus({ title, message, showAdminLink = false }) {
           <p className="login-subtitle">{message}</p>
           <div className="entry-status-actions">
             {showAdminLink && <a className="google-button" href="/admin">Open Admin</a>}
-            <button className="google-secondary-button" type="button" onClick={() => signOut(auth)}>
+            <button className="google-secondary-button" type="button" onClick={requestSignOut}>
               Sign out
             </button>
           </div>
@@ -405,6 +407,7 @@ function RequestCard({ request, onCompleted, focused }) {
 }
 
 function AppFrame({ children, activeTab, onTabChange, user, isAdmin, onOpenAdmin }) {
+  const requestSignOut = useAccountSignOut();
   return (
     <main className="page">
       <div className="phone-shell">
@@ -464,7 +467,7 @@ function AppFrame({ children, activeTab, onTabChange, user, isAdmin, onOpenAdmin
             History
           </button>
 
-          <button className="nav-button" onClick={() => signOut(auth)}>
+          <button className="nav-button" onClick={requestSignOut}>
             <Settings size={16} />
             Sign out
           </button>
@@ -602,6 +605,7 @@ function PlaceholderScreen({ title }) {
 }
 
 function App() {
+  const requestSignOut = useAccountSignOut();
   const publicReview = publicSandboxReviewEnabled(fairwayEnvironment, firebaseConfig, window.location, import.meta.env.VITE_FAIRWAY_PUBLIC_REVIEW);
   const [publicReviewError, setPublicReviewError] = useState('');
   const [entryMode] = useState(() => modeForPath(window.location.pathname));
@@ -971,11 +975,11 @@ function App() {
   }
 
   if (entry === 'admin') {
-    return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onSignOut={() => signOut(auth)} />;
+    return <AdminApp user={user} apiBaseUrl={adminApiBaseUrl} onSignOut={requestSignOut} />;
   }
 
   if (entry === 'inventory') {
-    return <Suspense fallback={<EntryStatus title="Inventory Management" message="Loading course inventory…" />}><InventoryApp user={user} apiBaseUrl={adminApiBaseUrl} courses={inventoryCourses} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={() => signOut(auth)} /></Suspense>;
+    return <Suspense fallback={<EntryStatus title="Inventory Management" message="Loading course inventory…" />}><InventoryApp user={user} apiBaseUrl={adminApiBaseUrl} courses={inventoryCourses} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={requestSignOut} /></Suspense>;
   }
 
   return (
@@ -992,7 +996,7 @@ function App() {
       canManageInventory={operatorState === 'authorized'}
       onOpenAdmin={() => window.location.assign('/admin')}
       onOpenInventory={() => window.location.assign('/inventory')}
-      onSignOut={() => signOut(auth)}
+      onSignOut={requestSignOut}
       onRequestAction={(request, action) => updateRequestStatus(request.id, action)}
     />
   );
@@ -1043,4 +1047,6 @@ const root = createRoot(document.getElementById('root'));
 if (modeForPath(window.location.pathname) === APP_MODE.PUBLIC_BAY) {
   document.documentElement.classList.add('public-bay-page');
 }
-root.render(window.location.pathname === '/operator-design' ? <OperatorDesignReview /> : <App />);
+root.render(<AccountSignOutProvider getUser={() => auth.currentUser} apiBaseUrl={adminApiBaseUrl} onSignOut={() => signOut(auth)}>
+  {window.location.pathname === '/operator-design' ? <OperatorDesignReview /> : <App />}
+</AccountSignOutProvider>);

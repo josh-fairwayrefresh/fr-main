@@ -4,12 +4,13 @@ import {
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
 } from 'lucide-react';
 import NotificationSetup from './NotificationSetup';
-import { InventorySessionControls, useInventorySession } from './InventorySession';
+import { useInventorySession } from './InventorySession';
 import { operatorRequest } from './lib/operator';
 import {
   authorizedCustomers,
   courseContextUrl,
   courseDisplayLabel,
+  courseDisplayNames,
   courseKey,
   mergeDashboardCourse,
   replaceCourseContext,
@@ -230,7 +231,7 @@ export default function OperatorApp({
   const customers = authorizedCustomers(operatorConfig.courses);
   const customerCourses = operatorConfig.courses.filter((item) => item.customer_id === selectedCourse?.customer_id);
   const operation = courseOperation(course);
-  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course);
+  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course, { readOnly: true });
   const selectedRequests = useMemo(() => requests.filter((request) => (
     course && request.customer_id === course.customer_id && request.course_id === course.course_id
   )), [requests, course?.customer_id, course?.course_id]);
@@ -396,6 +397,7 @@ export default function OperatorApp({
   const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
   const requestServiceActive = course?.service_state?.active ||
     (course?.has_on_premise_devices && course?.on_premise_service_state?.active);
+  const displayNames = courseDisplayNames(course);
 
   return <main className="operator-app"><header className="op-header">
     <div className="op-header-main">
@@ -404,15 +406,26 @@ export default function OperatorApp({
         <button className={tab === 'requests' ? 'active' : ''} type="button" aria-pressed={tab === 'requests'} onClick={() => setTab('requests')}>Requests</button>
         <button className={tab === 'history' ? 'active' : ''} type="button" aria-pressed={tab === 'history'} onClick={() => setTab('history')}>History</button>
       </nav>
-      <div className="op-header-account">
-        {isAdmin && <button className="op-icon" type="button" disabled={contextPending} onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
-        <button className="op-icon" type="button" disabled={contextPending} onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+      <div className="op-header-utilities">
+        {operation.inventory && <a className="op-inventory" href={contextPending ? undefined : courseContextUrl('/inventory', course)} aria-disabled={contextPending || undefined} title="Inventory management"><Package size={17} />Inventory</a>}
+        <div className="op-header-account">
+          {isAdmin && <button className="op-icon" type="button" disabled={contextPending} onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
+          <button className="op-icon" type="button" disabled={contextPending} onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+        </div>
       </div>
     </div>
     <div className="op-header-context">
       <div className="op-course-context">
-        <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operation.inventory && inventoryApiBaseUrl && <InventorySessionControls key={selectedCourseKeyValue} session={inventorySession} />}
+        <div className="op-course-identity">
+          <div className="op-current-course" aria-label={courseDisplayLabel(course)}>
+            <span>{displayNames.customer}</span>
+            <strong>{course ? displayNames.course : 'No authorized Course'}</strong>
+          </div>
+          {operation.inventory && inventoryApiBaseUrl && <div className="inventory-session" aria-live="polite">
+            <span>Operator: <strong>{inventorySession.shift?.staff_name || (inventorySession.ready ? 'Not selected' : 'Unavailable')}</strong></span>
+            {inventorySession.error && <span role="alert">Unable to verify operator: {inventorySession.error} Open Inventory to retry.</span>}
+          </div>}
+        </div>
         <div className="op-context-selectors">
           {isAdmin && customers.length > 0 && <label className="op-course-select"><span>Customer</span><select
             value={selectedCourse?.customer_id || ''} disabled={contextPending}
@@ -431,7 +444,6 @@ export default function OperatorApp({
           <span>{serviceActionLabel}</span>
         </button></>}
         {serviceError && <p role="alert">{serviceError}</p>}
-        {operation.inventory && <a className="op-inventory" href={contextPending ? undefined : courseContextUrl('/inventory', course)} aria-disabled={contextPending || undefined} title="Inventory management"><Package size={17} />Inventory</a>}
       </div>
     </div>
   </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig}

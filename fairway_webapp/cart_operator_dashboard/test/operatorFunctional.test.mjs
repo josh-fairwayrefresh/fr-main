@@ -28,7 +28,7 @@ test('request selection remains stable and notification focus is one-shot', () =
   assert.match(source, /pendingNotificationSelection\.current = \{\s*requestId: focusedRequestId/);
   assert.match(source, /notificationSelection\.selectionVersion !== manualSelectionVersion\.current/);
   assert.match(source, /selectedRequestIdRef\.current = oldestRequestId/);
-  assert.match(source, /key=\{selectedCourseKeyValue\}/);
+  assert.match(source, /key=\{`requests:\$\{selectedCourseKeyValue\}`\}/);
   assert.match(source, /disabled=\{actionPending\}/);
   assert.match(source, /requestActionInFlight\.current \|\| actionedRequestIdsRef\.current\.has\(request\.id\)/);
   assert.match(source, /requestLocationLabel\(request\)/);
@@ -42,7 +42,7 @@ test('Assigned customer users have an Inventory link into the shared authenticat
 test('course matching in OperatorApp matches on customer_id and course_id', () => {
   assert.match(source, /mergeDashboardCourse\(selectedCourse, currentDashboard\?\.courses\)/);
   assert.match(source, /dashboard\?\.key === selectedCourseKeyValue \? dashboard\.data : null/);
-  assert.match(source, /\{courseDisplayLabel\(course\)\}/);
+  assert.match(source, /aria-label=\{courseDisplayLabel\(course\)\}/);
 });
 
 test('mobile operator header preserves navigation, course selection, and labeled service actions', () => {

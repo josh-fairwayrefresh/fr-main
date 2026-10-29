@@ -4,6 +4,7 @@ import {
   authorizedCustomers,
   courseContextUrl,
   courseDisplayLabel,
+  courseDisplayNames,
   courseKey,
   mergeDashboardCourse,
   selectedCourseFromLocation,
@@ -23,6 +24,15 @@ const courses = [
     course_name: 'Monarch Bay',
   },
 ];
+
+test('banner identity uses the same normalized names as the shared Course label', () => {
+  assert.deepEqual(courseDisplayNames(courses[0]), { customer: 'Monarch Bay GC', course: 'Tony Lema Course' });
+  assert.deepEqual(courseDisplayNames({ customer_name: ' null ', course_name: 'undefined' }),
+    { customer: 'Customer name unavailable', course: 'Course name unavailable' });
+  assert.deepEqual(courseDisplayNames({ customer_name: ' Club \u00b7 East ', course_name: ' South ' }),
+    { customer: 'Club \u00b7 East', course: 'South' });
+  assert.equal(courseDisplayLabel(null), 'No authorized Course');
+});
 
 test('course selection requires an authorized customer/course pair from URL context', () => {
   assert.equal(

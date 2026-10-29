@@ -58,9 +58,17 @@ export function mergeDashboardCourse(authorizedCourse, dashboardCourses) {
   };
 }
 
+export function courseDisplayNames(course) {
+  return {
+    customer: usableDisplayName(course?.customer_name) || 'Customer name unavailable',
+    course: usableDisplayName(course?.course_name) || 'Course name unavailable',
+  };
+}
+
 export function courseDisplayLabel(course) {
   if (!course) return 'No authorized Course';
-  return `${usableDisplayName(course.customer_name) || 'Customer name unavailable'} · ${usableDisplayName(course.course_name) || 'Course name unavailable'}`;
+  const names = courseDisplayNames(course);
+  return `${names.customer} · ${names.course}`;
 }
 
 export function courseContextUrl(pathname, course) {

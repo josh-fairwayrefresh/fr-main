@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import OperatorApp from '../src/OperatorApp.jsx';
 import '../src/styles.css';
 
+const grouped = new URLSearchParams(location.search).get('groups') === '1';
 const cart = { customer_id: 'CUST-0001', course_id: 'COURSE-0001', customer_name: 'Synthetic Monarch',
+  ...(grouped ? { has_on_premise_devices: true, on_premise_service_state: { active: true } } : {}),
   course_name: 'Tony Lema', operation_kind: 'cart', timezone: 'America/Los_Angeles', service_state: { active: true } };
 const range = { ...cart, course_id: 'COURSE-0003', course_name: 'Driving Range',
   operation_kind: 'driving_range', service_state: { active: false, suspended: true } };

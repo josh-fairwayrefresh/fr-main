@@ -7,6 +7,8 @@
 .inventory-session-overlay label { display: grid; gap: 8px; margin: 14px 0; }
 .inventory-session-overlay input, .inventory-session-overlay select { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; }
 .inventory-session-overlay footer { display: flex; gap: 12px; justify-content: flex-end; }
+.account-sign-out footer { flex-wrap: wrap; }
+.account-sign-out footer button, .account-sign-out footer a { display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 8px 12px; border: 1px solid #bac9bd; border-radius: 7px; background: #fff; color: #183e2c; font: inherit; text-decoration: none; cursor: pointer; }
 .inventory-session [role="alert"] { color: #a32c26; }
 .inv-stock-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .inv-stock-controls button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bac9bd; border-radius: 6px; padding: 8px; background: #fff; color: #183e2c; cursor: pointer; }

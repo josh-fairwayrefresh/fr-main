@@ -271,6 +271,28 @@ their selected active approver and authenticated submitting UID suffice.
 Submitting an audit never starts or marks a shift active; stock/catalog mutations
 still require operator attribution. Uncertain outcomes remain explicit and
 recoverable, not success.
+Inventory alone renders selection/change/closeout controls. Requests consumes
+the existing `InventorySession` owner in read-only mode: no staff-directory
+dependency, UUID creation or management writes. The existing
+`inventory-session:<UID>:<Customer>:<Course>` record holds the UUID, selected
+shift cache, pending operation identities and dollar draft. There is no second
+React shift projection or separate Requests session store. Scoped local change
+events refresh consumers; server reads on mount/focus/pageshow are guarded by
+scope, load lifetime and local revision. Mutation receipts merge into the latest
+record only while their exact pending signature/operation identity matches.
+Unmount never closes a shift. Confirmed close and recovered close clear context
+atomically; stale reads/callbacks cannot overwrite newer local state.
+Authentication's `AccountSignOutProvider` owns the sole Firebase sign-out call.
+It composes the Inventory owner's read-only sign-out check over all recorded
+Course sessions for the current UID in this browser session, using the existing
+authorized session-shift endpoint. Pending operations and authoritative open
+shifts direct the user to Inventory; status/storage failures are explicit,
+not permission to sign out. Cancellation aborts the check, not a shift.
+This is an application workflow safeguard, not a replacement for Firebase
+authentication, an account-wide shift model, or a guarantee against externally
+revoked/expired authentication or deliberately cleared browser storage.
+Existing backend authorization, shift/session contracts, historical snapshots,
+audit independence and report counting/rendering are unchanged.
 Completed stock/audit submissions keep a synchronous intent guard until their
 dialog closes, including post-commit refresh; late/repeated submit callbacks
 cannot start a new attribution request. Session forms ignore submission when

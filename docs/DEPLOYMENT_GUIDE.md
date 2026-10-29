@@ -1,5 +1,58 @@
 # Deployment Guide
 
+## Inventory-owned operator workflow - local implementation review (2026-10-28)
+
+**Review-branch source only, undeployed; not CPO acceptance.**
+The accepted reporting baseline and verified remote main are
+`3ec5a8df4a0da4c992f850be567839b95c21f32e`. Local isolated branch
+`fix/inventory-owned-operator` starts there. Abandoned PR #23 was not merged,
+cherry-picked or incorporated wholesale; its branch/history are preserved.
+
+- Inventory alone owns operator selection/change and shift closeout. Requests
+  displays its scoped name read-only and remains actionable without selection
+  or successful inventory-status/staff loading. Existing session storage key,
+  UUID, backend transactions, attribution, independent audit approval, accounting
+  and report owners remain intact. Closeout before stock activity is available
+  so the sign-out requirement cannot trap a newly selected operator.
+- One authentication boundary guards all application sign-out controls,
+  including Admin and access-status views. The existing authorized session
+  read verifies every recorded Course session for this UID/browser session.
+  Active shifts and pending operations link to their scoped Inventory page;
+  read/storage errors prevent unverified sign-out. No shift is implicitly
+  closed and no recovery state is cleared by sign-out. Cancelled checks cannot
+  later sign out. This does not introduce account-wide shifts/cross-tab identity,
+  nor prevent externally expired/revoked Auth or deliberate browser-data removal.
+- Isolated frontend regression gate: **98/98 pass**, serial local tests.
+  Eight focused workflow/wiring cases exercise actual Requests/Inventory links,
+  reload and existing UUID restoration; independent Customer/Course/deep-link
+  scope; no Range inventory context; Inventory-only correction/closeout;
+  no-operator Complete/Cancel; cached/failed/corrupt session recovery;
+  open/empty/pending/error sign-out including Admin and another Course;
+  cancellation, 4xx rejection, lost close response and exact same-operation
+  recovery; delayed reads/draft preservation and closed-shift non-resurrection.
+  Existing stock, audit, attribution, exported workbook and pointer/touch
+  workflows also pass. Widths 375/430/768/1024/1440 remain within the viewport.
+  Three deployed-sandbox browser suites were intentionally not run.
+- In-memory backend regressions: **13 report cases**, **36 Inventory/API
+  cases**, and **2 release-compatibility cases** pass (17 top-level Node runner
+  entries, with the Inventory suites reporting their own inner cases).
+  The original retained-export fixture still matches **116 suspended attempts,
+  63 completed requests**, all daily totals and 179 original plotted records;
+  PDF output remains landscape Letter. No reporting or backend source changes.
+- Production-configured frontend validator/build pass with the existing bundle
+  size warnings. Editor diagnostics and whitespace checks pass. Private local
+  evidence is retained in session artifacts named
+  `inventory-owned-operator-regression-final.log`,
+  `inventory-owned-operator-backend.log` and
+  `inventory-owned-operator-build-final.log`.
+- CPO authorization permits one commit and push of this review branch only.
+  No merge, deployment, runtime/IAM/configuration change,
+  production transaction or physical-device action is performed. Production
+  remains exactly at the reporting release below. No physical iPad/Safari/PWA,
+  real Firebase sign-out, customer-device or browser-restart acceptance is
+  claimed; automated checks use synthetic users/APIs and preserved session
+  storage/reload. Existing browser-session persistence is not replaced.
+
 ## Admin Button Activity Report controlled production release - 2026-10-28
 
 **Released through merged [PR #21](https://github.com/josh-fairwayrefresh/fr-main/pull/21).**
@@ -2733,6 +2786,21 @@ remediated by this bounded report increment.
 ## Alignment Register
 
 The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+
+### Inventory-owned operator workflow - review branch only (2026-10-28)
+
+- **Source:** `fix/inventory-owned-operator`, based on
+  `3ec5a8df4a0da4c992f850be567839b95c21f32e`, containing only the reviewed
+  source/test/doc increment. Its single feature commit identifies the review
+  source; no merge SHA exists. PR #23 is not incorporated and remains preserved.
+- **Scope/evidence:** Inventory-only shift management, read-only Requests
+  attribution display, centralized application sign-out protection; 98 local
+  frontend checks, scoped in-memory Inventory/report regressions and production
+  build pass. The [local review record](#inventory-owned-operator-workflow---local-implementation-review-2026-10-28)
+  owns evidence, persistence boundaries and unperformed operational acceptance.
+- **Production:** unchanged from the verified reporting release immediately
+  below. No publication or data/configuration/IAM changes are authorized by
+  this review entry. Existing compatible recovery remains unchanged.
 
 ### Production Admin Button Activity Report - 2026-10-28
 

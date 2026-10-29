@@ -93,15 +93,9 @@ test('authorized Customer/service context, deep links, stale reads and mutation 
     await page.waitForFunction(() => !document.querySelector('[aria-label="Select customer"]').disabled);
 
     await service.selectOption('CUST-0001/COURSE-0001');
-    await page.getByRole('button', { name: 'Select operator', exact: true }).click();
-    await page.getByLabel('Staff name').selectOption('alex');
-    await page.evaluate(() => { heldPaths = ['/shifts/select']; });
-    await page.getByRole('button', { name: 'Confirm operator', exact: true }).click();
-    await waitForHeld();
-    assert.equal(await customer.isDisabled(), true);
-    assert.equal(await service.isDisabled(), true);
-    await release();
-    await page.waitForFunction(() => !document.querySelector('[aria-label="Select customer"]').disabled);
+    await page.locator('.inventory-session').getByText('Not selected', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /Select operator|Change operator|Close out/ }).count(), 0);
+    assert.equal(await page.evaluate(() => releaseCalls.some(call => call.path.endsWith('/shifts/select'))), false);
 
     await page.evaluate(() => { heldPaths = ['/notification-preferences']; });
     await page.getByRole('checkbox', { name: 'Tony Lema', exact: true }).click();

@@ -7,58 +7,167 @@ export function inventoryCoursePath(course, suffix = '') {
   return `/api/v1/inventory/courses/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.course_id)}${suffix}`;
 }
 
-export function useInventorySession(user, apiBaseUrl, course) {
+const SESSION_CHANGED = 'inventory-session-changed';
+
+function readSession(key) {
+  const session = JSON.parse(sessionStorage.getItem(key) || 'null');
+  if (session && (typeof session.session_id !== 'string' || !session.session_id ||
+      !session.pending || typeof session.pending !== 'object' || Array.isArray(session.pending))) {
+    throw new Error('Stored inventory session is invalid. Do not clear it; contact support to recover the shift.');
+  }
+  for (const [signature, operationId] of Object.entries(session?.pending || {})) {
+    const operation = JSON.parse(signature);
+    if (!Array.isArray(operation) || operation.length !== 3 || typeof operation[0] !== 'string' ||
+        typeof operation[1] !== 'string' || !operation[2] || typeof operation[2] !== 'object' ||
+        typeof operationId !== 'string' || !operationId) {
+      throw new Error('Stored inventory submission is invalid. Do not clear it; contact support to recover the submission.');
+    }
+  }
+  return session;
+}
+
+function writeSession(key, session) {
+  sessionStorage.setItem(key, JSON.stringify({ ...session, revision: (session.revision || 0) + 1 }));
+  window.dispatchEvent(new CustomEvent(SESSION_CHANGED, { detail: { key } }));
+}
+
+// Authentication checks every Course visited by this browser session, not just
+// the currently displayed Course. The server remains the authority for closure.
+export async function inventorySignOutBlocker(user, apiBaseUrl, { signal } = {}) {
+  const prefix = `inventory-session:${user.uid}:`;
+  const records = [];
+  for (let index = 0; index < sessionStorage.length; index++) {
+    const key = sessionStorage.key(index);
+    if (!key.startsWith(prefix)) continue;
+    const [customer_id, course_id, ...extra] = key.slice(prefix.length).split(':');
+    if (!customer_id || !course_id || extra.length) throw new Error('Unable to verify the stored inventory scope. Contact support before signing out.');
+    const session = readSession(key);
+    if (session) records.push({ key, session, course: { customer_id, course_id } });
+  }
+  for (const { key, session, course } of records) {
+    if (Object.keys(session.pending).length) return { course, pending: true };
+    const result = await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course,
+      `/shifts/session?session_id=${encodeURIComponent(session.session_id)}`), { signal });
+    if (!Object.hasOwn(result, 'shift')) throw new Error('The server did not confirm inventory shift status. Retry before signing out.');
+    if (JSON.stringify(readSession(key)) !== JSON.stringify(session)) {
+      throw new Error('Inventory session changed while checking sign-out. Please retry.');
+    }
+    if (result.shift) return { course, pending: false };
+  }
+  // Catch a newly opened/pending session while another Course was being checked.
+  const latest = [];
+  for (let index = 0; index < sessionStorage.length; index++) {
+    const key = sessionStorage.key(index);
+    if (key.startsWith(prefix)) latest.push([key, readSession(key)]);
+  }
+  if (JSON.stringify(latest) !== JSON.stringify(records.map(({ key, session }) => [key, session]))) {
+    throw new Error('Inventory session changed while checking sign-out. Please retry.');
+  }
+  return null;
+}
+
+export function useInventorySession(user, apiBaseUrl, course, { readOnly = false } = {}) {
   const key = user && course ? `inventory-session:${user.uid}:${course.customer_id}:${course.course_id}` : '';
-  const [state, setState] = useState({ key: '', shift: null, staff: [], error: '', ready: false });
+  const [state, setState] = useState({ key: '', staff: [], error: '', ready: false });
   const [choosing, setChoosing] = useState(false);
   const [, setPendingVersion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const continuation = useRef(null);
   const requestInFlight = useRef(false);
   const loadVersion = useRef(0);
+  const mounted = useRef(false);
   const currentKey = useRef(key);
   currentKey.current = key;
-  const stored = key ? JSON.parse(sessionStorage.getItem(key) || 'null') : null;
+  let stored = null;
+  let storageError = '';
+  try { stored = key ? readSession(key) : null; }
+  catch (error) { storageError = `Unable to read inventory session: ${error.message}`; }
   const sessionId = stored?.session_id;
-  const value = state.key === key ? state : { shift: null, staff: [], error: '', ready: false };
+  const value = {
+    ...(state.key === key ? state : { staff: [], error: '', ready: false }),
+    shift: stored?.shift || null,
+    ...(storageError ? { error: storageError, ready: false } : {}),
+  };
 
   function storeSession() {
-    const existing = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (!key || readOnly) throw new Error('Operator selection and shift management are available in Inventory only.');
+    const existing = readSession(key);
     if (existing) return existing;
     const session = { session_id: crypto.randomUUID(), pending: {} };
-    sessionStorage.setItem(key, JSON.stringify(session));
+    writeSession(key, session);
     return session;
   }
 
   async function load() {
     if (!key) return;
     const version = ++loadVersion.current;
-    const session = storeSession();
-    const [directory, selected] = await Promise.all([
-      inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, '/staff')),
+    const session = readSession(key) || (readOnly ? null : storeSession());
+    if (!session) {
+      if (mounted.current && currentKey.current === key) setState({ key, staff: [], error: '', ready: true });
+      return;
+    }
+    const revision = readSession(key).revision || 0;
+    const [selected, directory] = await Promise.allSettled([
       inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, `/shifts/session?session_id=${encodeURIComponent(session.session_id)}`)),
+      readOnly ? Promise.resolve({ staff: [] }) : inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, '/staff')),
     ]);
-    if (currentKey.current !== key || version !== loadVersion.current) return;
-    const latest = storeSession();
-    const closingUncertain = Object.keys(latest.pending || {}).some(signature => JSON.parse(signature)[1].endsWith('/close'));
-    const shift = selected.shift || (closingUncertain ? latest.shift : null);
-    latest.shift = shift;
-    sessionStorage.setItem(key, JSON.stringify(latest));
-    setState({ key, staff: directory.staff, shift, error: '', ready: true });
+    if (!mounted.current || currentKey.current !== key || version !== loadVersion.current) return;
+    const latest = readSession(key);
+    const errors = [];
+    if (selected.status === 'fulfilled') {
+      if (!Object.hasOwn(selected.value, 'shift')) errors.push('The server did not confirm the inventory shift.');
+      else if ((latest.revision || 0) === revision && !Object.keys(latest.pending).length) {
+        writeSession(key, { ...latest, shift: selected.value.shift });
+      }
+    } else errors.push(selected.reason.message);
+    if (directory.status === 'rejected') errors.push(directory.reason.message);
+    setState({ key, staff: directory.status === 'fulfilled' ? directory.value.staff : [],
+      error: errors.join(' '), ready: errors.length === 0 });
   }
 
   useEffect(() => {
+    mounted.current = true;
     setChoosing(false);
     if (continuation.current) continuation.current.reject(new Error('Course or account changed. Please retry the action.'));
     continuation.current = null;
     if (!key) return;
     const refresh = () => load().catch(error => {
-      if (currentKey.current === key) setState({ key, staff: [], shift: null, error: error.message, ready: false });
+      if (mounted.current && currentKey.current === key) setState({ key, staff: [], error: error.message, ready: false });
     });
+    const changed = event => {
+      if (event.detail.key === key) setPendingVersion(version => version + 1);
+    };
+    window.addEventListener(SESSION_CHANGED, changed);
     refresh();
     window.addEventListener('focus', refresh);
-    return () => window.removeEventListener('focus', refresh);
-  }, [key, apiBaseUrl]);
+    window.addEventListener('pageshow', refresh);
+    return () => {
+      mounted.current = false;
+      loadVersion.current++;
+      window.removeEventListener(SESSION_CHANGED, changed);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      continuation.current?.reject(new Error('Inventory context changed. Please retry the action.'));
+      continuation.current = null;
+    };
+  }, [key, apiBaseUrl, readOnly]);
+
+  function finishOperation(signature, operationId, result) {
+    const latest = readSession(key);
+    if (latest?.pending[signature] !== operationId) return;
+    const [, suffix, payload] = JSON.parse(signature);
+    delete latest.pending[signature];
+    if (suffix === '/shifts/select') {
+      if (!result.shift) throw new Error('The server did not confirm the selected shift.');
+      latest.shift = result.shift;
+    } else if (suffix.endsWith('/close')) {
+      latest.shift = null;
+      latest.close_amount = '';
+    } else if (payload.shift_id && latest.shift?.shift_id === payload.shift_id) {
+      latest.shift = { ...latest.shift, has_activity: true };
+    }
+    writeSession(key, latest);
+  }
 
   async function submitRequest(suffix, body, method, requireShift, shift) {
     if (!navigator.onLine) throw new Error('Connectivity is required. Nothing has been submitted.');
@@ -70,28 +179,20 @@ export function useInventorySession(user, apiBaseUrl, course) {
     if (unresolved) throw new Error('A previous submission is unresolved. Retry that unchanged action before starting another.');
     const operationId = session.pending?.[signature] || crypto.randomUUID();
     session.pending = { ...session.pending, [signature]: operationId };
-    sessionStorage.setItem(key, JSON.stringify(session));
-    setPendingVersion(version => version + 1);
+    writeSession(key, session);
     try {
       const result = await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
         method, body: { ...payload, operation_id: operationId },
       });
-      delete session.pending[signature];
-      sessionStorage.setItem(key, JSON.stringify(session));
-      setPendingVersion(version => version + 1);
-      if (requireShift && currentKey.current === key) setState(previous => ({
-        ...previous, shift: { ...shift, has_activity: true },
-      }));
-      if (requireShift) {
-        session.shift = { ...shift, has_activity: true };
-        sessionStorage.setItem(key, JSON.stringify(session));
-      }
+      finishOperation(signature, operationId, result);
       return result;
     } catch (error) {
-      if (error.status && error.status < 500) {
-        delete session.pending[signature];
-        sessionStorage.setItem(key, JSON.stringify(session));
-        setPendingVersion(version => version + 1);
+      if (error.status && error.status < 500 && !suffix.endsWith('/close')) {
+        const latest = readSession(key);
+        if (latest.pending[signature] === operationId) {
+          delete latest.pending[signature];
+          writeSession(key, latest);
+        }
       } else {
         error.message = `${error.message} Submission is not confirmed; retry the same action to resolve it safely.`;
       }
@@ -100,6 +201,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
   }
 
   async function request(suffix, body = {}, method = 'POST', requireShift = true) {
+    if (readOnly) throw new Error('Operator selection and shift management are available in Inventory only.');
     if (requestInFlight.current) throw new Error('Wait for the current submission before continuing.');
     let shift = value.shift;
     if (requireShift && !shift) {
@@ -107,7 +209,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
       if (continuation.current) throw new Error('Select an operator to finish the current action first.');
       setChoosing(true);
       shift = await new Promise((resolve, reject) => { continuation.current = { resolve, reject }; });
-      if (currentKey.current !== key) throw new Error('Course changed. Please retry.');
+      if (!mounted.current || currentKey.current !== key) throw new Error('Inventory context changed. Please retry.');
     }
     requestInFlight.current = true;
     setSubmitting(true);
@@ -126,10 +228,7 @@ export function useInventorySession(user, apiBaseUrl, course) {
     }, 'POST', false);
     const shift = result.shift;
     if (!shift) throw new Error('The server did not confirm the selected shift.');
-    const selectedSession = storeSession();
-    selectedSession.shift = shift;
-    sessionStorage.setItem(key, JSON.stringify(selectedSession));
-    await load();
+    if (!mounted.current || currentKey.current !== key || readSession(key)?.shift?.shift_id !== shift.shift_id) return;
     setChoosing(false);
     continuation.current?.resolve(shift);
     continuation.current = null;
@@ -141,20 +240,16 @@ export function useInventorySession(user, apiBaseUrl, course) {
     await request(`/shifts/${encodeURIComponent(value.shift.shift_id)}/close`, {
       session_id: storeSession().session_id, amount_minor: parsed.price.amount_minor,
     }, 'POST', false);
-    const closedSession = storeSession();
-    closedSession.shift = null;
-    closedSession.close_amount = '';
-    sessionStorage.setItem(key, JSON.stringify(closedSession));
-    if (currentKey.current === key) {
+    if (mounted.current && currentKey.current === key) {
       loadVersion.current++;
       setChoosing(false);
       if (continuation.current) continuation.current.reject(new Error('Shift closed. Start a new action to select an operator.'));
       continuation.current = null;
-      setState(previous => ({ ...previous, shift: null }));
     }
   }
 
   async function resolvePending() {
+    if (readOnly) throw new Error('Resolve inventory submissions in Inventory before signing out.');
     if (requestInFlight.current) throw new Error('Wait for the current submission before retrying.');
     const session = storeSession();
     const entry = Object.entries(session.pending || {})[0];
@@ -164,24 +259,25 @@ export function useInventorySession(user, apiBaseUrl, course) {
     requestInFlight.current = true;
     setSubmitting(true);
     try {
-      await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
+      const result = await inventoryRequest(user, apiBaseUrl, inventoryCoursePath(course, suffix), {
         method, body: { ...payload, operation_id: operationId },
       });
+      finishOperation(signature, operationId, result);
     } catch (error) {
-      if (error.status && error.status < 500) {
-        delete session.pending[signature];
-        sessionStorage.setItem(key, JSON.stringify(session));
-        setPendingVersion(version => version + 1);
+      if (error.status && error.status < 500 && !suffix.endsWith('/close')) {
+        const latest = readSession(key);
+        if (latest.pending[signature] === operationId) {
+          delete latest.pending[signature];
+          writeSession(key, latest);
+        }
       }
       throw error;
     } finally { requestInFlight.current = false; setSubmitting(false); }
-    delete session.pending[signature];
-    if (suffix.endsWith('/close')) session.close_amount = '';
-    sessionStorage.setItem(key, JSON.stringify(session));
-    setPendingVersion(version => version + 1);
-    await load();
+    if (mounted.current && currentKey.current === key) await load();
     window.dispatchEvent(new Event('inventory-updated'));
   }
+
+  if (readOnly) return { ...value, sessionId, submitting: false, isSubmitting: () => false };
 
   return {
     ...value, sessionId, request, select, close, choosing, resolvePending, submitting,
@@ -190,15 +286,16 @@ export function useInventorySession(user, apiBaseUrl, course) {
     saveCloseDraft: amount => {
       const session = storeSession();
       session.close_amount = amount;
-      sessionStorage.setItem(key, JSON.stringify(session));
-      setPendingVersion(version => version + 1);
+      writeSession(key, session);
     },
     unresolved: Object.keys(stored?.pending || {}).length > 0,
     pendingCloseAmount: (() => {
       const entry = Object.keys(stored?.pending || {}).map(signature => JSON.parse(signature)).find(([, suffix]) => suffix.endsWith('/close'));
-      return entry ? (entry[2].amount_minor / 100).toFixed(2) : null;
+      if (!entry) return null;
+      const draft = usdPriceFromInput(stored?.close_amount || '');
+      return draft.price?.amount_minor === entry[2].amount_minor ? stored.close_amount : (entry[2].amount_minor / 100).toFixed(2);
     })(),
-    choose: () => setChoosing(true), reload: load,
+    choose: () => { if (!readOnly) setChoosing(true); }, reload: load,
     cancel: () => {
       setChoosing(false);
       continuation.current?.reject(new Error('Select an operator before continuing.'));
@@ -242,11 +339,14 @@ export function InventorySessionControls({ session, actions }) {
   }
   return <div className="inventory-session">
     <span>Operator: <strong>{session.shift?.staff_name || 'Not selected'}</strong></span>
-    <div className="inventory-session-actions"><button className={session.shift?.has_activity ? 'inventory-close-out' : undefined} type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
-      setError(''); setConfirmingClose(false); setClosing(Boolean(session.shift?.has_activity));
+    <div className="inventory-session-actions"><button className={session.shift ? 'inventory-close-out' : undefined} type="button" disabled={(!session.ready && !session.shift) || pending || session.submitting || session.unresolved} onClick={() => {
+      setError(''); setConfirmingClose(false); setClosing(Boolean(session.shift));
       setAmount(session.closeDraft);
-      if (!session.shift?.has_activity) session.choose();
-    }}>{session.shift?.has_activity ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
+      if (!session.shift) session.choose();
+    }}>{session.shift ? <><span>Close out</span><span>Enter final sales</span></> : 'Select operator'}</button>
+    {session.shift && !session.shift.has_activity && <button type="button" disabled={!session.ready || pending || session.submitting || session.unresolved} onClick={() => {
+      setClosing(false); setConfirmingClose(false); setError(''); session.choose();
+    }}>Change operator</button>}
     {actions}</div>
     {session.unresolved && <button type="button" disabled={pending} onClick={async () => {
       setPending(true); setError('');
@@ -260,7 +360,7 @@ export function InventorySessionControls({ session, actions }) {
       <form onSubmit={submit}>
         {closing ? confirmingClose
           ? <p>Close {session.shift?.staff_name}’s shift with final sales of <strong>${(usdPriceFromInput(amount).price.amount_minor / 100).toFixed(2)}</strong>?</p>
-          : <><p>Close {session.shift?.staff_name}’s shift before selecting another operator. Stock and today’s sales remain unchanged.</p><label>Total sales ($)<input autoFocus type="number" min="0" step="0.01" required value={amount} onChange={event => { setAmount(event.target.value); session.saveCloseDraft(event.target.value); }} disabled={pending} /></label></> : <>
+          : <><p>Close {session.shift?.staff_name}’s shift before selecting another operator. Stock and today’s sales remain unchanged.</p><label>Total sales ($)<input autoFocus type="number" min="0" step="0.01" required value={amount} onChange={event => { setAmount(event.target.value); session.saveCloseDraft(event.target.value); }} disabled={pending || session.pendingCloseAmount !== null} /></label></> : <>
           <label>Staff name<select required value={staffId} onChange={event => setStaffId(event.target.value)} disabled={pending}><option value="">Select a name</option>{session.staff.filter(person => person.active !== false).map(person => <option key={person.staff_id} value={person.staff_id}>{person.name}</option>)}<option value="custom">Custom</option></select></label>
           {staffId === 'custom' && <label>New name<input autoFocus required maxLength="160" value={name} onChange={event => setName(event.target.value)} disabled={pending} /></label>}
         </>}
