@@ -6,6 +6,16 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
+The latest [responsive Inventory banner release](DEPLOYMENT_GUIDE.md#responsive-inventory-banner---production-release-2026-10-28)
+is live from `376350de83a6acdcd3a92313737d60224264209b`, merged through PR #27,
+at Hosting **`192d0bce8df085dd`**. The CPO confirmed physical iPad/Safari
+validation completed and authorized this release. All 100 relevant regressions,
+production build, live artifact verification and authenticated nondestructive
+smoke pass. The release record owns current Hosting identity and verified
+recovery; notification/operator workflows, backend identities, operational data,
+permanent signs and unrelated local work remain unchanged. Older Hosting
+identities below are historical.
+
 ## Current Milestone
 
 Fairway Refresh is a fielded product operating at the CPO-accepted **Pilot 1.1** milestone.
