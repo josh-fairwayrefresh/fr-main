@@ -1,5 +1,73 @@
 # Deployment Guide
 
+## Responsive notification strip - production release (2026-10-28)
+
+**Hosting only; the newer CPO-approved notification prototypes are implemented
+and live, not merely static review artifacts.** This record supersedes older
+frontend review-only status and Hosting identities below. It does not change
+backend, firmware, operational data or physical-device acceptance.
+
+- Authorized baseline: main `31b0a352cbf71c7cb48f73a17edb74433562be7f`,
+  merged through [PR #24](https://github.com/josh-fairwayrefresh/fr-main/pull/24)
+  with accepted operator dependency `59384bbda49445f160273576249fa598f25d7824`
+  and responsive banner `496a6f726485c66d157ba17e5d62c50d6bbdca8d`.
+  The prior Hosting **`f44449d61317858e`**, release **`1793247486180000`**,
+  served the exact approved banner artifacts. The integration itself correctly
+  did not redeploy equivalent artifacts.
+- Notification implementation `f57a83f4bb12d006a689385f656f69f9af83afca`
+  is merged through [PR #25](https://github.com/josh-fairwayrefresh/fr-main/pull/25).
+  **Deployed application source: `26f8927a634f373ec2f5927f5b8a162a7c2f0864`.**
+  Its tree equals the tested implementation tree. The compact desktop/iPad
+  row and stacked mobile preferences have one `NotificationSetup` owner;
+  presentation is owned by the [UX specification](UX_SPECIFICATION.md#cart-operator-push-notifications-source-behavior-and-dated-physical-validation).
+  No new notification delivery or dismissal lifecycle is introduced.
+- **Hosting `8e2bb1f419075003`**, live release **`1793249285768000`**,
+  **`2026-10-29T04:48:05.768Z`** (October 28, 9:48 PM PDT), at
+  **https://app.fairwayrefresh.com/**. Firebase Tools deployed **Hosting only**
+  with an explicit project and Hosting-only configuration. All **128** served
+  files match the integrated production build and preserved public resources.
+  Permanent Driving Range signs, mapping and installation PDF are unchanged.
+- **99/99** relevant frontend regressions pass. Coverage includes 320-1920 CSS
+  pixel notification geometry, approved 56-pixel desktop/iPad and 146-pixel
+  two-Course mobile examples, label/checkbox order, 44-pixel Course targets,
+  long/additional Courses, unavailable/permission/error/retry transitions,
+  unchanged preference/subscription contracts, banner/navigation, reporting,
+  requests and Inventory-owned operator/closeout/sign-out workflows.
+  Production-configured builds pass before and after integration; existing
+  large-bundle warnings remain.
+- Nondestructive authenticated production smoke passes session restoration,
+  notification layout at 375/390/430/768/1024/1440, Requests/History navigation,
+  Inventory's existing **93** product articles, idle read-only operator
+  attribution and Admin Button Activity report generation. Capability guidance
+  appears on focus and disappears on blur without changing preferences.
+  No new observed application errors or failed API responses. No preferences,
+  service state, requests, inventory, staff or shift records were changed.
+  Live account sign-out/shift transactions and physical iPad/Safari push
+  delivery were not exercised; isolated functional coverage is not physical
+  device acceptance.
+- Existing entry-page HTTP caching is **`max-age=3600`**. One previously visited
+  query URL initially reused its pre-release browser-cached entry bundle;
+  explicit revalidation/reload loaded the new bundle. Fresh/revalidated live
+  files match the release. Users with an already-open/cached page may need a
+  refresh with cache revalidation. No cache/infrastructure change was made.
+- Admin remains **`fairway-admin-report-5396b69`**, Receiver
+  **`fairway-button-receiver-qr-db9001e`**, notifier
+  **`fairway-request-notifier-qr-db9001e`**. No backend, schema, Auth,
+  infrastructure or firmware deployment; no synthetic production transactions.
+- **Rollback:** retained finalized Hosting **`f44449d61317858e`**,
+  source **`496a6f726485c66d157ba17e5d62c50d6bbdca8d`**, compatible with the
+  accepted operator workflow. Use the existing Hosting Release history rollback
+  for that exact version. All 128 actual previous served files were downloaded
+  and hash-verified before publication; an explicit Hosting-only recovery
+  configuration permits republishing those exact bytes if needed. No data
+  rollback or backend change is required. Rollback was not executed.
+- Private release evidence is retained in the session's
+  `notification-strip-release` directory: before/after Hosting manifests,
+  verified recovery and published bytes, production build/test logs, responsive
+  screenshots, Hosting-only configurations and release script. All seven
+  unrelated dirty harness/release-note files and existing worktree checkouts
+  are preserved; they were not included in the release.
+
 ## Inventory-owned operator workflow - local implementation review (2026-10-28)
 
 **Review-branch source only, undeployed; not CPO acceptance.**
