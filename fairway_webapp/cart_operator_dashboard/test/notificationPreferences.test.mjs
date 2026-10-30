@@ -6,6 +6,14 @@ const notificationSource = await readFile(
   new URL('../src/NotificationSetup.jsx', import.meta.url),
   'utf8'
 );
+const refreshSource = await readFile(
+  new URL('../src/AppRefresh.jsx', import.meta.url),
+  'utf8'
+);
+const operatorSource = await readFile(
+  new URL('../src/OperatorApp.jsx', import.meta.url),
+  'utf8'
+);
 
 test('notification preference controls are independent per course and use authenticated APIs', () => {
   assert.match(notificationSource, /operatorConfig\.courses\.map/);
@@ -24,4 +32,13 @@ test('disabling a course preference does not unsubscribe the shared browser devi
   );
   assert.match(disableFlow, /savePreference\(course, false\)/);
   assert.doesNotMatch(disableFlow, /\.unsubscribe\(/);
+});
+
+test('subscription recovery is owned by the existing Refresh control without added settings UI', () => {
+  assert.match(notificationSource, /pushManager\.getSubscription\(\)/);
+  assert.match(notificationSource, /registerWithBackend\(course, currentSubscription\)/);
+  assert.doesNotMatch(notificationSource, /Restore Notifications|notification-subscription-status/);
+  assert.match(refreshSource, /const notificationRecovery = onRefresh\?\.\(\);\s*setChecking\(true\);\s*await notificationRecovery;/);
+  assert.match(operatorSource, /onRefresh=\{\(\) => notificationRefreshRecovery\.current\?\.\(\)\}/);
+  assert.match(operatorSource, /refreshRecoveryRef=\{notificationRefreshRecovery\}/);
 });

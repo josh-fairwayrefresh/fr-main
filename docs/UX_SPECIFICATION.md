@@ -57,13 +57,17 @@ cancelled, not by silently discarding them.
 
 On application startup, including after Refresh, the notification owner checks
 the browser's current push subscription and re-registers it for every enabled
-Customer/Course preference. When no subscription exists and browser permission
-is granted, it attempts to create one without replacing a valid subscription.
-If creation requires a user gesture, or permission must be granted, the operator
-is shown a **Restore Notifications** action. Registration failures remain visible
-with a retry action; the saved preference is not automatically changed. The
-checked preference records the operator's choice and is not, by itself, evidence
-that a browser subscription is registered or operational.
+Customer/Course preference. The existing **Refresh App** icon initiates the same
+reconciliation from its click handler before the application refresh proceeds.
+An existing subscription is reused; when one is missing, the application
+attempts creation if browser permission permits. Permission-sensitive recovery
+is initiated directly by the Refresh click so installed browsers can apply
+their user-gesture requirements. Recovery failures are reported through the
+existing notification error message; pressing Refresh retries. No additional
+recovery control or subscription-status display is added, and saved preferences
+are never changed by recovery. A checked preference records the operator's
+choice; it is not proof that a browser subscription is registered or
+operational.
 
 The entry page revalidates with Hosting on reload; fingerprinted assets retain
 immutable caching. Existing pre-release installations must first receive this
@@ -708,8 +712,9 @@ for Admin/Hosting only.
    guidance only when needed; unavailable unchecked preferences remain
    disabled, with their labels keyboard-focusable for explanation. Explicit
    mutation errors remain visible. There is no new notification dismissal or
-   automatic preference change. Subscription recovery honors browser permission
-   and installed-app requirements and does not request permission on page load.
+   automatic preference change. Subscription recovery uses the existing Refresh
+   control, honors browser permission and installed-app requirements, and does
+   not request permission on page load.
    The accepted banner, request, operator, Inventory and account flows are
    unchanged. Deployment identity is owned by the Deployment Guide.
 - The Cart Operator installs Fairway from Safari as an iPhone Home Screen web
@@ -720,13 +725,15 @@ for Admin/Hosting only.
    permission; disabling one Course does not disable Cart access or another
    Course's preference.
 - On startup, `NotificationSetup` checks and re-registers the current browser
-   subscription for each enabled Customer/Course. If it is absent, recovery
-   attempts Push API creation when permission permits; browser-required user
-   interaction is exposed through **Restore Notifications**. Recovery failure
-   remains visible and retryable. The preference checkbox represents the saved
-   choice only; subscription registration and notification presentation are
-   separate states. Recovery does not automatically disable preferences or
-   replace an existing subscription.
+   subscription for each enabled Customer/Course. The existing **Refresh App**
+   click starts the same reconciliation before reloading. Existing subscriptions
+   are reused; a missing subscription is created when browser permission allows.
+   The Refresh click initiates permission-sensitive work directly in its user
+   gesture. Recovery failures use the existing notification error message and
+   can be retried by pressing Refresh again. There is no separate recovery button
+   or subscription-status interface. The checkbox remains the saved preference,
+   not proof of subscription registration or notification presentation; recovery
+   never changes preferences or unnecessarily replaces an existing subscription.
 - Accepted source sends one visible notification per newly accepted request for
    each active subscription for the originating Customer/Course whose saved
    notification preference is enabled. Delivery does not perform a per-request

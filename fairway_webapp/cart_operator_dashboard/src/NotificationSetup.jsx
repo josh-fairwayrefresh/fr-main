@@ -13,19 +13,20 @@ function isInstalled() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
 
-export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, onMutationPending }) {
+export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, onMutationPending, refreshRecoveryRef }) {
   const [preferences, setPreferences] = useState(operatorConfig.notification_preferences || {});
   const [busyCourse, setBusyCourse] = useState('');
   const [error, setError] = useState('');
   const [guidanceVisible, setGuidanceVisible] = useState(false);
-  const [subscriptionStates, setSubscriptionStates] = useState({});
-  const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const recoveryInFlight = useRef(false);
+  const serviceWorkerRef = useRef(null);
+  const subscriptionRef = useRef(undefined);
+  const recoveryPromiseRef = useRef(null);
+  const permissionRequestRef = useRef(null);
+  const recoverSubscriptionsRef = useRef(null);
   const guidanceId = useId();
   const supported = Boolean(navigator.serviceWorker && window.PushManager && window.Notification);
   const installed = isInstalled();
   const canEnable = supported && installed && Boolean(operatorConfig.push?.vapid_public_key);
-  const enabledCourses = operatorConfig.courses.filter((course) => preferences[courseKey(course)] === true);
   const configuredEnabledCourses = operatorConfig.courses.filter((course) => (
     operatorConfig.notification_preferences?.[courseKey(course)] === true
   ));
@@ -45,112 +46,105 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, on
     setPreferences((current) => ({ ...current, [courseKey(course)]: enabled }));
   }
 
-  async function recoverSubscriptions(fromUserGesture = false, courses = enabledCourses) {
-    if (recoveryInFlight.current || courses.length === 0) return;
-    recoveryInFlight.current = true;
-    setRecoveryBusy(true);
+  async function recoverSubscriptions(fromUserGesture = false) {
+    const enabledCourses = operatorConfig.courses.filter((course) => (
+      operatorConfig.notification_preferences?.[courseKey(course)] === true
+    ));
+    if (enabledCourses.length === 0) return;
+
+    if (fromUserGesture && supported && installed && operatorConfig.push?.vapid_public_key &&
+        Notification.permission !== 'granted' && subscriptionRef.current !== true) {
+      try {
+        permissionRequestRef.current = Notification.requestPermission();
+      } catch (reason) {
+        setError(`Unable to request notification permission: ${reason.message}`);
+      }
+    }
+
+    if (recoveryPromiseRef.current) return recoveryPromiseRef.current;
     setError('');
-    setSubscriptionStates((current) => Object.fromEntries([
-      ...Object.entries(current),
-      ...courses.map((course) => [courseKey(course), 'checking']),
-    ]));
-    onMutationPending?.(true);
+    let gestureSubscription = null;
+    if (fromUserGesture && operatorConfig.push?.vapid_public_key && subscriptionRef.current === false &&
+        Notification.permission === 'granted' && serviceWorkerRef.current) {
+      gestureSubscription = serviceWorkerRef.current.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey(operatorConfig.push.vapid_public_key),
+      }).then(
+        (subscription) => ({ subscription }),
+        (reason) => ({ error: reason }),
+      );
+    }
+    const task = (async () => {
+      try {
+        if (!supported) {
+          throw new Error('Web Push is unavailable on this browser. Use a browser that supports notifications.');
+        }
+        if (!installed) {
+          throw new Error('Open the installed Fairway Home Screen app to use push notifications.');
+        }
+        if (!operatorConfig.push?.vapid_public_key) {
+          throw new Error('Push notifications are unavailable in this environment. Contact support if this continues.');
+        }
 
-    try {
-      if (!supported) {
-        throw new Error('Web Push is unavailable on this browser. Use a browser that supports notifications.');
-      }
-      if (!installed) {
-        throw new Error('Open the installed Fairway Home Screen app to restore notifications.');
-      }
-      if (!operatorConfig.push?.vapid_public_key) {
-        throw new Error('Push notifications are unavailable in this environment. Contact support if this continues.');
-      }
+        if (!serviceWorkerRef.current) {
+          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          serviceWorkerRef.current = await navigator.serviceWorker.ready;
+        }
+        const registration = serviceWorkerRef.current;
+        const subscription = await registration.pushManager.getSubscription();
+        subscriptionRef.current = Boolean(subscription);
 
-      await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-      const registration = await navigator.serviceWorker.ready;
-      let subscription = await registration.pushManager.getSubscription();
-      let permission = Notification.permission;
+        let permission = Notification.permission;
+        if (permissionRequestRef.current) {
+          const permissionRequest = permissionRequestRef.current;
+          permissionRequestRef.current = null;
+          permission = await permissionRequest;
+        }
+        if (!subscription && permission !== 'granted') {
+          throw new Error(permission === 'denied'
+            ? 'Notifications are blocked. Allow them in this device’s Settings, then press Refresh App again.'
+            : 'Notifications are enabled in your saved preference, but this device has not granted permission. Press Refresh App to allow notifications.');
+        }
 
-      if (fromUserGesture && permission !== 'granted') {
-        permission = await Notification.requestPermission();
-      }
-
-      if (!subscription && permission !== 'granted') {
-        const message = permission === 'denied'
-          ? 'Notifications are blocked. Allow them in this device’s Settings, then tap Restore Notifications.'
-          : 'Tap Restore Notifications to allow this device to create a push subscription.';
-        setSubscriptionStates((current) => Object.fromEntries([
-          ...Object.entries(current),
-          ...courses.map((course) => [courseKey(course), 'needs-restore']),
-        ]));
-        setError(message);
-        return;
-      }
-
-      if (!subscription) {
-        try {
-          subscription = await registration.pushManager.subscribe({
+        const proactiveResult = !subscription && gestureSubscription
+          ? await gestureSubscription
+          : null;
+        if (proactiveResult?.error) throw proactiveResult.error;
+        const currentSubscription = subscription || proactiveResult?.subscription ||
+          await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: applicationServerKey(operatorConfig.push.vapid_public_key),
           });
-        } catch (reason) {
-          if (!fromUserGesture && reason.name === 'NotAllowedError') {
-            setSubscriptionStates((current) => Object.fromEntries([
-              ...Object.entries(current),
-              ...courses.map((course) => [courseKey(course), 'needs-restore']),
-            ]));
-            setError('This browser requires a tap to restore notifications. Tap Restore Notifications to continue.');
-            return;
-          }
-          throw reason;
-        }
+        subscriptionRef.current = true;
+        const results = await Promise.allSettled(enabledCourses.map((course) => (
+          registerWithBackend(course, currentSubscription)
+        )));
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed) throw failed.reason;
+        setError('');
+      } catch (reason) {
+        subscriptionRef.current = reason.name === 'NotAllowedError' ? false : subscriptionRef.current;
+        setError(`${reason.message || 'Unable to recover push notifications.'} Press Refresh App to retry.`);
       }
-
-      const results = await Promise.all(courses.map(async (course) => {
-        try {
-          await registerWithBackend(course, subscription);
-          return { key: courseKey(course), name: course.course_name, error: '' };
-        } catch (reason) {
-          return { key: courseKey(course), name: course.course_name, error: reason.message };
-        }
-      }));
-      setSubscriptionStates((current) => ({
-        ...current,
-        ...Object.fromEntries(results.map(({ key, error: reason }) => [key, reason ? 'error' : 'registered'])),
-      }));
-
-      const failed = results.filter((result) => result.error);
-      if (failed.length > 0) {
-        setError(`Could not register notifications for ${failed.map(({ name }) => name).join(', ')}. Tap Restore Notifications to retry. ${failed[0].error}`);
-      } else if (permission !== 'granted') {
-        setSubscriptionStates((current) => Object.fromEntries([
-          ...Object.entries(current),
-          ...courses.map((course) => [courseKey(course), 'needs-restore']),
-        ]));
-        setError('The subscription is registered, but notifications are blocked until permission is granted in device Settings. Tap Restore Notifications after allowing them.');
-      }
-    } catch (reason) {
-      setSubscriptionStates((current) => ({
-        ...current,
-        ...Object.fromEntries(courses.map((course) => [courseKey(course), 'error'])),
-      }));
-      setError(`${reason.message || 'Unable to restore notifications.'} Tap Restore Notifications to retry.`);
+    })();
+    recoveryPromiseRef.current = task;
+    try {
+      await task;
     } finally {
-      onMutationPending?.(false);
-      recoveryInFlight.current = false;
-      setRecoveryBusy(false);
+      if (recoveryPromiseRef.current === task) recoveryPromiseRef.current = null;
     }
   }
 
   useEffect(() => {
     setPreferences(operatorConfig.notification_preferences || {});
-    if (configuredEnabledCourses.length === 0) {
-      setSubscriptionStates({});
-      return;
-    }
-    void recoverSubscriptions(false, configuredEnabledCourses);
-  }, [apiBaseUrl, installed, operatorConfig, supported, user]);
+    recoverSubscriptionsRef.current = () => recoverSubscriptions(true);
+    if (refreshRecoveryRef) refreshRecoveryRef.current = recoverSubscriptionsRef.current;
+    if (configuredEnabledCourses.length > 0) void recoverSubscriptions();
+    return () => {
+      if (refreshRecoveryRef?.current === recoverSubscriptionsRef.current) refreshRecoveryRef.current = null;
+      recoverSubscriptionsRef.current = null;
+    };
+  }, [apiBaseUrl, installed, operatorConfig, supported, user, refreshRecoveryRef]);
 
   async function changePreference(course, enabled) {
     onMutationPending?.(true);
@@ -160,7 +154,6 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, on
     try {
       if (!enabled) {
         await savePreference(course, false);
-        setSubscriptionStates((current) => ({ ...current, [key]: 'off' }));
         return;
       }
       if (!canEnable) {
@@ -182,7 +175,7 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, on
       });
       await registerWithBackend(course, subscription);
       await savePreference(course, true);
-      setSubscriptionStates((current) => ({ ...current, [key]: 'registered' }));
+      subscriptionRef.current = true;
     } catch (reason) {
       setError(`${reason.message} Try enabling notifications again to retry.`);
     } finally {
@@ -233,23 +226,6 @@ export default function NotificationSetup({ user, apiBaseUrl, operatorConfig, on
           );
         })}
       </div>
-      {enabledCourses.map((course) => {
-        const key = courseKey(course);
-        const state = subscriptionStates[key] || 'checking';
-        const status = {
-          checking: 'Checking push subscription…',
-          registered: 'Preference enabled; subscription registered.',
-          'needs-restore': 'Preference enabled; this device needs notification restoration.',
-          error: 'Preference enabled; subscription registration needs attention.',
-        }[state];
-        return <p className="notification-subscription-status" role="status" key={key}>{course.course_name}: {status}</p>;
-      })}
-      {enabledCourses.some((course) => subscriptionStates[courseKey(course)] !== 'registered') && (
-        <button type="button" className="notification-restore"
-          onClick={() => void recoverSubscriptions(true)} disabled={recoveryBusy || Boolean(busyCourse)}>
-          {recoveryBusy ? 'Restoring Notifications…' : 'Restore Notifications'}
-        </button>
-      )}
       {guidance && <p id={guidanceId} className="notification-guidance" hidden={!guidanceVisible}>{guidance}</p>}
       {error && <p role="alert">{error}</p>}
     </section>

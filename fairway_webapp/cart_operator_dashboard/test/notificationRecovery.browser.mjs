@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
 
-test('notification setup recovers subscriptions, reports failures, and runs on Refresh', { timeout: 90000 }, async () => {
+test('one Refresh press reconciles subscriptions while preserving notification preferences', { timeout: 90000 }, async () => {
   const root = fileURLToPath(new URL('..', import.meta.url));
   const server = await createServer({
     root,
@@ -14,6 +14,7 @@ test('notification setup recovers subscriptions, reports failures, and runs on R
   });
   const registrations = [];
   const attempts = new Map();
+  const preferenceWrites = [];
   server.middlewares.use(async (request, response, next) => {
     const url = new URL(request.url, 'http://localhost');
     if (url.pathname === '/__notifications') {
@@ -37,6 +38,14 @@ test('notification setup recovers subscriptions, reports failures, and runs on R
       }
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (url.pathname.endsWith('/api/v1/operator/notification-preferences') && request.method === 'PATCH') {
+      let raw = '';
+      for await (const chunk of request) raw += chunk;
+      preferenceWrites.push(JSON.parse(raw));
+      response.setHeader('Content-Type', 'application/json');
+      response.end(raw);
       return;
     }
     next();
@@ -79,11 +88,32 @@ test('notification setup recovers subscriptions, reports failures, and runs on R
         apiBaseUrl,
       };
       await page.addInitScript(({ config, permission, permissionOnRequest, endpoint, requireGesture, unsupported }) => {
-        const state = { permission, permissionOnRequest, requireGesture, endpoint, userGesture: false, subscribeCalls: 0, getSubscriptionCalls: 0, permissionCalls: 0 };
+        const persistenceKey = `notification-recovery:${config.courses.map((course) => course.course_id).join(',')}`;
+        const saved = JSON.parse(localStorage.getItem(persistenceKey) || '{}');
+        const state = {
+          permission: saved.permission || permission,
+          permissionOnRequest,
+          requireGesture,
+          endpoint,
+          refreshHandlerStack: false,
+          subscribeCalls: saved.subscribeCalls || 0,
+          gestureSubscribeCalls: saved.gestureSubscribeCalls || 0,
+          getSubscriptionCalls: 0,
+          permissionCalls: saved.permissionCalls || 0,
+        };
+        const persist = () => localStorage.setItem(persistenceKey, JSON.stringify({
+          permission: state.permission,
+          endpoint: state.subscription?.toJSON().endpoint || '',
+          subscribeCalls: state.subscribeCalls,
+          gestureSubscribeCalls: state.gestureSubscribeCalls,
+          permissionCalls: state.permissionCalls,
+        }));
         const makeSubscription = (value) => ({
           toJSON: () => ({ endpoint: value, expirationTime: null, keys: { p256dh: 'public-key', auth: 'auth-key' } }),
         });
-        state.subscription = endpoint ? makeSubscription(endpoint) : null;
+        state.subscription = saved.endpoint
+          ? makeSubscription(saved.endpoint)
+          : endpoint ? makeSubscription(endpoint) : null;
         window.__notificationMock = state;
         window.__notificationConfig = config;
         Object.defineProperty(navigator, 'standalone', { configurable: true, value: true });
@@ -94,8 +124,11 @@ test('notification setup recovers subscriptions, reports failures, and runs on R
           },
           subscribe: async () => {
             state.subscribeCalls += 1;
-            if (state.requireGesture && !state.userGesture) throw new DOMException('User gesture required', 'NotAllowedError');
+            if (state.refreshHandlerStack) state.gestureSubscribeCalls += 1;
+            persist();
+            if (state.requireGesture && !state.refreshHandlerStack) throw new DOMException('User gesture required', 'NotAllowedError');
             state.subscription = makeSubscription('https://push.example/generated-subscription');
+            persist();
             return state.subscription;
           },
         } };
@@ -113,12 +146,13 @@ test('notification setup recovers subscriptions, reports failures, and runs on R
             get permission() { return state.permission; },
             requestPermission: async () => {
               state.permissionCalls += 1;
+              if (!state.refreshHandlerStack) throw new DOMException('User gesture required', 'NotAllowedError');
               state.permission = state.permissionOnRequest;
+              persist();
               return state.permission;
             },
           },
         });
-        document.addEventListener('click', () => { state.userGesture = true; }, true);
       }, { config, permission, permissionOnRequest, endpoint, requireGesture, unsupported });
       if (abortRegistration) {
         await page.route('**/api/v1/operator/push-subscriptions', (route) => route.abort());
@@ -136,85 +170,117 @@ test('notification setup recovers subscriptions, reports failures, and runs on R
       assert.fail(`Timed out waiting for ${count} registrations for ${courseId}`);
     }
 
+    async function refreshOnce(page) {
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+        page.getByRole('button', { name: 'Refresh App', exact: true }).click(),
+      ]);
+    }
+
     const existing = await openPage({
       courses: ['existing-course', 'another-course', 'disabled-course'],
       enabled: ['existing-course', 'another-course'],
       endpoint: 'https://push.example/existing-subscription',
     });
-    await existing.getByText('Course existing-course: Preference enabled; subscription registered.').waitFor();
-    await existing.getByText('Course another-course: Preference enabled; subscription registered.').waitFor();
+    await waitForPosts('existing-course', 1);
+    await waitForPosts('another-course', 1);
     assert.equal(await existing.getByRole('checkbox').nth(0).isChecked(), true);
     assert.equal(await existing.getByRole('checkbox').nth(2).isChecked(), false);
     assert.equal(await existing.evaluate(() => window.__notificationMock.subscribeCalls), 0);
-    assert.deepEqual(registrations.filter((entry) => ['existing-course', 'another-course'].includes(entry.course_id)).map((entry) => [
-      entry.customer_id, entry.course_id, entry.subscription.endpoint, entry.authorization,
-    ]), [
-      ['customer-existing-course', 'existing-course', 'https://push.example/existing-subscription', 'Bearer notification-test-token'],
-      ['customer-another-course', 'another-course', 'https://push.example/existing-subscription', 'Bearer notification-test-token'],
-    ]);
-    assert.equal(await existing.getByRole('button', { name: 'Restore Notifications' }).count(), 0);
+    const preferenceWritesBeforeRefresh = preferenceWrites.length;
+    await refreshOnce(existing);
+    await waitForPosts('existing-course', 2);
+    await waitForPosts('another-course', 2);
+    assert.equal(preferenceWrites.length, preferenceWritesBeforeRefresh);
+    assert.equal(await existing.getByRole('checkbox').nth(0).isChecked(), true);
+    assert.equal(await existing.getByRole('checkbox').nth(2).isChecked(), false);
+    assert.equal(await existing.getByText(/subscription registered|notification restoration/i).count(), 0);
+    assert.equal(await existing.getByRole('button', { name: /Restore Notifications/i }).count(), 0);
+    assert.ok(registrations.filter((entry) => ['existing-course', 'another-course'].includes(entry.course_id))
+      .every((entry) => entry.subscription.endpoint === 'https://push.example/existing-subscription'));
+    assert.ok(registrations.filter((entry) => ['existing-course', 'another-course'].includes(entry.course_id))
+      .every((entry) => entry.authorization === 'Bearer notification-test-token'));
+    assert.equal(registrations.some((entry) => entry.course_id === 'disabled-course'), false);
     await existing.close();
 
     const automatic = await openPage({ courses: ['automatic-course'] });
-    await automatic.getByText('Course automatic-course: Preference enabled; subscription registered.').waitFor();
+    await waitForPosts('automatic-course', 1);
     assert.equal(await automatic.evaluate(() => window.__notificationMock.subscribeCalls), 1);
     assert.equal(registrations.find((entry) => entry.course_id === 'automatic-course').subscription.endpoint,
       'https://push.example/generated-subscription');
     await automatic.close();
 
     const gesture = await openPage({ courses: ['gesture-course'], requireGesture: true });
-    await gesture.getByRole('alert').getByText(/requires a tap/i).waitFor();
-    await gesture.getByRole('button', { name: 'Restore Notifications' }).click();
-    await gesture.getByText('Course gesture-course: Preference enabled; subscription registered.').waitFor();
-    assert.equal(await gesture.evaluate(() => window.__notificationMock.subscribeCalls), 2);
+    await gesture.getByRole('alert').getByText(/Press Refresh App to retry/i).waitFor();
+    assert.equal(await gesture.evaluate(() => window.__notificationMock.subscribeCalls), 1);
+    await refreshOnce(gesture);
+    assert.deepEqual(await gesture.evaluate(() => ({
+      subscribeCalls: window.__notificationMock.subscribeCalls,
+      endpoint: window.__notificationMock.subscription?.toJSON().endpoint || '',
+      storage: localStorage.getItem('notification-recovery:gesture-course'),
+    })), {
+      subscribeCalls: 2,
+      endpoint: 'https://push.example/generated-subscription',
+      storage: JSON.stringify({
+        permission: 'granted',
+        endpoint: 'https://push.example/generated-subscription',
+        subscribeCalls: 2,
+        gestureSubscribeCalls: 1,
+        permissionCalls: 0,
+      }),
+    });
+    assert.equal(await gesture.evaluate(() => window.__notificationMock.gestureSubscribeCalls), 1);
+    await waitForPosts('gesture-course', 2);
+    assert.equal(await gesture.getByRole('button', { name: /Restore Notifications/i }).count(), 0);
     await gesture.close();
 
     const defaultPermission = await openPage({ courses: ['permission-course'], permission: 'default' });
-    await defaultPermission.getByRole('alert').getByText(/Tap Restore Notifications/i).waitFor();
+    await defaultPermission.getByRole('alert').getByText(/Press Refresh App to allow notifications/i).waitFor();
     assert.equal(await defaultPermission.evaluate(() => window.__notificationMock.subscribeCalls), 0);
-    await defaultPermission.getByRole('button', { name: 'Restore Notifications' }).click();
-    await defaultPermission.getByText('Course permission-course: Preference enabled; subscription registered.').waitFor();
+    await refreshOnce(defaultPermission);
+    await waitForPosts('permission-course', 1);
     assert.equal(await defaultPermission.evaluate(() => window.__notificationMock.permissionCalls), 1);
+    assert.equal(await defaultPermission.getByRole('checkbox').isChecked(), true);
     await defaultPermission.close();
 
-    const denied = await openPage({ courses: ['denied-course'], permission: 'denied' });
+    const denied = await openPage({
+      courses: ['denied-course'],
+      permission: 'denied',
+      permissionOnRequest: 'denied',
+    });
     await denied.getByRole('alert').getByText(/blocked/i).waitFor();
     assert.equal(await denied.getByRole('checkbox').isChecked(), true);
-    assert.match(await denied.getByText(/Course denied-course:/).innerText(), /needs notification restoration/);
-    assert.equal(await denied.getByRole('button', { name: 'Restore Notifications' }).count(), 1);
+    assert.equal(await denied.getByRole('button', { name: /Restore Notifications/i }).count(), 0);
+    await refreshOnce(denied);
+    await denied.getByRole('alert').getByText(/blocked/i).waitFor();
+    assert.equal(await denied.evaluate(() => window.__notificationMock.subscribeCalls), 0);
     await denied.close();
 
     const unsupportedPage = await openPage({ courses: ['unsupported-course'], unsupported: true });
     await unsupportedPage.getByRole('alert').getByText(/unavailable on this browser/i).waitFor();
-    assert.equal(await unsupportedPage.getByRole('button', { name: 'Restore Notifications' }).count(), 1);
+    assert.equal(await unsupportedPage.getByRole('button', { name: /Restore Notifications/i }).count(), 0);
     await unsupportedPage.close();
 
     const networkFailure = await openPage({ courses: ['network-course'], abortRegistration: true });
-    await networkFailure.getByRole('alert').getByText(/retry/i).waitFor();
-    assert.match(await networkFailure.getByText(/Course network-course:/).innerText(), /needs attention/);
+    await networkFailure.getByRole('alert').getByText(/Press Refresh App to retry/i).waitFor();
     await networkFailure.unroute('**/api/v1/operator/push-subscriptions');
-    await networkFailure.getByRole('button', { name: 'Restore Notifications' }).click();
-    await networkFailure.getByText('Course network-course: Preference enabled; subscription registered.').waitFor();
+    await refreshOnce(networkFailure);
+    await waitForPosts('network-course', 2);
     await networkFailure.close();
 
     const backendFailure = await openPage({ courses: ['retry-course'] });
     await backendFailure.getByRole('alert').getByText(/temporarily unavailable/i).waitFor();
-    assert.match(await backendFailure.getByText(/Course retry-course:/).innerText(), /needs attention/);
-    await backendFailure.getByRole('button', { name: 'Restore Notifications' }).click();
-    await backendFailure.getByText('Course retry-course: Preference enabled; subscription registered.').waitFor();
+    await refreshOnce(backendFailure);
+    await waitForPosts('retry-course', 3);
     await backendFailure.close();
 
     const refresh = await openPage({ courses: ['refresh-course'], endpoint: 'https://push.example/refresh-subscription' });
-    await refresh.getByText('Course refresh-course: Preference enabled; subscription registered.').waitFor();
     await waitForPosts('refresh-course', 1);
     const originalUrl = refresh.url();
-    await Promise.all([
-      refresh.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-      refresh.getByRole('button', { name: 'Refresh App' }).click(),
-    ]);
-    await refresh.getByText('Course refresh-course: Preference enabled; subscription registered.').waitFor();
+    await refreshOnce(refresh);
     await waitForPosts('refresh-course', 2);
     assert.equal(refresh.url(), originalUrl);
+    assert.equal(preferenceWrites.length, preferenceWritesBeforeRefresh);
     await refresh.close();
     await context.close();
   } finally {

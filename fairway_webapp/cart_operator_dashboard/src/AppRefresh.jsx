@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { inventoryRefreshBlocker } from './InventorySession';
 import './appRefresh.css';
 
-export default function AppRefresh({ user, getBlockReason, className }) {
+export default function AppRefresh({ user, getBlockReason, onRefresh, className }) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
@@ -22,7 +22,9 @@ export default function AppRefresh({ user, getBlockReason, className }) {
     let timer;
     try {
       verifySafe();
+      const notificationRecovery = onRefresh?.();
       setChecking(true);
+      await notificationRecovery;
       const controller = new AbortController();
       timer = window.setTimeout(() => controller.abort(), 15000);
       const response = await fetch(window.location.href, {

@@ -210,6 +210,7 @@ export default function OperatorApp({
   const [serviceError, setServiceError] = useState('');
   const [notificationPending, setNotificationPending] = useState(false);
   const notificationActionsInFlight = useRef(0);
+  const notificationRefreshRecovery = useRef(null);
   const serviceActionInFlight = useRef(false);
   const [selectedCourseKey, setSelectedCourseKey] = useState(() => {
     const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
@@ -416,7 +417,7 @@ export default function OperatorApp({
       <div className="op-header-utilities">
         {operation.inventory && <a className="op-inventory" href={contextPending ? undefined : courseContextUrl('/inventory', course)} aria-disabled={contextPending || undefined} title="Inventory management"><Package size={17} />Inventory</a>}
         <div className="op-header-account">
-          <AppRefresh className="op-icon" user={user} getBlockReason={() => (
+          <AppRefresh className="op-icon" user={user} onRefresh={() => notificationRefreshRecovery.current?.()} getBlockReason={() => (
             requestActionInFlight.current || serviceActionInFlight.current ||
             inventorySession.isSubmitting() || notificationActionsInFlight.current > 0
               ? 'Wait for the request, service or notification update to finish before refreshing.'
@@ -459,7 +460,7 @@ export default function OperatorApp({
         {serviceError && <p role="alert">{serviceError}</p>}
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig}
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} refreshRecoveryRef={notificationRefreshRecovery}
     onMutationPending={(value) => {
       notificationActionsInFlight.current += value ? 1 : -1;
       setNotificationPending(notificationActionsInFlight.current > 0);
