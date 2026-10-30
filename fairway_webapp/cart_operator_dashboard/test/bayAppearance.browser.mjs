@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
 
-test('QR bay page stays white and usable across appearance settings, viewport sizes and states', { timeout: 60000 }, async () => {
+test('QR bay page stays white and usable across appearance settings, viewport sizes and states', {
+  timeout: 60000,
+  skip: process.env.FAIRWAY_QR_FIXTURE ? false : 'requires the private synthetic sandbox fixture',
+}, async () => {
   const fixture = JSON.parse(await readFile(process.env.FAIRWAY_QR_FIXTURE, 'utf8'));
   assert.equal(fixture.projectId, 'fairway-refresh-sandbox-qr1');
   const browser = await chromium.launch({

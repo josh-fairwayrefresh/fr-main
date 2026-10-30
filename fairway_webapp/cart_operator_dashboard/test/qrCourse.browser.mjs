@@ -5,7 +5,10 @@ import path from 'node:path';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
 
-test('isolated deployed QR golfer and shared Course operator flows', { timeout: 180000 }, async () => {
+test('isolated deployed QR golfer and shared Course operator flows', {
+  timeout: 180000,
+  skip: process.env.FAIRWAY_QR_FIXTURE ? false : 'requires the private synthetic sandbox fixture',
+}, async () => {
   assert.ok(process.env.FAIRWAY_QR_FIXTURE, 'FAIRWAY_QR_FIXTURE must identify private synthetic fixture credentials');
   const fixture = JSON.parse(await readFile(process.env.FAIRWAY_QR_FIXTURE, 'utf8'));
   assert.equal(fixture.projectId, 'fairway-refresh-sandbox-qr1', 'This acceptance runner must not target other projects');

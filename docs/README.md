@@ -6,14 +6,31 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
-The latest [Refresh App header-icon release](DEPLOYMENT_GUIDE.md#refresh-app-header-icon---production-release-2026-10-29)
+The latest [Service Suspended Request production release](DEPLOYMENT_GUIDE.md#service-suspended-request-production-release-2026-10-29)
+is live from accepted main `e31b4a963c88639c3277d5c38ff7b6351104c140`.
+Receiver `fairway-button-receiver-00031-5mx` and notifier
+`fairway-request-notifier-00007-yes` are healthy at 100%; the existing
+Firestore-created Eventarc trigger is unchanged. Hosting
+**`2f7936fc2d731f71`**, release **`1793322691774000`**, serves all 134
+verified files on both production origins, retaining all prior public assets
+and cache policy. Backend/frontend tests and the production build passed.
+Nondestructive production auth, mobile-layout and state-preservation checks
+passed; live request/notification lifecycle checks remain unexecuted to avoid
+creating operational records or changing Monarch Bay's suspended state.
+The deployment record documents the serial browser closeout results, fixture-
+dependent QR limitations, and removal of disposable local/staging artifacts.
+The CPO has not yet accepted the production behavior. The release record owns
+rollback to receiver/notifier `fairway-button-receiver-qr-db9001e` /
+`fairway-request-notifier-qr-db9001e` and Hosting `2e923bc2314454f4`.
+
+The preceding [Refresh App header-icon release](DEPLOYMENT_GUIDE.md#refresh-app-header-icon---production-release-2026-10-29)
 is live from `be70a5e3064624d23709bd48187f4ce2f79f89bc`, merged through PR #31,
 at Hosting **`2e923bc2314454f4`**. The shared refresh control is icon-only in
 both top header rows, immediately left of available Admin/Sign out controls.
 The exact validated tree retains the 102-check gate; integrated focused tests,
 production build, 127-file verification and authenticated icon-refresh smoke pass.
-Behavior, caching, operational ownership and backends remain unchanged.
-The release record owns verified rollback to `8d70fcfa6287e4cb`.
+Behavior, caching, operational ownership and backends remained unchanged at
+that release. Its record owns the earlier rollback to `8d70fcfa6287e4cb`.
 The CPO accepted the deployed final icon presentation on 2026-10-29 at 09:06 PDT.
 The existing Alignment Register's consolidated
 [UI-ALIGN-01 milestone](DEPLOYMENT_GUIDE.md#ui-align-01--cross-form-factor-ui-alignment--operational-stability-2026-10-29)
