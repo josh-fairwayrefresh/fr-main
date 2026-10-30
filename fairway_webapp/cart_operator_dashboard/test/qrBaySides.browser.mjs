@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
 
-test('deployed sandbox shows independent A/B requests, deep links and terminal outcomes', { timeout: 120000 }, async () => {
+test('deployed sandbox shows independent A/B requests, deep links and terminal outcomes', {
+  timeout: 120000,
+  skip: process.env.FAIRWAY_QR_FIXTURE ? false : 'requires the private synthetic sandbox fixture',
+}, async () => {
   const fixture = JSON.parse(await readFile(process.env.FAIRWAY_QR_FIXTURE, 'utf8'));
   assert.equal(fixture.projectId, 'fairway-refresh-sandbox-qr1');
   const origin = `https://${fixture.projectId}.web.app`;

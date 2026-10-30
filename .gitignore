@@ -86,6 +86,11 @@ node_modules/
 dist/
 .firebase/
 
+# Generated test and Python artifacts
+*.log
+__pycache__/
+*.py[cod]
+
 # Local environment configuration
 .env
 .env.*

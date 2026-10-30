@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "test:browser": "node --test test/*.browser.mjs",
-    "test:qr:browser": "node --test test/qrCourse.browser.mjs",
+    "test:browser": "node --test --test-concurrency=1 test/*.browser.mjs",
+    "test:qr:browser": "test -n \"$FAIRWAY_QR_FIXTURE\" || { echo 'Set FAIRWAY_QR_FIXTURE to the private synthetic sandbox fixture'; exit 1; }; node --test --test-concurrency=1 test/qrBaySides.browser.mjs test/qrCourse.browser.mjs",
     "validate:sandbox": "node --env-file-if-exists=.env.sandbox scripts/validate_frontend_config.js",
     "validate:production": "node --env-file-if-exists=.env.production scripts/validate_frontend_config.js",
     "dev:sandbox": "npm run validate:sandbox && vite --mode sandbox --host 0.0.0.0",

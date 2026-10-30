@@ -1,5 +1,124 @@
 # Deployment Guide
 
+## Service Suspended Request production release (2026-10-29)
+
+**CPO-authorized integrated production deployment; CPO product acceptance is
+pending.** Source is accepted main
+`e31b4a963c88639c3277d5c38ff7b6351104c140` in
+`josh-fairwayrefresh/fr-main`. Production project is
+`savvy-kit-496703-r5`, region `us-central1`.
+
+### Deployed identities and rollback
+
+| Surface | Deployed identity | Image / release | Traffic / health | Immediate rollback |
+|---|---|---|---|---|
+| Receiver | `fairway-button-receiver-00031-5mx` | `sha256:7c31478ef9b4010b63b3e3d8fc36762e8c643412fb647b9ad07d3c7331a483e9`; Cloud Build `ae517634-88b9-48f7-a99b-e158a42bb4b9` | Ready, Active, ContainerHealthy; 100% | `fairway-button-receiver-qr-db9001e` |
+| Notifier | `fairway-request-notifier-00007-yes` | `sha256:5c8815befcd8bd566660764f298dc654d15c0bf3446d266ed1c752a91d8177e9`; Cloud Build `b3d594f4-56f9-4c52-9901-e53fed36306d` | Ready, Active, ContainerHealthy; 100% | `fairway-request-notifier-qr-db9001e` |
+| Cart Requests Hosting | Version `2f7936fc2d731f71`; release `1793322691774000` at `2026-10-30T01:11:31.774Z` | 134 application files; 134/134 SHA-256 verified on both production origins | Live at `https://app.fairwayrefresh.com/` and `https://savvy-kit-496703-r5.web.app/` | Version `2e923bc2314454f4`; release `1793289751660000` |
+
+Receiver source archive generation `1793322058582488` and notifier source
+archive generation `1793322118169230` each contain 67 uploaded tracked files
+that byte-match accepted main. The notifier runs Node.js 22 with entry point
+`fairwayRequestNotifier`; its source lockfile resolves `body-parser@1.20.9`.
+The existing trigger
+`projects/savvy-kit-496703-r5/locations/nam5/triggers/fairway-request-notifier-108760`
+retains its Firestore `requests/{requestId}` created-event filter, retry policy,
+destination and trigger identity
+`fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com`.
+The notifier runtime identity remains
+`fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`; the
+receiver runtime identity remains
+`936892386735-compute@developer.gserviceaccount.com`. The notifier service
+invoker binding remains limited to the trigger identity.
+
+The Hosting artifact was composed from the verified immediately prior release
+plus the accepted production build. All 127 prior public files remain; seven
+new fingerprinted bundles and the updated `index.html` publish the increment.
+All 134 composed files hash-match on both Hosting origins. All 107 files under
+`driving-range-signs/`, including the permanent bay signs, mapping and
+installation PDF, plus other non-bundle public resources, service worker, and
+cache policy are preserved. Entry/deep-link and
+service-worker responses return `Cache-Control: no-cache`; fingerprinted
+assets retain `public,max-age=31536000,immutable`.
+
+### Staging artifact correction
+
+The first zero-traffic staging attempts created receiver
+`fairway-button-receiver-00030-ttw` and notifier
+`fairway-request-notifier-00006-nur` from the working directory. Inspection
+found that each uploaded source archive also contained the untracked
+763-byte Firestore emulator `firestore-debug.log`. The file contained emulator
+markers; targeted checks found no authorization header, private-key marker,
+access/refresh-token marker, email address, production project ID, or
+request/user document path. Neither initial revision received traffic; both
+were superseded by the tracked-source-only revisions above. The initial
+revisions were confirmed retired with no traffic or tags; both services
+remained at 100% on the accepted revisions, and the previous rollback revisions
+were preserved. On 2026-10-30, the two retired staging revisions and their
+exact source object generations
+(`1793321881436564` and `1793321700909882`) were deleted. Before deletion, the
+archives were copied to session evidence storage and SHA-256 recorded as
+`aa7591aea4f2088b83619d034fabc83aa65f2adc9e5fdb8e0c16ab285a156c1a` and
+`17d2e87b3344084d4ff3afc46307d3bb81d32ad25f2b80b8f73ee9dedb8759479`.
+No active service, Eventarc trigger, production data, or rollback target was
+changed.
+
+### Validation and operational state
+
+- Before deployment, backend tests passed **62/62**, frontend tests passed
+  **83/83**, the production-configured build passed, and the focused
+  service-suspended browser regression passed **1/1**. The backend production
+  dependency audit had zero high-severity findings; 12 moderate advisories
+  remain. During engineering closeout, the serial browser suite passed
+  **23/23 executed tests**, with **3 sandbox-dependent QR tests skipped** unless
+  a private synthetic fixture is supplied. The fixture-enabled run passed the
+  QR appearance check, but the two QR integration tests did not match the
+  fixture/current sandbox: it contains bay numbers without A/B side data, and
+  the Course operator flow rendered Requests rather than the Email sign-in
+  field expected by the test. The browser suite's public-menu test had one
+  target-closed failure in a fixture-enabled full run; it passed in isolation
+  and in the subsequent serial default suite. No product defect or persistent
+  Vite contention was demonstrated. The service-suspended browser regression
+  passed.
+- Both newly deployed Cloud Run revisions are Ready, Active and healthy at
+  100%. No `ERROR` log entries were found for either revision during final
+  verification. Receiver preflight returned HTTP **204** and unauthenticated
+  operator bootstrap returned **401**, both before and after cutover.
+- An authenticated, read-only production Requests session rendered at
+  375/430/768/1024/1440-pixel viewport widths with zero document horizontal
+  overflow and zero clipped interactive controls. The visible Cart service
+  remained **OFF** and its active queue was empty. No service control, request,
+  preference, shift, inventory, or history mutation was performed.
+- Read-only Firestore checks before and after deployment confirmed Tony Lema
+  Course `CUST-0001/COURSE-0001` remained suspended and its On-premise service
+  remained inactive. No production request or notification was generated.
+- Existing source tests establish rejected-request persistence, HTTP 503,
+  clear-only action/history behavior, reporting exclusion, and shared
+  notification dispatch with delivery-time Course authorization and
+  notification-preference checks. Those live paths were not triggered in
+  production: doing so would create operational records or push notifications.
+  Consequently, live HTTP 503 behavior, a rejected card and its clear/history
+  lifecycle, accepted Complete/Cancel, and post-deployment push delivery were
+  not demonstrated. Delivery-time authorization/preference enforcement is
+  deployed but still needs a controlled test subscription/event for production
+  acceptance. No physical device or golfer interaction was used.
+
+### Release artifact note and remaining acceptance
+
+Private evidence is retained under the session artifact directory
+`service-suspended-request-prod-20261030/`: prepared file manifest, exact
+Hosting-only config, deployment result, and post-release file verification.
+The live release is healthy and rollback targets remain available. No rollback
+was required. Closeout removed the inspected
+`fairway_backend/cloudrun_receiver/firestore-debug.log` and
+`scripts/__pycache__/` bytecode files; `.gitignore` now excludes generated
+logs, Python cache directories and bytecode. The serial browser command is
+`npm run test:browser` from `fairway_webapp/cart_operator_dashboard/`.
+Production acceptance remains pending controlled production request and
+notification validation and review of the unexecuted checks above. The
+fixture-dependent QR integration flows remain unverified until their synthetic
+fixture and expected sign-in/course data are aligned.
+
 ## Refresh App header icon - production release (2026-10-29)
 
 **CPO-authorized presentation-only refinement; Hosting-only released.**
