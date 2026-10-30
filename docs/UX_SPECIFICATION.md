@@ -55,6 +55,16 @@ change service state, submit/cancel requests or unregister the push service work
 Unsaved dialog edits are protected by requiring the dialog to be finished or
 cancelled, not by silently discarding them.
 
+On application startup, including after Refresh, the notification owner checks
+the browser's current push subscription and re-registers it for every enabled
+Customer/Course preference. When no subscription exists and browser permission
+is granted, it attempts to create one without replacing a valid subscription.
+If creation requires a user gesture, or permission must be granted, the operator
+is shown a **Restore Notifications** action. Registration failures remain visible
+with a retry action; the saved preference is not automatically changed. The
+checked preference records the operator's choice and is not, by itself, evidence
+that a browser subscription is registered or operational.
+
 The entry page revalidates with Hosting on reload; fingerprinted assets retain
 immutable caching. Existing pre-release installations must first receive this
 increment once before they can expose its control. Automated standalone-mode
@@ -697,8 +707,9 @@ for Admin/Hosting only.
    are removed. Focusing or tapping a preference reveals relevant capability
    guidance only when needed; unavailable unchecked preferences remain
    disabled, with their labels keyboard-focusable for explanation. Explicit
-   mutation errors remain visible. There is no new notification dismissal,
-   automatic preference change or altered push permission/install lifecycle.
+   mutation errors remain visible. There is no new notification dismissal or
+   automatic preference change. Subscription recovery honors browser permission
+   and installed-app requirements and does not request permission on page load.
    The accepted banner, request, operator, Inventory and account flows are
    unchanged. Deployment identity is owned by the Deployment Guide.
 - The Cart Operator installs Fairway from Safari as an iPhone Home Screen web
@@ -708,25 +719,33 @@ for Admin/Hosting only.
    Customer/Course pair. It is separate from browser/device notification
    permission; disabling one Course does not disable Cart access or another
    Course's preference.
-- Accepted source sends one visible notification per newly accepted request for each
-   active subscription whose user still has Course access and has enabled that
-   Course's preference. A received button press while its assigned service group
-   is suspended is durably recorded in the existing `requests` collection with
-   `status: rejected`, `rejection_reason: service_suspended`, and the service
-   state observed at receipt. The receiver keeps its service-unavailable failure
-   response to the marker; the existing request-created notification workflow
-   sends one identified push per stored rejected request to eligible subscribed
-   users, without requiring an active operator shift. It respects the existing
-   Course authorization, saved preference, and browser/device permission
-   behavior. The request card and notification identify **Request Rejected —
-   Service Suspended**; the notification links to the originating Course and
-   request.
-- In current accepted source, revoking a user's Course access or disabling their
-   saved preference prevents subsequent delivery even if the push subscription
-   remains stored. The last-inspected production notifier does not yet enforce
-   those delivery-time checks; sandbox has no delivery deployment. Do not infer
-   production revocation/preference enforcement from source tests.
-   Push delivery failures are asynchronous and do not block Cart Operations.
+- On startup, `NotificationSetup` checks and re-registers the current browser
+   subscription for each enabled Customer/Course. If it is absent, recovery
+   attempts Push API creation when permission permits; browser-required user
+   interaction is exposed through **Restore Notifications**. Recovery failure
+   remains visible and retryable. The preference checkbox represents the saved
+   choice only; subscription registration and notification presentation are
+   separate states. Recovery does not automatically disable preferences or
+   replace an existing subscription.
+- Accepted source sends one visible notification per newly accepted request for
+   each active subscription for the originating Customer/Course whose saved
+   notification preference is enabled. Delivery does not perform a per-request
+   user-access lookup. Application authentication, authorization of subscription
+   registration and preference management, and the saved notification preference
+   remain separate controls. Changing Course access does not automatically
+   deactivate an existing push subscription; access management remains an
+   explicit account-management responsibility. A received button press while
+   its assigned service group is suspended is durably recorded in the existing
+   `requests` collection with `status: rejected`,
+   `rejection_reason: service_suspended`, and the service state observed at
+   receipt. The receiver keeps its service-unavailable failure response to the
+   marker; the existing request-created notification workflow sends one
+   identified push per stored rejected request to eligible active subscriptions,
+   without requiring an active operator shift or service to be ON. It respects
+   the saved preference and browser/device permission behavior. The request card
+   and notification identify **Request Rejected — Service Suspended**; the
+   notification links to the originating Course and request.
+- Push delivery failures are asynchronous and do not block Cart Operations.
 - Tapping the notification opens or focuses the authenticated Fairway
    application at the originating request and course. Accepted requests remain
    actionable through the normal operator workflow; rejected requests remain
@@ -736,10 +755,9 @@ for Admin/Hosting only.
 - Physical production acceptance on 2026-10-01 confirmed one notification for
    one authoritative request, successful deep-link focus, and no notification
    for an in-window duplicate press.
-- Per-user/per-Course preference controls and delivery-time authorization
-   filtering are implemented in source and covered by automated regression
-   tests; their environment deployment status is owned by
-   `docs/DEPLOYMENT_GUIDE.md`.
+- Per-user/per-Course preference controls and request dispatch eligibility are
+   covered by automated regression tests; their environment deployment status
+   is owned by `docs/DEPLOYMENT_GUIDE.md`.
 
 ## Cart Operator Application (Accepted source behavior; deployment limits)
 

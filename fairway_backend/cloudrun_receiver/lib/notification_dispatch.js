@@ -3,7 +3,6 @@
 const crypto = require('crypto');
 const {
   COURSE_SUBSCRIPTIONS_COLLECTION,
-  getOperatorAssignment,
   isNotificationEnabled,
 } = require('./operator_notifications');
 
@@ -85,20 +84,12 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
     .where('status', '==', 'active').get();
   const payload = JSON.stringify(notificationPayload(requestId, request));
   const transientFailures = [];
-  const assignments = new Map();
   let accepted = 0;
 
   for (const subscriptionSnapshot of subscriptions.docs) {
     const subscription = subscriptionSnapshot.data();
     if (typeof subscription.operator_uid !== 'string') continue;
-    if (!assignments.has(subscription.operator_uid)) {
-      assignments.set(subscription.operator_uid, getOperatorAssignment(db, subscription.operator_uid));
-    }
-    const assignment = await assignments.get(subscription.operator_uid);
-    const currentlyAuthorized = assignment?.courses.some((course) => (
-      course.course_id === request.course_id && course.customer_id === subscription.customer_id
-    ));
-    if (subscription.customer_id !== request.customer_id || !currentlyAuthorized || !(await isNotificationEnabled(
+    if (subscription.customer_id !== request.customer_id || !(await isNotificationEnabled(
       db, subscription.operator_uid, request.customer_id, request.course_id
     ))) {
       continue;

@@ -53,12 +53,7 @@ async function getNotificationPreferences(db, operatorUid, courses) {
     if (preference.exists) {
       return [`${course.customer_id}/${course.course_id}`, preference.data().enabled === true];
     }
-    const hasDuplicateCourseId = courses.some((candidate) => (
-      candidate.course_id === course.course_id && candidate.customer_id !== course.customer_id
-    ));
-    const legacyPreference = hasDuplicateCourseId
-      ? null
-      : await coursePreferences.doc(course.course_id).get();
+    const legacyPreference = await coursePreferences.doc(course.course_id).get();
     if (legacyPreference?.exists) {
       return [`${course.customer_id}/${course.course_id}`, legacyPreference.data().enabled === true];
     }
@@ -105,24 +100,19 @@ async function isNotificationEnabled(db, operatorUid, customerId, courseId) {
   if (preference.exists) {
     return preference.data().enabled === true;
   }
-  const assignment = await getOperatorAssignment(db, operatorUid);
-  const hasDuplicateCourseId = assignment?.courses.some((course) => (
-    course.course_id === courseId && course.customer_id !== customerId
-  ));
-  if (!hasDuplicateCourseId) {
-    const legacyPreference = await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
-      .doc(operatorUid).collection('courses').doc(courseId).get();
-    if (legacyPreference.exists) return legacyPreference.data().enabled === true;
+  const legacyPreference = await db.collection(NOTIFICATION_PREFERENCES_COLLECTION)
+    .doc(operatorUid).collection('courses').doc(courseId).get();
+  if (legacyPreference.exists) {
+    return legacyPreference.data().enabled === true;
   }
-
-  const legacySubscription = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
+  const activeSubscription = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
     .doc(courseId).collection('subscriptions')
     .where('operator_uid', '==', operatorUid)
     .where('customer_id', '==', customerId)
     .where('status', '==', 'active')
     .limit(1)
     .get();
-  return !legacySubscription.empty;
+  return !activeSubscription.empty;
 }
 
 async function registerPushSubscription(db, operatorUid, {

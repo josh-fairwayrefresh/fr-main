@@ -108,21 +108,45 @@ test('disabled per-course preference prevents push delivery', async () => {
   assert.strictEqual(sends, 0);
 });
 
-test('revoked course access prevents push delivery even when the subscription remains active', async () => {
+test('active cart and admin subscriptions remain eligible without delivery-time access checks', async () => {
   const db = new FakeFirestore();
   await seedRequestAndSubscription(db);
+  await db.collection('user_notification_preferences').doc('operator-123')
+    .collection('courses').doc('COURSE-0001').set({ enabled: true });
+  await db.collection('user_access').doc('admin-123').set({
+    schema_version: 2,
+    admin: true,
+    customer_id: null,
+    course_ids: [],
+  });
+  await db.collection('user_notification_preferences').doc('admin-123')
+    .collection('courses').doc('COURSE-0001').set({ enabled: true });
+  await db.collection('course_push_subscriptions').doc('COURSE-0001')
+    .collection('subscriptions').doc('admin-subscription').set({
+      operator_uid: 'admin-123',
+      customer_id: 'CUST-0001',
+      course_id: 'COURSE-0001',
+      endpoint: 'https://push.example.test/admin-device',
+      keys: { auth: 'admin-auth', p256dh: 'admin-p256dh' },
+      status: 'active',
+    });
   await db.collection('user_access').doc('operator-123').set({
     schema_version: 2,
     admin: false,
     customer_id: 'CUST-0001',
     course_ids: ['COURSE-0002'],
   });
-  let sends = 0;
+  const sends = [];
 
-  const result = await dispatchRequestNotifications(db, 'request-a', async () => { sends += 1; });
+  const result = await dispatchRequestNotifications(db, 'request-a', async (subscription) => {
+    sends.push(subscription.endpoint);
+  });
 
-  assert.deepStrictEqual(result, { accepted: 0, subscriptions: 1 });
-  assert.strictEqual(sends, 0);
+  assert.deepStrictEqual(result, { accepted: 2, subscriptions: 2 });
+  assert.deepStrictEqual(sends.sort(), [
+    'https://push.example.test/admin-device',
+    'https://push.example.test/device-a',
+  ]);
 });
 
 test('accepted dispatch identity prevents a repeated trigger from sending again', async () => {

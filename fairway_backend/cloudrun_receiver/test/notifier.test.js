@@ -172,31 +172,31 @@ async function main() {
   await db.collection('user_access').doc(OPERATOR_UID).update({
     course_ids: ['COURSE-NOTIFIER-OTHER'],
   });
-  await seedRequest('accepted-unauthorized-test');
-  await seedRequest('rejected-unauthorized-test', {
+  await seedRequest('accepted-no-current-access-test');
+  await seedRequest('rejected-no-current-access-test', {
     status: 'rejected',
     rejection_reason: 'service_suspended',
     service_state_at_receipt: { active: false, suspended: true, service_group: 'on_course' },
   });
   assert.deepEqual(
-    await registeredHandler(requestEvent('accepted-unauthorized-test')),
-    { accepted: 0, subscriptions: 1 },
+    await registeredHandler(requestEvent('accepted-no-current-access-test')),
+    { accepted: 1, subscriptions: 1 },
   );
   assert.deepEqual(
-    await registeredHandler(requestEvent('rejected-unauthorized-test')),
-    { accepted: 0, subscriptions: 1 },
+    await registeredHandler(requestEvent('rejected-no-current-access-test')),
+    { accepted: 1, subscriptions: 1 },
   );
-  assert.equal(deliveries.length, 2);
+  assert.equal(deliveries.length, 4);
 
   assert.equal((await db.collection('notification_dispatches').doc('rejected-trigger-test')
     .collection('subscriptions').doc('subscription-notifier-test').get()).data().status, 'accepted');
   assert.equal((await db.collection('notification_dispatches').doc('rejected-disabled-preference-test')
     .collection('subscriptions').get()).size, 0);
-  assert.equal((await db.collection('notification_dispatches').doc('rejected-unauthorized-test')
-    .collection('subscriptions').get()).size, 0);
+  assert.equal((await db.collection('notification_dispatches').doc('rejected-no-current-access-test')
+    .collection('subscriptions').doc('subscription-notifier-test').get()).data().status, 'accepted');
   assert.equal((await db.collection('shifts').get()).size, 0);
 
-  console.log('2 trigger deliveries passed; disabled preference and unauthorized access blocked both request types');
+  console.log('Accepted and rejected requests delivered with access changed; disabled preferences blocked both request types');
 }
 
 main().catch((error) => {
