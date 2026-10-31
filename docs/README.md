@@ -6,22 +6,21 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
-The latest [Service Suspended Request production release](DEPLOYMENT_GUIDE.md#service-suspended-request-production-release-2026-10-29)
-is live from accepted main `e31b4a963c88639c3277d5c38ff7b6351104c140`.
-Receiver `fairway-button-receiver-00031-5mx` and notifier
-`fairway-request-notifier-00007-yes` are healthy at 100%; the existing
-Firestore-created Eventarc trigger is unchanged. Hosting
-**`2f7936fc2d731f71`**, release **`1793322691774000`**, serves all 134
-verified files on both production origins, retaining all prior public assets
-and cache policy. Backend/frontend tests and the production build passed.
-Nondestructive production auth, mobile-layout and state-preservation checks
-passed; live request/notification lifecycle checks remain unexecuted to avoid
-creating operational records or changing Monarch Bay's suspended state.
-The deployment record documents the serial browser closeout results, fixture-
-dependent QR limitations, and removal of disposable local/staging artifacts.
-The CPO has not yet accepted the production behavior. The release record owns
-rollback to receiver/notifier `fairway-button-receiver-qr-db9001e` /
-`fairway-request-notifier-qr-db9001e` and Hosting `2e923bc2314454f4`.
+The current notification production baseline is accepted source
+`79940e63c03b0ef5bc3c55173607032e050289e7` on `main`. The CPO reported on
+2026-10-30 that the deployed notification corrections appeared to operate
+correctly in the field, closing the notification incident. Cart Requests
+Hosting version **`137b7cb36f21b327`**, release **`1793394269175000`**, serves
+the approved frontend on both production origins. Notifier revision
+**`fairway-request-notifier-00009-seg`** is Ready at 100%, with its existing
+Firestore Eventarc trigger unchanged. Automated backend/frontend tests, the
+focused Refresh recovery browser test, production build and deployed-file
+verification passed. No independently captured device-level notification test
+artifact was recorded; this evidence distinction and release details are in the
+[notification production baseline](DEPLOYMENT_GUIDE.md#notification-recovery-production-baseline-2026-10-30).
+The prior [Service Suspended Request release](DEPLOYMENT_GUIDE.md#service-suspended-request-production-release-2026-10-29)
+remains the current receiver baseline and documents unrelated production
+validation limits and rollback identities.
 
 The preceding [Refresh App header-icon release](DEPLOYMENT_GUIDE.md#refresh-app-header-icon---production-release-2026-10-29)
 is live from `be70a5e3064624d23709bd48187f4ce2f79f89bc`, merged through PR #31,

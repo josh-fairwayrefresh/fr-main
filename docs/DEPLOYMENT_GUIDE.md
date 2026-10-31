@@ -1,5 +1,75 @@
 # Deployment Guide
 
+## Notification recovery production baseline (2026-10-30)
+
+**CPO-reported field operation; notification incident closed.** The approved
+source baseline is `79940e63c03b0ef5bc3c55173607032e050289e7` on `main` in
+`josh-fairwayrefresh/fr-main`. The CPO reported on 2026-10-30 that the deployed
+notification corrections appeared to be operating correctly in the field.
+This confirms the CPO's field assessment; no independently captured
+device-level notification test artifact was provided or verified for this
+baseline. The incident is closed on the CPO's confirmation, not on a claim of
+independently observed iPad/Safari notification presentation.
+
+### Production identities
+
+| Surface | Deployed identity | Build / release | Verification |
+|---|---|---|---|
+| Cart Operator Hosting | Version `137b7cb36f21b327`; release `1793394269175000` at `2026-10-30T21:04:29.175Z` | Production build from approved source `79940e63c03b0ef5bc3c55173607032e050289e7` | 140 prepared application files match byte-for-byte on both production origins; Hosting reports 142 files including two Firebase-managed initialization files |
+| Request notifier | `fairway-request-notifier-00009-seg` | Cloud Build `f40a1fad-fc39-4279-b6b1-cd0921cd65c9`; image `sha256:b7538283dcd23891f7af8af9b2f7d10b4f7af90390e31a06b1e22f6541c00b45` | Ready and healthy; 100% service traffic |
+
+Production project is `savvy-kit-496703-r5`. The Hosting release is live at
+`https://app.fairwayrefresh.com/` and
+`https://savvy-kit-496703-r5.web.app/`. All 134 files from the preceding
+Hosting version were retained, with six new fingerprinted assets and the
+updated `index.html`; cache configuration was preserved. The approved app
+bundle is `assets/index-UsHk4CXl.js`, SHA-256
+`82e2cebe5c780084dc0857c51a3f0451d94b3be15780a94e1b7d773f8f35e7d6`.
+The root, request deep link and `sw.js` returned HTTP 200 on both origins, and
+all 140 prepared artifact files matched byte-for-byte on both origins.
+
+Notifier runtime remains Node.js 22 with entry point `fairwayRequestNotifier`
+and runtime identity
+`fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`. The
+Firestore `requests/{requestId}` created-event trigger remains
+`projects/savvy-kit-496703-r5/locations/nam5/triggers/fairway-request-notifier-108760`
+with its existing trigger identity and retry policy. The existing
+`qr-release` tag remains mapped to prior revision `fairway-request-notifier-00007-yes`;
+the latest serving revision is `fairway-request-notifier-00009-seg`. No
+production request, preference, subscription or service-state data was changed
+for deployment verification. No `ERROR` log entries were found for the new
+notifier revision during the post-release check.
+
+### Automated validation and field evidence
+
+- Backend regression suite: `npm test` passed; all 65 reported Node test cases
+  across the backend test files passed.
+- Cart Operator frontend unit suite: **84/84 passed**.
+- Focused Refresh-triggered subscription-recovery browser test: **1/1 passed**.
+- Production frontend configuration validation and `npm run build:production`
+  passed. The build emitted the existing advisory about a minified JavaScript
+  chunk exceeding 500 kB.
+- Post-release checks confirmed Hosting availability, exact served bundle and
+  full prepared-artifact hashes on both origins; notifier readiness and
+  100%-traffic routing; receiver CORS preflight HTTP 204; and unauthenticated
+  operator bootstrap HTTP 401.
+- The CPO's 2026-10-30 report that the corrections appeared to operate
+  correctly in the field is the field-validation evidence closing this
+  notification incident. Independent device-level test evidence (including
+  independently observed notification presentation on iPad/Safari) was not
+  captured in this release record. Automated/mocked browser tests do not
+  replace that evidence. No synthetic production request or push was created
+  for verification.
+
+The existing Refresh icon remains the sole subscription-recovery interaction.
+It reconciles subscriptions for enabled Customer/Course preferences without
+changing saved preferences or adding recovery/status UI. The notification
+behavior and incident closure are summarized in the
+[UX specification](UX_SPECIFICATION.md); the accepted source commit remains
+the reproducible implementation baseline. The notifier rollback revision is
+`fairway-request-notifier-qr-db9001e`; the prior Hosting version is
+`2f7936fc2d731f71`. No deployment rollback was required.
+
 ## Service Suspended Request production release (2026-10-29)
 
 **CPO-authorized integrated production deployment; CPO product acceptance is

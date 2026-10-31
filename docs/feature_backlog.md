@@ -10,8 +10,11 @@ queue selection and independent Amenity Areas controls on 2026-10-23.
 That increment and its reporting/service-control prerequisite are closed;
 acceptance and publication evidence are retained in the
 [existing release record](DEPLOYMENT_GUIDE.md#cpo-production-acceptance-and-closeout--2026-10-23),
-not as open backlog items. This does not close the separate
-physical-phone/Safari, notification, or network-reliability work below.
+not as open backlog items. The CPO-reported notification field operation on
+2026-10-30 closed that incident; deployment and evidence limits are recorded
+in the [notification production baseline](DEPLOYMENT_GUIDE.md#notification-recovery-production-baseline-2026-10-30).
+Separate physical-phone/Safari mobile-layout and network-reliability work below
+remain open.
 
 The CPO-accepted persistent inventory increment was merged through PR #12 and
 released to production Admin/Hosting on 2026-10-26. It is no longer open backlog
@@ -22,8 +25,8 @@ PR #13's authorized production release now closes active-queue promotion and
 the notifier source/deployment divergence. Current shared request/notification
 owners, the active-query index and exact production identities are recorded
 in the [Driving Range release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26).
-This does not close physical notification/phone/print acceptance or authorize
-Driving Range activation; its service remains suspended.
+This does not close physical-phone/mobile-layout or print acceptance, nor
+authorize Driving Range activation; its service remains suspended.
 
 ## Open and deferred work
 
@@ -39,7 +42,6 @@ Driving Range activation; its service remains suspended.
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
 | Broader course analytics | Course-level analytics beyond the accepted Cart Operator day/week/month service summaries remain deferred. |
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
-| Notification physical-platform acceptance | Matched production notifier source is released; customer-device/installed-PWA/OS delivery remains unverified. No production customer test push was sent. [Details](#notification-release-gap). |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
 | Provisioning policy and automation | Transactional allocation and prepared rotations exist; manufacturing, compromise/revocation, secret delivery, and end-to-end automation remain incomplete. [Details](#provisioning-policy-and-automation). |
 
@@ -51,24 +53,6 @@ the linked owner, including the authorized PR #13 production release.
 These form a queue for prioritization, not implementation authorization.
 "Blocks" identifies an affected acceptance/release claim, not a newly asserted
 whole-product shutdown.
-
-### Notification release gap
-
-The reviewed shared notifier is now deployed as
-`fairway-request-notifier-qr-db9001e`, retaining the existing production
-Eventarc trigger and VAPID identity. The source/deployment gap is closed.
-Prior real isolated QR sandbox Chrome/Eventarc/Web Push evidence and current
-isolated preference/access/idempotent dispatch/deep-link tests remain valid.
-
-- **Remaining boundary:** physical phone/iPad/Safari, installed-PWA/OS delivery
-  and production customer-device notification acceptance are not newly proven.
-  No customer test notification was authorized or sent during publication.
-  Local dispatcher checks and unchanged routing cannot replace platform proof.
-- **Acceptance:** separately authorize real-device/recipient testing for
-  enabled, disabled/revoked, retried/failed and deep-linked delivery, recording
-  exact source/configuration and platform coverage. Driving Range requires
-  explicit user notification opt-in and separate CPO service activation.
-  Do not auto-enable it or change existing Cart subscriptions/preferences.
 
 ### Review enforcement gap
 
