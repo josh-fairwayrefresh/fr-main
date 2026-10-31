@@ -55,14 +55,6 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
     }
   }
 
-  function closeWindow() {
-    try {
-      window.close();
-    } catch {
-      // Browsers may reject script-initiated closure for scanned QR tabs.
-    }
-  }
-
   return <main className="bay-page">
     <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
     {sandbox && <p className="bay-test">SANDBOX TEST — NOT FOR PRODUCTION</p>}
@@ -78,11 +70,11 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
     {state === 'accepted' && <section className="bay-confirmation" role="status">
       <h2>Thank you!</h2>
       <p>A server will visit your bay shortly.</p>
-      <button type="button" onClick={closeWindow}>Close Window</button>
+      <p>You can close this browser tab.</p>
     </section>}
     {state === 'declined' && <section className="bay-confirmation" role="status">
       <h2>No service request was sent.</h2>
-      <button type="button" onClick={closeWindow}>Close Window</button>
+      <p>You can close this browser tab.</p>
     </section>}
     {state === 'unavailable' && <section role="status"><h2>Server requests are currently unavailable.</h2><p>Please visit the restaurant.</p></section>}
     {error && <p role="alert">{error}</p>}
