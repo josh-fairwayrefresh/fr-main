@@ -55,6 +55,14 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
     }
   }
 
+  function closeWindow() {
+    try {
+      window.close();
+    } catch {
+      // Browsers may reject script-initiated closure for scanned QR tabs.
+    }
+  }
+
   return <main className="bay-page">
     <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
     {sandbox && <p className="bay-test">SANDBOX TEST — NOT FOR PRODUCTION</p>}
@@ -67,11 +75,18 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
         {state === 'submitting' ? 'Sending…' : state === 'retry' ? 'Retry request' : 'Yes'}
       </button>{state === 'ready' && <button type="button" onClick={() => setState('declined')}>No</button>}</div>
     </>}
-    {state === 'accepted' && <section role="status"><h2>Your request has been received.</h2><p>A server has been requested for Bay {bay.bay_number}{bay.bay_side || ''}.</p></section>}
-    {state === 'declined' && <p>No request was sent.</p>}
+    {state === 'accepted' && <section className="bay-confirmation" role="status">
+      <h2>Thank you!</h2>
+      <p>A server will visit your bay shortly.</p>
+      <button type="button" onClick={closeWindow}>Close Window</button>
+    </section>}
+    {state === 'declined' && <section className="bay-confirmation" role="status">
+      <h2>No service request was sent.</h2>
+      <button type="button" onClick={closeWindow}>Close Window</button>
+    </section>}
     {state === 'unavailable' && <section role="status"><h2>Server requests are currently unavailable.</h2><p>Please visit the restaurant.</p></section>}
     {error && <p role="alert">{error}</p>}
-    {['accepted', 'declined', 'unavailable', 'error'].includes(state) &&
+    {['unavailable', 'error'].includes(state) &&
       <button type="button" onClick={() => window.location.reload()}>Reload bay page</button>}
   </main>;
 }

@@ -44,7 +44,8 @@ test('isolated deployed QR golfer and shared Course operator flows', {
     await publicPage.goto(`${origin}/range/${bay.id}`);
     await publicPage.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     await publicPage.getByRole('button', { name: 'No', exact: true }).tap();
-    await publicPage.getByText('No request was sent.', { exact: true }).waitFor();
+    await publicPage.getByRole('heading', { name: 'No service request was sent.', exact: true }).waitFor();
+    await publicPage.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
     assert.equal(await page.getByRole('heading', { name: 'No active requests' }).count(), 1);
     await publicPage.reload();
     for (const width of [375, 430, 768]) {
@@ -54,7 +55,9 @@ test('isolated deployed QR golfer and shared Course operator flows', {
       assert.ok(yes.width >= 44 && yes.height >= 44);
     }
     await publicPage.getByRole('button', { name: 'Yes', exact: true }).tap();
-    await publicPage.getByText('Your request has been received.', { exact: true }).waitFor();
+    await publicPage.getByRole('heading', { name: 'Thank you!', exact: true }).waitFor();
+    await publicPage.getByText('A server will visit your bay shortly.', { exact: true }).waitFor();
+    await publicPage.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
     await page.getByRole('heading', { name: 'Bay 3A', exact: true }).waitFor();
     const requestId = (await page.locator('.op-priority').getAttribute('id')).replace('request-', '');
     await page.goto(`${origin}/requests/${requestId}?customer_id=${fixture.customer_id}&course_id=${fixture.range_course_id}`);
@@ -94,7 +97,8 @@ test('isolated deployed QR golfer and shared Course operator flows', {
     await page.getByRole('heading', { name: 'No active requests' }).waitFor();
     await publicPage.reload();
     await publicPage.getByRole('button', { name: 'Retry request', exact: true }).tap();
-    await publicPage.getByText('Your request has been received.', { exact: true }).waitFor();
+    await publicPage.getByRole('heading', { name: 'Thank you!', exact: true }).waitFor();
+    await publicPage.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
     assert.equal(await page.getByRole('heading', { name: 'No active requests' }).count(), 1);
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ deployedUI: true, golferYesNo: true, completeCancel: true,

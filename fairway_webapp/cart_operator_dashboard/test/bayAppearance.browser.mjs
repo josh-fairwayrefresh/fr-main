@@ -43,14 +43,16 @@ test('QR bay page stays white and usable across appearance settings, viewport si
           });
         }
         await page.getByRole('button', { name: 'No', exact: true }).tap();
-        await page.getByText('No request was sent.', { exact: true }).waitFor();
+        await page.getByRole('heading', { name: 'No service request was sent.', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
         // Stub submissions so appearance checks cannot create server records.
         await page.route('**/api/v1/public/bays/*/requests', (route) => route.fulfill({
           status: 200, contentType: 'application/json', body: '{"status":"accepted"}',
         }));
         await page.reload();
         await page.getByRole('button', { name: 'Yes', exact: true }).tap();
-        await page.getByText('Your request has been received.', { exact: true }).waitFor();
+        await page.getByRole('heading', { name: 'Thank you!', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
         assert.equal(await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
         await page.unroute('**/api/v1/public/bays/*/requests');
         for (const response of [

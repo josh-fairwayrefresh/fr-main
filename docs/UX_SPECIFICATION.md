@@ -204,7 +204,13 @@ validation are recorded in the
   The complete page uses a white background and dark readable text, including
   the surrounding viewport and loading, confirmation and error states,
   regardless of the phone's light/dark appearance setting.
-  No creates nothing. Yes confirms only server-acknowledged acceptance.
+  No creates nothing and ends at **"No service request was sent."** with a
+  **Close Window** button. Yes confirms only server-acknowledged acceptance;
+  after successful creation, the page displays **"Thank you!"** and **"A server
+  will visit your bay shortly."**, with a **Close Window** button. Request
+  failures never display the success confirmation. Close Window attempts to
+  close the browser tab; when the browser blocks script-initiated closure, the
+  confirmation remains visible without redirecting or reloading.
   No golfer login, order entry or payment is required.
 - One outstanding request exists per bay side until Complete or Cancel;
   A and B can request independently. Public pages, new request snapshots,

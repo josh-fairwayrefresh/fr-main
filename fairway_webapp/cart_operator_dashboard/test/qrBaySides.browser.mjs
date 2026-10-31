@@ -33,10 +33,13 @@ test('deployed sandbox shows independent A/B requests, deep links and terminal o
       await page.getByRole('heading', { name: `Bay 26${bay.bay_side}`, exact: true }).waitFor();
       assert.equal(await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
       await page.getByRole('button', { name: 'No', exact: true }).tap();
-      await page.getByText('No request was sent.', { exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'No service request was sent.', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
       await page.reload();
       await page.getByRole('button', { name: 'Yes', exact: true }).tap();
-      await page.getByText('Your request has been received.', { exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'Thank you!', exact: true }).waitFor();
+      await page.getByText('A server will visit your bay shortly.', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
     }
     for (let index = 0; index < bays.length; index++) {
       const statuses = await pages[index].evaluate(async ({ bayId }) => Promise.all(
