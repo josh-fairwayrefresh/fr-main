@@ -1,5 +1,66 @@
 # Deployment Guide
 
+## Driving Range golfer confirmation UX production release (2026-10-31)
+
+**CPO-authorized frontend-only deployment.** Approved application source
+`a75e635115848e6b073ded448ee49915514041af` was deployed to the production
+Firebase Hosting site `savvy-kit-496703-r5`. No backend, Firestore, Rules,
+firmware, QR configuration, subscription preference, or production service
+configuration was changed.
+
+### Hosting identity and artifact preservation
+
+- Live Hosting version **`66fdcec2411fb532`**, release
+  **`1793421275652000`**, finalized at **`2026-10-31T04:34:35.797952Z`**.
+  The version contains **148 files** and serves both
+  `https://app.fairwayrefresh.com/` and
+  `https://savvy-kit-496703-r5.web.app/`.
+- The prior live version `137b7cb36f21b327` was read and merged with the
+  approved production build. All **148 deployed files** match the merged
+  artifact byte-for-byte on both origins (**296 origin/file comparisons**).
+  Existing app-entry/cache policy remains `no-cache`; fingerprinted assets
+  remain `public,max-age=31536000,immutable`.
+- All **107** files under `driving-range-signs/` remain byte-identical,
+  including the 52-side mapping and installed 26-page PDF. The PDF SHA-256
+  remains
+  `f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`.
+  The installed Bay 1A URL remains
+  `https://app.fairwayrefresh.com/range/Eq4h2a-N5qu4pS4aVSf9BW7Y`.
+- The deployed `index.html`, approved Bay Request bundle, and service worker
+  were independently checked on both production origins. No backend service
+  was deployed: receiver `fairway-button-receiver-00031-5mx` and notifier
+  `fairway-request-notifier-00009-seg` remain at 100%.
+
+### Production validation
+
+- The production build passed. Frontend unit tests passed **84/84** and the
+  focused confirmation browser test passed **1/1**. The build retains the
+  existing Vite advisory for chunks larger than 500 kB.
+- Opening the installed Bay 1A destination at a 375 px viewport and choosing
+  **No** showed “No service request was sent.” and **Close Window**, produced
+  no request POST, and had no horizontal overflow or Reload button.
+- One **Yes** submission to the production receiver returned HTTP 200 and
+  showed “Thank you!”, “A server will visit your bay shortly.”, and
+  **Close Window**, with no Reload button or horizontal overflow. Exactly one
+  production `server_request` was recorded:
+  `HHnMWTdtpkIvgVPJrpPB`, Bay **1A**, `CUST-0001 / COURSE-0003`, source `qr`,
+  received **`2026-10-31T04:40:26.717Z`**. No sandbox request was created.
+- The authenticated operator queue showed that Bay 1A request; it was
+  completed through the existing **Complete service** action at
+  **`2026-10-31T04:41:16.591Z`**. The request is `completed`, the queue
+  returned to zero, and the public bay API still reports service available.
+- The existing notifier recorded **one accepted** subscription dispatch at
+  **`2026-10-31T04:40:29.062Z`**. No preference was changed. This test did
+  not produce independent device-level push-receipt evidence; the separate
+  2026-10-30 CPO-reported device receipt remains attributed to that earlier
+  validation. The focused browser test also verified that a blocked
+  `window.close()` leaves each confirmation visible without redirect or reload.
+- Firebase CLI's default local authentication did not access the project.
+  Deployment succeeded through the established Firebase Tools flow using the
+  active authorized gcloud identity and explicit production quota project.
+  No IAM, persistent credential, or production authentication configuration
+  changed.
+
 ## Driving Range activation and installed-QR production validation (2026-10-30)
 
 **CPO-authorized production activation and one controlled request.** The
@@ -50,9 +111,12 @@ deployment occurred.
 
 The request, Course state, dispatch result, bay register, and public
 availability were verified through read-only production reads after the
-authorized actions. No application deployment or additional production test
-traffic occurred. The current source and deployed identities remain those in
-the [notification production baseline](#notification-recovery-production-baseline-2026-10-30)
+2026-10-30 activation test; no application deployment or additional production
+test traffic occurred during that activation. The subsequent frontend
+deployment and controlled confirmation-flow test are recorded in the
+[Driving Range golfer confirmation release](#driving-range-golfer-confirmation-ux-production-release-2026-10-31).
+The receiver and notifier identities remain those in the
+[notification production baseline](#notification-recovery-production-baseline-2026-10-30)
 and [Service Suspended Request release](#service-suspended-request-production-release-2026-10-29).
 
 ## Notification recovery production baseline (2026-10-30)

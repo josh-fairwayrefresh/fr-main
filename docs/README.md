@@ -6,24 +6,33 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
-The current notification production baseline is accepted source
-`79940e63c03b0ef5bc3c55173607032e050289e7` on `main`. The CPO reported on
-2026-10-30 that the deployed notification corrections appeared to operate
-correctly in the field, closing the notification incident. Cart Requests
-Hosting version **`137b7cb36f21b327`**, release **`1793394269175000`**, serves
-the approved frontend on both production origins. Notifier revision
-**`fairway-request-notifier-00009-seg`** is Ready at 100%, with its existing
-Firestore Eventarc trigger unchanged. Automated backend/frontend tests, the
-focused Refresh recovery browser test, production build and deployed-file
-verification passed. No independently captured device-level notification test
-artifact was recorded; this evidence distinction and release details are in the
-[notification production baseline](DEPLOYMENT_GUIDE.md#notification-recovery-production-baseline-2026-10-30).
+The notification backend baseline remains accepted source
+`79940e63c03b0ef5bc3c55173607032e050289e7`; the current approved frontend
+source is `a75e635115848e6b073ded448ee49915514041af` on `main`. The CPO reported
+on 2026-10-30 that the deployed notification corrections appeared to operate
+correctly in the field, closing the notification incident. The approved
+Driving Range confirmation UX is live at Hosting version
+**`66fdcec2411fb532`**, release **`1793421275652000`**, on both production
+origins; all 148 published files were byte-verified on each origin. Receiver
+revision **`fairway-button-receiver-00031-5mx`** and notifier revision
+**`fairway-request-notifier-00009-seg`** remain unchanged at 100%, with the
+existing Firestore Eventarc trigger unchanged. The production build, 84 frontend
+tests and focused confirmation browser test passed. The 2026-10-31 controlled
+Bay 1A request was accepted, dispatched to one enabled subscription, and
+completed through the existing queue; the separate 2026-10-30 CPO-reported
+device receipt remains distinct from independently captured device-level
+evidence. The
+[Driving Range confirmation release](DEPLOYMENT_GUIDE.md#driving-range-golfer-confirmation-ux-production-release-2026-10-31)
+and [notification production baseline](DEPLOYMENT_GUIDE.md#notification-recovery-production-baseline-2026-10-30)
+own the detailed evidence and qualifications.
 On 2026-10-30, the CPO authorized activation of Monarch Bay Driving Range.
 The supplied installed-sign PDF exactly matched the published production
-edition; its existing production QR routes were preserved. One Bay 1A request
-was created, notified, CPO-confirmed as visibly received on the intended
-device, and completed through the existing workflow. No application deployment
-or sandbox request occurred. The
+edition; its existing production QR routes were preserved. The 2026-10-30
+activation record documents one Bay 1A request created, notified,
+CPO-confirmed as visibly received on the intended device, and completed
+through the existing workflow; no application deployment or sandbox request
+occurred during that activation. The subsequent frontend release and test are
+recorded separately. The
 [activation and validation record](DEPLOYMENT_GUIDE.md#driving-range-activation-and-installed-qr-production-validation-2026-10-30)
 owns the exact evidence and remaining device-evidence qualification.
 The prior [Service Suspended Request release](DEPLOYMENT_GUIDE.md#service-suspended-request-production-release-2026-10-29)
