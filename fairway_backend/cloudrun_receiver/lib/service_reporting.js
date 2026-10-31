@@ -1,6 +1,7 @@
 'use strict';
 
 const SUMMARY_PERIODS = Object.freeze(['daily', 'weekly', 'monthly']);
+const { isRequestReportingEligible } = require('./request_reporting');
 
 function toDate(value) {
   if (value instanceof Date) return value;
@@ -120,7 +121,7 @@ function activeSecondsByLocalDay(events, range, timeZone, asOf) {
 function completedRequestsInRange(requests, range) {
   return requests.filter((request) => {
     const completedAt = toDate(request.completed_at);
-    return request.status === 'completed' && completedAt &&
+    return isRequestReportingEligible(request) && request.status === 'completed' && completedAt &&
       completedAt >= range.start && completedAt <= range.end;
   });
 }
@@ -137,6 +138,7 @@ function outcomeTime(request) {
 function historyRequestsInRange(requests, range) {
   return requests
     .filter((request) => {
+      if (!isRequestReportingEligible(request)) return false;
       const timestamp = outcomeTime(request);
       return timestamp && timestamp >= range.start && timestamp <= range.end;
     })

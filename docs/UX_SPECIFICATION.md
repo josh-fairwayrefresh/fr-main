@@ -279,6 +279,10 @@ entitlement, service state or operational data is changed.
   rejection attempts, including each separate transport retry. Larger open
   circles represent accepted physical-button requests completed by the explicit
   as-of boundary, once per request, plotted at **receipt**, not completion.
+  Completed-request points use the shared request reporting eligibility rule:
+  missing `reporting_state` means `active`, `active` contributes, and `excluded`
+  does not. This does not filter or infer correlation for Logging-based
+  service-unavailable attempts.
   Cancelled/open requests and QR activity are excluded. This does not change
   existing Service History's completion-time metrics.
 - The PDF is landscape US Letter, with a three-column device legend, daily
@@ -979,7 +983,9 @@ Deployment Guide.
   time across course-local days. Sum duration and round it to the nearest
   minute for reporting; display hours with at most two decimal places.
 - **Completed Requests** are counted by completion timestamp within the
-  course-local calendar day. Exclude open and cancelled requests.
+  course-local calendar day. Exclude open and cancelled requests. Requests
+  with no `reporting_state` are active for reporting; only `active` requests
+  contribute, while `excluded` requests do not.
 - **Average Completion Time** is receipt-to-completion elapsed time averaged
   over those completed requests. Refresh it after each completion.
 - **Requests per Hour** equals Completed Requests divided by Active Cart Hours.
@@ -992,14 +998,29 @@ Deployment Guide.
   completed rows are selected by completion time and cancelled rows by
   cancellation time. Service-suspended rejected attempts also appear, in red
   and identified as **Service Suspended**, selected by receipt time and retained
-  after dashboard clearing. Rejected attempts are not completed or cancelled
-  and do not affect completion, duration, request-rate, or service-hours
-  calculations. Refresh reporting when request outcomes change, including
-  changes made by another operator, and at minute-level intervals so ongoing
-  active time and local calendar-period boundaries become current. Return every
-  matching outcome for the selected period; do not silently truncate History.
+  after dashboard clearing. Completed, cancelled, and service-suspended
+  rejected outcomes are shown only when their reporting state is `active`;
+  legacy records without the field are treated as active. Rejected attempts
+  are not completed or cancelled and do not affect completion, duration,
+  request-rate, or service-hours calculations. Refresh reporting when request
+  outcomes change, including changes made by another operator, and at
+  minute-level intervals so ongoing active time and local calendar-period
+  boundaries become current. Return every matching outcome for the selected
+  period; do not silently truncate History.
   If pagination is introduced later, it must expose the total and provide access
   to every matching row.
+- Administrator-rights users may exclude an individual History outcome after
+  confirmation and may review excluded outcomes for the selected Course and
+  restore them to reporting. Exclusion is a reversible reporting-only state:
+  it never changes operational status or deletes the request. Backend
+  authorization requires an authenticated global Admin and exact Customer,
+  Course, and request identity. Each state transition records the acting Admin,
+  server time, and from/to states. Cart Operators have no exclusion or restore
+  controls. The same eligibility rule applies to Service History, Completed
+  Requests, Average Completion Time, Requests per Hour, and completed
+  physical-button contributions in Button Activity; Logging-based rejection
+  events remain independent. Active Cart Hours remain based solely on service
+  transition events and are unchanged by request reporting state.
 - Started periods with no activity display 0. Zero Active Cart Hours produces
   0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
   display.

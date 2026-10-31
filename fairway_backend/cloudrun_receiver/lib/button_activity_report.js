@@ -1,6 +1,7 @@
 'use strict';
 
 const { addLocalDays, localMidnightUtc } = require('./service_reporting');
+const { isRequestReportingEligible } = require('./request_reporting');
 
 const MAX_DAYS = 31;
 const MAX_RECORDS = 20000;
@@ -100,7 +101,8 @@ function buildButtonReport({ customer, course, bounds, asOf, logs, requests, ret
   }
   const seenRequests = new Set();
   for (const request of requests) {
-    if (request.customer_id !== customer.customer_id || request.course_id !== course.course_id ||
+    if (!isRequestReportingEligible(request) ||
+        request.customer_id !== customer.customer_id || request.course_id !== course.course_id ||
         request.status !== 'completed' || request.event_type !== 'button_press' ||
         request.source !== 'nrf9151' || seenRequests.has(request.id)) continue;
     const received = dateValue(request.received_at);

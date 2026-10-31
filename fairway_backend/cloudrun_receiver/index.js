@@ -48,6 +48,11 @@ const { courseOperation } = require('./lib/course_operation');
 const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
 const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
 const { generateButtonReport, ButtonReportError } = require('./lib/button_activity_report');
+const {
+  RequestReportingError,
+  listExcludedRequests,
+  setRequestReportingState,
+} = require('./lib/request_reporting');
 const { renderButtonReport } = require('./lib/button_report_pdf');
 const {
   getOperatorAssignment,
@@ -1208,6 +1213,26 @@ function createFairwayHandlers(db, {
     }
 
     try {
+      if (req.method === 'GET' && path === '/api/v1/admin/requests/excluded') {
+        const { customer_id: customerId, course_id: courseId } = req.query || {};
+        if (typeof customerId !== 'string' || typeof courseId !== 'string' ||
+            !customerId.trim() || !courseId.trim()) {
+          return res.status(400).json({ error: 'customer_id and course_id are required' });
+        }
+        return res.status(200).json(await listExcludedRequests(db, customerId, courseId));
+      }
+      const reportingStateMatch = path.match(/^\/api\/v1\/admin\/requests\/([^/]+)\/reporting-state$/);
+      if (req.method === 'PATCH' && reportingStateMatch) {
+        requireBodyFields(req.body, ['customer_id', 'course_id', 'reporting_state']);
+        const result = await setRequestReportingState(db, {
+          requestId: decodeURIComponent(reportingStateMatch[1]),
+          customerId: req.body.customer_id,
+          courseId: req.body.course_id,
+          reportingState: req.body.reporting_state,
+          adminUid: admin.uid,
+        });
+        return res.status(200).json(result);
+      }
       if (req.method === 'POST' && path === '/api/v1/admin/reports/button-activity') {
         requireBodyFields(req.body, ['customer_id', 'course_id', 'start_date', 'end_date']);
         const report = await generateButtonReport(db, req.body, { asOf: now(), source: buttonReportSource });
@@ -1353,6 +1378,9 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error instanceof RequestReportingError) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
       if (error.code === 'last_admin') {
         return res.status(409).json({ error: 'last_admin_required' });
       }

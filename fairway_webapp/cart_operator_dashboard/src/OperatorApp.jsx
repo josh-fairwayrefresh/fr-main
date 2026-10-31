@@ -6,6 +6,7 @@ import {
 import NotificationSetup from './NotificationSetup';
 import AppRefresh from './AppRefresh';
 import { useInventorySession } from './InventorySession';
+import { adminRequest } from './admin/adminApi';
 import { operatorRequest } from './lib/operator';
 import {
   authorizedCustomers,
@@ -187,21 +188,148 @@ function RequestsView({ requests, loadState, loadError, focusedRequestId, onActi
   </section><aside className="op-summary">{cartMetrics && <Performance summary={summary} />}<RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
 
-function HistoryView({ dashboard, cartMetrics = true }) {
+function HistoryView({
+  dashboard, cartMetrics = true, isAdmin = false, user, adminApiBaseUrl, course,
+  onReportingStateChanged,
+}) {
   const [period, setPeriod] = useState('daily');
+  const [showExcluded, setShowExcluded] = useState(false);
+  const [excludedRequests, setExcludedRequests] = useState([]);
+  const [excludedLoadState, setExcludedLoadState] = useState('idle');
+  const [reportingPendingId, setReportingPendingId] = useState('');
+  const [reportingError, setReportingError] = useState('');
+  const [reportingNotice, setReportingNotice] = useState('');
+  const [hiddenRequestIds, setHiddenRequestIds] = useState(() => new Set());
   const report = dashboard?.reports?.[period] || {};
   const summary = report.summary || {};
-  const history = report.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>{cartMetrics ? 'Performance & outcomes' : 'Request outcomes'}</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header>{cartMetrics && <div className="op-metrics">
-    <div><BarChart3 size={18} aria-hidden="true" /><span>Completed Requests</span><strong>{summary.completed_requests ?? 0}</strong></div>
-    <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
-    <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
-    <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
-  </div>}<section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : item.status === 'cancelled' ? 'Cancelled' : 'Service Suspended'}</span><strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed, cancelled, or rejected requests yet.</div>}</section></section>;
+  const history = (report.history || []).filter((item) => !hiddenRequestIds.has(item.request_id));
+
+  useEffect(() => {
+    if (!isAdmin || !showExcluded || !course || !adminApiBaseUrl) return undefined;
+    let active = true;
+    setExcludedLoadState('loading');
+    setReportingError('');
+    adminRequest(user, adminApiBaseUrl,
+      `/api/v1/admin/requests/excluded?customer_id=${encodeURIComponent(course.customer_id)}&course_id=${encodeURIComponent(course.course_id)}`)
+      .then((requests) => {
+        if (active) {
+          setExcludedRequests(requests);
+          setExcludedLoadState('ready');
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setReportingError(error.message);
+          setExcludedLoadState('error');
+        }
+      });
+    return () => { active = false; };
+  }, [adminApiBaseUrl, course?.course_id, course?.customer_id, isAdmin, showExcluded, user]);
+
+  async function changeReportingState(request, reportingState) {
+    const requestId = request.request_id || request.id;
+    const label = requestLocationLabel(request);
+    const action = reportingState === 'excluded' ? 'Exclude' : 'Restore';
+    const detail = reportingState === 'excluded'
+      ? 'This request will be omitted from Service History and request-based reports.'
+      : 'This request will be included in Service History and request-based reports again.';
+    if (!window.confirm(`${action} ${label} from reporting? ${detail}`)) return;
+    setReportingPendingId(requestId);
+    setReportingError('');
+    setReportingNotice('');
+    try {
+      await adminRequest(user, adminApiBaseUrl,
+        `/api/v1/admin/requests/${encodeURIComponent(requestId)}/reporting-state`, {
+          method: 'PATCH',
+          body: {
+            customer_id: course.customer_id,
+            course_id: course.course_id,
+            reporting_state: reportingState,
+          },
+        });
+      if (reportingState === 'excluded') {
+        setHiddenRequestIds((current) => new Set([...current, requestId]));
+        setExcludedRequests((current) => [
+          { ...request, id: requestId, request_id: requestId, reporting_state: 'excluded' },
+          ...current.filter((item) => (item.request_id || item.id) !== requestId),
+        ]);
+      } else {
+        setExcludedRequests((current) => current.filter((item) => (item.request_id || item.id) !== requestId));
+        setHiddenRequestIds((current) => {
+          const next = new Set(current);
+          next.delete(requestId);
+          return next;
+        });
+      }
+      setReportingNotice(`${label} ${reportingState === 'excluded' ? 'excluded from' : 'restored to'} reporting.`);
+      onReportingStateChanged?.();
+    } catch (error) {
+      setReportingError(error.message);
+    } finally {
+      setReportingPendingId('');
+    }
+  }
+
+  function outcomeLabel(item) {
+    return item.status === 'completed' ? 'Completed' :
+      item.status === 'cancelled' ? 'Cancelled' : 'Service Suspended';
+  }
+
+  return <section className="op-history-view">
+    <header><div><span>SERVICE HISTORY</span><h1>{cartMetrics ? 'Performance & outcomes' : 'Request outcomes'}</h1></div>
+      <div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) =>
+        <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id}
+          onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div>
+    </header>
+    {cartMetrics && <div className="op-metrics">
+      <div><BarChart3 size={18} aria-hidden="true" /><span>Completed Requests</span><strong>{summary.completed_requests ?? 0}</strong></div>
+      <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
+      <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
+      <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
+    </div>}
+    <section className="op-history-list">
+      <div className={`op-history-row heading${isAdmin ? ' admin' : ''}`}>
+        <span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span>{isAdmin && <span>Reporting</span>}
+      </div>
+      {history.map((item) => <div className={`op-history-row${isAdmin ? ' admin' : ''}`} key={item.request_id}>
+        <span className={`op-outcome ${item.status}`}>{outcomeLabel(item)}</span>
+        <strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
+        {isAdmin && <button className="op-reporting-action" type="button" disabled={Boolean(reportingPendingId)}
+          onClick={() => changeReportingState(item, 'excluded')}>Exclude</button>}
+      </div>)}
+      {history.length === 0 && <div className="op-message">No completed, cancelled, or rejected requests yet.</div>}
+    </section>
+    {isAdmin && <section className="op-excluded-panel">
+      <button className="op-reporting-toggle" type="button" aria-expanded={showExcluded} onClick={() => {
+        setShowExcluded((current) => !current);
+        setReportingError('');
+        setReportingNotice('');
+      }}>{showExcluded ? 'Hide excluded requests' : 'View excluded requests'}</button>
+      {showExcluded && <div className="op-excluded-content">
+        <h2>Excluded Requests</h2>
+        {excludedLoadState === 'loading' && <p>Loading excluded requests...</p>}
+        {excludedLoadState === 'error' && <p role="alert">{reportingError}</p>}
+        {excludedLoadState === 'ready' && <section className="op-history-list">
+          <div className="op-history-row heading admin">
+            <span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span><span>Reporting</span>
+          </div>
+          {excludedRequests.map((item) => <div className="op-history-row admin" key={item.request_id || item.id}>
+            <span className={`op-outcome ${item.status}`}>{outcomeLabel(item)}</span>
+            <strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
+            <button className="op-reporting-action" type="button" disabled={Boolean(reportingPendingId)}
+              onClick={() => changeReportingState(item, 'active')}>Restore to Reporting</button>
+          </div>)}
+          {excludedRequests.length === 0 && <div className="op-message">No excluded requests for this Course.</div>}
+        </section>}
+      </div>}
+    </section>}
+    {reportingError && excludedLoadState !== 'error' && <p className="op-reporting-error" role="alert">{reportingError}</p>}
+    {reportingNotice && <p className="op-reporting-notice" role="status">{reportingNotice}</p>}
+  </section>;
 }
 
 export default function OperatorApp({
-  user, apiBaseUrl, inventoryApiBaseUrl, operatorConfig, requests, loadState, loadError,
+  user, apiBaseUrl, adminApiBaseUrl, inventoryApiBaseUrl, operatorConfig, requests, loadState, loadError,
   focusedRequestId, isAdmin, onOpenAdmin, onOpenInventory, onSignOut, onRequestAction,
 }) {
   const [tab, setTab] = useState('requests');
@@ -465,5 +593,5 @@ export default function OperatorApp({
       notificationActionsInFlight.current += value ? 1 : -1;
       setNotificationPending(notificationActionsInFlight.current > 0);
     }}
-  />{dashboardError && <p role="alert">Course history unavailable: {dashboardError}</p>}</div><RequestsView key={`requests:${selectedCourseKeyValue}`} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={currentDashboard?.reports?.daily?.summary} history={currentDashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} cartMetrics={operation.cart_metrics} />{tab === 'history' && <HistoryView key={`history:${selectedCourseKeyValue}`} dashboard={currentDashboard} cartMetrics={operation.cart_metrics} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  />{dashboardError && <p role="alert">Course history unavailable: {dashboardError}</p>}</div><RequestsView key={`requests:${selectedCourseKeyValue}`} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={currentDashboard?.reports?.daily?.summary} history={currentDashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} cartMetrics={operation.cart_metrics} />{tab === 'history' && <HistoryView key={`history:${selectedCourseKeyValue}`} dashboard={currentDashboard} cartMetrics={operation.cart_metrics} isAdmin={isAdmin} user={user} adminApiBaseUrl={adminApiBaseUrl} course={course} onReportingStateChanged={scheduleDashboardRefresh} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }
