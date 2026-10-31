@@ -144,12 +144,16 @@ Request A may still be active when Request B is created; that is valid. The oper
 ## Driving Range QR requests (review increment)
 
 **Released:** PR #13 is merged and published to production, including the
-accepted A/B refinement and current inventory/staff integration. Monarch's
-Driving Range remains suspended until separate explicit CPO activation.
+accepted A/B refinement and current inventory/staff integration. The CPO
+authorized production activation on 2026-10-30; Monarch's Course now uses its
+existing persistent Resume/Suspend state, and the current service is active.
 Environment identities, verified production sign register and remaining
 physical/browser-notification acceptance limits belong to the
 [current release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26).
 The heading's review-increment anchor is retained for existing document links.
+The activation, preserved installed QR edition, and controlled Bay 1A
+validation are recorded in the
+[2026-10-30 operational record](DEPLOYMENT_GUIDE.md#driving-range-activation-and-installed-qr-production-validation-2026-10-30).
 
 - Driving Range is its own Course asset under a Customer, alongside golf
   Courses such as Tony Lema. All 26 bays belong to that Driving Range Course,

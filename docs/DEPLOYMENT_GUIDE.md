@@ -1,5 +1,60 @@
 # Deployment Guide
 
+## Driving Range activation and installed-QR production validation (2026-10-30)
+
+**CPO-authorized production activation and one controlled request.** The
+operator resumed Monarch Bay's existing Driving Range Course through the
+authenticated Cart Operator control on 2026-10-30. No source, Hosting,
+backend, routing, QR, configuration, or notification-preference changes were
+made for activation. The operation ran against documentation baseline
+`bb661bf4672313767061e243cee8ddadec9c1e7b`, whose approved application source
+baseline is `79940e63c03b0ef5bc3c55173607032e050289e7`; no application
+deployment occurred.
+
+### Installed QR destination and preservation
+
+- The CPO supplied the 26-page installation PDF to preserve. Its SHA-256,
+  **`f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`**,
+  exactly matches the published production installation PDF at
+  `https://app.fairwayrefresh.com/driving-range-signs/driving-range-installation.pdf`.
+- The existing 52 A/B QR destinations therefore remain
+  `https://app.fairwayrefresh.com/range/{permanentId}`. No sandbox redirect,
+  QR regeneration, sign replacement, or Hosting change was needed.
+- All 52 production bay records remained enabled and owned by
+  `CUST-0001 / COURSE-0003`; all 52 public API reads returned the matching bay
+  number/side, Driving Range Course, and available state after activation.
+
+### Activation and controlled request
+
+- The existing authenticated operator control resumed `CUST-0001 /
+  COURSE-0003` on 2026-10-30. The Course's `service_suspension` is cleared and
+  its public bay API reports available. The operation did not change Tony
+  Lema's service state or any bay identity/configuration.
+- Before the test there were no production requests for this Course and no
+  active Range request. One Yes submission from the installed production Bay
+  1A URL created exactly one production `server_request`
+  (`GkLgQsi3Dgh6icB4Ljtj`) at `2026-10-31T03:53:50.231Z`; the golfer page
+  acknowledged Bay 1A and the authenticated operator queue showed Bay 1A.
+- The request's existing notifier dispatch was accepted for one enabled
+  operator subscription at `2026-10-31T03:53:52.539Z`. Three Range
+  subscriptions were active: one operator's saved Course preference was
+  enabled, and two were disabled. No preference was changed. The CPO confirmed
+  visible push receipt on the intended device; the operator browser session
+  also showed its existing reminder that push use requires the installed
+  Fairway Home Screen app. The device receipt is CPO-reported, not supported
+  by an independently captured device artifact.
+- The operator completed the request through the existing Complete action at
+  `2026-10-31T03:55:28.661Z`. The request is completed, Bay 1A's active
+  request pointer is clear, and the operator queue returned to zero. No
+  sandbox request was created.
+
+The request, Course state, dispatch result, bay register, and public
+availability were verified through read-only production reads after the
+authorized actions. No application deployment or additional production test
+traffic occurred. The current source and deployed identities remain those in
+the [notification production baseline](#notification-recovery-production-baseline-2026-10-30)
+and [Service Suspended Request release](#service-suspended-request-production-release-2026-10-29).
+
 ## Notification recovery production baseline (2026-10-30)
 
 **CPO-reported field operation; notification incident closed.** The approved

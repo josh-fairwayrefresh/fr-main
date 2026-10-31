@@ -25,8 +25,13 @@ PR #13's authorized production release now closes active-queue promotion and
 the notifier source/deployment divergence. Current shared request/notification
 owners, the active-query index and exact production identities are recorded
 in the [Driving Range release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26).
-This does not close physical-phone/mobile-layout or print acceptance, nor
-authorize Driving Range activation; its service remains suspended.
+The CPO separately authorized activation on 2026-10-30. The existing
+production QR edition was confirmed against the supplied installed-sign PDF;
+one controlled Bay 1A request was notified and completed through the normal
+operator workflow. This operational validation did not change source or QR
+routing. See the [activation record](DEPLOYMENT_GUIDE.md#driving-range-activation-and-installed-qr-production-validation-2026-10-30).
+This does not close separate Cart Operator mobile acceptance or independent
+physical print/laminated-sign scan acceptance.
 
 ## Open and deferred work
 

@@ -115,13 +115,18 @@ No operational data, service-state, entitlement or notification changes.
 
 Merged and released through PR #13 from integrated source
 `db9001ecba79b88f6584a6d407de355dc0c63d75`. Monarch's independent production
-Course and 52 bay-side identities are provisioned; **service remains suspended
-pending separate CPO activation**. The
+Course and 52 bay-side identities are provisioned. The CPO authorized and
+resumed the Course on 2026-10-30 using the existing authenticated operator
+control; a controlled Bay 1A request was notified and completed. The
 [current release record](DEPLOYMENT_GUIDE.md#driving-range-production-integration-and-controlled-release--2026-10-26)
 owns deployed identities, exact entitlement additions, production installation
 register/PDF, preservation and stock/assignment/Course-aware recovery.
 Production uses normal operator authentication; both review sandboxes remain
 unchanged. No Tony Lema operational staff was assigned to Driving Range.
+The installed-sign PDF hash matched the published production PDF, so all
+existing QR URLs remain unchanged. The activation and end-to-end validation
+evidence is in the
+[2026-10-30 operational record](DEPLOYMENT_GUIDE.md#driving-range-activation-and-installed-qr-production-validation-2026-10-30).
 
 Product behavior is owned by [UX Specification](UX_SPECIFICATION.md#driving-range-qr-requests-review-increment).
 The independent Course boundary reuses Customer/Course authorization, Course

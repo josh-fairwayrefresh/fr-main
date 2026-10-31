@@ -18,6 +18,14 @@ focused Refresh recovery browser test, production build and deployed-file
 verification passed. No independently captured device-level notification test
 artifact was recorded; this evidence distinction and release details are in the
 [notification production baseline](DEPLOYMENT_GUIDE.md#notification-recovery-production-baseline-2026-10-30).
+On 2026-10-30, the CPO authorized activation of Monarch Bay Driving Range.
+The supplied installed-sign PDF exactly matched the published production
+edition; its existing production QR routes were preserved. One Bay 1A request
+was created, notified, CPO-confirmed as visibly received on the intended
+device, and completed through the existing workflow. No application deployment
+or sandbox request occurred. The
+[activation and validation record](DEPLOYMENT_GUIDE.md#driving-range-activation-and-installed-qr-production-validation-2026-10-30)
+owns the exact evidence and remaining device-evidence qualification.
 The prior [Service Suspended Request release](DEPLOYMENT_GUIDE.md#service-suspended-request-production-release-2026-10-29)
 remains the current receiver baseline and documents unrelated production
 validation limits and rollback identities.
@@ -84,7 +92,10 @@ The CPO-authorized Driving Range release is now merged through PR #13 and
 published from `db9001ecba79b88f6584a6d407de355dc0c63d75`, integrated with the
 current stock-aware and Course-assigned staff owners. Monarch's independent
 Driving Range Course has 52 permanent production bay sides and a 26-page
-installation PDF; it remains **suspended pending separate CPO activation**.
+installation PDF; it was **activated on 2026-10-30** using the existing
+authenticated operator control. The supplied installed-sign PDF matches the
+published production edition, and one controlled Bay 1A request was received,
+notified and completed without changing QR routing.
 Normal authenticated service switching and explicit notification opt-in use
 the existing owners. Only the two existing Monarch Customer login accounts
 gained the new Course entitlement; Tony Lema's staff, all inventory/history,
