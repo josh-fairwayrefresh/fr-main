@@ -7,22 +7,25 @@ valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
 The notification backend baseline remains accepted source
-`79940e63c03b0ef5bc3c55173607032e050289e7`; the current approved frontend
-source is `a75e635115848e6b073ded448ee49915514041af` on `main`. The CPO reported
-on 2026-10-30 that the deployed notification corrections appeared to operate
-correctly in the field, closing the notification incident. The approved
-Driving Range confirmation UX is live at Hosting version
-**`66fdcec2411fb532`**, release **`1793421275652000`**, on both production
-origins; all 148 published files were byte-verified on each origin. Receiver
-revision **`fairway-button-receiver-00031-5mx`** and notifier revision
-**`fairway-request-notifier-00009-seg`** remain unchanged at 100%, with the
-existing Firestore Eventarc trigger unchanged. The production build, 84 frontend
-tests and focused confirmation browser test passed. The 2026-10-31 controlled
-Bay 1A request was accepted, dispatched to one enabled subscription, and
-completed through the existing queue; the separate 2026-10-30 CPO-reported
-device receipt remains distinct from independently captured device-level
-evidence. The
-[Driving Range confirmation release](DEPLOYMENT_GUIDE.md#driving-range-golfer-confirmation-ux-production-release-2026-10-31)
+`79940e63c03b0ef5bc3c55173607032e050289e7`; the current frontend source is
+`9b325fb6122cddafc0ff1ea14745c84d0a5d1efe` on `main`. The CPO reported on
+2026-10-30 that the deployed notification corrections appeared to operate
+correctly in the field, closing the notification incident. The Driving Range
+confirmation update is live at Hosting version **`e900799fa501018e`**, release
+**`1793422849956000`**, on both production origins; all 152 project files were
+verified on each origin, and the 107 installed-sign assets remain unchanged.
+Both terminal confirmations now provide ordinary **"You can close this
+browser tab."** text without a Close Window control or automatic navigation.
+The production build, 84 frontend tests and focused confirmation browser test
+passed. The production No journey was checked without calling the request
+creation endpoint; no production Yes request was made for this text-only
+correction. Receiver revision **`fairway-button-receiver-00031-5mx`** and
+notifier revision **`fairway-request-notifier-00009-seg`** remain unchanged at
+100%, with the existing Firestore Eventarc trigger unchanged. The separate
+2026-10-30 CPO-reported device receipt remains distinct from independently
+captured device-level evidence. The
+[Driving Range tab-close guidance release](DEPLOYMENT_GUIDE.md#driving-range-tab-close-guidance-production-release-2026-10-31),
+[prior confirmation behavior release](DEPLOYMENT_GUIDE.md#driving-range-golfer-confirmation-ux-production-release-2026-10-31),
 and [notification production baseline](DEPLOYMENT_GUIDE.md#notification-recovery-production-baseline-2026-10-30)
 own the detailed evidence and qualifications.
 On 2026-10-30, the CPO authorized activation of Monarch Bay Driving Range.

@@ -1,5 +1,58 @@
 # Deployment Guide
 
+## Driving Range tab-close guidance production release (2026-10-31)
+
+**CPO-authorized frontend-only correction.** Implementation commit
+`9b325fb6122cddafc0ff1ea14745c84d0a5d1efe`, based on accepted source
+`43023583c88b2c9671fd2575fb8a18cdece0d724`, replaced the nonfunctional
+**Close Window** controls with the ordinary text **"You can close this browser
+tab."** on both terminal golfer confirmations. The production request and
+retry logic is unchanged.
+
+### Hosting identity and artifact preservation
+
+- Live Hosting version **`e900799fa501018e`**, release
+  **`1793422849956000`**, finalized at **`2026-10-31T05:00:49.956Z`** on
+  `savvy-kit-496703-r5`. The version contains **154 files**: 152 project
+  files and two Firebase-managed initialization files.
+- The prior live version `66fdcec2411fb532` was read and merged with the
+  production build. All **152 project files** match the merged artifact on
+  both `https://app.fairwayrefresh.com/` and
+  `https://savvy-kit-496703-r5.web.app/`; the file hashes were verified using
+  the Firebase Tools gzip-level-9 upload hash. The existing no-cache entry
+  policy, immutable `/assets/**` caching, and SPA rewrite were retained.
+- All **107** files under `driving-range-signs/` remain byte-identical,
+  including the complete 52-side map and installed PDF. The PDF SHA-256
+  remains
+  `f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`.
+  The existing Bay 1A QR destination was not changed. The deployed service
+  worker and mapping file are present.
+- No backend, Firestore, Rules, firmware, QR configuration, subscription
+  preference, production data, or production configuration was changed.
+
+### Validation
+
+- `npm test`: **84/84 passed**. The focused
+  `bayConfirmation.browser.mjs` test passed **1/1**. The production
+  configuration check and build passed; Vite retained its existing advisory
+  about chunks larger than 500 kB.
+- The focused browser test verified the exact Yes and No confirmation text,
+  success only after the backend returned success, no request for No, no
+  Close Window button or `window.close()` call, no automatic navigation or
+  reload, and preservation of the same request identity for failed-request
+  retry. Both confirmations remained visible and unclipped at **375 px** and
+  **430 px**.
+- The deployed bundle contains the approved tab-close instruction and no
+  Close Window control or script-close call. The existing Bay 1A production
+  destination was checked at **375 px**: No displayed **"No service request
+  was sent."** and **"You can close this browser tab."**, with no Close Window
+  button, horizontal overflow, or subsequent navigation. No request-creation
+  endpoint was called; the page's Firebase Identity Toolkit session lookup
+  was the only observed POST. The deployed Yes journey was not submitted in
+  production, as explicitly required.
+- No rollback was required. Physical iOS/Safari validation was not part of
+  this text-only correction.
+
 ## Driving Range golfer confirmation UX production release (2026-10-31)
 
 **CPO-authorized frontend-only deployment.** Approved application source
