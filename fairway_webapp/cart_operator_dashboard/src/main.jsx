@@ -992,6 +992,7 @@ function App() {
     <OperatorApp
       user={user}
       apiBaseUrl={API_BASE_URL}
+      adminApiBaseUrl={adminApiBaseUrl}
       inventoryApiBaseUrl={adminApiBaseUrl}
       operatorConfig={operatorConfig}
       requests={activeRequests}

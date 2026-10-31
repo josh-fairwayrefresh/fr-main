@@ -126,6 +126,56 @@ test('Firestore pagination reads every page including equal receipt timestamps a
   })), /Too many/);
 });
 
+test('Button Activity excludes completed requests by reporting state and retains unrelated rejection logs', () => {
+  const asOf = new Date(fixture.asOf);
+  const bounds = reportBounds({ start_date: '2026-10-17', end_date: '2026-10-28' }, fixture.course.timezone, asOf);
+  const request = {
+    id: 'button-request-1',
+    customer_id: fixture.customer.customer_id,
+    course_id: fixture.course.course_id,
+    device_id: 'FRB-0001',
+    received_at: new Date('2026-10-20T18:00:00.000Z'),
+    completed_at: new Date('2026-10-20T18:10:00.000Z'),
+    status: 'completed',
+    source: 'nrf9151',
+    event_type: 'button_press',
+  };
+  const excluded = {
+    ...request,
+    id: 'button-request-excluded',
+    reporting_state: 'excluded',
+  };
+  const report = buildButtonReport({
+    customer: fixture.customer,
+    course: fixture.course,
+    bounds,
+    asOf,
+    logs: [{
+      timestamp: '2026-10-20T18:05:00.000Z',
+      insertId: 'independent-rejection',
+      logName: 'projects/test/logs/stdout',
+      textPayload: "Rejected golfer request because Course service is unavailable: device_id: 'FRB-0001' course_id: 'COURSE-0001'",
+    }],
+    requests: [request, excluded],
+    retentionStart: fixture.start,
+  });
+
+  assert.deepEqual(report.points.filter((point) => point.series === 'completed').map((point) => point.id),
+    ['button-request-1']);
+  assert.equal(report.points.filter((point) => point.series === 'empty').length, 1);
+  assert.deepEqual(report.totals, { empty: 1, completed: 1 });
+  const restoredReport = buildButtonReport({
+    customer: fixture.customer,
+    course: fixture.course,
+    bounds,
+    asOf,
+    logs: [],
+    requests: [request, { ...excluded, reporting_state: 'active' }],
+    retentionStart: fixture.start,
+  });
+  assert.deepEqual(restoredReport.totals, { empty: 0, completed: 2 });
+});
+
 test('production adapter uses ADC, bucket retention and paginated scoped logs; permission failure is an error', async () => {
   const calls = [];
   const sources = createReportSources({}, { auth: {
@@ -162,6 +212,7 @@ test('Firestore adapter reuses receipt DESC index with document cursor and one r
   assert.equal(transactionOptions.readOnly, true);
   assert.equal(transactionOptions.readTime.toDate().toISOString(), fixture.asOf);
   assert.ok(calls.some(([method, field, direction]) => method === 'orderBy' && field === 'received_at' && direction === 'desc'));
+  assert.ok(calls.some(([method, ...fields]) => method === 'select' && fields.includes('reporting_state')));
   assert.ok(calls.some(([method, field, operator]) => method === 'where' && field === 'received_at' && operator === '<'));
   assert.equal(calls.find(([method]) => method === 'startAfter')[1], documents[499]);
   assert.equal(result.readTime, fixture.asOf);

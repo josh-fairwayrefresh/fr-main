@@ -276,3 +276,76 @@ test('course aggregation uses weighted completion duration and underlying active
   assert.strictEqual(summaries.monthly.average_completion_minutes, 17.5);
   assert.strictEqual(summaries.monthly.requests_per_hour, 1.6);
 });
+
+test('excluded outcomes leave Service History and request KPIs while preserving Active Cart Hours', () => {
+  const course = { timezone: 'America/Los_Angeles' };
+  const asOf = new Date('2026-10-22T20:00:00.000Z');
+  const events = [
+    { type: 'resumed', recorded_at: new Date('2026-10-22T18:00:00.000Z') },
+  ];
+  const requests = [
+    {
+      request_id: 'active',
+      status: 'completed',
+      received_at: new Date('2026-10-22T18:00:00.000Z'),
+      completed_at: new Date('2026-10-22T18:10:00.000Z'),
+    },
+    {
+      request_id: 'excluded',
+      status: 'completed',
+      reporting_state: 'excluded',
+      received_at: new Date('2026-10-22T18:00:00.000Z'),
+      completed_at: new Date('2026-10-22T18:20:00.000Z'),
+    },
+    {
+      request_id: 'excluded-cancelled',
+      status: 'cancelled',
+      reporting_state: 'excluded',
+      received_at: new Date('2026-10-22T18:00:00.000Z'),
+      cancelled_at: new Date('2026-10-22T18:05:00.000Z'),
+    },
+  ];
+
+  const reports = reportCoursePeriods(course, events, requests, requests, asOf);
+  for (const period of ['daily', 'weekly', 'monthly']) {
+    assert.equal(reports[period].summary.completed_requests, 1);
+    assert.equal(reports[period].summary.average_completion_minutes, 10);
+    assert.equal(reports[period].summary.requests_per_hour, 0.5);
+    assert.deepEqual(reports[period].history.map((request) => request.request_id), ['active']);
+    assert.equal(reports[period].summary.active_cart_hours, 2);
+  }
+
+  const restoredRequests = requests.map((request) => ({ ...request, reporting_state: 'active' }));
+  const restored = reportCoursePeriods(course, events, restoredRequests, restoredRequests, asOf);
+  for (const period of ['daily', 'weekly', 'monthly']) {
+    assert.equal(restored[period].summary.completed_requests, 2);
+    assert.equal(restored[period].summary.requests_per_hour, 1);
+    assert.deepEqual(restored[period].history.map((request) => request.request_id), [
+      'excluded', 'active', 'excluded-cancelled',
+    ]);
+    assert.equal(restored[period].summary.active_cart_hours, 2);
+  }
+});
+
+test('multi-Course aggregation includes only each Course request reporting state', () => {
+  const course = { timezone: 'America/Los_Angeles' };
+  const asOf = new Date('2026-10-22T20:00:00.000Z');
+  const excluded = {
+    request_id: 'excluded-course-request',
+    status: 'completed',
+    reporting_state: 'excluded',
+    received_at: new Date('2026-10-22T18:00:00.000Z'),
+    completed_at: new Date('2026-10-22T18:10:00.000Z'),
+  };
+  const active = {
+    ...excluded,
+    request_id: 'active-course-request',
+    reporting_state: 'active',
+  };
+  const firstCourse = reportCoursePeriods(course, [], [excluded], [excluded], asOf);
+  const secondCourse = reportCoursePeriods(course, [], [active], [active], asOf);
+  const aggregate = aggregateCourseReports([firstCourse, secondCourse]);
+
+  assert.equal(aggregate.daily.summary.completed_requests, 1);
+  assert.deepEqual(aggregate.daily.history.map((request) => request.request_id), ['active-course-request']);
+});
