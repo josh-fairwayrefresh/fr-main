@@ -424,8 +424,12 @@ The current implementation and deployment status are owned by
    inventory data. Switching categories resets the subcategory selection to
    All.
 - Catalog actions pair **Add Category** with **+ Add Product**. A clearly
-   labeled **Golfer-View Menu** link for the selected Course opens in a new tab
-   on the right of the filters, matching the audit button's font and text size.
+   labeled **Golfer-View Menu** control for the selected Course opens its
+   existing golfer-facing menu URL in an Inventory-controlled, full-screen
+   in-app viewer on the right of the filters, matching the audit button's font
+   and text size. The viewer provides a prominent accessible close control;
+   closing it returns to the same Inventory screen and preserves its current
+   state and operator session. The golfer-facing menu remains unchanged.
    **Confirm Inventory Audit** sits directly beneath Close out / Enter final
    sales inside the same bounded Sales Today/operator panel.
    If no slug is configured, explain that Admin must configure the link

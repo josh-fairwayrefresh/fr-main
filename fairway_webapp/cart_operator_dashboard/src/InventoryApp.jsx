@@ -281,6 +281,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   });
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState('all');
+  const [menuViewerOpen, setMenuViewerOpen] = useState(false);
   const [inventory, setInventory] = useState(null);
   const [loadStatus, setLoadStatus] = useState('loading');
   const [loadError, setLoadError] = useState('');
@@ -296,6 +297,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   const [sessionEditing, setSessionEditing] = useState(false);
   const exportStateRef = useRef(null);
   const refreshRef = useRef(async () => {});
+  const menuOpenButtonRef = useRef(null);
+  const menuCloseButtonRef = useRef(null);
+  const menuViewerWasOpen = useRef(false);
   const course = courses.find((item) => courseKey(item) === selectedKey)
     || selectedCourseFromLocation(courses, window.location.search);
   const session = useInventorySession(user, apiBaseUrl, course);
@@ -325,6 +329,15 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     && loadStatus === 'ready' && !session.unresolved && !session.submitting && !busyId;
   const exportSignature = JSON.stringify([selectedKey, inventory?.inventory_revision, inventory?.daily_sales, selectedCategory, selectedSubcategory, showArchived, session.shift?.staff_name]);
   exportStateRef.current = { canExport, signature: exportSignature };
+  useEffect(() => {
+    if (menuViewerOpen) {
+      menuViewerWasOpen.current = true;
+      menuCloseButtonRef.current?.focus();
+    } else if (menuViewerWasOpen.current) {
+      menuViewerWasOpen.current = false;
+      menuOpenButtonRef.current?.focus();
+    }
+  }, [menuViewerOpen]);
   const movement = useInventoryDrag({
     scope: `${user?.uid}:${course?.customer_id}:${course?.course_id}:${selectedCategory}:${selectedSubcategory}`,
     disabled: Boolean(busyId || session.submitting || session.unresolved || session.choosing || stockAction || editor || auditing),
@@ -458,7 +471,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
 
   const displayNames = courseDisplayNames(course);
   return <main className="inventory-app">
-    <header className="inv-header">
+    <header className="inv-header" inert={menuViewerOpen}>
       <div className="inv-header-main">
         <a href={courseContextUrl('/', course)} className="inv-brand" title="Return to Cart Operations"><img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" /></a>
         <nav className="inv-header-nav" aria-label="Inventory navigation">
@@ -484,7 +497,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         </div>
       </div>
     </header>
-    <div className="inv-main">
+    <div className="inv-main" inert={menuViewerOpen}>
       <section className="inv-title-row">
         <div className="inv-title"><p className="inv-eyebrow">{course.customer_name || 'MONARCH BAY GC'}</p><h1>CART INVENTORY MANAGEMENT DASHBOARD</h1><p className="inv-subtitle">{course.course_name}</p></div>
         <section className="inv-daily-sales" aria-label="Today's inventory sales">
@@ -511,7 +524,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
         </div>)}
       </nav><div className="inv-audit-action">
         {hasCurrentInventory && inventory?.public_menu_slug
-          ? <a className="inv-secondary inv-menu-link" href={publicMenuPath(inventory.public_menu_slug)} target="_blank" rel="noopener noreferrer">Golfer-View Menu</a>
+          ? <button className="inv-secondary inv-menu-link" type="button" ref={menuOpenButtonRef} onClick={() => setMenuViewerOpen(true)}>Golfer-View Menu</button>
           : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">Public menu link not configured for this Course. Contact Admin.</span>}
       </div></div>}
       {inventory && selectedCategory !== 'all' && subcategoryNames.length > 0 && <nav className="inv-subcategory-filters" aria-label="Filter inventory by subcategory">
@@ -541,5 +554,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     />}
     {stockAction && <StockDialog action={stockAction} session={session} onSaved={() => refreshInventory(true)} onRefresh={() => refreshInventory(true)} onClose={() => setStockAction(null)} />}
     {auditing && <AuditDialog inventory={inventory} session={session} onSaved={() => refreshInventory(true)} onClose={() => setAuditing(false)} />}
+    {menuViewerOpen && inventory?.public_menu_slug && <section className="inv-menu-viewer" role="dialog" aria-modal="true" aria-label="Golfer-View Menu">
+      <button className="inv-menu-viewer-close" type="button" ref={menuCloseButtonRef} onClick={() => setMenuViewerOpen(false)} aria-label="Close golfer-view menu and return to Inventory"><X size={30} strokeWidth={2.5} /></button>
+      <iframe title="Golfer-View Menu" src={publicMenuPath(inventory.public_menu_slug)} />
+    </section>}
   </main>;
 }

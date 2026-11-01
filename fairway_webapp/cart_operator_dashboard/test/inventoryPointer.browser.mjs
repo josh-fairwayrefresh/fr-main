@@ -67,7 +67,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
           title:box(document.querySelector('.inv-title')),panel:box(panel),
           actionBoxes:[...actions.querySelectorAll('button,a')].map(box),
           actionNames:[...actions.querySelectorAll('button,a')].map(e=>e.textContent),
-          publicLink:(()=>{const a=document.querySelector('.inv-audit-action a'),audit=document.querySelector('.inventory-session-actions .inv-secondary');return {href:a?.getAttribute('href'),target:a?.target,text:a?.textContent,font:getComputedStyle(a).fontFamily===getComputedStyle(audit).fontFamily&&getComputedStyle(a).fontSize===getComputedStyle(audit).fontSize};})(),
+          publicLink:(()=>{const a=document.querySelector('.inv-audit-action .inv-menu-link'),audit=document.querySelector('.inventory-session-actions .inv-secondary');return {tag:a?.tagName.toLowerCase(),text:a?.textContent,font:getComputedStyle(a).fontFamily===getComputedStyle(audit).fontFamily&&getComputedStyle(a).fontSize===getComputedStyle(audit).fontSize};})(),
           compactTotal:panel.querySelector('.inv-sales-total').textContent,
           detailedTally:Boolean(panel.querySelector('ul')),
           aboveFilters:actions.nextElementSibling.classList.contains('inv-filter-row'),
@@ -93,7 +93,7 @@ test('trusted mouse and touch dragging returns stock, resumes staff selection, s
       assert.equal(layout.adminIcon, true);
       assert.equal(layout.operatorInPanel, true);
       assert.deepEqual(layout.actionNames, ['Add Category', '+ Add Product']);
-      assert.deepEqual(layout.publicLink, { href: '/cartmenus/pointer-course', target: '_blank', text: 'Golfer-View Menu', font: true });
+      assert.deepEqual(layout.publicLink, { tag: 'button', text: 'Golfer-View Menu', font: true });
       assert.equal(layout.compactTotal, 'Sales Today0 units sold');
       assert.equal(layout.detailedTally, false);
       assert.equal(layout.logo.width, width <= 740 ? Math.min(168, layout.header.width - 192) : width <= 900 ? 190 : 210, 'Horizontal branding yields to 44px account controls within available header width');
