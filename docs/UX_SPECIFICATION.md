@@ -213,6 +213,10 @@ validation are recorded in the
   Confirmations remain visible until the golfer closes or navigates away from
   the tab; the page does not attempt script-initiated closure or automatically
   reload, redirect, or navigate away.
+  When the public bay lookup reports the Driving Range Course as suspended, a
+  newly opened QR page displays only **"Service is not available at this time.
+  You may close this window."** When service is resumed, newly opened QR pages
+  retain the normal request experience.
   No golfer login, order entry or payment is required.
 - One outstanding request exists per bay side until Complete or Cancel;
   A and B can request independently. Public pages, new request snapshots,
