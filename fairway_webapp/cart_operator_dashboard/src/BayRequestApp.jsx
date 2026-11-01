@@ -18,7 +18,7 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
       if (!response.ok) throw new Error(result.error || 'Unable to load this bay.');
       setBay(result);
       operation.current = sessionStorage.getItem(storageKey);
-      setState(result.available ? (operation.current ? 'retry' : 'ready') : 'unavailable');
+      setState(operation.current ? 'retry' : result.available ? 'ready' : 'unavailable');
     }).catch((reason) => {
       if (reason.name !== 'AbortError') { setError(reason.message); setState('error'); }
     });
@@ -55,15 +55,12 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
     }
   }
 
-  if (bay && !bay.available) {
-    return <main className="bay-page"><p role="status">Service is not available at this time. You may close this window.</p></main>;
-  }
-
   return <main className="bay-page">
     <img src="/icons/logo-and-name-row-banner.jpg" alt="Fairway Refresh" />
     {sandbox && <p className="bay-test">SANDBOX TEST — NOT FOR PRODUCTION</p>}
     {bay && <><p>{bay.course_name}</p><h1>Bay {bay.bay_number}{bay.bay_side || ''}</h1></>}
     {state === 'loading' && <p role="status">Loading bay…</p>}
+    {state === 'retry' && bay && !bay.available && <p role="status">Server requests are currently unavailable. You can still check your earlier submission.</p>}
     {['ready', 'submitting', 'retry'].includes(state) && <>
       <h2>Would you like a server to come and take your order?</h2>
       <div className="bay-actions"><button type="button" disabled={state === 'submitting'} onClick={submit}>

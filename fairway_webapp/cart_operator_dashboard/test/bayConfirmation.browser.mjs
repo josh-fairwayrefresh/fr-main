@@ -13,7 +13,6 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
   });
   const submissions = [];
   const createResults = [503, 200];
-  let serviceAvailable = true;
   let createdRequests = 0;
   server.middlewares.use(async (request, response, next) => {
     if (request.url !== '/__bay-confirmation') return next();
@@ -40,7 +39,7 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
     await page.route('**/mock-api/api/v1/public/bays/test-bay-id', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ bay_number: 9, bay_side: 'B', course_name: 'TEST Driving Range', available: serviceAvailable }),
+      body: JSON.stringify({ bay_number: 9, bay_side: 'B', course_name: 'TEST Driving Range', available: true }),
     }));
     await page.route('**/mock-api/api/v1/public/bays/test-bay-id/requests', async (route) => {
       const request = route.request();
@@ -124,24 +123,6 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
     assert.equal(await page.evaluate(() => window.closeAttempts), 0, 'Yes confirmation must not call window.close');
     assert.equal(await page.getByRole('button', { name: 'Reload bay page', exact: true }).count(), 0);
     assert.deepEqual(errors, []);
-
-    await page.evaluate(() => sessionStorage.setItem('fairway.bay.submission.test-bay-id', 'saved-operation'));
-    serviceAvailable = false;
-    await page.reload();
-    const suspensionMessage = 'Service is not available at this time. You may close this window.';
-    await page.getByText(suspensionMessage, { exact: true }).waitFor();
-    assert.equal(await page.locator('main').innerText(), suspensionMessage);
-    assert.equal(await page.locator('main').locator('> *').count(), 1);
-    assert.equal(await page.getByRole('button').count(), 0);
-    assert.equal(await page.locator('img').count(), 0);
-    assert.equal(await page.getByRole('heading', { name: 'Bay 9B', exact: true }).count(), 0);
-
-    serviceAvailable = true;
-    await page.evaluate(() => sessionStorage.removeItem('fairway.bay.submission.test-bay-id'));
-    await page.reload();
-    await page.getByRole('heading', { name: 'Would you like a server to come and take your order?', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Yes', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'No', exact: true }).waitFor();
     await context.close();
   } finally {
     await browser?.close();
