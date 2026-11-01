@@ -1,5 +1,53 @@
 # Deployment Guide
 
+## Inventory golfer menu in-app viewer production release (2026-10-31)
+
+**Authorized Inventory-only navigation correction.** Source commit
+`28087ed97357de85a5aa7d082776fd8ea8d3244c` changes the Inventory
+**Golfer-View Menu** control to open the existing public menu URL in an
+Inventory-controlled full-screen iframe viewer. Its accessible close control
+returns focus to the opener and preserves the mounted Inventory screen and
+operator session. The golfer-facing menu implementation and URL, Inventory
+workflows, authentication, and backend contracts are unchanged.
+
+### Hosting identity and artifact preservation
+
+- Firebase Hosting site `savvy-kit-496703-r5`, version
+  **`3d703c16d356b247`**, release **`1793505866839000`**. The previous live
+  version was `a63610eb954a0104`, release `1793504216107000`.
+- The isolated release worktree built **127** controlled project files.
+  All 127 files matched byte-for-byte on both
+  `https://app.fairwayrefresh.com/` and
+  `https://savvy-kit-496703-r5.web.app/`. The prior and new complete artifacts
+  have the same paths; only `index.html` and seven fingerprinted build bundles
+  were replaced. All **107** Driving Range sign assets remained unchanged.
+- The protected mapping SHA-256 is
+  `23b2c3fa1449a79d8d129e8e693602d3ea5cca63ab7401c582f0d73bc9496b87`; the
+  installation PDF SHA-256 is
+  `f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`.
+- The existing menu route returned HTTP 200 and has no frame-blocking
+  `X-Frame-Options` or Content-Security-Policy response header. The existing
+  SPA rewrite, no-cache entry policy, and immutable `/assets/**` caching were
+  retained. Only Firebase Hosting was deployed; no backend, Firestore, Rules,
+  firmware, infrastructure, production data, or service configuration changed.
+
+### Validation
+
+- `npm test`: **89/89 passed**. The focused Inventory viewer and adjacent
+  Inventory browser regressions passed **2/2** in the isolated release
+  worktree. The new browser test opened the existing menu URL in the viewer and
+  closed it at **390×844** and **834×1194**, checking full-screen geometry,
+  accessible close focus, preserved Inventory scroll/category/component state,
+  and retained operator session.
+- The fresh production configuration check and build passed; the build
+  verifier confirmed all 107 accepted QR assets. Vite emitted its existing
+  advisory about chunks larger than 500 kB.
+- The deployed `/`, `/inventory`, and public menu route returned HTTP 200.
+  Read-only production browser inspection confirmed the public golfer menu
+  rendered. Authenticated Inventory open/close was not exercised in production
+  because no production operator test session was available; the exact deployed
+  files were verified against the tested build on both Hosting origins.
+
 ## Driving Range tab-close guidance production release (2026-10-31)
 
 **CPO-authorized frontend-only correction.** Implementation commit
