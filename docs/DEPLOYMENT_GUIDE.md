@@ -6582,9 +6582,14 @@ Before recommending a production Hosting deployment:
 2. Assemble a complete, reproducible candidate artifact from controlled
    inputs. Required production assets must be part of those controlled inputs;
    they must not depend on implicit carry-forward from Hosting or on
-   unversioned local or session-only files.
-3. Compare the candidate against the complete live production file inventory
-   by path and content hash. Report every addition, modification, and removal.
+   unversioned local or session-only files. Establish candidate completeness
+   from accepted, version-controlled source inputs and their build checks before
+   considering the live production inventory.
+3. As secondary drift detection, compare the candidate against the complete
+   live production file inventory by path and content hash. Report every
+   addition, modification, and removal. Live files may expose a discrepancy
+   and block release, but must never be copied into or used to assemble the
+   candidate.
 4. Block deployment when a required existing resource would be removed or
    modified outside the explicitly authorized scope.
 5. Provide the complete production delta, artifact identity, preservation
@@ -6598,16 +6603,16 @@ Before recommending a production Hosting deployment:
    previous release identity for recovery; use the supported Hosting Release
    history rollback procedure when restoration is required.
 
-These are required release controls; an automated fail-closed preflight is not
-yet implemented. The repository-controlled production build inputs do not
-contain the complete previously accepted production asset inventory,
-including the Driving Range sign files, and the deployment process currently
-does not automatically detect or block an unapproved removal or modification.
-Until that deployment-integrity defect is corrected and validated, ordinary
-production Hosting deployments must not proceed. Passing application tests and
-builds is insufficient to establish that the candidate preserves the live
-site. The documented Hosting command remains the deployment mechanism, not
-evidence of preservation.
+Candidate completeness is established upstream from controlled source, not
+reconstructed from live Hosting. The production frontend build verifies that
+the version-controlled Driving Range sign assets match the accepted mapping,
+installation PDF, complete file count, and content fingerprint; an incomplete
+or altered asset set fails the build before deployment. Live comparison remains
+a secondary drift and preservation check only. Passing this build check does
+not itself authorize deployment or replace independent Lead Architect review,
+separate CPO authorization, exact-artifact deployment, and post-deployment
+verification. The documented Hosting command remains the deployment
+mechanism, not evidence of authorization.
 
 Deployment process status:
 
