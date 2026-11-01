@@ -87,6 +87,27 @@ identity or command path; operator access still requires normal authentication.
 - Open, deferred work is listed in `docs/feature_backlog.md`. Superseded milestones and abandoned work are summarized, non-authoritatively, in `docs/archive.md`.
 - Pilot 1.1 has no Health reporting, and the golfer demand window is fixed at five minutes.
 
+### Persistent production environment and preservation
+
+Fairway Refresh operates one persistent, integrated live production
+environment. Engineering increments modify that environment only within their
+explicitly authorized scope; they do not establish replacement production
+environments.
+
+Existing production functionality, data, configuration, interfaces,
+dependencies, infrastructure, and required artifacts remain intact unless the
+CPO expressly authorizes their modification or removal. This preservation
+invariant applies across firmware, backend, web applications, infrastructure,
+and integrations. A technical release mechanism may publish a complete
+artifact or version, but it must preserve the accepted production system
+outside the authorized change. A Git branch isolates source work; it does not
+isolate production resources.
+
+Infrastructure changes require explicit architectural consideration,
+proportionate validation, and CPO authorization. Deployment procedures and
+resource-specific preservation checks are owned by the
+[Deployment Guide](DEPLOYMENT_GUIDE.md).
+
 ## Change and Validation Discipline
 
 ### Admin Button Activity Report review increment
@@ -384,13 +405,20 @@ Follow the Fidelity Mandate above and the engineering workflow in `docs/README.m
 
 ### Isolated development and remote review
 
-The canonical GitHub repository is `josh-fairwayrefresh/fr-main`. Begin new
-material work on a scoped branch from accepted `main` in an isolated workspace,
-with clear sprint/feature goals, scope, readiness, and acceptance criteria.
-Use the existing readiness, roles, and authorization rules in
+The canonical GitHub repository is `josh-fairwayrefresh/fr-main`. Every
+engineering task, regardless of size or type, begins on a dedicated scoped
+branch from the accepted baseline; this includes features, defects,
+documentation, and governance changes. Do not make engineering edits directly
+on `main`. The local VS Code workspace is the active engineering environment;
+GitHub is the remote source backup and review/promotion location, not the
+production environment.
+
+Establish clear goals, scope, readiness, and acceptance criteria using the
+existing readiness, roles, and authorization rules in
 [Kaizen](Continuous_improvement_Kaizen_1.0.md), not a competing approval process.
-Development and testing use approved sandbox resources: a Git branch alone
-does not isolate production data, credentials, infrastructure, or devices.
+Development and testing use approved sandbox resources where needed; a branch
+alone does not isolate production data, credentials, infrastructure, or
+devices.
 
 Within explicit authorization, develop, validate, commit, and push the branch;
 expose in-progress work and evidence in a draft PR targeting `main`. Each
@@ -432,6 +460,14 @@ documentation, residual risks, and CPO acceptance. Merge and operational
 authorization remain separate. Release-specific rollout, observation, stop
 conditions, and compatible recovery are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
+
+Before recommending a production deployment, the Lead Architect independently
+assesses the complete proposed production effect, not merely the source diff or
+feature-test results. The review establishes that production responsibilities
+and resources outside the authorized scope remain preserved, using the
+release-integrity evidence required by the Deployment Guide. This review does
+not replace or combine the existing development, integration, deployment, and
+production-validation authorization boundaries.
 
 ### CPO_stats_fix architecture — accepted and deployed
 

@@ -6567,6 +6567,48 @@ Repository-Derived and Historical Web Deployment Facts:
   deploy the Firestore rules/indexes also declared in `firebase.json`, Functions,
   or other Firebase resources.
 
+### Production Hosting release integrity
+
+Firebase Hosting publishes a complete snapshot of the configured `public`
+directory; for this application, that directory is `dist`. A Hosting-only
+deployment limits which Firebase product is deployed. It does not merge only
+changed application files or preserve live files omitted from the candidate
+artifact.
+
+Before recommending a production Hosting deployment:
+
+1. Identify the accepted live production release and the complete affected
+   deployment boundary.
+2. Assemble a complete, reproducible candidate artifact from controlled
+   inputs. Required production assets must be part of those controlled inputs;
+   they must not depend on implicit carry-forward from Hosting or on
+   unversioned local or session-only files.
+3. Compare the candidate against the complete live production file inventory
+   by path and content hash. Report every addition, modification, and removal.
+4. Block deployment when a required existing resource would be removed or
+   modified outside the explicitly authorized scope.
+5. Provide the complete production delta, artifact identity, preservation
+   invariants, validation evidence, and verified recovery release to the Lead
+   Architect for independent review. Obtain separate CPO authorization for
+   production deployment.
+6. Deploy the exact reviewed artifact. Do not rebuild it or substitute another
+   artifact between review and deployment.
+7. Verify the resulting live release identity, intended feature behavior, and
+   preservation of unrelated production resources. Retain the verified
+   previous release identity for recovery; use the supported Hosting Release
+   history rollback procedure when restoration is required.
+
+These are required release controls; an automated fail-closed preflight is not
+yet implemented. The repository-controlled production build inputs do not
+contain the complete previously accepted production asset inventory,
+including the Driving Range sign files, and the deployment process currently
+does not automatically detect or block an unapproved removal or modification.
+Until that deployment-integrity defect is corrected and validated, ordinary
+production Hosting deployments must not proceed. Passing application tests and
+builds is insufficient to establish that the candidate preserves the live
+site. The documented Hosting command remains the deployment mechanism, not
+evidence of preservation.
+
 Deployment process status:
 
 Repository-controlled artifacts define web build behavior and the production

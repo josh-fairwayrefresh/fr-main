@@ -393,3 +393,24 @@ Prefer direct, low-risk, additive instrumentation over inferring root cause from
 Failure prevented
 
 Repeated speculative diagnosis of a distributed/async failure (for example, competing reboot or connectivity-drop theories) that direct instrumentation could resolve in one occurrence, and wasted investigation cycles re-deriving the same ambiguity each time the symptom recurs.
+
+⸻
+
+K-008 — Review the Complete Production Effect
+
+Rule
+
+Evaluate engineering changes by their complete applied effect on the existing
+production environment, not only by source diff, feature tests, or the selected
+deployment component. Preserve production resources outside the authorized
+scope, and verify both the intended changes and the preservation invariants.
+Use existing review and authorization points; this principle does not create
+a separate routine approval gate.
+
+Failure prevented
+
+A narrow Driving Range QR interface change was deployed as a complete Firebase
+Hosting snapshot that omitted previously accepted sign assets. Reviewing only
+the feature diff and tests did not expose that unrelated production files would
+be removed. This rule prevents narrowly scoped changes from silently replacing
+or removing out-of-scope production resources.
