@@ -199,7 +199,12 @@ validation are recorded in the
   under its own Course, not copied sandbox identities.
   `qr_bays` remains the identity owner, with numeric `bay_number` and explicit
   `bay_side: A | B`. The
-  anonymous mobile page identifies the Course and bay and asks:
+  anonymous mobile page uses the existing public bay availability response.
+  When service is suspended, it displays only
+  **"Sorry, we are outside of service hours. You may close this window."**
+  and exposes no request or other service action. Missing or invalid
+  availability fails closed without showing the active request flow. When
+  service is active, the page identifies the Course and bay and asks:
   **"Would you like a server to come and take your order?"**
   The complete page uses a white background and dark readable text, including
   the surrounding viewport and loading, confirmation and error states,

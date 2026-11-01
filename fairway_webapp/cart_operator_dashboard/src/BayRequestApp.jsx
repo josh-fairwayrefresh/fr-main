@@ -16,9 +16,12 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
     }).then(async (response) => {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to load this bay.');
+      if (typeof result.available !== 'boolean') {
+        throw new Error('Unable to verify Driving Range service availability.');
+      }
       setBay(result);
       operation.current = sessionStorage.getItem(storageKey);
-      setState(operation.current ? 'retry' : result.available ? 'ready' : 'unavailable');
+      setState(!result.available ? 'suspended' : operation.current ? 'retry' : 'ready');
     }).catch((reason) => {
       if (reason.name !== 'AbortError') { setError(reason.message); setState('error'); }
     });
@@ -53,6 +56,12 @@ export default function BayRequestApp({ apiBaseUrl, bayId, sandbox = false }) {
     } finally {
       inFlight.current = false;
     }
+  }
+
+  if (state === 'suspended') {
+    return <main className="bay-page">
+      <p role="status">Sorry, we are outside of service hours. You may close this window.</p>
+    </main>;
   }
 
   return <main className="bay-page">
