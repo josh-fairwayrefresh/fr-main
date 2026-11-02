@@ -303,6 +303,11 @@ location. An unrecognized location is rejected with an error.
   Values come from the Course weather register (Open-Meteo). A day whose weather
   could not be obtained shows "High —"; without a Course location, or if the
   register cannot be read, the line is omitted and the report still generates.
+- Each date with a recorded total in the Course **Total Sales Register** shows
+  that amount in bold US dollars and cents (for example "$1,381.79") floating
+  on the column's 8 PM line, above the markers on a light backing. Dates with
+  no recorded total, future dates, or a register read failure leave the line
+  blank; the report still generates.
 - Each date column is shaded light, semi-transparent green for the periods
   service was ON, and a field above that column's counts shows that day's
   **cart hours** in service; the key gives the range total. Periods come from

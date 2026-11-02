@@ -114,7 +114,7 @@ function serviceByDay(serviceEvents, bounds, timezone) {
   }));
 }
 
-function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [], weather = null }) {
+function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [], weather = null, sales = null }) {
   if (requests.length > MAX_RECORDS) {
     throw new ButtonReportError('Report exceeds 20,000 source records. Choose a shorter range.', 413);
   }
@@ -143,9 +143,10 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);
     const dayWeather = weather?.get(day) ? { high_f: weather.get(day).high_f, rain: weather.get(day).rain } : null;
-    return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null, cart_hours: null, service: [], weather: null } :
+    return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null, cart_hours: null, service: [], weather: null, sales_minor: null } :
       { day, ...count(points.filter(point => point.day === day)), cart_hours: hours(service.get(day).minutes),
-        service: service.get(day).periods, weather: dayWeather };
+        service: service.get(day).periods, weather: dayWeather,
+        sales_minor: sales?.has(day) ? sales.get(day) : null };
   });
   const cartHours = hours(bounds.days.reduce((sum, day) => sum + service.get(day).minutes, 0));
   return {
@@ -174,14 +175,17 @@ async function generateButtonReport(db, input, { asOf = new Date(), source, fetc
   const requests = await sources.requests({ ...bounds, asOf, customerId: input.customer_id, courseId: input.course_id });
   const unlabeled = [...new Set(requests.filter(request => request.device_id && !request.device_label &&
     !Number.isInteger(request.hole)).map(request => request.device_id))];
-  const [currentLabels, serviceEvents, weather] = await Promise.all([
+  const today = localPoint(asOf, course.timezone).day;
+  const [currentLabels, serviceEvents, weather, sales] = await Promise.all([
     unlabeled.length ? sources.currentLabels({ deviceIds: unlabeled, courseId: input.course_id }) : {},
     sources.serviceEvents({ ...bounds, customerId: input.customer_id, courseId: input.course_id }),
     sources.weather ? sources.weather({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
-      today: localPoint(asOf, course.timezone).day, now: asOf }) : null,
+      today, now: asOf }) : null,
+    sources.sales ? sources.sales({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
+      today, start: bounds.start, end: bounds.end, now: asOf }) : null,
   ]);
   return buildButtonReport({ customer, course: { course_id: course.course_id, course_name: course.course_name, timezone: course.timezone },
-    bounds, asOf, requests, currentLabels, serviceEvents, weather });
+    bounds, asOf, requests, currentLabels, serviceEvents, weather, sales });
 }
 
 module.exports = { ButtonReportError, MAX_DAYS, MAX_RECORDS, LOCATION_COLORS, reportBounds, requestLabel,

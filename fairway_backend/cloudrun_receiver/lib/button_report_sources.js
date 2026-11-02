@@ -4,6 +4,7 @@ const { FieldPath, Timestamp } = require('@google-cloud/firestore');
 const { ButtonReportError, MAX_RECORDS } = require('./button_activity_report');
 const { deriveDisplayLabelFromLocation } = require('./fleet/schema');
 const { readCourseWeather } = require('./course_weather');
+const { readCourseSales } = require('./course_sales');
 
 async function collectRequestPages(getPage) {
   const rows = [];
@@ -53,6 +54,14 @@ function createReportSources(db, { fetchImpl = (...args) => fetch(...args) } = {
       checkDeadline();
       return readCourseWeather(db, { customerId, courseId, course, days, today, now, fetchImpl }).catch(error => {
         console.error('Button report weather read failed:', { code: error.code, message: error.message });
+        return null;
+      });
+    },
+    // Total sales are supplementary: any failure leaves the report without them.
+    async sales({ customerId, courseId, course, days, today, start, end, now }) {
+      checkDeadline();
+      return readCourseSales(db, { customerId, courseId, course, days, today, start, end, now }).catch(error => {
+        console.error('Button report total sales read failed:', { code: error.code, message: error.message });
         return null;
       });
     },

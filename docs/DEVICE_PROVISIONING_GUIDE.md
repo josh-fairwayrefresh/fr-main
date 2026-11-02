@@ -116,6 +116,18 @@ The hierarchy is Customer → Course → Device:
   ending at least two days earlier are final and reused, and more recent days,
   or days fetched for different coordinates, are refreshed. Client access is
   denied by the Firestore rules catch-all.
+- A Course's **Total Sales Register** is
+  `customers/{customerId}/courses/{courseId}/sales_days/{YYYY-MM-DD}`:
+  `{ day, total_minor, currency_code: "USD", source, ... }` for a Course-local
+  day. `source: closeout` days total that day's operator shift close-outs
+  (`inventory_shift_closures.amount_minor`, by Course-local `closed_at`) and
+  also store `closeout_count` and `closeout_total_minor`; the Admin backend
+  creates or refreshes them when a Button Activity report covers the day.
+  `source: paper_record` (prior paper records) and `source: reviewed_correction`
+  (a CPO-reviewed total replacing the close-out sum, with `note`) are entered
+  only by a recorded, CPO-authorized write and are never overwritten by
+  close-out sync. Close-out records themselves are not changed. Client access
+  is denied by the Firestore rules catch-all.
 - A Device has a permanent identity as the Firestore document ID `devices/{FRB-XXXX}`.
 - IDs use `CUST-XXXX`, `COURSE-XXXX`, and `FRB-XXXX` formats. Backend allocation is centralized and transaction-backed; clients do not guess IDs.
 - Active assignment is represented by `customer_id`/`customer_name`, `course_id`/`course_name`, and one `location`. A device in `in_inventory` has all assignment fields null. Do not duplicate device identity, hole, label, or active status in separate fields.

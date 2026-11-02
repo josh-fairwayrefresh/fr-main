@@ -57,7 +57,7 @@ test('three series use saved suspended, cancelled and completed requests and hon
   const restored = build(requests.map(row => ({ ...row, reporting_state: 'active' })));
   assert.deepEqual(restored.totals, { completed: 2, suspended: 2, cancelled: 2, cart_hours: 0 });
   const day = report.days.find(item => item.day === '2026-10-20');
-  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1, cart_hours: 0, service: [], weather: null });
+  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1, cart_hours: 0, service: [], weather: null, sales_minor: null });
 });
 
 test('legend uses the location in use at each press, falls back to current placement, and orders naturally', () => {
@@ -126,6 +126,26 @@ test('the daily high and rain come from the Course weather register and fit the 
   assert.equal(pdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);
   assert.ok(pdf.includes(Buffer.from('/Subtype /Image')), 'the Fairway Refresh logo is embedded');
   if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-weather.pdf'), pdf);
+});
+
+test('recorded total sales come from the Course Total Sales Register and render on the 8 PM line', async () => {
+  const db = await database();
+  const courseRef = db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001');
+  await courseRef.collection('sales_days').doc('2026-10-19')
+    .set({ day: '2026-10-19', total_minor: 17691, currency_code: 'USD', source: 'paper_record' });
+  await courseRef.collection('inventory_shift_closures').doc('s1')
+    .set({ amount_minor: 66418, currency_code: 'USD', closed_at: new Date('2026-10-20T23:49:00Z') });
+  const at = new Date('2026-10-21T19:30:00Z');
+  const input = { customer_id: 'CUST-0001', course_id: 'COURSE-0001', start_date: '2026-10-19', end_date: '2026-10-22' };
+  const report = await generateButtonReport(db, input, { asOf: at, source: { requests: async () => [], serviceEvents: async () => [],
+    currentLabels: async () => ({}), sales: createReportSources(db).sales } });
+  assert.deepEqual(report.days.map(day => day.sales_minor), [17691, 66418, null, null]);
+  const pdf = await renderButtonReport(report);
+  assert.equal(pdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);
+  assert.ok(pdf.includes(Buffer.from('Helvetica-Bold')), 'sales amounts render in bold');
+  const failing = await generateButtonReport(db, input, { asOf: at, source: { requests: async () => [], serviceEvents: async () => [],
+    currentLabels: async () => ({}), sales: async () => null } });
+  assert.ok(failing.days.every(day => day.sales_minor === null), 'an unavailable register leaves sales blank');
 });
 
 test('in-service shading and cart hours count only time between each day\'s first and last service change', async () => {

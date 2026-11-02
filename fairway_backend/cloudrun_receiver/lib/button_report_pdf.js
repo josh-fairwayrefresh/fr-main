@@ -16,10 +16,15 @@ const RAIN_BLUE = '#2F7FC1';
 const LOGO = fs.readFileSync(path.join(__dirname, '..', 'assets', 'fairway-refresh-report-logo.png'));
 const LOGO_WIDTH = 150;
 const TITLE_WIDTH = 560;
+const SALES_HOUR = 20;
 
 function dayDate(day) {
   const [year, month, date] = day.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, date, 12));
+}
+
+function currency(minor) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100);
 }
 
 function hourLabel(hour) {
@@ -147,6 +152,18 @@ function renderButtonReport(report) {
         const index = days.findIndex(day => day.day === point.day);
         if (index >= 0) marker(point.series, px(index), py(point.hour), colors.get(point.label));
       }
+      // Recorded total sales float in bold on each day's 8 PM line, above markers.
+      days.forEach((day, index) => {
+        if (!Number.isSafeInteger(day.sales_minor)) return;
+        const amount = currency(day.sales_minor);
+        let size = 8.5;
+        while (size > 6 && pdf.font('Helvetica-Bold').fontSize(size).widthOfString(amount) > step - 8) size -= 0.5;
+        const width = pdf.font('Helvetica-Bold').fontSize(size).widthOfString(amount) + 6;
+        pdf.roundedRect(px(index) - width / 2, py(SALES_HOUR) - size / 2 - 2, width, size + 4, 2)
+          .fillOpacity(0.85).fill('#FFFFFF').fillOpacity(1);
+        pdf.font('Helvetica-Bold').fontSize(size).fillColor('#253238')
+          .text(amount, px(index) - width / 2, py(SALES_HOUR) - size / 2 + 0.5, { width, align: 'center', lineBreak: false });
+      });
       text('Time of day', 36, top - 12, 7);
       if (pages > 1) text(`Page ${page + 1} of ${pages}`, left, bottom + 24, 8, { width: right - left, align: 'center' });
     }
