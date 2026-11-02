@@ -86,22 +86,29 @@ function localPoint(timestamp, timezone) {
 }
 
 // Port of the accepted one-off generator: every series is plotted at receipt time, not completion time.
-// In-service periods use the Cart KPI Active Cart Hours rules: On-course
-// Resume/Suspend events, ongoing time through the report end, minute rounding.
+// In-service periods follow the On-course Resume/Suspend events, but a day only
+// counts time between its own first and last service change (CPO 2026-11-02):
+// service carried over from a prior day or left on after the day's last change
+// is not shown. Service still on during the in-progress final day counts
+// through the report time.
 function serviceByDay(serviceEvents, bounds, timezone) {
-  const intervals = activeIntervals(serviceEvents, bounds.end);
+  const end = bounds.end.getTime();
+  const closedAtEnd = serviceEvents.some(event => event.type === 'suspended' &&
+    dateValue(event.recorded_at).getTime() === end);
+  const intervals = activeIntervals(serviceEvents, bounds.end).filter(interval => {
+    const startDay = localPoint(interval.start, timezone).day;
+    if (interval.start < bounds.start) return false;
+    const ongoing = interval.end.getTime() === end && !closedAtEnd;
+    if (ongoing) return !bounds.endExclusive && startDay === localPoint(bounds.end, timezone).day;
+    return startDay === localPoint(interval.end, timezone).day;
+  });
   return new Map(bounds.days.map(day => {
-    const dayStart = localMidnightUtc(parseDay(day), timezone);
-    const dayEnd = localMidnightUtc(addLocalDays(parseDay(day), 1), timezone);
     const periods = [];
     let seconds = 0;
     for (const interval of intervals) {
-      const from = Math.max(interval.start.getTime(), dayStart.getTime(), bounds.start.getTime());
-      const to = Math.min(interval.end.getTime(), dayEnd.getTime(), bounds.end.getTime());
-      if (from >= to) continue;
-      seconds += (to - from) / 1000;
-      periods.push({ start_hour: localPoint(new Date(from), timezone).hour,
-        end_hour: to === dayEnd.getTime() ? 24 : localPoint(new Date(to), timezone).hour });
+      if (localPoint(interval.start, timezone).day !== day) continue;
+      seconds += (interval.end - interval.start) / 1000;
+      periods.push({ start_hour: localPoint(interval.start, timezone).hour, end_hour: localPoint(interval.end, timezone).hour });
     }
     return [day, { periods, minutes: Math.round(seconds / 60) }];
   }));

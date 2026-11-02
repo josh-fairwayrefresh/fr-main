@@ -292,13 +292,16 @@ entitlement, service state or operational data is changed.
   explanatory notes.
 - Each date column is shaded light, semi-transparent green for the periods
   service was ON, and a field above that column's counts shows that day's
-  **cart hours** in service; the key gives the range total. Both use the Cart
-  KPI **Active Cart Hours** rules: the On-course operator Resume/Suspend
-  `service_events` stream (Amenity Areas transitions excluded), service already
-  ON at the range start, ongoing time through the as-of boundary, time split
-  across Course-local days, minute rounding and at most two decimals. Service
-  left ON overnight is shown and counted as recorded. Future dates show no
-  cart hours.
+  **cart hours** in service; the key gives the range total. Periods come from
+  the On-course operator Resume/Suspend `service_events` stream (Amenity Areas
+  transitions excluded). Only time between a day's own Resume and a later
+  Suspend on the same Course-local day counts: service carried over from a
+  previous day (before the day's first change) and service left ON after the
+  day's last change, including overnight, are excluded. On the in-progress
+  final day, service resumed that day and still ON counts through the report
+  time. Hours use minute rounding and at most two decimals. These report hours
+  can therefore be lower than the Cart KPI **Active Cart Hours**, which counts
+  recorded service as-is. Future dates show no cart hours.
 - The legend is by location, not device: each Hole or custom name has its own
   color, assigned in natural order within the report from an 18-color palette.
   Each point uses the `device_label` snapshot stored on its request at receipt,

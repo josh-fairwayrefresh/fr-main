@@ -92,7 +92,7 @@ test('report generation reads current placement only for unlabelled requests at 
   assert.deepEqual(report.locations.map(location => location.label), ['Clubhouse', 'FRB-0008', 'Hole 7']);
 });
 
-test('in-service shading and cart hours use On-course Resume/Suspend time split by course-local day', async () => {
+test('in-service shading and cart hours count only time between each day\'s first and last service change', async () => {
   const at = new Date('2026-10-21T19:30:00Z');
   const range = reportBounds({ start_date: '2026-10-19', end_date: '2026-10-22' }, fixture.course.timezone, at);
   const events = [
@@ -100,17 +100,23 @@ test('in-service shading and cart hours use On-course Resume/Suspend time split 
     { type: 'suspended', recorded_at: new Date('2026-10-19T17:15:00Z') },
     { type: 'resumed', recorded_at: new Date('2026-10-19T18:00:00Z') },
     { type: 'resumed', recorded_at: new Date('2026-10-19T19:00:00Z') },
-    { type: 'suspended', recorded_at: new Date('2026-10-20T08:00:00Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-19T22:30:00Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-20T01:00:00Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-20T15:00:00Z') },
     { type: 'resumed', recorded_at: new Date('2026-10-21T16:00:00Z') },
   ];
   const report = buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds: range, asOf: at,
     requests: [], serviceEvents: events });
-  assert.deepEqual(report.days.map(day => day.cart_hours), [23.25, 1, 3.5, null]);
-  assert.deepEqual(report.days[0].service, [{ start_hour: 0, end_hour: 10.25 }, { start_hour: 11, end_hour: 24 }]);
-  assert.deepEqual(report.days[1].service, [{ start_hour: 0, end_hour: 1 }]);
-  assert.deepEqual(report.days[2].service, [{ start_hour: 9, end_hour: 12.5 }], 'ongoing service ends at the report time');
-  assert.deepEqual(report.days[3].service, []);
-  assert.equal(report.totals.cart_hours, 27.75);
+  assert.deepEqual(report.days.map(day => day.cart_hours), [4.5, 0, 3.5, null],
+    'carry-over before the first change and overnight time after the last change are not counted');
+  assert.deepEqual(report.days[0].service, [{ start_hour: 11, end_hour: 15.5 }]);
+  assert.deepEqual(report.days[1].service, []);
+  assert.deepEqual(report.days[2].service, [{ start_hour: 9, end_hour: 12.5 }], 'in-progress day counts through the report time');
+  assert.equal(report.totals.cart_hours, 8);
+  const later = new Date('2026-10-23T19:00:00Z');
+  const ended = buildButtonReport({ customer: fixture.customer, course: fixture.course, asOf: later, requests: [],
+    bounds: reportBounds({ start_date: '2026-10-19', end_date: '2026-10-21' }, fixture.course.timezone, later), serviceEvents: events });
+  assert.deepEqual(ended.days.map(day => day.cart_hours), [4.5, 0, 0], 'service left on after a past day\'s last change is excluded');
 
   const db = await database();
   const stream = db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001').collection('service_events');
