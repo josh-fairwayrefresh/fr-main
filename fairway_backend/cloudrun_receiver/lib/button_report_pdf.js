@@ -64,7 +64,7 @@ function renderButtonReport(report) {
     for (let page = 0; page < pages; page++) {
       pdf.addPage();
       const days = report.days.slice(page * 12, page * 12 + 12);
-      const title = `${report.customer.customer_name || report.customer.customer_id}: empty attempts and completed button requests`;
+      const title = `${report.customer.customer_name || report.customer.customer_id}: Button Request Service Performance`;
       if (pdf.fontSize(15).heightOfString(title, { width: 720 }) > 36 ||
           pdf.fontSize(10).widthOfString(report.course.course_name) > 720) {
         throw new ButtonReportError('Customer or Course name exceeds the readable report heading limit.', 413);

@@ -287,7 +287,8 @@ entitlement, service state or operational data is changed.
   Cloud Logging is no longer read; there is no retention coverage, N/A or
   partial-day marker. This does not change Service History's completion-time
   metrics.
-- Below the unchanged title, the PDF shows the Course name alone, then one
+- The title is **"[Customer name]: Button Request Service Performance"**
+  (Customer ID if no name is set). Below it, the PDF shows the Course name alone, then one
   line giving only the start and end dates. It has no disclaimer or
   explanatory notes.
 - Each date column is shaded light, semi-transparent green for the periods
