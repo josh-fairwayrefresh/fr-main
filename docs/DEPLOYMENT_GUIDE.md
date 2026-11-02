@@ -1,5 +1,26 @@
 # Deployment Guide
 
+## Full History request date production release (2026-11-02)
+
+**CPO-authorized Hosting-only release after CPO sandbox review.** Source is
+`f04bc30c1061c03758f58d8b312849f772cbc3c1` (`feature/history-request-date`,
+one commit on the request reporting exclusion release). Full History and
+Admin excluded rows now show the received weekday, date and time; on phones
+that column is now shown beneath the request name instead of hidden.
+
+- Hosting version `40cc1fa49fad2c45`, release `1793649938227000`; rollback
+  target version `3fc2cc810d7a1591`, release `1793648738754000`.
+- Frontend 89/89 and browser suite 28 passed, 0 failed, 3 skipped; the
+  reporting browser test asserts the visible date fits at 375, 430, 768, 1024
+  and 1440 px without horizontal overflow.
+- Clean production build: 127 files, 107 Driving Range assets verified with
+  unchanged mapping and PDF hashes. Relative to the prior live release, only
+  `index.html` and seven fingerprinted bundles changed. All 127 files matched
+  byte-for-byte on both production origins; `/`, `/inventory`, `/admin`, a QR
+  destination, `sw.js` and the installation PDF returned 200.
+- QR sandbox review used Hosting only; no backend, Firestore, rules, indexes,
+  firmware, infrastructure or production data changed.
+
 ## Administrator request reporting exclusion production release (2026-11-02)
 
 **CPO-authorized integrated release after CPO sandbox acceptance.** Release
