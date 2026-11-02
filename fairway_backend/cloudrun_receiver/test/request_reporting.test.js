@@ -5,6 +5,7 @@ const test = require('node:test');
 const { FakeFirestore } = require('./fake_firestore');
 const { createFairwayHandlers } = require('../index');
 const {
+  isRequestReportingEligible,
   listExcludedRequests,
   requestReportingState,
   setRequestReportingState,
@@ -212,4 +213,23 @@ test('invalid reporting states fail closed', async () => {
   await assert.rejects(setRequestReportingState(new FakeFirestore(), reportingInput('x', 'ignored')), {
     status: 400,
   });
+});
+
+test('invalid reporting states are omitted from reporting without failing it', () => {
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (line) => warnings.push(JSON.parse(line));
+  try {
+    assert.equal(isRequestReportingEligible({ ...requestBase }), true);
+    assert.equal(isRequestReportingEligible({ ...requestBase, reporting_state: 'active' }), true);
+    assert.equal(isRequestReportingEligible({ ...requestBase, reporting_state: 'excluded' }), false);
+    assert.equal(warnings.length, 0);
+    assert.equal(isRequestReportingEligible({ ...requestBase, id: 'bad-1', reporting_state: 'ignored' }), false);
+    assert.equal(isRequestReportingEligible({ ...requestBase, reporting_state: null }), false);
+    assert.equal(warnings.length, 2);
+    assert.equal(warnings[0].message, 'request_reporting_state_invalid');
+    assert.equal(warnings[0].request_id, 'bad-1');
+  } finally {
+    console.warn = warn;
+  }
 });

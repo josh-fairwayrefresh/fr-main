@@ -24,19 +24,32 @@ function requestReportingState(request) {
   return state;
 }
 
+// An unrecognized explicit state is never treated as active: the request is
+// omitted from reporting and logged, without failing the whole report.
 function isRequestReportingEligible(request) {
-  return requestReportingState(request) === 'active';
+  const state = request.reporting_state === undefined ? 'active' : request.reporting_state;
+  if (state === 'active') return true;
+  if (state !== 'excluded') {
+    console.warn(JSON.stringify({
+      severity: 'WARNING',
+      message: 'request_reporting_state_invalid',
+      request_id: request.request_id || request.id || null,
+      customer_id: request.customer_id || null,
+      course_id: request.course_id || null,
+    }));
+  }
+  return false;
 }
 
 async function listExcludedRequests(db, customerId, courseId) {
   const snapshot = await db.collection('requests')
     .where('customer_id', '==', customerId)
     .where('course_id', '==', courseId)
+    .where('reporting_state', '==', 'excluded')
     .get();
   return snapshot.docs
     .map((doc) => ({ ...doc.data(), id: doc.id, request_id: doc.id }))
-    .filter((request) => isReportableRequest(request) &&
-      requestReportingState(request) === 'excluded');
+    .filter((request) => isReportableRequest(request));
 }
 
 async function setRequestReportingState(db, {
