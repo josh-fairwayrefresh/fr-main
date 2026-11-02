@@ -84,6 +84,34 @@ function parseRejection(entry) {
   return { id: `${entry.logName}/${entry.insertId}`, device_id: device[1], course_id: course[1], received_at: entry.timestamp };
 }
 
+// The rejection log line is written just before its rejected request is
+// persisted and carries no request id, so pair each persisted record with the
+// latest unused same-device log line shortly before its receipt time.
+const REJECTION_PAIRING_MS = 2000;
+
+function excludedRejectionLogIds(rows, requests, customer, course) {
+  const records = requests.filter(request => request.status === 'rejected' &&
+    request.rejection_reason === 'service_suspended' && request.event_type === 'button_press' &&
+    request.customer_id === customer.customer_id && request.course_id === course.course_id &&
+    request.device_id && request.received_at)
+    .map(request => ({ request, received: dateValue(request.received_at) }))
+    .sort((a, b) => a.received - b.received || String(a.request.id).localeCompare(String(b.request.id)));
+  const used = new Set();
+  const excluded = new Set();
+  for (const { request, received } of records) {
+    let match = null;
+    for (const row of rows) {
+      const lead = received - row.received;
+      if (row.device_id !== request.device_id || used.has(row.id) || lead < 0 || lead > REJECTION_PAIRING_MS) continue;
+      if (!match || row.received > match.received) match = row;
+    }
+    if (!match) continue;
+    used.add(match.id);
+    if (!isRequestReportingEligible(request)) excluded.add(match.id);
+  }
+  return excluded;
+}
+
 // Port of the accepted one-off generator: both series use receipt time, not completion time.
 function buildButtonReport({ customer, course, bounds, asOf, logs, requests, retentionStart, sourceReadTime }) {
   if (logs.length > MAX_RECORDS || requests.length > MAX_RECORDS) {
@@ -91,12 +119,19 @@ function buildButtonReport({ customer, course, bounds, asOf, logs, requests, ret
   }
   const points = [];
   const seenLogs = new Set();
+  const rejections = [];
   for (const entry of logs) {
     const row = parseRejection(entry);
     if (!row || row.course_id !== course.course_id || seenLogs.has(row.id)) continue;
     seenLogs.add(row.id);
     const received = dateValue(row.received_at);
     if (received < bounds.start || received > bounds.end || bounds.endExclusive && received >= bounds.end || received > asOf) continue;
+    rejections.push({ row, received });
+  }
+  const excludedLogs = excludedRejectionLogIds(rejections.map(({ row, received }) => ({ id: row.id, device_id: row.device_id, received })),
+    requests, customer, course);
+  for (const { row } of rejections) {
+    if (excludedLogs.has(row.id)) continue;
     points.push({ ...row, series: 'empty', ...localPoint(row.received_at, course.timezone) });
   }
   const seenRequests = new Set();
@@ -139,7 +174,7 @@ function buildButtonReport({ customer, course, bounds, asOf, logs, requests, ret
       completed: points.filter(point => point.series === 'completed').length },
     days, devices, points,
     notes: [
-      'Empty: received service-unavailable rejection attempts, including separate transport retries.',
+      'Empty: received service-unavailable rejection attempts, including separate transport retries; attempts paired with a request excluded by an Admin are omitted.',
       'Completed: accepted physical-button requests completed by as-of; counted once and plotted at receipt, not completion.',
       'Cancelled/open requests and QR activity excluded. Nearby points overlap.',
       'Logs reflect service eligibility rules in force at receipt (including historical schedule-based availability).',

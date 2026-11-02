@@ -176,6 +176,47 @@ test('Button Activity excludes completed requests by reporting state and retains
   assert.deepEqual(restoredReport.totals, { empty: 0, completed: 2 });
 });
 
+test('Button Activity omits rejection logs paired with excluded suspended requests and keeps unpaired logs', () => {
+  const asOf = new Date(fixture.asOf);
+  const bounds = reportBounds({ start_date: '2026-10-17', end_date: '2026-10-28' }, fixture.course.timezone, asOf);
+  const log = (insertId, timestamp, device = 'FRB-0001') => ({
+    timestamp, insertId, logName: 'projects/test/logs/stdout',
+    textPayload: `Rejected golfer request because Course service is unavailable: device_id: '${device}' course_id: 'COURSE-0001'`,
+  });
+  const rejected = (id, receivedAt, reportingState, device = 'FRB-0001') => ({
+    id, customer_id: fixture.customer.customer_id, course_id: fixture.course.course_id, device_id: device,
+    received_at: new Date(receivedAt), status: 'rejected', rejection_reason: 'service_suspended',
+    source: 'nrf9151', event_type: 'button_press', ...(reportingState ? { reporting_state: reportingState } : {}),
+  });
+  const logs = [
+    log('excluded-log', '2026-10-20T18:00:00.000Z'),
+    log('active-log', '2026-10-20T18:00:03.000Z'),
+    log('unpaired-log', '2026-10-20T18:10:00.000Z'),
+    log('late-record-log', '2026-10-20T18:20:00.000Z'),
+    log('other-device-log', '2026-10-20T18:30:00.000Z', 'FRB-0002'),
+    log('retry-log', '2026-10-20T18:40:00.000Z'),
+    log('retry-log-2', '2026-10-20T18:40:00.900Z'),
+  ];
+  const requests = [
+    rejected('excluded', '2026-10-20T18:00:00.050Z', 'excluded'),
+    rejected('active', '2026-10-20T18:00:03.040Z'),
+    rejected('late-record', '2026-10-20T18:20:02.500Z', 'excluded'),
+    rejected('other-device', '2026-10-20T18:30:00.050Z', 'excluded', 'FRB-0001'),
+    rejected('retry', '2026-10-20T18:40:00.950Z', 'excluded'),
+  ];
+  const build = rows => buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds, asOf,
+    logs, requests: rows, retentionStart: fixture.start });
+  const emptyIds = report => report.points.filter(point => point.series === 'empty')
+    .map(point => point.id.split('/').pop()).sort();
+
+  assert.deepEqual(emptyIds(build(requests)),
+    ['active-log', 'late-record-log', 'other-device-log', 'retry-log', 'unpaired-log']);
+  assert.deepEqual(build(requests).totals, { empty: 5, completed: 0 });
+  assert.equal(build(requests.map(request => ({ ...request, reporting_state: 'active' }))).totals.empty, 7);
+  assert.equal(build([]).totals.empty, 7);
+  assert.ok(build(requests).notes.some(note => note.includes('excluded by an Admin are omitted')));
+});
+
 test('production adapter uses ADC, bucket retention and paginated scoped logs; permission failure is an error', async () => {
   const calls = [];
   const sources = createReportSources({}, { auth: {
@@ -212,7 +253,8 @@ test('Firestore adapter reuses receipt DESC index with document cursor and one r
   assert.equal(transactionOptions.readOnly, true);
   assert.equal(transactionOptions.readTime.toDate().toISOString(), fixture.asOf);
   assert.ok(calls.some(([method, field, direction]) => method === 'orderBy' && field === 'received_at' && direction === 'desc'));
-  assert.ok(calls.some(([method, ...fields]) => method === 'select' && fields.includes('reporting_state')));
+  assert.ok(calls.some(([method, ...fields]) => method === 'select' && fields.includes('reporting_state') &&
+    fields.includes('rejection_reason')));
   assert.ok(calls.some(([method, field, operator]) => method === 'where' && field === 'received_at' && operator === '<'));
   assert.equal(calls.find(([method]) => method === 'startAfter')[1], documents[499]);
   assert.equal(result.readTime, fixture.asOf);

@@ -281,8 +281,9 @@ entitlement, service state or operational data is changed.
   as-of boundary, once per request, plotted at **receipt**, not completion.
   Completed-request points use the shared request reporting eligibility rule:
   missing `reporting_state` means `active`, `active` contributes, and `excluded`
-  does not. This does not filter or infer correlation for Logging-based
-  service-unavailable attempts.
+  does not. Logging-based service-unavailable attempts paired with an excluded
+  persisted request are omitted, as defined under request reporting exclusion;
+  unpaired attempts remain counted.
   Cancelled/open requests and QR activity are excluded. This does not change
   existing Service History's completion-time metrics.
 - The PDF is landscape US Letter, with a three-column device legend, daily
@@ -1023,8 +1024,13 @@ Deployment Guide.
   server time, and from/to states. Cart Operators have no exclusion or restore
   controls. The same eligibility rule applies to Service History, Completed
   Requests, Average Completion Time, Requests per Hour, and completed
-  physical-button contributions in Button Activity; Logging-based rejection
-  events remain independent. Active Cart Hours remain based solely on service
+  physical-button contributions in Button Activity. Button Activity's
+  Logging-based empty (service-unavailable) points also honour exclusion: each
+  persisted service-suspended request is paired with the latest unused rejection
+  log for the same device and Course received up to 2 seconds before it, and
+  the log point is omitted when that request is not reporting-eligible. Logs
+  with no paired request (for example, before rejected requests were persisted)
+  remain counted. Active Cart Hours remain based solely on service
   transition events and are unchanged by request reporting state.
 - Started periods with no activity display 0. Zero Active Cart Hours produces
   0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
