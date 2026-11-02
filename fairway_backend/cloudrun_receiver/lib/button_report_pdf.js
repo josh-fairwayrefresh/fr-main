@@ -24,7 +24,11 @@ function dayDate(day) {
 }
 
 function currency(minor) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(minor / 100);
+}
+
+function hoursText(hours) {
+  return Number(hours).toFixed(1);
 }
 
 function hourLabel(hour) {
@@ -70,103 +74,138 @@ function renderButtonReport(report) {
         pdf.moveTo(x - r, y - r).lineTo(x + r, y + r).moveTo(x - r, y + r).lineTo(x + r, y - r).lineWidth(1.3).stroke(color);
       }
     };
-    const drop = (x, y) => {
-      pdf.circle(x, y, 2.6).fill(RAIN_BLUE);
-      pdf.polygon([x - 2.25, y - 1.3], [x + 2.25, y - 1.3], [x, y - 5.8]).fill(RAIN_BLUE);
+    const drop = (x, y, scale = 1) => {
+      pdf.circle(x, y, 2.6 * scale).fill(RAIN_BLUE);
+      pdf.polygon([x - 2.25 * scale, y - 1.3 * scale], [x + 2.25 * scale, y - 1.3 * scale], [x, y - 5.8 * scale]).fill(RAIN_BLUE);
     };
     const colors = new Map(report.locations.map(location => [location.label, location.color]));
     const window = windowText(report);
-    const pages = Math.ceil(report.days.length / 12);
-    for (let page = 0; page < pages; page++) {
-      pdf.addPage();
-      const days = report.days.slice(page * 12, page * 12 + 12);
-      const title = `${report.customer.customer_name || report.customer.customer_id}: Button Request Service Performance`;
-      if (pdf.fontSize(15).heightOfString(title, { width: TITLE_WIDTH }) > 36 ||
-          pdf.fontSize(10).widthOfString(report.course.course_name) > 720) {
-        throw new ButtonReportError('Customer or Course name exceeds the readable report heading limit.', 413);
+    // Every range (up to 31 dates) fits one page; column labels shorten as columns narrow.
+    pdf.addPage();
+    const days = report.days;
+    const title = `${report.customer.customer_name || report.customer.customer_id}: Button Request Service Performance`;
+    if (pdf.fontSize(15).heightOfString(title, { width: TITLE_WIDTH }) > 36 ||
+        pdf.fontSize(10).widthOfString(report.course.course_name) > 720) {
+      throw new ButtonReportError('Customer or Course name exceeds the readable report heading limit.', 413);
+    }
+    text(title, 36, 27, 15, { width: TITLE_WIDTH, lineBreak: true });
+    pdf.image(LOGO, 756 - LOGO_WIDTH, 26, { width: LOGO_WIDTH });
+    text(report.course.course_name, 36, 64, 10);
+    text(window, 36, 80, 8.5, { width: 720 });
+    report.locations.forEach((location, index) => {
+      const x = 49 + index % 3 * 240, y = 103 + Math.floor(index / 3) * 18;
+      if (pdf.fontSize(8).widthOfString(location.label) > 220) {
+        throw new ButtonReportError('A location name exceeds the readable legend limit.', 413);
       }
-      text(title, 36, 27, 15, { width: TITLE_WIDTH, lineBreak: true });
-      pdf.image(LOGO, 756 - LOGO_WIDTH, 26, { width: LOGO_WIDTH });
-      text(report.course.course_name, 36, 64, 10);
-      text(window, 36, 80, 8.5, { width: 720 });
-      report.locations.forEach((location, index) => {
-        const x = 49 + index % 3 * 240, y = 103 + Math.floor(index / 3) * 18;
-        if (pdf.fontSize(8).widthOfString(location.label) > 220) {
-          throw new ButtonReportError('A location name exceeds the readable legend limit.', 413);
-        }
-        pdf.rect(x - 3, y, 7, 7).fill(location.color);
-        text(location.label, x + 9, y - 0.5, 8, { width: 220 });
-      });
-      const legendBottom = 107 + Math.ceil(report.locations.length / 3) * 18;
-      [['completed', 'Completed'], ['suspended', 'Service suspended'], ['cancelled', 'Cancelled']].forEach(([series, name], index) => {
-        const x = 49 + index * 180;
-        marker(series, x, legendBottom + 4, INK);
-        text(`${name}: ${report.totals[series]}`, x + 9, legendBottom, 8.5);
-      });
-      pdf.rect(49 + 3 * 180 - 4, legendBottom - 0.5, 9, 9).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
-      text(`In service: ${report.totals.cart_hours} cart hours`, 49 + 3 * 180 + 9, legendBottom, 8.5);
-      const left = 73, right = 755, top = legendBottom + (report.weather_available ? 80 : 66), bottom = 540;
-      if (bottom - top < 150) throw new ButtonReportError('Report content exceeds the readable page limit. Choose a shorter range.', 413);
-      const step = (right - left) / days.length;
-      const px = index => left + step * (index + 0.5);
-      const py = hour => bottom - (Math.min(LAST_HOUR, Math.max(FIRST_HOUR, hour)) - FIRST_HOUR) / (LAST_HOUR - FIRST_HOUR) * (bottom - top);
-      days.forEach((day, index) => {
-        if (index % 2 === 0) pdf.rect(left + index * step, top, step, bottom - top).fill('#F5F8FA');
-        for (const period of day.service) {
-          if (period.end_hour <= FIRST_HOUR || period.start_hour >= LAST_HOUR) continue;
-          pdf.rect(left + index * step, py(period.end_hour), step, py(period.start_hour) - py(period.end_hour))
-            .fillOpacity(SERVICE_OPACITY).fill(SERVICE_GREEN).fillOpacity(1);
-        }
-        pdf.moveTo(px(index), top).lineTo(px(index), bottom).lineWidth(0.35).stroke('#E4EAEE');
-        if (day.cart_hours !== null) {
-          const field = `${day.cart_hours} cart hrs`;
-          const width = Math.min(step - 4, pdf.font('Helvetica').fontSize(7).widthOfString(field) + 8);
-          pdf.roundedRect(px(index) - width / 2, top - 31, width, 11, 2).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
-          text(field, px(index) - width / 2, top - 28.5, 7, { width, align: 'center' });
-        }
-        if (report.weather_available && day.cart_hours !== null) {
-          const high = day.weather ? `High ${Math.round(day.weather.high_f)}\u00b0F` : 'High \u2014';
-          const width = pdf.font('Helvetica').fontSize(7).widthOfString(high) + (day.weather?.rain ? 9 : 0);
-          text(high, px(index) - width / 2, top - 45, 7);
-          if (day.weather?.rain) drop(px(index) + width / 2 - 3, top - 40.5);
-        }
-        if (day.completed !== null) {
-          const counts = ['completed', 'suspended', 'cancelled'];
-          const widths = counts.map(series => 9 + pdf.font('Helvetica').fontSize(7).widthOfString(String(day[series])));
-          let x = px(index) - (widths.reduce((sum, width) => sum + width, 0) + 4 * (counts.length - 1)) / 2;
+      pdf.rect(x - 3, y, 7, 7).fill(location.color);
+      text(location.label, x + 9, y - 0.5, 8, { width: 220 });
+    });
+    const legendBottom = 107 + Math.ceil(report.locations.length / 3) * 18;
+    [['completed', 'Completed'], ['suspended', 'Service suspended'], ['cancelled', 'Cancelled']].forEach(([series, name], index) => {
+      const x = 49 + index * 180;
+      marker(series, x, legendBottom + 4, INK);
+      text(`${name}: ${report.totals[series]}`, x + 9, legendBottom, 8.5);
+    });
+    pdf.rect(49 + 3 * 180 - 4, legendBottom - 0.5, 9, 9).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
+    text(`In service: ${hoursText(report.totals.cart_hours)} cart hours`, 49 + 3 * 180 + 9, legendBottom, 8.5);
+    const left = 73, right = 755, bottom = 540;
+    const step = (right - left) / days.length;
+    const width = (value, size = 7, font = 'Helvetica') => pdf.font(font).fontSize(size).widthOfString(String(value));
+    const counts = ['completed', 'suspended', 'cancelled'];
+    const countWidth = day => counts.reduce((sum, series) => sum + 9 + width(day[series]), 0) + 4 * (counts.length - 1);
+    const stacked = days.some(day => day.completed !== null && countWidth(day) > step - 4);
+    const extra = stacked ? 18 : 0;
+    const top = legendBottom + (report.weather_available ? 80 : 66) + extra;
+    if (bottom - top < 150) throw new ButtonReportError('Report content exceeds the readable page limit. Choose a shorter range.', 413);
+    const px = index => left + step * (index + 0.5);
+    const py = hour => bottom - (Math.min(LAST_HOUR, Math.max(FIRST_HOUR, hour)) - FIRST_HOUR) / (LAST_HOUR - FIRST_HOUR) * (bottom - top);
+    // Label formats are chosen once per page so every column reads the same way.
+    const shown = days.filter(day => day.cart_hours !== null);
+    const hoursLabel = [value => `${value} cart hrs`, value => `${value} hrs`, value => value]
+      .find(format => shown.every(day => width(format(hoursText(day.cart_hours))) + 8 <= step - 2)) || (value => value);
+    const temperature = day => day.weather ? Math.round(day.weather.high_f) : null;
+    const highLabel = [value => `High ${value ?? '\u2014'}${value === null ? '' : '\u00b0F'}`,
+      value => value === null ? '\u2014' : `${value}\u00b0F`, value => value === null ? '\u2014' : `${value}\u00b0`]
+      .find(format => shown.every(day => width(format(temperature(day))) + (day.weather?.rain ? 9 : 0) <= step - 3)) ||
+      (value => value === null ? '\u2014' : `${value}\u00b0`);
+    let highSize = 7;
+    while (highSize > 5 && shown.some(day => width(highLabel(temperature(day)), highSize) + (day.weather?.rain ? 7 : 0) > step - 3)) {
+      highSize -= 0.5;
+    }
+    const dateFormat = options => day => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(dayDate(day.day));
+    const longDate = dateFormat({ weekday: 'short', month: 'short', day: 'numeric' });
+    const weekday = dateFormat({ weekday: 'short' });
+    const shortDate = dateFormat({ month: 'short', day: 'numeric' });
+    const numericDate = dateFormat({ month: 'numeric', day: 'numeric' });
+    const dateLines = days.every(day => width(longDate(day), 7.5) <= step - 2) ? [longDate] :
+      days.every(day => width(shortDate(day), 7) <= step - 2) ? [weekday, shortDate] : [weekday, numericDate];
+    days.forEach((day, index) => {
+      if (index % 2 === 0) pdf.rect(left + index * step, top, step, bottom - top).fill('#F5F8FA');
+      for (const period of day.service) {
+        if (period.end_hour <= FIRST_HOUR || period.start_hour >= LAST_HOUR) continue;
+        pdf.rect(left + index * step, py(period.end_hour), step, py(period.start_hour) - py(period.end_hour))
+          .fillOpacity(SERVICE_OPACITY).fill(SERVICE_GREEN).fillOpacity(1);
+      }
+      pdf.moveTo(px(index), top).lineTo(px(index), bottom).lineWidth(0.35).stroke('#E4EAEE');
+      if (day.cart_hours !== null) {
+        const field = hoursLabel(hoursText(day.cart_hours));
+        const fieldWidth = Math.min(step - 2, width(field) + 8);
+        pdf.roundedRect(px(index) - fieldWidth / 2, top - 31 - extra, fieldWidth, 11, 2)
+          .fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
+        text(field, px(index) - fieldWidth / 2, top - 28.5 - extra, 7, { width: fieldWidth, align: 'center' });
+      }
+      if (report.weather_available && day.cart_hours !== null) {
+        const rain = day.weather?.rain ? 9 : 0;
+        const high = highLabel(temperature(day));
+        const dropWidth = rain && highSize < 7 ? 7 : rain;
+        const highWidth = width(high, highSize) + dropWidth;
+        text(high, px(index) - highWidth / 2, top - 45 - extra + (7 - highSize) / 2, highSize);
+        if (rain) drop(px(index) + highWidth / 2 - 3, top - 40.5 - extra, highSize < 7 ? 0.8 : 1);
+      }
+      if (day.completed !== null) {
+        if (stacked) {
           counts.forEach((series, position) => {
+            const rowWidth = 9 + width(day[series]);
+            const x = px(index) - rowWidth / 2;
+            const y = top - 10 - (counts.length - 1 - position) * 9;
+            marker(series, x + 3, y, INK, 0.75);
+            text(day[series], x + 8, y - 3, 7);
+          });
+        } else {
+          let x = px(index) - countWidth(day) / 2;
+          counts.forEach(series => {
             marker(series, x + 3, top - 10, INK, 0.75);
             text(day[series], x + 8, top - 13, 7);
-            x += widths[position] + 4;
+            x += 9 + width(day[series]) + 4;
           });
         }
-        text(new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(dayDate(day.day)),
-          px(index) - step / 2, bottom + 7, 7.5, { width: step, align: 'center' });
-      });
-      for (let hour = FIRST_HOUR; hour <= LAST_HOUR; hour++) {
-        pdf.moveTo(left, py(hour)).lineTo(right, py(hour)).lineWidth(hour % 3 === 0 ? 0.5 : 0.25).stroke('#D8E0E5');
-        text(hourLabel(hour), 29, py(hour) - 3, 7, { width: 39, align: 'right' });
       }
-      pdf.rect(left, top, right - left, bottom - top).lineWidth(0.6).stroke('#88969F');
-      for (const point of report.points) {
-        const index = days.findIndex(day => day.day === point.day);
-        if (index >= 0) marker(point.series, px(index), py(point.hour), colors.get(point.label));
-      }
-      // Recorded total sales float in bold on each day's 8 PM line, above markers.
-      days.forEach((day, index) => {
-        if (!Number.isSafeInteger(day.sales_minor)) return;
-        const amount = currency(day.sales_minor);
-        let size = 8.5;
-        while (size > 6 && pdf.font('Helvetica-Bold').fontSize(size).widthOfString(amount) > step - 8) size -= 0.5;
-        const width = pdf.font('Helvetica-Bold').fontSize(size).widthOfString(amount) + 6;
-        pdf.roundedRect(px(index) - width / 2, py(SALES_HOUR) - size / 2 - 2, width, size + 4, 2)
-          .fillOpacity(0.85).fill('#FFFFFF').fillOpacity(1);
-        pdf.font('Helvetica-Bold').fontSize(size).fillColor('#253238')
-          .text(amount, px(index) - width / 2, py(SALES_HOUR) - size / 2 + 0.5, { width, align: 'center', lineBreak: false });
+      dateLines.forEach((format, line) => {
+        text(format(day), px(index) - step / 2, bottom + 7 + line * 9, dateLines.length > 1 ? 7 : 7.5, { width: step, align: 'center' });
       });
-      text('Time of day', 36, top - 12, 7);
-      if (pages > 1) text(`Page ${page + 1} of ${pages}`, left, bottom + 24, 8, { width: right - left, align: 'center' });
+    });
+    for (let hour = FIRST_HOUR; hour <= LAST_HOUR; hour++) {
+      pdf.moveTo(left, py(hour)).lineTo(right, py(hour)).lineWidth(hour % 3 === 0 ? 0.5 : 0.25).stroke('#D8E0E5');
+      text(hourLabel(hour), 29, py(hour) - 3, 7, { width: 39, align: 'right' });
     }
+    pdf.rect(left, top, right - left, bottom - top).lineWidth(0.6).stroke('#88969F');
+    for (const point of report.points) {
+      const index = days.findIndex(day => day.day === point.day);
+      if (index >= 0) marker(point.series, px(index), py(point.hour), colors.get(point.label));
+    }
+    // Recorded total sales float in bold, whole dollars, on each day's 8 PM line above markers.
+    days.forEach((day, index) => {
+      if (!Number.isSafeInteger(day.sales_minor)) return;
+      const amount = currency(day.sales_minor);
+      let size = 8.5;
+      while (size > 5 && width(amount, size, 'Helvetica-Bold') > step - 4) size -= 0.5;
+      const amountWidth = width(amount, size, 'Helvetica-Bold') + 4;
+      pdf.roundedRect(px(index) - amountWidth / 2, py(SALES_HOUR) - size / 2 - 2, amountWidth, size + 4, 2)
+        .fillOpacity(0.85).fill('#FFFFFF').fillOpacity(1);
+      pdf.font('Helvetica-Bold').fontSize(size).fillColor('#253238')
+        .text(amount, px(index) - amountWidth / 2, py(SALES_HOUR) - size / 2 + 0.5, { width: amountWidth, align: 'center', lineBreak: false });
+    });
+    text('Time of day', 36, top - 12, 7);
     pdf.end();
   });
 }

@@ -138,7 +138,7 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
   const locations = [...new Set(points.map(point => point.label))].sort(labelOrder.compare)
     .map((label, index) => ({ label, color: LOCATION_COLORS[index % LOCATION_COLORS.length] }));
   const count = rows => Object.fromEntries(SERIES.map(series => [series, rows.filter(point => point.series === series).length]));
-  const hours = minutes => Number((minutes / 60).toFixed(2));
+  const hours = minutes => Number((minutes / 60).toFixed(1));
   const service = serviceByDay(serviceEvents, bounds, course.timezone);
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);

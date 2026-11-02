@@ -329,7 +329,14 @@ test('renderer shows only the start and end dates, the 6 AM-9 PM axis and no dis
   const at = new Date('2026-11-01T08:00:00Z');
   const long = buildButtonReport({ customer: fixture.customer, course: fixture.course, asOf: at,
     bounds: reportBounds({ start_date: '2026-10-01', end_date: '2026-10-31' }, fixture.course.timezone, at), requests: fixture.requests });
-  assert.equal((await renderButtonReport(long)).toString('latin1').match(/\/Type \/Page\b/g).length, 3);
+  assert.equal((await renderButtonReport(long)).toString('latin1').match(/\/Type \/Page\b/g).length, 1, 'a 31-day range fits one page');
+  const busiest = { ...long, weather_available: true,
+    locations: Array.from({ length: 18 }, (_, i) => ({ label: `Hole ${i + 1}`, color: LOCATION_COLORS[i] })),
+    days: long.days.map(day => ({ ...day, cart_hours: 12.3, weather: { high_f: 101.4, rain: true }, sales_minor: 1234567,
+      completed: 199, suspended: 99, cancelled: 99 })) };
+  const busiestPdf = await renderButtonReport(busiest);
+  assert.equal(busiestPdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1, '31 days, 18 locations, weather and sales fit one page');
+  if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-31-day-busiest.pdf'), busiestPdf);
   const eighteen = { ...report, locations: Array.from({ length: 18 }, (_, i) => ({ label: `Hole ${i + 1}`, color: LOCATION_COLORS[i] })) };
   const eighteenPdf = await renderButtonReport(eighteen);
   assert.equal(eighteenPdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);

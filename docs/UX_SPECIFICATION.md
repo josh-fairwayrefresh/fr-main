@@ -296,15 +296,17 @@ location. An unrecognized location is rejected with an error.
   line giving only the start and end dates. It has no disclaimer or
   explanatory notes. The official Fairway Refresh horizontal logo (trimmed
   from `docs/logo_source_files/fairway-refresh/fairway-refresh-horizontal-transparent.png`)
-  sits at the top right of every page.
+  sits at the top right of the page.
 - When the Course has a location, a line above each past or current date's
   cart hours shows that Course-local day's **high temperature** ("High 68°F",
-  rounded) with a blue water drop when precipitation was at least 0.01 in.
+  rounded; "High" and then "F" are dropped when columns are too narrow) with a
+  blue water drop when precipitation was at least 0.01 in.
   Values come from the Course weather register (Open-Meteo). A day whose weather
   could not be obtained shows "High —"; without a Course location, or if the
   register cannot be read, the line is omitted and the report still generates.
 - Each date with a recorded total in the Course **Total Sales Register** shows
-  that amount in bold US dollars and cents (for example "$1,381.79") floating
+  that amount in bold whole US dollars, rounded to the nearest dollar with no
+  cents (for example "$1,382" for $1,381.79), floating
   on the column's 8 PM line, above the markers on a light backing. Dates with
   no recorded total, future dates, or a register read failure leave the line
   blank; the report still generates.
@@ -317,7 +319,7 @@ location. An unrecognized location is rejected with an error.
   previous day (before the day's first change) and service left ON after the
   day's last change, including overnight, are excluded. On the in-progress
   final day, service resumed that day and still ON counts through the report
-  time. Hours use minute rounding and at most two decimals. These report hours
+  time. Hours use minute rounding and are shown to one decimal. These report hours
   can therefore be lower than the Cart KPI **Active Cart Hours**, which counts
   recorded service as-is. Future dates show no cart hours.
 - The legend is by location, not device: each Hole or custom name has its own
@@ -334,8 +336,10 @@ location. An unrecognized location is rejected with an error.
   midnight, exclusive, or the generation as-of instant, inclusive, if earlier.
   Future-only ranges fail. Future dates within a selected range show no
   counts rather than zero.
-- Charts continue after 12 dates per landscape page, with "Page n of N" on
-  multi-page reports, without dropping records. Up to 18 locations are
+- Every range, up to 31 dates, fits one landscape page without dropping
+  records. As columns narrow, each label shortens consistently across the page
+  ("5.1 cart hrs" to "5.1 hrs" to "5.1"; counts stack vertically; dates use
+  two lines) rather than overlapping. Up to 18 locations are
   supported; excessive headings, labels or content fail explicitly rather than
   clip. The source cap is 20,000 requests with a 45-second read budget.
   Exceeding a practical limit returns an error asking for a shorter range,
