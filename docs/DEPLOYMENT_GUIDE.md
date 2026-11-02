@@ -1,5 +1,41 @@
 # Deployment Guide
 
+## Button report title, logo, weather and total sales production release (2026-11-02)
+
+**CPO-authorized Admin and Hosting release with two CPO-authorized data
+writes.** Source is `12f60f0` (`feature/button-report-title`: `d97da3c`,
+`1888273`, `12f60f0` on `8562756`). The Button Activity PDF is titled
+"[Customer name]: Button Request Service Performance", carries the Fairway
+Refresh logo, shows each day's high temperature with a rain drop from the new
+Course weather register (Open-Meteo), and floats recorded daily total sales in
+bold on the 8 PM line from the new Course Total Sales Register. The Admin Course
+form gains a geocoded Location field. Firestore rules, indexes, firmware and
+infrastructure were unchanged; the Receiver was not redeployed (no changed
+Receiver routes).
+
+- Admin revision `fairway-admin-sales-12f60f0` (tag `sales-release`) at 100%;
+  rollback target `fairway-admin-hours-26b6201` (tag `hours-release`). Uploaded
+  source matched the commit (only `.gcloudignore` and `test/fixtures`
+  excluded); configuration identical to the prior revision; 401
+  unauthenticated and 204 preflight on the tagged URL.
+- Hosting version `66967ac5f95e5070`, release `1793656292240000`; rollback
+  target version `1811ea077512804c`. Two clean builds of 127 files were
+  byte-identical, with 107 Driving Range assets and the protected mapping and
+  installation PDF hashes unchanged; only `index.html` and fingerprinted
+  bundles changed, and all 127 files matched byte-for-byte on both origins.
+- Data writes: Tony Lema Course (`CUST-0001`/`COURSE-0001`) `course_location`
+  set to "San Leandro, CA" (37.72493, -122.15608) via the same Open-Meteo
+  geocoding as the Admin form. Its `sales_days` register was seeded with paper
+  records 2026-10-17 $1,435.27, 2026-10-18 $1,381.79 and 2026-10-19 $176.91,
+  and a `reviewed_correction` of $187.80 for 2026-10-30, where the CPO
+  confirmed the second identical $187.80 close-out was a duplicate. Close-out
+  records were not modified.
+- The CPO generated the Oct 17 report in production (200); the live service
+  wrote the weather register and synced close-out days 2026-10-29, -31 and
+  11-01 with no errors logged.
+- Backend all passing (including new weather and sales register tests) and
+  frontend 89/89 on the release commit.
+
 ## Report service hours and rolling history periods production release (2026-11-02)
 
 **CPO-authorized Receiver, Admin and Hosting release.** Source is `26b6201`
