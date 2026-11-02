@@ -878,7 +878,7 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
     'cancelled-assigned', 'rejected-cleared-assigned', 'completed-assigned', 'completed-prior-day',
   ]);
   assert.strictEqual(response.body.reports.weekly.summary.completed_requests, 2);
-  assert.strictEqual(response.body.reports.monthly.summary.completed_requests, 1);
+  assert.strictEqual(response.body.reports.monthly.summary.completed_requests, 2, 'Month is the last 30 days, not since the 1st');
   assert.strictEqual(response.body.courses[0].customer_id, 'CUST-0001');
   assert.strictEqual(response.body.courses[0].course_id, 'COURSE-0001');
 });

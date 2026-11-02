@@ -939,8 +939,9 @@ and [open defects](feature_backlog.md#material-readiness-items).
    actionable. A valid marker press received while suspended still shows the
    normal red service-unavailable response, and additionally creates a durable
    non-actionable rejected request for the Cart Operator workflow.
-- Current Day/Week/Month summary selectors use rolling 24-hour/7-day/30-day
-   periods, not local calendar periods. The history tally is the same last
+- Day/Week/Month periods are defined under
+   [CPO Stats Fix Reporting Requirements](#cpo-stats-fix-reporting-requirements):
+   today, the last 7 days and the last 30 days, in Course-local days. The history tally is the same last
    100 completed/cancelled requests, independent of the selected period;
    dashboard reads cap requests at 5,000 and service events at 500.
    Cart-hour metrics use scheduled service time minus scheduled-time
@@ -992,15 +993,18 @@ Deployment Guide.
 - **Average Completion Time** is receipt-to-completion elapsed time averaged
   over those completed requests. Refresh it after each completion.
 - **Requests per Hour** equals Completed Requests divided by Active Cart Hours.
-- Show these four KPIs on the Cart UI's calendar Day, Week, and Month tabs.
-  Weeks begin Monday. Weekly and monthly Requests per Hour use total
+- Show these four KPIs on the Cart UI's Day, Week, and Month tabs. Day is
+  today; Week is the last 7 Course-local days and Month the last 30, each
+  including today and starting at local midnight (CPO decision 2026-11-02,
+  replacing Monday-start calendar weeks and calendar months). Each period runs
+  through the present. Weekly and monthly Requests per Hour use total
   completions divided by total active hours. Average Completion Time for a
   multi-day period is total completion duration divided by the total completed
   request count, not an unweighted average of daily averages.
 - Each History row, including Admin excluded rows, shows the request's
   received date and time (weekday, month, day and time) at every supported
   width, so Week and Month rows identify the day of each request.
-- History rows use the same selected Course and calendar period as the KPIs:
+- History rows use the same selected Course and period as the KPIs:
   completed rows are selected by completion time and cancelled rows by
   cancellation time. Service-suspended rejected attempts also appear, in red
   and identified as **Service Suspended**, selected by receipt time and retained
@@ -1012,7 +1016,7 @@ Deployment Guide.
   are not completed or cancelled and do not affect completion, duration,
   request-rate, or service-hours calculations. Refresh reporting when request
   outcomes change, including changes made by another operator, and at
-  minute-level intervals so ongoing active time and local calendar-period
+  minute-level intervals so ongoing active time and local-day period
   boundaries become current. Return every matching outcome for the selected
   period; do not silently truncate History.
   If pagination is introduced later, it must expose the total and provide access

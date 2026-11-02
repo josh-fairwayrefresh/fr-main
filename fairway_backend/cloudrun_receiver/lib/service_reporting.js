@@ -63,16 +63,13 @@ function localMidnightUtc(parts, timeZone) {
   return new Date(result);
 }
 
+// Week and Month are the last 7 and 30 Course-local days, including today, from local midnight.
 function periodBounds(asOf, timeZone) {
   const current = localDateParts(asOf, timeZone);
-  const weekday = new Date(Date.UTC(current.year, current.month - 1, current.day)).getUTCDay();
-  const daysSinceMonday = (weekday + 6) % 7;
-  const monday = addLocalDays(current, -daysSinceMonday);
-  const monthStart = { year: current.year, month: current.month, day: 1 };
   return {
     daily: { start: localMidnightUtc(current, timeZone), end: asOf },
-    weekly: { start: localMidnightUtc(monday, timeZone), end: asOf },
-    monthly: { start: localMidnightUtc(monthStart, timeZone), end: asOf },
+    weekly: { start: localMidnightUtc(addLocalDays(current, -6), timeZone), end: asOf },
+    monthly: { start: localMidnightUtc(addLocalDays(current, -29), timeZone), end: asOf },
   };
 }
 

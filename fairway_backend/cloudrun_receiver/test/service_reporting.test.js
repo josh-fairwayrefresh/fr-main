@@ -11,11 +11,16 @@ const {
   summarizeCoursePeriods,
 } = require('../lib/service_reporting');
 
-test('calendar periods use Course-local days and Monday-start weeks', () => {
-  const bounds = periodBounds(new Date('2026-10-01T19:00:00.000Z'), 'America/Los_Angeles');
-  assert.strictEqual(bounds.daily.start.toISOString(), '2026-10-01T07:00:00.000Z');
-  assert.strictEqual(bounds.weekly.start.toISOString(), '2026-09-28T07:00:00.000Z');
-  assert.strictEqual(bounds.monthly.start.toISOString(), '2026-10-01T07:00:00.000Z');
+test('Day is today; Week and Month are the last 7 and 30 Course-local days from midnight', () => {
+  const asOf = new Date('2026-11-02T21:00:00.000Z');
+  const bounds = periodBounds(asOf, 'America/Los_Angeles');
+  assert.strictEqual(bounds.daily.start.toISOString(), '2026-11-02T08:00:00.000Z');
+  assert.strictEqual(bounds.weekly.start.toISOString(), '2026-10-27T07:00:00.000Z', 'Tue Oct 27 PDT midnight');
+  assert.strictEqual(bounds.monthly.start.toISOString(), '2026-10-04T07:00:00.000Z', 'Sun Oct 4 PDT midnight');
+  for (const period of ['daily', 'weekly', 'monthly']) assert.strictEqual(bounds[period].end, asOf);
+  const early = periodBounds(new Date('2026-10-01T19:00:00.000Z'), 'America/Los_Angeles');
+  assert.strictEqual(early.weekly.start.toISOString(), '2026-09-25T07:00:00.000Z', 'spans the month boundary');
+  assert.strictEqual(early.monthly.start.toISOString(), '2026-09-02T07:00:00.000Z');
 });
 
 test('service intervals allocate across local days and include ongoing active time', () => {
