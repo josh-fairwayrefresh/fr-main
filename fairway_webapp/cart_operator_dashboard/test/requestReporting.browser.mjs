@@ -44,6 +44,11 @@ test('admins can exclude and restore reports while operators see no reporting co
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.getByRole('button', { name: 'Exclude', exact: true }).count(), 1);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      const received = page.locator('.op-history-list').first().locator('.op-history-received');
+      assert.equal(await received.count(), 1);
+      assert.match(await received.innerText(), /^[A-Z][a-z]{2}, Oct 29, \d{1,2}:\d{2}\s?[AP]M$/);
+      const box = await received.boundingBox();
+      assert.ok(box && box.width > 0 && box.x + box.width <= width, `received date visible at ${width}px`);
     }
     await page.setViewportSize({ width: 375, height: 900 });
     await page.getByRole('button', { name: 'Exclude', exact: true }).click();

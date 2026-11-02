@@ -45,6 +45,13 @@ function clockTime(value) {
   return date ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Unknown time';
 }
 
+function dateTime(value) {
+  const date = asDate(value);
+  if (!date) return 'Unknown time';
+  const day = date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return `${day}, ${clockTime(date)}`;
+}
+
 function duration(request) {
   const start = asDate(request.received_at);
   const end = asDate(request.completed_at || request.cancelled_at);
@@ -293,7 +300,7 @@ function HistoryView({
       </div>
       {history.map((item) => <div className={`op-history-row${isAdmin ? ' admin' : ''}`} key={item.request_id}>
         <span className={`op-outcome ${item.status}`}>{outcomeLabel(item)}</span>
-        <strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
+        <strong>{requestLocationLabel(item)}</strong><span className="op-history-received">{dateTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
         {isAdmin && <button className="op-reporting-action" type="button" disabled={Boolean(reportingPendingId)}
           onClick={() => changeReportingState(item, 'excluded')}>Exclude</button>}
       </div>)}
@@ -315,7 +322,7 @@ function HistoryView({
           </div>
           {excludedRequests.map((item) => <div className="op-history-row admin" key={item.request_id || item.id}>
             <span className={`op-outcome ${item.status}`}>{outcomeLabel(item)}</span>
-            <strong>{requestLocationLabel(item)}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
+            <strong>{requestLocationLabel(item)}</strong><span className="op-history-received">{dateTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
             <button className="op-reporting-action" type="button" disabled={Boolean(reportingPendingId)}
               onClick={() => changeReportingState(item, 'active')}>Restore to Reporting</button>
           </div>)}

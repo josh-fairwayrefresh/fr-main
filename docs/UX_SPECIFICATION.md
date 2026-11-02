@@ -994,6 +994,9 @@ Deployment Guide.
   completions divided by total active hours. Average Completion Time for a
   multi-day period is total completion duration divided by the total completed
   request count, not an unweighted average of daily averages.
+- Each History row, including Admin excluded rows, shows the request's
+  received date and time (weekday, month, day and time) at every supported
+  width, so Week and Month rows identify the day of each request.
 - History rows use the same selected Course and calendar period as the KPIs:
   completed rows are selected by completion time and cancelled rows by
   cancellation time. Service-suspended rejected attempts also appear, in red

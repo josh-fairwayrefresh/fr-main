@@ -198,7 +198,8 @@
   .op-history-view > header { align-items: stretch; flex-direction: column; }
   .op-metrics { grid-template-columns: 1fr 1fr; }
   .op-history-row { grid-template-columns: 95px 1fr; padding: 10px 12px; }
-  .op-history-row > span:nth-child(3), .op-history-row > span:nth-child(4), .op-history-row.heading { display: none; }
+  .op-history-row > span:nth-child(4), .op-history-row.heading { display: none; }
+  .op-history-row > .op-history-received { grid-column: 2; color: var(--op-muted); }
   .op-history-row.admin { grid-template-columns: 95px minmax(0, 1fr); }
   .op-history-row.admin > .op-reporting-action { grid-column: 2; justify-self: start; }
 }
