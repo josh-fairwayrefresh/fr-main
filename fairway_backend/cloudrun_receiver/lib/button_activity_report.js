@@ -1,6 +1,6 @@
 'use strict';
 
-const { addLocalDays, localMidnightUtc } = require('./service_reporting');
+const { activeIntervals, addLocalDays, localMidnightUtc } = require('./service_reporting');
 const { isRequestReportingEligible } = require('./request_reporting');
 
 const MAX_DAYS = 31;
@@ -86,7 +86,28 @@ function localPoint(timestamp, timezone) {
 }
 
 // Port of the accepted one-off generator: every series is plotted at receipt time, not completion time.
-function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {} }) {
+// In-service periods use the Cart KPI Active Cart Hours rules: On-course
+// Resume/Suspend events, ongoing time through the report end, minute rounding.
+function serviceByDay(serviceEvents, bounds, timezone) {
+  const intervals = activeIntervals(serviceEvents, bounds.end);
+  return new Map(bounds.days.map(day => {
+    const dayStart = localMidnightUtc(parseDay(day), timezone);
+    const dayEnd = localMidnightUtc(addLocalDays(parseDay(day), 1), timezone);
+    const periods = [];
+    let seconds = 0;
+    for (const interval of intervals) {
+      const from = Math.max(interval.start.getTime(), dayStart.getTime(), bounds.start.getTime());
+      const to = Math.min(interval.end.getTime(), dayEnd.getTime(), bounds.end.getTime());
+      if (from >= to) continue;
+      seconds += (to - from) / 1000;
+      periods.push({ start_hour: localPoint(new Date(from), timezone).hour,
+        end_hour: to === dayEnd.getTime() ? 24 : localPoint(new Date(to), timezone).hour });
+    }
+    return [day, { periods, minutes: Math.round(seconds / 60) }];
+  }));
+}
+
+function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [] }) {
   if (requests.length > MAX_RECORDS) {
     throw new ButtonReportError('Report exceeds 20,000 source records. Choose a shorter range.', 413);
   }
@@ -110,15 +131,19 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
   const locations = [...new Set(points.map(point => point.label))].sort(labelOrder.compare)
     .map((label, index) => ({ label, color: LOCATION_COLORS[index % LOCATION_COLORS.length] }));
   const count = rows => Object.fromEntries(SERIES.map(series => [series, rows.filter(point => point.series === series).length]));
+  const hours = minutes => Number((minutes / 60).toFixed(2));
+  const service = serviceByDay(serviceEvents, bounds, course.timezone);
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);
-    return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null } :
-      { day, ...count(points.filter(point => point.day === day)) };
+    return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null, cart_hours: null, service: [] } :
+      { day, ...count(points.filter(point => point.day === day)), cart_hours: hours(service.get(day).minutes),
+        service: service.get(day).periods };
   });
+  const cartHours = hours(bounds.days.reduce((sum, day) => sum + service.get(day).minutes, 0));
   return {
     customer, course, start: bounds.start.toISOString(), end: bounds.end.toISOString(),
     as_of: asOf.toISOString(), end_exclusive: Boolean(bounds.endExclusive),
-    totals: count(points), days, locations, points,
+    totals: { ...count(points), cart_hours: cartHours }, days, locations, points,
   };
 }
 
@@ -141,9 +166,12 @@ async function generateButtonReport(db, input, { asOf = new Date(), source } = {
   const requests = await sources.requests({ ...bounds, asOf, customerId: input.customer_id, courseId: input.course_id });
   const unlabeled = [...new Set(requests.filter(request => request.device_id && !request.device_label &&
     !Number.isInteger(request.hole)).map(request => request.device_id))];
-  const currentLabels = unlabeled.length ? await sources.currentLabels({ deviceIds: unlabeled, courseId: input.course_id }) : {};
+  const [currentLabels, serviceEvents] = await Promise.all([
+    unlabeled.length ? sources.currentLabels({ deviceIds: unlabeled, courseId: input.course_id }) : {},
+    sources.serviceEvents({ ...bounds, customerId: input.customer_id, courseId: input.course_id }),
+  ]);
   return buildButtonReport({ customer, course: { course_id: course.course_id, course_name: course.course_name, timezone: course.timezone },
-    bounds, asOf, requests, currentLabels });
+    bounds, asOf, requests, currentLabels, serviceEvents });
 }
 
 module.exports = { ButtonReportError, MAX_DAYS, MAX_RECORDS, LOCATION_COLORS, reportBounds, requestLabel,

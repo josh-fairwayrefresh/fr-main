@@ -31,6 +31,22 @@ function createReportSources(db) {
       return Object.fromEntries(devices.filter(doc => doc.exists && doc.data().course_id === courseId)
         .map(doc => [doc.id, deriveDisplayLabelFromLocation(doc.data().location)]).filter(([, label]) => label));
     },
+    // Same On-course Resume/Suspend stream and read shape as Cart KPI Active Cart Hours.
+    async serviceEvents({ start, end, customerId, courseId }) {
+      checkDeadline();
+      const events = db.collection('customers').doc(customerId).collection('courses').doc(courseId)
+        .collection('service_events');
+      const [prior, period] = await Promise.all([
+        events.where('recorded_at', '<', start).orderBy('recorded_at', 'desc').limit(1).get(),
+        events.where('recorded_at', '>=', start).where('recorded_at', '<=', end).orderBy('recorded_at', 'asc')
+          .limit(MAX_RECORDS + 1).get(),
+      ]).catch(error => {
+        console.error('Button report service event read failed:', { code: error.code, message: error.message });
+        throw new ButtonReportError('Service hours read failed. Retry.', 503);
+      });
+      if (period.size > MAX_RECORDS) throw new ButtonReportError('Too many service records. Choose a shorter range.', 413);
+      return [...prior.docs, ...period.docs].map(doc => doc.data());
+    },
     async requests({ start, end, asOf, customerId, courseId, endExclusive }) {
       return db.runTransaction(async transaction => {
         const query = db.collection('requests')

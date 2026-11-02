@@ -28,7 +28,7 @@ function reference() {
 
 test('saved reference requests reconcile 63 completed and 20 cancelled records at receipt time', () => {
   const report = reference();
-  assert.deepEqual(report.totals, { completed: 63, suspended: 0, cancelled: 20 });
+  assert.deepEqual(report.totals, { completed: 63, suspended: 0, cancelled: 20, cart_hours: 0 });
   assert.deepEqual(report.days.map(day => day.completed), fixture.expectedDaily.map(([, completed]) => completed));
   assert.deepEqual(report.points.filter(point => point.series === 'completed').map(point => point.id).sort(),
     fixture.expectedRecords.filter(record => record.series === 'completed').map(record => record.id).sort());
@@ -53,11 +53,11 @@ test('three series use saved suspended, cancelled and completed requests and hon
   const report = build(requests);
   assert.deepEqual(report.points.map(point => [point.id, point.series]),
     [['done', 'completed'], ['suspended', 'suspended'], ['cancelled', 'cancelled']]);
-  assert.deepEqual(report.totals, { completed: 1, suspended: 1, cancelled: 1 });
+  assert.deepEqual(report.totals, { completed: 1, suspended: 1, cancelled: 1, cart_hours: 0 });
   const restored = build(requests.map(row => ({ ...row, reporting_state: 'active' })));
-  assert.deepEqual(restored.totals, { completed: 2, suspended: 2, cancelled: 2 });
+  assert.deepEqual(restored.totals, { completed: 2, suspended: 2, cancelled: 2, cart_hours: 0 });
   const day = report.days.find(item => item.day === '2026-10-20');
-  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1 });
+  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1, cart_hours: 0, service: [] });
 });
 
 test('legend uses the location in use at each press, falls back to current placement, and orders naturally', () => {
@@ -86,10 +86,41 @@ test('report generation reads current placement only for unlabelled requests at 
     request('c', 'completed', '2026-10-20T20:00:00.000Z')];
   const sources = createReportSources(db);
   const report = await generateButtonReport(db, { customer_id: 'CUST-0001', course_id: 'COURSE-0001',
-    start_date: '2026-10-17', end_date: '2026-10-28' }, { asOf, source: { requests: async () => rows,
+    start_date: '2026-10-17', end_date: '2026-10-28' }, { asOf, source: { requests: async () => rows, serviceEvents: async () => [],
     currentLabels: async input => { requested.push(...input.deviceIds); return sources.currentLabels(input); } } });
   assert.deepEqual(requested, ['FRB-0004', 'FRB-0008']);
   assert.deepEqual(report.locations.map(location => location.label), ['Clubhouse', 'FRB-0008', 'Hole 7']);
+});
+
+test('in-service shading and cart hours use On-course Resume/Suspend time split by course-local day', async () => {
+  const at = new Date('2026-10-21T19:30:00Z');
+  const range = reportBounds({ start_date: '2026-10-19', end_date: '2026-10-22' }, fixture.course.timezone, at);
+  const events = [
+    { type: 'resumed', recorded_at: new Date('2026-10-18T16:00:00Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-19T17:15:00Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-19T18:00:00Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-19T19:00:00Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-20T08:00:00Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-21T16:00:00Z') },
+  ];
+  const report = buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds: range, asOf: at,
+    requests: [], serviceEvents: events });
+  assert.deepEqual(report.days.map(day => day.cart_hours), [23.25, 1, 3.5, null]);
+  assert.deepEqual(report.days[0].service, [{ start_hour: 0, end_hour: 10.25 }, { start_hour: 11, end_hour: 24 }]);
+  assert.deepEqual(report.days[1].service, [{ start_hour: 0, end_hour: 1 }]);
+  assert.deepEqual(report.days[2].service, [{ start_hour: 9, end_hour: 12.5 }], 'ongoing service ends at the report time');
+  assert.deepEqual(report.days[3].service, []);
+  assert.equal(report.totals.cart_hours, 27.75);
+
+  const db = await database();
+  const stream = db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001').collection('service_events');
+  for (const [id, event] of events.entries()) await stream.doc(`e${id}`).set(event);
+  await stream.doc('late').set({ type: 'suspended', recorded_at: new Date('2026-10-23T00:00:00Z') });
+  const read = await createReportSources(db).serviceEvents({ ...range, customerId: 'CUST-0001', courseId: 'COURSE-0001' });
+  assert.deepEqual(read.map(event => event.recorded_at.toISOString()), events.map(event => event.recorded_at.toISOString()));
+  await assert.rejects(createReportSources({ collection() { return this; }, doc() { return this; }, where() { return this; },
+    orderBy() { return this; }, limit() { return this; }, get: async () => { throw Object.assign(new Error('denied'), { code: 7 }); } })
+    .serviceEvents({ ...range, customerId: 'CUST-0001', courseId: 'COURSE-0001' }), error => error.status === 503);
 });
 
 test('exclusive end midnight, as-of boundaries and missing timestamps are explicit', () => {
@@ -193,7 +224,7 @@ test('actual Admin route denies unsigned/non-Admin callers and returns a PDF onl
   await db.collection('user_access').doc('operator').set({ schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: ['COURSE-0001'] });
   const instance = createFairwayHandlers(db, { verifyOperatorToken: async token => ({ uid: token }),
     now: () => new Date(fixture.asOf), buttonReportSource: {
-      requests: async () => [], currentLabels: async () => ({}),
+      requests: async () => [], currentLabels: async () => ({}), serviceEvents: async () => [],
     } });
   async function run(token, extra = {}) {
     const res = { headers: {}, set(k, v) { this.headers[k] = v; return this; },
@@ -214,17 +245,17 @@ test('actual Admin route denies unsigned/non-Admin callers and returns a PDF onl
   assert.equal(result.body.subarray(0, 4).toString(), '%PDF');
 });
 
-test('renderer shows plain dates and hours, the 6 AM-9 PM axis and no disclaimer notes', async () => {
+test('renderer shows only the start and end dates, the 6 AM-9 PM axis and no disclaimer notes', async () => {
   const report = build([
     request('a', 'completed', '2026-10-20T14:00:00.000Z'),
     request('b', 'rejected', '2026-10-21T03:30:00.000Z', { device_label: 'Marina 4' }),
     request('c', 'cancelled', '2026-10-22T20:00:00.000Z', { device_label: 'Hole 12' }),
   ]);
-  assert.equal(windowText(report), 'Sat, Oct 17 \u2013 Wed, Oct 28, 2026, 6 AM to 9 PM each day (Pacific Time), through Oct 28, 10:30 AM');
+  assert.equal(windowText(report), 'Sat, Oct 17 \u2013 Wed, Oct 28, 2026');
   const partial = buildButtonReport({ customer: fixture.customer, course: fixture.course, asOf: new Date('2026-11-02T20:33:00Z'),
     bounds: reportBounds({ start_date: '2026-11-01', end_date: '2026-11-02' }, fixture.course.timezone, new Date('2026-11-02T20:33:00Z')),
     requests: [] });
-  assert.equal(windowText(partial), 'Sun, Nov 1 \u2013 Mon, Nov 2, 2026, 6 AM to 9 PM each day (Pacific Time), through Nov 2, 12:33 PM');
+  assert.equal(windowText(partial), 'Sun, Nov 1 \u2013 Mon, Nov 2, 2026');
   const pdf = await renderButtonReport(report);
   assert.ok(pdf.includes(Buffer.from('/MediaBox [0 0 792 612]')));
   assert.equal(pdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);

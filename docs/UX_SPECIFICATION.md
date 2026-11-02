@@ -288,9 +288,17 @@ entitlement, service state or operational data is changed.
   partial-day marker. This does not change Service History's completion-time
   metrics.
 - Below the unchanged title, the PDF shows the Course name alone, then one
-  plain line giving the dates, the 6 AM–9 PM daily hours and the Course time
-  zone, plus "through" the as-of time when the window ends before midnight.
-  It has no disclaimer or explanatory notes.
+  line giving only the start and end dates. It has no disclaimer or
+  explanatory notes.
+- Each date column is shaded light, semi-transparent green for the periods
+  service was ON, and a field above that column's counts shows that day's
+  **cart hours** in service; the key gives the range total. Both use the Cart
+  KPI **Active Cart Hours** rules: the On-course operator Resume/Suspend
+  `service_events` stream (Amenity Areas transitions excluded), service already
+  ON at the range start, ongoing time through the as-of boundary, time split
+  across Course-local days, minute rounding and at most two decimals. Service
+  left ON overnight is shown and counted as recorded. Future dates show no
+  cart hours.
 - The legend is by location, not device: each Hole or custom name has its own
   color, assigned in natural order within the report from an 18-color palette.
   Each point uses the `device_label` snapshot stored on its request at receipt,

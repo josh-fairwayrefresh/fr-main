@@ -7,6 +7,8 @@ const FIRST_HOUR = 6;
 const LAST_HOUR = 21;
 const INK = '#52616B';
 const MAX_LOCATIONS = 18;
+const SERVICE_GREEN = '#2E9E4F';
+const SERVICE_OPACITY = 0.22;
 
 function dayDate(day) {
   const [year, month, date] = day.split('-').map(Number);
@@ -25,14 +27,7 @@ function windowText(report) {
   const dates = first === last ? format(first, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) :
     `${format(first, { weekday: 'short', month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })} \u2013 ` +
     format(last, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  const zone = new Intl.DateTimeFormat('en-US', { timeZone: report.course.timezone, timeZoneName: 'longGeneric' })
-    .formatToParts(new Date(report.start)).find(part => part.type === 'timeZoneName')?.value || report.course.timezone;
-  let text = `${dates}, ${hourLabel(FIRST_HOUR)} to ${hourLabel(LAST_HOUR)} each day (${zone})`;
-  if (!report.end_exclusive) {
-    text += `, through ${new Intl.DateTimeFormat('en-US', { timeZone: report.course.timezone, month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit' }).format(new Date(report.end))}`;
-  }
-  return text;
+  return dates;
 }
 
 function renderButtonReport(report) {
@@ -87,18 +82,31 @@ function renderButtonReport(report) {
       });
       const legendBottom = 107 + Math.ceil(report.locations.length / 3) * 18;
       [['completed', 'Completed'], ['suspended', 'Service suspended'], ['cancelled', 'Cancelled']].forEach(([series, name], index) => {
-        const x = 49 + index * 240;
+        const x = 49 + index * 180;
         marker(series, x, legendBottom + 4, INK);
         text(`${name}: ${report.totals[series]}`, x + 9, legendBottom, 8.5);
       });
-      const left = 73, right = 755, top = legendBottom + 52, bottom = 540;
+      pdf.rect(49 + 3 * 180 - 4, legendBottom - 0.5, 9, 9).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
+      text(`In service: ${report.totals.cart_hours} cart hours`, 49 + 3 * 180 + 9, legendBottom, 8.5);
+      const left = 73, right = 755, top = legendBottom + 66, bottom = 540;
       if (bottom - top < 150) throw new ButtonReportError('Report content exceeds the readable page limit. Choose a shorter range.', 413);
       const step = (right - left) / days.length;
       const px = index => left + step * (index + 0.5);
       const py = hour => bottom - (Math.min(LAST_HOUR, Math.max(FIRST_HOUR, hour)) - FIRST_HOUR) / (LAST_HOUR - FIRST_HOUR) * (bottom - top);
       days.forEach((day, index) => {
         if (index % 2 === 0) pdf.rect(left + index * step, top, step, bottom - top).fill('#F5F8FA');
+        for (const period of day.service) {
+          if (period.end_hour <= FIRST_HOUR || period.start_hour >= LAST_HOUR) continue;
+          pdf.rect(left + index * step, py(period.end_hour), step, py(period.start_hour) - py(period.end_hour))
+            .fillOpacity(SERVICE_OPACITY).fill(SERVICE_GREEN).fillOpacity(1);
+        }
         pdf.moveTo(px(index), top).lineTo(px(index), bottom).lineWidth(0.35).stroke('#E4EAEE');
+        if (day.cart_hours !== null) {
+          const field = `${day.cart_hours} cart hrs`;
+          const width = Math.min(step - 4, pdf.font('Helvetica').fontSize(7).widthOfString(field) + 8);
+          pdf.roundedRect(px(index) - width / 2, top - 31, width, 11, 2).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
+          text(field, px(index) - width / 2, top - 28.5, 7, { width, align: 'center' });
+        }
         if (day.completed !== null) {
           const counts = ['completed', 'suspended', 'cancelled'];
           const widths = counts.map(series => 9 + pdf.font('Helvetica').fontSize(7).widthOfString(String(day[series])));
@@ -121,7 +129,7 @@ function renderButtonReport(report) {
         const index = days.findIndex(day => day.day === point.day);
         if (index >= 0) marker(point.series, px(index), py(point.hour), colors.get(point.label));
       }
-      text('Time of day', 36, top - 29, 7);
+      text('Time of day', 36, top - 12, 7);
       if (pages > 1) text(`Page ${page + 1} of ${pages}`, left, bottom + 24, 8, { width: right - left, align: 'center' });
     }
     pdf.end();
