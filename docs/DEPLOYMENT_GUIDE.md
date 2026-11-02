@@ -1,5 +1,32 @@
 # Deployment Guide
 
+## Button Activity exclusion of suspended presses production release (2026-11-02)
+
+**CPO-authorized Admin-only release.** Source is
+`7ec07b8741c9ae562675c9eccc7d7b08b9ae9109` (`feature/button-report-exclusion`).
+The Button Activity "empty" series is read from Receiver rejection logs, so
+Admin-excluded suspended presses were still counted. Each rejection log is now
+paired with its same-device `service_suspended` request received 0-2000 ms
+later; the log is omitted when that request is excluded, and unpaired logs
+remain counted. The report is served by `fairway-admin`, so only that
+service was deployed. The Receiver, Hosting, Firestore, rules, indexes,
+firmware and infrastructure were unchanged.
+
+- Admin revision `fairway-admin-rptexcl-7ec07b8` (tag `rptexcl-release`) at
+  100%; image digest
+  `sha256:1715cc04073165d77c4ed0820c342e041c9a032e0282380b5ade65547da107cd`.
+  Rollback target `fairway-admin-excl-cf7d885` (tag `excl-release`).
+- Backend 75/75. Replaying real production logs and requests from Oct 31 to
+  Nov 2 paired 36/36 rejections one-to-one; Monarch Nov 1 empty dots fall from
+  32 to 13, and Oct 31 is unchanged at 4.
+- Uploaded source matched the commit; service account, environment, resources
+  and scaling were identical to the prior revision. Unauthenticated access
+  returned 401 and CORS preflight returned 204, both on the tagged URL and
+  after traffic moved; no errors were logged.
+- The QR sandbox Admin runs the same commit. Sandbox report generation fails
+  on old and new revisions alike, because the sandbox service account lacks
+  Cloud Logging read access.
+
 ## Full History request date production release (2026-11-02)
 
 **CPO-authorized Hosting-only release after CPO sandbox review.** Source is
