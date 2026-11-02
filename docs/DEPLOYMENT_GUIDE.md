@@ -1,5 +1,33 @@
 # Deployment Guide
 
+## Button Activity report layout production release (2026-11-02)
+
+**CPO-authorized Admin and Hosting release.** Source is
+`c66b99f` (`feature/button-report-layout`). The PDF shows completed (solid
+dot), service-suspended (open circle) and cancelled (X) saved button requests
+on a 6 AM-9 PM axis, coloured by the location label saved on each request, with
+the course name, a plain dates line and no notes. Cloud Logging is no longer
+read, so Admin exclusion applies to every series. Receiver, Firestore, rules,
+indexes, firmware and infrastructure were unchanged.
+
+- Admin revision `fairway-admin-layout-c66b99f` (tag `layout-release`) at
+  100%; image digest
+  `sha256:b4b8639e27ca72984c608441ca4f638c0fe546e51dc0240480a4c46667c1240b`.
+  Rollback target `fairway-admin-rptexcl-7ec07b8` (tag `rptexcl-release`).
+  Uploaded source matched the commit; configuration identical to the prior
+  revision; 401 unauthenticated and 204 preflight on the tagged and live URLs.
+- Hosting version `82a8137ff3f6a7f0`, release `1793652774354000`; rollback
+  target version `40cc1fa49fad2c45`, release `1793649938227000`. Clean build of
+  127 files with 107 Driving Range assets verified; relative to the prior live
+  release only `index.html` and six fingerprinted bundles changed. All 127
+  files matched byte-for-byte on both production origins.
+- Backend 72/72 and frontend 89/89. The QR sandbox Admin generated a PDF end
+  to end with the same commit.
+- The production Admin service account's Logging read access is now unused
+  and was left unchanged. The Firebase CLI deploy required
+  `GOOGLE_CLOUD_QUOTA_PROJECT=savvy-kit-496703-r5` because the local ADC has no
+  quota project.
+
 ## Button Activity exclusion of suspended presses production release (2026-11-02)
 
 **CPO-authorized Admin-only release.** Source is
