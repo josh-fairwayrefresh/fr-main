@@ -1,5 +1,32 @@
 # Deployment Guide
 
+## Report service hours and rolling history periods production release (2026-11-02)
+
+**CPO-authorized Receiver, Admin and Hosting release.** Source is `26b6201`
+(`release/report-hours-rolling`): `feature/button-report-service-hours`
+(`153109b`, `07345df`) plus `feature/rolling-history-periods` (`55439f7`,
+cherry-picked as `26b6201`) on `7c56f13`. The Button Activity PDF shows only
+start and end dates, shades in-service time green and gives daily cart hours,
+counting only time between each day's own Resume and Suspend changes. Cart
+Service History and KPI Week/Month are the last 7 and 30 Course-local days.
+Firestore, rules, indexes, firmware and infrastructure were unchanged.
+
+- Receiver revision `fairway-button-receiver-roll-26b6201` (tag
+  `roll-release`) at 100%; rollback target
+  `fairway-button-receiver-excl-cf7d885` (tag `excl-release`).
+- Admin revision `fairway-admin-hours-26b6201` (tag `hours-release`) at 100%;
+  rollback target `fairway-admin-layout-c66b99f` (tag `layout-release`).
+- Both revisions: uploaded source matched the commit (only `.gcloudignore`
+  and `test/fixtures` excluded); configuration identical to the prior
+  revisions; 401 unauthenticated and 204 preflight on the tagged URLs; no
+  errors logged after cutover, and live operator dashboard calls returned 200.
+- Hosting version `1811ea077512804c`, release `1793654166447000`; rollback
+  target version `82a8137ff3f6a7f0`, release `1793652774354000`. Clean build of
+  127 files with 107 Driving Range assets verified; the artifact was unchanged
+  between build and deploy, and all 127 files matched byte-for-byte on both
+  production origins.
+- Backend 208 passing and frontend 89/89 on the release commit.
+
 ## Button Activity report layout production release (2026-11-02)
 
 **CPO-authorized Admin and Hosting release.** Source is
