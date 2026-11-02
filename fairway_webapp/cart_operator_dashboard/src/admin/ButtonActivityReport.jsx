@@ -37,7 +37,7 @@ export default function ButtonActivityReport({ user, apiBaseUrl, customers, dire
   }
   return <section className="a-view" aria-labelledby="button-report-title">
     <div className="a-heading"><div><p>REPORTS</p><h2 id="button-report-title">Button Activity</h2></div></div>
-    <p>Each physical-button request is plotted at its receipt time from 6 AM to 9 PM: solid dots are completed, open circles were received while service was suspended, and X marks were cancelled. Colors show the Hole or custom location in use when the button was pressed. Green shading marks when service was on between each day's first and last service change, with that day's cart hours above its column. Requests excluded by an Admin and QR activity are not shown.</p>
+    <p>Each physical-button request is plotted at its receipt time from 6 AM to 9 PM: solid dots are completed, open circles were received while service was suspended, and X marks were cancelled. Colors show the Hole or custom location in use when the button was pressed. Green shading marks when service was on between each day's first and last service change, with that day's cart hours above its column and, when the Course location is set, the day's high temperature (a drop marks rain). Requests excluded by an Admin and QR activity are not shown.</p>
     <form className="a-form a-panel" onSubmit={generate}>
       <div className="a-form-grid">
         <label>Customer<select aria-label="Customer" required value={customerId} onChange={event => {

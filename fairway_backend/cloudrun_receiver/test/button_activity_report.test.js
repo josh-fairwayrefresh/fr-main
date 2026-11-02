@@ -57,7 +57,7 @@ test('three series use saved suspended, cancelled and completed requests and hon
   const restored = build(requests.map(row => ({ ...row, reporting_state: 'active' })));
   assert.deepEqual(restored.totals, { completed: 2, suspended: 2, cancelled: 2, cart_hours: 0 });
   const day = report.days.find(item => item.day === '2026-10-20');
-  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1, cart_hours: 0, service: [] });
+  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1, cart_hours: 0, service: [], weather: null });
 });
 
 test('legend uses the location in use at each press, falls back to current placement, and orders naturally', () => {
@@ -90,6 +90,42 @@ test('report generation reads current placement only for unlabelled requests at 
     currentLabels: async input => { requested.push(...input.deviceIds); return sources.currentLabels(input); } } });
   assert.deepEqual(requested, ['FRB-0004', 'FRB-0008']);
   assert.deepEqual(report.locations.map(location => location.label), ['Clubhouse', 'FRB-0008', 'Hole 7']);
+});
+
+test('the daily high and rain come from the Course weather register and fit the page with the logo', async () => {
+  const db = await database();
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .update({ course_location: { label: 'San Leandro, CA', latitude: 37.72493, longitude: -122.15608 } });
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(url);
+    const params = new URL(url).searchParams;
+    const time = [];
+    for (let day = params.get('start_date'); day <= params.get('end_date');
+      day = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)) time.push(day);
+    return { ok: true, json: async () => ({ daily: { time, temperature_2m_max: time.map((_, i) => 60.4 + i),
+      precipitation_sum: time.map(day => day === '2026-10-20' ? 0.2 : 0) } }) };
+  };
+  const at = new Date('2026-10-21T19:30:00Z');
+  const sources = createReportSources(db, { fetchImpl });
+  const input = { customer_id: 'CUST-0001', course_id: 'COURSE-0001', start_date: '2026-10-19', end_date: '2026-10-22' };
+  const report = await generateButtonReport(db, input, { asOf: at, source: { requests: async () => [], serviceEvents: async () => [],
+    currentLabels: async () => ({}), weather: sources.weather } });
+  assert.equal(report.weather_available, true);
+  assert.deepEqual(report.days.map(day => day.weather), [{ high_f: 60.4, rain: false }, { high_f: 61.4, rain: true },
+    { high_f: 62.4, rain: false }, null]);
+  assert.equal(new URL(calls[0]).searchParams.get('end_date'), '2026-10-21', 'weather is requested only through today');
+  const stored = await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .collection('weather_days').doc('2026-10-20').get();
+  assert.equal(stored.data().precipitation_in, 0.2);
+  const unlocated = await generateButtonReport(await database(), input, { asOf: at, source: { requests: async () => [],
+    serviceEvents: async () => [], currentLabels: async () => ({}), weather: createReportSources(await database()).weather } });
+  assert.equal(unlocated.weather_available, false, 'no Course location means no weather line');
+  const crowded = { ...report, locations: Array.from({ length: 18 }, (_, i) => ({ label: `Hole ${i + 1}`, color: LOCATION_COLORS[i] })) };
+  const pdf = await renderButtonReport(crowded);
+  assert.equal(pdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);
+  assert.ok(pdf.includes(Buffer.from('/Subtype /Image')), 'the Fairway Refresh logo is embedded');
+  if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-weather.pdf'), pdf);
 });
 
 test('in-service shading and cart hours count only time between each day\'s first and last service change', async () => {

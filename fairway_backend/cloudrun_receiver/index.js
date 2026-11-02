@@ -48,6 +48,7 @@ const { courseOperation } = require('./lib/course_operation');
 const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
 const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
 const { generateButtonReport, ButtonReportError } = require('./lib/button_activity_report');
+const { CourseLocationError, geocodeCourseLocation } = require('./lib/course_weather');
 const {
   RequestReportingError,
   listExcludedRequests,
@@ -182,6 +183,7 @@ function createFairwayHandlers(db, {
   firebaseAuth = null,
   now = () => new Date(),
   buttonReportSource,
+  fetchImpl = (...args) => fetch(...args),
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
@@ -940,6 +942,9 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof CourseLocationError) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
     if (error instanceof ButtonReportError) {
       return res.status(error.status).json({ error: error.message, code: error.code });
     }
@@ -1049,8 +1054,9 @@ function createFairwayHandlers(db, {
           operation_kind: courseOperation(courseSource).kind,
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
+          course_location: courseSource.course_location ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_suspension', 'comments', 'course_location']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -1098,24 +1104,42 @@ function createFairwayHandlers(db, {
     return res.status(200).json(customer);
   }
 
+  // Optional "City, ST" label; empty clears it. Resolved to coordinates only when it changes.
+  async function resolveCourseLocation(label, current = null) {
+    if (label === undefined) return undefined;
+    if (label === null || (typeof label === 'string' && label.trim() === '')) return null;
+    if (typeof label !== 'string') throw new CourseLocationError('Course location must be "City, ST".');
+    if (current && current.label === label.trim()) return undefined;
+    return geocodeCourseLocation(label, { fetchImpl });
+  }
+
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule', 'operation_kind']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'course_location', 'service_schedule', 'operation_kind']);
+    const courseLocation = await resolveCourseLocation(req.body.course_location);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
       operationKind: req.body.operation_kind,
       comments: req.body.comments,
+      courseLocation: courseLocation ?? null,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'service_schedule']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'course_location', 'service_schedule']);
+    let courseLocation;
+    if (req.body.course_location !== undefined) {
+      const existing = await getCourseForCustomer(db, customerId, courseId);
+      if (!existing) throw new Error(`Unknown course_id: ${courseId}`);
+      courseLocation = await resolveCourseLocation(req.body.course_location, existing.course_location);
+    }
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
       comments: req.body.comments,
+      courseLocation,
     });
     return res.status(200).json(course);
   }
@@ -1235,7 +1259,7 @@ function createFairwayHandlers(db, {
       }
       if (req.method === 'POST' && path === '/api/v1/admin/reports/button-activity') {
         requireBodyFields(req.body, ['customer_id', 'course_id', 'start_date', 'end_date']);
-        const report = await generateButtonReport(db, req.body, { asOf: now(), source: buttonReportSource });
+        const report = await generateButtonReport(db, req.body, { asOf: now(), source: buttonReportSource, fetchImpl });
         const pdf = await renderButtonReport(report);
         res.set('Cache-Control', 'no-store');
         res.set('Content-Type', 'application/pdf');

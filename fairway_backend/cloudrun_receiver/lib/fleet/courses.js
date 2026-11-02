@@ -32,6 +32,9 @@ function isValidIanaTimezone(timezone) {
  *   service_schedule           legacy stored field; ignored by active behavior
  *   service_suspension         persistent operator OFF state or null
  *   comments                   administrator free-text notes
+ *   course_location            { label "City, ST", latitude, longitude,
+ *                              resolved_name, source } or null; used for
+ *                              the daily weather register (course_weather.js)
  *   created_at / updated_at    standard metadata
  */
 
@@ -52,6 +55,7 @@ async function createCourse(db, {
   timezone,
   comments = null,
   operationKind = 'cart',
+  courseLocation = null,
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
@@ -81,6 +85,7 @@ async function createCourse(db, {
     timezone,
     service_suspension: operation.kind === 'driving_range' ? { suspended_at: now, suspended_by: 'course_creation' } : null,
     comments,
+    course_location: courseLocation,
     created_at: now,
     updated_at: now,
   };
@@ -110,6 +115,7 @@ async function updateCourse(db, customerId, courseId, {
   courseName,
   timezone,
   comments,
+  courseLocation,
 } = {}) {
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
   if (!customerSnap.exists) {
@@ -141,6 +147,9 @@ async function updateCourse(db, customerId, courseId, {
   }
   if (comments !== undefined) {
     update.comments = comments;
+  }
+  if (courseLocation !== undefined) {
+    update.course_location = courseLocation;
   }
 
   const batch = db.batch();

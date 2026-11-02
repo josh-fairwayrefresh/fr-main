@@ -104,6 +104,18 @@ The hierarchy is Customer → Course → Device:
 
 - A Customer is stored at `customers/{customerId}`.
 - A Course belongs to one Customer and is stored at `customers/{customerId}/courses/{courseId}`.
+- A Course may record its place as `course_location`: `{ label: "City, ST",
+  latitude, longitude, resolved_name, source }`, or null when unset. Admin enters
+  "City, ST" on the Course form and the backend resolves it with Open-Meteo
+  geocoding (US only), re-resolving only when the label changes. Its daily
+  weather register is
+  `customers/{customerId}/courses/{courseId}/weather_days/{YYYY-MM-DD}`:
+  Course-local `high_f` (°F) and `precipitation_in`, the coordinates used,
+  `source: open-meteo`, `fetched_at`, and `final`. The Admin backend fills it
+  from Open-Meteo when a Button Activity report needs a missing day; days
+  ending at least two days earlier are final and reused, and more recent days,
+  or days fetched for different coordinates, are refreshed. Client access is
+  denied by the Firestore rules catch-all.
 - A Device has a permanent identity as the Firestore document ID `devices/{FRB-XXXX}`.
 - IDs use `CUST-XXXX`, `COURSE-XXXX`, and `FRB-XXXX` formats. Backend allocation is centralized and transaction-backed; clients do not guess IDs.
 - Active assignment is represented by `customer_id`/`customer_name`, `course_id`/`course_name`, and one `location`. A device in `in_inventory` has all assignment fields null. Do not duplicate device identity, hole, label, or active status in separate fields.

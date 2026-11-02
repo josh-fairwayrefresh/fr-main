@@ -77,8 +77,9 @@ function createRequest({ body = {}, headers = {}, method = 'GET', path } = {}) {
   };
 }
 
-function createAdminApi(db) {
+function createAdminApi(db, options = {}) {
   const { fairwayAdmin } = createFairwayHandlers(db, {
+    ...options,
     verifyOperatorToken: async (token) => {
       const uid = token === 'admin-token' || token === 'staff-token'
         ? 'staff-uid'
@@ -1086,6 +1087,49 @@ test('Admin User Management denies customer users and protects the last active A
   assert.strictEqual(demotion.statusCode, 409);
   assert.strictEqual(demotion.body.error, 'last_admin_required');
   assert.strictEqual((await db.collection('user_access').doc('staff-uid').get()).data().admin, true);
+});
+
+test('Course location is geocoded on save, kept when unchanged, cleared when empty, and rejected when unknown', async () => {
+  const db = new FakeFirestore();
+  const lookups = [];
+  const fetchImpl = async (url) => {
+    lookups.push(url);
+    return { ok: true, json: async () => ({ results: [
+      { name: 'San Leandro', admin1: 'California', latitude: 37.724929, longitude: -122.156077 },
+      { name: 'San Leandro', admin1: 'Texas', latitude: 1, longitude: 2 },
+    ] }) };
+  };
+  const request = createAdminApi(db, { fetchImpl });
+  const customer = await request({ method: 'POST', path: '/api/v1/admin/customers', body: { customer_name: 'Monarch Bay GC', comments: null } });
+  const coursePath = `/api/v1/admin/customers/${customer.body.customer_id}/courses`;
+  const created = await request({ method: 'POST', path: coursePath,
+    body: { course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles', comments: null, course_location: 'san leandro, california' } });
+  assert.strictEqual(created.statusCode, 201);
+  assert.deepStrictEqual(created.body.course_location, { label: 'San Leandro, CA', latitude: 37.72493, longitude: -122.15608,
+    resolved_name: 'San Leandro, California, United States', source: 'open-meteo-geocoding' });
+  assert.match(lookups[0], /name=san%20leandro&count=20&countryCode=US/);
+  const path = `${coursePath}/${created.body.course_id}`;
+  const unchanged = await request({ method: 'PATCH', path,
+    body: { course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles', comments: '', course_location: 'San Leandro, CA' } });
+  assert.strictEqual(unchanged.statusCode, 200);
+  assert.strictEqual(lookups.length, 1, 'an unchanged location is not looked up again');
+  const stored = await db.collection('customers').doc(customer.body.customer_id).collection('courses').doc(created.body.course_id).get();
+  assert.strictEqual(stored.data().course_location.label, 'San Leandro, CA');
+  const bad = await request({ method: 'PATCH', path, body: { course_location: 'San Leandro' } });
+  assert.strictEqual(bad.statusCode, 400);
+  assert.match(bad.body.error, /City, ST/);
+  const unknownState = await request({ method: 'PATCH', path, body: { course_location: 'San Leandro, ZZ' } });
+  assert.strictEqual(unknownState.statusCode, 400);
+  const cleared = await request({ method: 'PATCH', path, body: { course_location: '' } });
+  assert.strictEqual(cleared.statusCode, 200);
+  assert.strictEqual((await db.collection('customers').doc(customer.body.customer_id).collection('courses').doc(created.body.course_id).get())
+    .data().course_location, null);
+  const outage = createAdminApi(db, { fetchImpl: async () => { throw new Error('network down'); } });
+  const unavailable = await outage({ method: 'PATCH', path, body: { course_location: 'Oakland, CA' } });
+  assert.strictEqual(unavailable.statusCode, 503);
+  const directory = await request({ method: 'GET', path: '/api/v1/admin/fleet' });
+  const listed = directory.body.customers.find(item => item.customer_id === customer.body.customer_id).courses[0];
+  assert.strictEqual(listed.course_location, null);
 });
 
 run();

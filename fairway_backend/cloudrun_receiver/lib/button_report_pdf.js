@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const PDFDocument = require('pdfkit');
 const { ButtonReportError } = require('./button_activity_report');
 
@@ -9,6 +11,11 @@ const INK = '#52616B';
 const MAX_LOCATIONS = 18;
 const SERVICE_GREEN = '#2E9E4F';
 const SERVICE_OPACITY = 0.22;
+const RAIN_BLUE = '#2F7FC1';
+// Trimmed from docs/logo_source_files/fairway-refresh/fairway-refresh-horizontal-transparent.png.
+const LOGO = fs.readFileSync(path.join(__dirname, '..', 'assets', 'fairway-refresh-report-logo.png'));
+const LOGO_WIDTH = 150;
+const TITLE_WIDTH = 560;
 
 function dayDate(day) {
   const [year, month, date] = day.split('-').map(Number);
@@ -58,6 +65,10 @@ function renderButtonReport(report) {
         pdf.moveTo(x - r, y - r).lineTo(x + r, y + r).moveTo(x - r, y + r).lineTo(x + r, y - r).lineWidth(1.3).stroke(color);
       }
     };
+    const drop = (x, y) => {
+      pdf.circle(x, y, 2.6).fill(RAIN_BLUE);
+      pdf.polygon([x - 2.25, y - 1.3], [x + 2.25, y - 1.3], [x, y - 5.8]).fill(RAIN_BLUE);
+    };
     const colors = new Map(report.locations.map(location => [location.label, location.color]));
     const window = windowText(report);
     const pages = Math.ceil(report.days.length / 12);
@@ -65,11 +76,12 @@ function renderButtonReport(report) {
       pdf.addPage();
       const days = report.days.slice(page * 12, page * 12 + 12);
       const title = `${report.customer.customer_name || report.customer.customer_id}: Button Request Service Performance`;
-      if (pdf.fontSize(15).heightOfString(title, { width: 720 }) > 36 ||
+      if (pdf.fontSize(15).heightOfString(title, { width: TITLE_WIDTH }) > 36 ||
           pdf.fontSize(10).widthOfString(report.course.course_name) > 720) {
         throw new ButtonReportError('Customer or Course name exceeds the readable report heading limit.', 413);
       }
-      text(title, 36, 27, 15, { width: 720, lineBreak: true });
+      text(title, 36, 27, 15, { width: TITLE_WIDTH, lineBreak: true });
+      pdf.image(LOGO, 756 - LOGO_WIDTH, 26, { width: LOGO_WIDTH });
       text(report.course.course_name, 36, 64, 10);
       text(window, 36, 80, 8.5, { width: 720 });
       report.locations.forEach((location, index) => {
@@ -88,7 +100,7 @@ function renderButtonReport(report) {
       });
       pdf.rect(49 + 3 * 180 - 4, legendBottom - 0.5, 9, 9).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
       text(`In service: ${report.totals.cart_hours} cart hours`, 49 + 3 * 180 + 9, legendBottom, 8.5);
-      const left = 73, right = 755, top = legendBottom + 66, bottom = 540;
+      const left = 73, right = 755, top = legendBottom + (report.weather_available ? 80 : 66), bottom = 540;
       if (bottom - top < 150) throw new ButtonReportError('Report content exceeds the readable page limit. Choose a shorter range.', 413);
       const step = (right - left) / days.length;
       const px = index => left + step * (index + 0.5);
@@ -106,6 +118,12 @@ function renderButtonReport(report) {
           const width = Math.min(step - 4, pdf.font('Helvetica').fontSize(7).widthOfString(field) + 8);
           pdf.roundedRect(px(index) - width / 2, top - 31, width, 11, 2).fillOpacity(SERVICE_OPACITY * 2).fill(SERVICE_GREEN).fillOpacity(1);
           text(field, px(index) - width / 2, top - 28.5, 7, { width, align: 'center' });
+        }
+        if (report.weather_available && day.cart_hours !== null) {
+          const high = day.weather ? `High ${Math.round(day.weather.high_f)}\u00b0F` : 'High \u2014';
+          const width = pdf.font('Helvetica').fontSize(7).widthOfString(high) + (day.weather?.rain ? 9 : 0);
+          text(high, px(index) - width / 2, top - 45, 7);
+          if (day.weather?.rain) drop(px(index) + width / 2 - 3, top - 40.5);
         }
         if (day.completed !== null) {
           const counts = ['completed', 'suspended', 'cancelled'];

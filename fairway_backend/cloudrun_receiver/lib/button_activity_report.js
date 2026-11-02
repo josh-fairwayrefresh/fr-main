@@ -114,7 +114,7 @@ function serviceByDay(serviceEvents, bounds, timezone) {
   }));
 }
 
-function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [] }) {
+function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [], weather = null }) {
   if (requests.length > MAX_RECORDS) {
     throw new ButtonReportError('Report exceeds 20,000 source records. Choose a shorter range.', 413);
   }
@@ -142,19 +142,20 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
   const service = serviceByDay(serviceEvents, bounds, course.timezone);
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);
-    return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null, cart_hours: null, service: [] } :
+    const dayWeather = weather?.get(day) ? { high_f: weather.get(day).high_f, rain: weather.get(day).rain } : null;
+    return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null, cart_hours: null, service: [], weather: null } :
       { day, ...count(points.filter(point => point.day === day)), cart_hours: hours(service.get(day).minutes),
-        service: service.get(day).periods };
+        service: service.get(day).periods, weather: dayWeather };
   });
   const cartHours = hours(bounds.days.reduce((sum, day) => sum + service.get(day).minutes, 0));
   return {
     customer, course, start: bounds.start.toISOString(), end: bounds.end.toISOString(),
     as_of: asOf.toISOString(), end_exclusive: Boolean(bounds.endExclusive),
-    totals: { ...count(points), cart_hours: cartHours }, days, locations, points,
+    totals: { ...count(points), cart_hours: cartHours }, days, locations, points, weather_available: weather !== null,
   };
 }
 
-async function generateButtonReport(db, input, { asOf = new Date(), source } = {}) {
+async function generateButtonReport(db, input, { asOf = new Date(), source, fetchImpl } = {}) {
   if (!/^CUST-\d+$/.test(input.customer_id || '') || !/^COURSE-\d+$/.test(input.course_id || '')) {
     throw new ButtonReportError('Select a valid Customer and Course.');
   }
@@ -169,16 +170,18 @@ async function generateButtonReport(db, input, { asOf = new Date(), source } = {
     throw new ButtonReportError('Course ownership could not be verified unambiguously.', 422);
   }
   const bounds = reportBounds(input, course.timezone, asOf);
-  const sources = source || require('./button_report_sources').createReportSources(db);
+  const sources = source || require('./button_report_sources').createReportSources(db, { fetchImpl });
   const requests = await sources.requests({ ...bounds, asOf, customerId: input.customer_id, courseId: input.course_id });
   const unlabeled = [...new Set(requests.filter(request => request.device_id && !request.device_label &&
     !Number.isInteger(request.hole)).map(request => request.device_id))];
-  const [currentLabels, serviceEvents] = await Promise.all([
+  const [currentLabels, serviceEvents, weather] = await Promise.all([
     unlabeled.length ? sources.currentLabels({ deviceIds: unlabeled, courseId: input.course_id }) : {},
     sources.serviceEvents({ ...bounds, customerId: input.customer_id, courseId: input.course_id }),
+    sources.weather ? sources.weather({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
+      today: localPoint(asOf, course.timezone).day, now: asOf }) : null,
   ]);
   return buildButtonReport({ customer, course: { course_id: course.course_id, course_name: course.course_name, timezone: course.timezone },
-    bounds, asOf, requests, currentLabels, serviceEvents });
+    bounds, asOf, requests, currentLabels, serviceEvents, weather });
 }
 
 module.exports = { ButtonReportError, MAX_DAYS, MAX_RECORDS, LOCATION_COLORS, reportBounds, requestLabel,

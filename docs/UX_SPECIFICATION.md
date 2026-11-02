@@ -272,7 +272,11 @@ Existing global Admin authorization gates
 The selectors reuse Admin's existing Customer/Course directory; the backend
 validates the Course's selected Customer parent before reading report sources.
 Ordinary Customer accounts cannot call the report endpoint. No account,
-entitlement, service state or operational data is changed.
+entitlement, service state or operational data is changed; generation may only
+add or refresh days in the Course weather register. The Admin Course form has a
+**Location (City, ST)** field (for example "San Leandro, CA"), geocoded on save
+and shown on the Course card with its coordinates; clearing it removes the
+location. An unrecognized location is rejected with an error.
 
 - **CPO layout revision (2026-11-02).** Dates run horizontally and
   Course-local time vertically, limited to **6 AM–9 PM**; any point outside
@@ -290,7 +294,15 @@ entitlement, service state or operational data is changed.
 - The title is **"[Customer name]: Button Request Service Performance"**
   (Customer ID if no name is set). Below it, the PDF shows the Course name alone, then one
   line giving only the start and end dates. It has no disclaimer or
-  explanatory notes.
+  explanatory notes. The official Fairway Refresh horizontal logo (trimmed
+  from `docs/logo_source_files/fairway-refresh/fairway-refresh-horizontal-transparent.png`)
+  sits at the top right of every page.
+- When the Course has a location, a line above each past or current date's
+  cart hours shows that Course-local day's **high temperature** ("High 68°F",
+  rounded) with a blue water drop when precipitation was at least 0.01 in.
+  Values come from the Course weather register (Open-Meteo). A day whose weather
+  could not be obtained shows "High —"; without a Course location, or if the
+  register cannot be read, the line is omitted and the report still generates.
 - Each date column is shaded light, semi-transparent green for the periods
   service was ON, and a field above that column's counts shows that day's
   **cart hours** in service; the key gives the range total. Periods come from

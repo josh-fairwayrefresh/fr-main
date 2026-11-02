@@ -3,6 +3,7 @@
 const { FieldPath, Timestamp } = require('@google-cloud/firestore');
 const { ButtonReportError, MAX_RECORDS } = require('./button_activity_report');
 const { deriveDisplayLabelFromLocation } = require('./fleet/schema');
+const { readCourseWeather } = require('./course_weather');
 
 async function collectRequestPages(getPage) {
   const rows = [];
@@ -16,7 +17,7 @@ async function collectRequestPages(getPage) {
   }
 }
 
-function createReportSources(db) {
+function createReportSources(db, { fetchImpl = (...args) => fetch(...args) } = {}) {
   const deadline = Date.now() + 45000;
   function checkDeadline() {
     if (Date.now() >= deadline) throw new ButtonReportError('Generation exceeded 45 seconds. Choose a shorter range and retry.', 503);
@@ -46,6 +47,14 @@ function createReportSources(db) {
       });
       if (period.size > MAX_RECORDS) throw new ButtonReportError('Too many service records. Choose a shorter range.', 413);
       return [...prior.docs, ...period.docs].map(doc => doc.data());
+    },
+    // Weather is supplementary: any failure leaves the report without it.
+    async weather({ customerId, courseId, course, days, today, now }) {
+      checkDeadline();
+      return readCourseWeather(db, { customerId, courseId, course, days, today, now, fetchImpl }).catch(error => {
+        console.error('Button report weather read failed:', { code: error.code, message: error.message });
+        return null;
+      });
     },
     async requests({ start, end, asOf, customerId, courseId, endExclusive }) {
       return db.runTransaction(async transaction => {
