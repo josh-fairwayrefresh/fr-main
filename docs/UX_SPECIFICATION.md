@@ -1000,7 +1000,9 @@ Deployment Guide.
   and identified as **Service Suspended**, selected by receipt time and retained
   after dashboard clearing. Completed, cancelled, and service-suspended
   rejected outcomes are shown only when their reporting state is `active`;
-  legacy records without the field are treated as active. Rejected attempts
+  legacy records without the field are treated as active. Any other
+  reporting-state value is omitted from reporting and logged as a warning; it
+  is never treated as active. Rejected attempts
   are not completed or cancelled and do not affect completion, duration,
   request-rate, or service-hours calculations. Refresh reporting when request
   outcomes change, including changes made by another operator, and at

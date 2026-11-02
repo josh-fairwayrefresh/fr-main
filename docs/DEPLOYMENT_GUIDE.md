@@ -1,5 +1,61 @@
 # Deployment Guide
 
+## Administrator request reporting exclusion production release (2026-11-02)
+
+**CPO-authorized integrated release after CPO sandbox acceptance.** Release
+source is `cf7d8855b9fb8816f4f332e80918a30be39d0806` on
+`release/request-exclusion`: accepted `main` `cee166e` plus the already-live
+Inventory menu viewer (`06005e1`, `fbbb23a`) and request reporting exclusion
+(`6c0e62b`, `cf7d885`). Global Admins can exclude a History outcome from
+reporting and restore it; History, Cart KPIs and Button Activity completed
+contributions omit `excluded` requests. Missing `reporting_state` remains
+active; any other value is omitted and logged as a warning.
+
+### Deployed identities and rollback
+
+| Surface | Deployed identity | Image / release | Immediate rollback |
+|---|---|---|---|
+| Admin | `fairway-admin-excl-cf7d885`, 100%, tag `excl-release` | `sha256:326831b1dfa73d856185f0313730cdf57ba9fee61891864f7072acdaea081be7` | `fairway-admin-report-5396b69` (source `eee363b`) |
+| Receiver | `fairway-button-receiver-excl-cf7d885`, 100%, tag `excl-release` | `sha256:ec1df2bb8660bdd8a14473f34acb622770481e2bd46ad4a56ad16eff5349ef6b` | `fairway-button-receiver-00031-5mx` (source `98a401f`) |
+| Hosting | Version `3fc2cc810d7a1591`, release `1793648738754000` | 127 project files plus 2 Firebase-managed init files | Version `3d703c16d356b247`, release `1793505866839000` |
+
+Both services were deployed from the release worktree with tracked source only
+(70 uploaded files each, byte-matching the release commit), as zero-traffic
+tagged revisions, then cut over. Runtime identities, environment, secrets,
+scaling and the Receiver's managed Node.js 22 base image are unchanged. Because
+both services build from the same source, this release also brought Admin up
+to the already-accepted service-suspended request handling (`e9eed24`),
+body-parser advisory patch (`98a401f`) and notification recovery
+(`de08089`), and brought the Receiver up to `de08089`. The notifier, Firestore
+rules and indexes, firmware, infrastructure and production data were not
+changed. The new excluded-request query uses existing single-field indexes.
+
+### Validation
+
+- Release worktree: backend **74/74**, Firestore Emulator reporting test
+  PASS, frontend **89/89**, serial browser suite **28 passed, 0 failed,
+  3 skipped** (private-fixture QR tests).
+- CPO accepted the Cart UI flow in the QR sandbox
+  (`fairway-refresh-sandbox-qr1`, revisions `*-excl-60fd88d`, Hosting
+  release `1793643831201000`) using synthetic requests. Sandbox API checks
+  confirmed exclusion changed History 6→5 and Completed 5→4 / average
+  12→5.5 min, restore reversed it, an invalid state returned 400 and a
+  non-Admin returned 403.
+- Clean production build: 127 files; all 107 Driving Range sign assets
+  verified, mapping SHA-256
+  `23b2c3fa1449a79d8d129e8e693602d3ea5cca63ab7401c582f0d73bc9496b87`, PDF
+  SHA-256 `f52966769dc155e37097e43fd5df72a3aadee149224994bb3210a768b1f6f425`.
+  Relative to the prior live version, only `index.html` bundle references and
+  seven fingerprinted bundles changed. All 127 files matched byte-for-byte on
+  both production origins after release.
+- Before and after cutover: Receiver preflight 204, unauthenticated operator
+  bootstrap 401, public QR bay lookup 200, Admin unauthenticated access and
+  excluded-list 401. No `ERROR` or 5xx entries on the new revisions. A
+  production QR destination rendered the active Yes/No page (not submitted).
+- Not exercised in production: authenticated Admin exclude/restore, because
+  that would change production reporting data. No production request,
+  service state, preference or subscription was created or changed.
+
 ## Inventory golfer menu in-app viewer production release (2026-10-31)
 
 **Authorized Inventory-only navigation correction.** Source commit
