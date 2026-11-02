@@ -5,43 +5,113 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const fixture = require('./fixtures/button_activity_reference.json');
-const { reportBounds, buildButtonReport, generateButtonReport, deviceColor } = require('../lib/button_activity_report');
-const { collectLogPages, collectRequestPages, createReportSources } = require('../lib/button_report_sources');
-const { renderButtonReport } = require('../lib/button_report_pdf');
+const { reportBounds, buildButtonReport, generateButtonReport, LOCATION_COLORS } = require('../lib/button_activity_report');
+const { collectRequestPages, createReportSources } = require('../lib/button_report_sources');
+const { renderButtonReport, windowText } = require('../lib/button_report_pdf');
 const { FakeFirestore } = require('./fake_firestore');
 const { createFairwayHandlers } = require('../index');
 
+const asOf = new Date(fixture.asOf);
+const bounds = () => reportBounds({ start_date: '2026-10-17', end_date: '2026-10-28' }, fixture.course.timezone, asOf);
+const base = { customer_id: 'CUST-0001', course_id: 'COURSE-0001', event_type: 'button_press', source: 'nrf9151' };
+const request = (id, status, receivedAt, extra = {}) => ({ ...base, id, status, device_id: 'FRB-0001',
+  device_label: 'Hole 7', received_at: receivedAt,
+  ...(status === 'completed' ? { completed_at: receivedAt } : {}),
+  ...(status === 'cancelled' ? { cancelled_at: receivedAt } : {}),
+  ...(status === 'rejected' ? { rejection_reason: 'service_suspended' } : {}), ...extra });
+const build = (requests, extra = {}) => buildButtonReport({ customer: fixture.customer, course: fixture.course,
+  bounds: bounds(), asOf, requests, ...extra });
+
 function reference() {
-  const asOf = new Date(fixture.asOf);
-  const bounds = reportBounds({ start_date: '2026-10-17', end_date: '2026-10-28' }, fixture.course.timezone, asOf);
-  bounds.start = new Date(fixture.start);
-  return buildButtonReport({ ...fixture, bounds, asOf, retentionStart: '2026-09-28T17:30:04.899Z',
-    sourceReadTime: fixture.asOf });
+  return build(fixture.requests);
 }
 
-test('accepted exports reconcile all 116/63 records, 12 daily totals and 179 original plotted coordinates', () => {
+test('saved reference requests reconcile 63 completed and 20 cancelled records at receipt time', () => {
   const report = reference();
-  assert.deepEqual(report.totals, { empty: 116, completed: 63 });
-  assert.deepEqual(report.days.map(day => [day.empty, day.completed]), fixture.expectedDaily);
-  const recordKeys = records => records.map(({ series, id, device_id, received_at }) =>
-    JSON.stringify({ series, id, device_id, received_at })).sort();
-  assert.deepEqual(recordKeys(report.points), recordKeys(fixture.expectedRecords));
-  const expected = [...fixture.expectedPoints];
-  for (const point of report.points) {
-    const index = report.days.findIndex(day => day.day === point.day);
-    const x = 105 + (1395 - 105) / 12 * (index + 0.5);
-    const y = 865 - point.hour / 24 * (865 - 245);
-    const match = expected.findIndex(other => other.series === point.series && other.color === deviceColor(point.device_id) &&
-      Math.abs(other.x - x) < 0.001 && Math.abs(other.y - y) < 0.01);
-    assert.notEqual(match, -1, JSON.stringify(point));
-    expected.splice(match, 1);
-  }
-  assert.equal(expected.length, 0);
-  assert.ok(report.devices.every(device => device.label === device.device_id));
-  assert.equal(report.devices.find(device => device.device_id === 'FRB-0002').color, '#D55E00');
-  assert.equal(report.devices.find(device => device.device_id === 'FRB-0006').color, '#6B51A3');
-  assert.equal(report.start, fixture.start);
+  assert.deepEqual(report.totals, { completed: 63, suspended: 0, cancelled: 20 });
+  assert.deepEqual(report.days.map(day => day.completed), fixture.expectedDaily.map(([, completed]) => completed));
+  assert.deepEqual(report.points.filter(point => point.series === 'completed').map(point => point.id).sort(),
+    fixture.expectedRecords.filter(record => record.series === 'completed').map(record => record.id).sort());
+  assert.ok(report.points.every(point => point.label === point.device_id), 'unlabelled fixture falls back to device ID');
   assert.equal(report.as_of, fixture.asOf);
+});
+
+test('three series use saved suspended, cancelled and completed requests and honour Admin exclusion', () => {
+  const requests = [
+    request('done', 'completed', '2026-10-20T18:00:00.000Z'),
+    request('done-excluded', 'completed', '2026-10-20T18:01:00.000Z', { reporting_state: 'excluded' }),
+    request('suspended', 'rejected', '2026-10-20T18:02:00.000Z'),
+    request('suspended-excluded', 'rejected', '2026-10-20T18:03:00.000Z', { reporting_state: 'excluded' }),
+    request('cancelled', 'cancelled', '2026-10-20T18:04:00.000Z'),
+    request('cancelled-excluded', 'cancelled', '2026-10-20T18:05:00.000Z', { reporting_state: 'excluded' }),
+    request('open', 'new', '2026-10-20T18:06:00.000Z'),
+    request('other-rejection', 'rejected', '2026-10-20T18:07:00.000Z', { rejection_reason: 'other' }),
+    request('qr', 'completed', '2026-10-20T18:08:00.000Z', { source: 'qr' }),
+    request('other-course', 'completed', '2026-10-20T18:09:00.000Z', { course_id: 'COURSE-0002' }),
+    request('done', 'completed', '2026-10-20T18:00:00.000Z'),
+  ];
+  const report = build(requests);
+  assert.deepEqual(report.points.map(point => [point.id, point.series]),
+    [['done', 'completed'], ['suspended', 'suspended'], ['cancelled', 'cancelled']]);
+  assert.deepEqual(report.totals, { completed: 1, suspended: 1, cancelled: 1 });
+  const restored = build(requests.map(row => ({ ...row, reporting_state: 'active' })));
+  assert.deepEqual(restored.totals, { completed: 2, suspended: 2, cancelled: 2 });
+  const day = report.days.find(item => item.day === '2026-10-20');
+  assert.deepEqual(day, { day: '2026-10-20', completed: 1, suspended: 1, cancelled: 1 });
+});
+
+test('legend uses the location in use at each press, falls back to current placement, and orders naturally', () => {
+  const report = build([
+    request('a', 'completed', '2026-10-20T18:00:00.000Z', { device_label: 'Hole 12' }),
+    request('b', 'completed', '2026-10-20T19:00:00.000Z', { device_label: 'Hole 7' }),
+    request('c', 'rejected', '2026-10-21T18:00:00.000Z', { device_label: 'Marina 4' }),
+    request('d', 'cancelled', '2026-10-21T18:30:00.000Z', { device_id: 'FRB-0005', device_label: 'Hole 7' }),
+    request('e', 'completed', '2026-10-22T18:00:00.000Z', { device_id: 'FRB-0003', device_label: null, hole: 2 }),
+    request('f', 'completed', '2026-10-22T19:00:00.000Z', { device_id: 'FRB-0004', device_label: null }),
+    request('g', 'completed', '2026-10-22T20:00:00.000Z', { device_id: 'FRB-0009', device_label: null }),
+  ], { currentLabels: { 'FRB-0004': 'Clubhouse' } });
+  assert.deepEqual(report.locations.map(location => location.label),
+    ['Clubhouse', 'FRB-0009', 'Hole 2', 'Hole 7', 'Hole 12', 'Marina 4']);
+  assert.deepEqual(report.locations.map(location => location.color), LOCATION_COLORS.slice(0, 6));
+  assert.equal(report.points.filter(point => point.label === 'Hole 7').length, 2, 'swapped units at one location share a colour');
+});
+
+test('report generation reads current placement only for unlabelled requests at this Course', async () => {
+  const db = await database();
+  await db.collection('devices').doc('FRB-0004').set({ course_id: 'COURSE-0001', location: { type: 'custom', name: 'Clubhouse' } });
+  await db.collection('devices').doc('FRB-0008').set({ course_id: 'COURSE-0002', location: { type: 'hole', hole: 3 } });
+  const requested = [];
+  const rows = [request('a', 'completed', '2026-10-20T18:00:00.000Z', { device_id: 'FRB-0004', device_label: null }),
+    request('b', 'completed', '2026-10-20T19:00:00.000Z', { device_id: 'FRB-0008', device_label: null }),
+    request('c', 'completed', '2026-10-20T20:00:00.000Z')];
+  const sources = createReportSources(db);
+  const report = await generateButtonReport(db, { customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+    start_date: '2026-10-17', end_date: '2026-10-28' }, { asOf, source: { requests: async () => rows,
+    currentLabels: async input => { requested.push(...input.deviceIds); return sources.currentLabels(input); } } });
+  assert.deepEqual(requested, ['FRB-0004', 'FRB-0008']);
+  assert.deepEqual(report.locations.map(location => location.label), ['Clubhouse', 'FRB-0008', 'Hole 7']);
+});
+
+test('exclusive end midnight, as-of boundaries and missing timestamps are explicit', () => {
+  const at = new Date('2026-10-29T12:00:00Z');
+  const range = reportBounds({ start_date: '2026-10-28', end_date: '2026-10-28' }, 'UTC', at);
+  const one = request('one', 'completed', '2026-10-28T12:00:00Z');
+  const report = buildButtonReport({ customer: fixture.customer, course: { ...fixture.course, timezone: 'UTC' },
+    bounds: range, asOf: at, requests: [one, request('midnight', 'completed', '2026-10-29T00:00:00Z'),
+      { ...one, id: 'later', completed_at: '2026-10-30T12:00:00Z' },
+      request('cancel-later', 'cancelled', '2026-10-28T13:00:00Z', { cancelled_at: '2026-10-30T12:00:00Z' })] });
+  assert.deepEqual(report.points.map(point => point.id), ['one']);
+  assert.throws(() => build([{ ...request('x', 'completed', '2026-10-20T18:00:00Z'), completed_at: null }]), /missing.*timestamp/);
+  assert.throws(() => build([{ ...request('x', 'completed', '2026-10-20T18:00:00Z'), device_id: null }]), /stable identity/);
+});
+
+test('future dates in the selected range have no counts rather than zero', () => {
+  const at = new Date('2026-10-20T19:00:00Z');
+  const range = reportBounds({ start_date: '2026-10-19', end_date: '2026-10-22' }, fixture.course.timezone, at);
+  const report = buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds: range, asOf: at,
+    requests: [request('a', 'completed', '2026-10-20T18:00:00Z')] });
+  assert.deepEqual(report.days.map(day => day.completed), [0, 1, null, null]);
+  assert.equal(report.end_exclusive, false);
 });
 
 test('DST boundaries, inclusive date selection, future ranges and malformed dates are explicit', () => {
@@ -58,62 +128,6 @@ test('DST boundaries, inclusive date selection, future ranges and malformed date
   assert.throws(() => bounds('2026-10-17', 'invalid'), /timezone/);
 });
 
-test('zero is not substituted for unavailable history; retries remain separate and exact duplicate logs deduplicate', () => {
-  const original = reference();
-  const report = buildButtonReport({ ...fixture, asOf: new Date(fixture.asOf),
-    bounds: { start: new Date(fixture.start), end: new Date(fixture.asOf), days: original.days.map(day => day.day) },
-    retentionStart: '2026-10-24T12:00:00Z', logs: [...fixture.logs, fixture.logs[0]] });
-  assert.equal(report.totals.empty, 116);
-  assert.equal(report.days[0].empty, null);
-  assert.equal(report.days[0].coverage, 'unavailable');
-  assert.equal(report.days[1].coverage, 'partial');
-  assert.equal(report.coverage, 'partial');
-  assert.ok(report.notes.some(note => note.includes('not guaranteed completeness')));
-});
-
-test('malformed matching records fail, and device colors/uncertainty remain stable across ranges', () => {
-  const report = reference();
-  const input = { ...fixture, bounds: { start: new Date(fixture.start), end: new Date(fixture.asOf),
-    days: report.days.map(day => day.day) }, asOf: new Date(fixture.asOf), retentionStart: '2026-09-28' };
-  assert.throws(() => buildButtonReport({ ...input, logs: [{ ...fixture.logs[0], insertId: undefined }] }), /attributed/);
-  const physical = fixture.requests.find(request => request.status === 'completed');
-  assert.throws(() => buildButtonReport({ ...input, requests: [{ ...physical, completed_at: null }] }), /missing.*timestamp/);
-  const subset = buildButtonReport({ ...input, logs: [], requests: [physical] });
-  assert.equal(subset.devices[0].color, report.devices.find(device => device.device_id === physical.device_id).color);
-  assert.equal(deviceColor('FRB-9999'), deviceColor('FRB-9999'));
-  assert.match(deviceColor('FRB-9999'), /^#[0-9a-f]{6}$/);
-});
-
-test('exclusive end midnight, completion as-of, wrong Course, QR, cancelled and open requests are excluded', () => {
-  const asOf = new Date('2026-10-29T12:00:00Z');
-  const bounds = reportBounds({ start_date: '2026-10-28', end_date: '2026-10-28' }, 'UTC', asOf);
-  const base = { id: 'one', device_id: 'FRB-0001', customer_id: 'CUST-0001', course_id: 'COURSE-0001',
-    event_type: 'button_press', source: 'nrf9151', status: 'completed',
-    received_at: '2026-10-28T12:00:00Z', completed_at: '2026-10-28T12:30:00Z' };
-  const requests = [base, base, { ...base, id: 'midnight', received_at: '2026-10-29T00:00:00Z' },
-    { ...base, id: 'later', completed_at: '2026-10-30T12:00:00Z' },
-    ...[{ status: 'cancelled' }, { status: 'new' }, { source: 'qr' }, { customer_id: 'CUST-0002' },
-      { course_id: 'COURSE-0002' }].map((extra, i) => ({ ...base, id: `other-${i}`, ...extra }))];
-  const report = buildButtonReport({ ...fixture, course: { ...fixture.course, timezone: 'UTC' },
-    bounds, asOf, logs: [], requests, retentionStart: '2026-10-01' });
-  assert.deepEqual(report.points.map(point => point.id), ['one']);
-  assert.deepEqual(report.totals, { empty: 0, completed: 1 });
-});
-
-test('Logging retrieves empty continuation pages, detects token loops/limits and propagates query failures', async () => {
-  const tokens = [];
-  const rows = await collectLogPages(async body => {
-    tokens.push(body.pageToken);
-    return !body.pageToken ? { entries: [{ id: 1 }], nextPageToken: 'next' } :
-      body.pageToken === 'next' ? { nextPageToken: 'last' } : { entries: [{ id: 2 }] };
-  }, {});
-  assert.deepEqual(rows, [{ id: 1 }, { id: 2 }]);
-  assert.deepEqual(tokens, [undefined, 'next', 'last']);
-  await assert.rejects(collectLogPages(async () => ({ nextPageToken: 'loop' }), {}), /did not advance/);
-  await assert.rejects(collectLogPages(async () => ({ entries: Array(20001).fill({}) }), {}), /Too many/);
-  await assert.rejects(collectLogPages(async () => { throw new Error('permission denied'); }, {}), /permission denied/);
-});
-
 test('Firestore pagination reads every page including equal receipt timestamps and enforces a visible cap', async () => {
   const pages = [Array.from({ length: 500 }, (_, i) => ({ id: String(i), data: () => ({ received_at: fixture.start }) })),
     [{ id: 'last', data: () => ({ received_at: fixture.start }) }]];
@@ -124,115 +138,6 @@ test('Firestore pagination reads every page including equal receipt timestamps a
   await assert.rejects(collectRequestPages(async () => ({
     docs: Array.from({ length: 500 }, (_, i) => ({ id: String(i), data: () => ({}) })),
   })), /Too many/);
-});
-
-test('Button Activity excludes completed requests by reporting state and retains unrelated rejection logs', () => {
-  const asOf = new Date(fixture.asOf);
-  const bounds = reportBounds({ start_date: '2026-10-17', end_date: '2026-10-28' }, fixture.course.timezone, asOf);
-  const request = {
-    id: 'button-request-1',
-    customer_id: fixture.customer.customer_id,
-    course_id: fixture.course.course_id,
-    device_id: 'FRB-0001',
-    received_at: new Date('2026-10-20T18:00:00.000Z'),
-    completed_at: new Date('2026-10-20T18:10:00.000Z'),
-    status: 'completed',
-    source: 'nrf9151',
-    event_type: 'button_press',
-  };
-  const excluded = {
-    ...request,
-    id: 'button-request-excluded',
-    reporting_state: 'excluded',
-  };
-  const report = buildButtonReport({
-    customer: fixture.customer,
-    course: fixture.course,
-    bounds,
-    asOf,
-    logs: [{
-      timestamp: '2026-10-20T18:05:00.000Z',
-      insertId: 'independent-rejection',
-      logName: 'projects/test/logs/stdout',
-      textPayload: "Rejected golfer request because Course service is unavailable: device_id: 'FRB-0001' course_id: 'COURSE-0001'",
-    }],
-    requests: [request, excluded],
-    retentionStart: fixture.start,
-  });
-
-  assert.deepEqual(report.points.filter((point) => point.series === 'completed').map((point) => point.id),
-    ['button-request-1']);
-  assert.equal(report.points.filter((point) => point.series === 'empty').length, 1);
-  assert.deepEqual(report.totals, { empty: 1, completed: 1 });
-  const restoredReport = buildButtonReport({
-    customer: fixture.customer,
-    course: fixture.course,
-    bounds,
-    asOf,
-    logs: [],
-    requests: [request, { ...excluded, reporting_state: 'active' }],
-    retentionStart: fixture.start,
-  });
-  assert.deepEqual(restoredReport.totals, { empty: 0, completed: 2 });
-});
-
-test('Button Activity omits rejection logs paired with excluded suspended requests and keeps unpaired logs', () => {
-  const asOf = new Date(fixture.asOf);
-  const bounds = reportBounds({ start_date: '2026-10-17', end_date: '2026-10-28' }, fixture.course.timezone, asOf);
-  const log = (insertId, timestamp, device = 'FRB-0001') => ({
-    timestamp, insertId, logName: 'projects/test/logs/stdout',
-    textPayload: `Rejected golfer request because Course service is unavailable: device_id: '${device}' course_id: 'COURSE-0001'`,
-  });
-  const rejected = (id, receivedAt, reportingState, device = 'FRB-0001') => ({
-    id, customer_id: fixture.customer.customer_id, course_id: fixture.course.course_id, device_id: device,
-    received_at: new Date(receivedAt), status: 'rejected', rejection_reason: 'service_suspended',
-    source: 'nrf9151', event_type: 'button_press', ...(reportingState ? { reporting_state: reportingState } : {}),
-  });
-  const logs = [
-    log('excluded-log', '2026-10-20T18:00:00.000Z'),
-    log('active-log', '2026-10-20T18:00:03.000Z'),
-    log('unpaired-log', '2026-10-20T18:10:00.000Z'),
-    log('late-record-log', '2026-10-20T18:20:00.000Z'),
-    log('other-device-log', '2026-10-20T18:30:00.000Z', 'FRB-0002'),
-    log('retry-log', '2026-10-20T18:40:00.000Z'),
-    log('retry-log-2', '2026-10-20T18:40:00.900Z'),
-  ];
-  const requests = [
-    rejected('excluded', '2026-10-20T18:00:00.050Z', 'excluded'),
-    rejected('active', '2026-10-20T18:00:03.040Z'),
-    rejected('late-record', '2026-10-20T18:20:02.500Z', 'excluded'),
-    rejected('other-device', '2026-10-20T18:30:00.050Z', 'excluded', 'FRB-0001'),
-    rejected('retry', '2026-10-20T18:40:00.950Z', 'excluded'),
-  ];
-  const build = rows => buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds, asOf,
-    logs, requests: rows, retentionStart: fixture.start });
-  const emptyIds = report => report.points.filter(point => point.series === 'empty')
-    .map(point => point.id.split('/').pop()).sort();
-
-  assert.deepEqual(emptyIds(build(requests)),
-    ['active-log', 'late-record-log', 'other-device-log', 'retry-log', 'unpaired-log']);
-  assert.deepEqual(build(requests).totals, { empty: 5, completed: 0 });
-  assert.equal(build(requests.map(request => ({ ...request, reporting_state: 'active' }))).totals.empty, 7);
-  assert.equal(build([]).totals.empty, 7);
-  assert.ok(build(requests).notes.some(note => note.includes('excluded by an Admin are omitted')));
-});
-
-test('production adapter uses ADC, bucket retention and paginated scoped logs; permission failure is an error', async () => {
-  const calls = [];
-  const sources = createReportSources({}, { auth: {
-    getProjectId: async () => 'isolated-project',
-    getClient: async () => ({ request: async options => {
-      calls.push(options);
-      return { data: options.method === 'GET' ? { lifecycleState: 'ACTIVE', retentionDays: 30 } : { entries: [] } };
-    } }),
-  } });
-  assert.equal((await sources.retention(new Date(fixture.asOf))).start, '2026-09-28T17:30:04.899Z');
-  await sources.logs({ start: new Date(fixture.start), end: new Date(fixture.asOf), courseId: 'COURSE-0001' });
-  assert.ok(calls[1].data.filter.includes("course_id: 'COURSE-0001'"));
-  assert.ok(calls[1].data.resourceNames[0].endsWith('/buckets/_Default/views/_AllLogs'));
-  const failing = createReportSources({}, { auth: { getProjectId: async () => 'isolated-project',
-    getClient: async () => ({ request: async () => { throw new Error('isolated permission failure'); } }) } });
-  await assert.rejects(failing.retention(new Date()), /Cloud Logging read failed/);
 });
 
 test('Firestore adapter reuses receipt DESC index with document cursor and one read-only as-of snapshot', async () => {
@@ -254,23 +159,12 @@ test('Firestore adapter reuses receipt DESC index with document cursor and one r
   assert.equal(transactionOptions.readTime.toDate().toISOString(), fixture.asOf);
   assert.ok(calls.some(([method, field, direction]) => method === 'orderBy' && field === 'received_at' && direction === 'desc'));
   assert.ok(calls.some(([method, ...fields]) => method === 'select' && fields.includes('reporting_state') &&
-    fields.includes('rejection_reason')));
+    fields.includes('rejection_reason') && fields.includes('cancelled_at') && fields.includes('device_label')));
   assert.ok(calls.some(([method, field, operator]) => method === 'where' && field === 'received_at' && operator === '<'));
   assert.equal(calls.find(([method]) => method === 'startAfter')[1], documents[499]);
   assert.equal(result.readTime, fixture.asOf);
   await assert.rejects(createReportSources({ runTransaction: async () => { throw new Error('isolated index failure'); } })
     .requests({ asOf }), /Firestore report read failed/);
-});
-
-test('source budget expiry is an explicit failure, not a late successful report', async context => {
-  let clock = 0;
-  context.mock.method(Date, 'now', () => clock);
-  const source = createReportSources({}, { auth: { getProjectId: async () => 'isolated-project',
-    getClient: async () => ({ request: async () => {
-      clock = 46000;
-      return { data: { lifecycleState: 'ACTIVE', retentionDays: 30 } };
-    } }) } });
-  await assert.rejects(source.retention(new Date(fixture.asOf)), /45 seconds/);
 });
 
 async function database() {
@@ -286,7 +180,7 @@ async function database() {
 test('server validates Customer/Course before querying sources and rejects ambiguous ownership', async () => {
   const db = await database();
   const input = { customer_id: 'CUST-0001', course_id: 'COURSE-0002', start_date: '2026-10-17', end_date: '2026-10-28' };
-  const source = { retention: () => { throw new Error('must not query'); } };
+  const source = { requests: () => { throw new Error('must not query'); } };
   await assert.rejects(generateButtonReport(db, input, { source }), /does not belong/);
   db.collectionGroup = () => ({ select() { return this; }, limit() { return this; },
     get: async () => ({ size: 2, docs: [{ id: 'COURSE-0001' }, { id: 'COURSE-0001' }] }) });
@@ -299,7 +193,7 @@ test('actual Admin route denies unsigned/non-Admin callers and returns a PDF onl
   await db.collection('user_access').doc('operator').set({ schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: ['COURSE-0001'] });
   const instance = createFairwayHandlers(db, { verifyOperatorToken: async token => ({ uid: token }),
     now: () => new Date(fixture.asOf), buttonReportSource: {
-      retention: async () => ({ start: '2026-09-28' }), logs: async () => [], requests: async () => [],
+      requests: async () => [], currentLabels: async () => ({}),
     } });
   async function run(token, extra = {}) {
     const res = { headers: {}, set(k, v) { this.headers[k] = v; return this; },
@@ -320,31 +214,34 @@ test('actual Admin route denies unsigned/non-Admin callers and returns a PDF onl
   assert.equal(result.body.subarray(0, 4).toString(), '%PDF');
 });
 
-test('renderer produces landscape Letter reference and continuation PDFs without re-querying or recounting', async () => {
-  const report = reference();
+test('renderer shows plain dates and hours, the 6 AM-9 PM axis and no disclaimer notes', async () => {
+  const report = build([
+    request('a', 'completed', '2026-10-20T14:00:00.000Z'),
+    request('b', 'rejected', '2026-10-21T03:30:00.000Z', { device_label: 'Marina 4' }),
+    request('c', 'cancelled', '2026-10-22T20:00:00.000Z', { device_label: 'Hole 12' }),
+  ]);
+  assert.equal(windowText(report), 'Sat, Oct 17 \u2013 Wed, Oct 28, 2026, 6 AM to 9 PM each day (Pacific Time), through Oct 28, 10:30 AM');
+  const partial = buildButtonReport({ customer: fixture.customer, course: fixture.course, asOf: new Date('2026-11-02T20:33:00Z'),
+    bounds: reportBounds({ start_date: '2026-11-01', end_date: '2026-11-02' }, fixture.course.timezone, new Date('2026-11-02T20:33:00Z')),
+    requests: [] });
+  assert.equal(windowText(partial), 'Sun, Nov 1 \u2013 Mon, Nov 2, 2026, 6 AM to 9 PM each day (Pacific Time), through Nov 2, 12:33 PM');
   const pdf = await renderButtonReport(report);
   assert.ok(pdf.includes(Buffer.from('/MediaBox [0 0 792 612]')));
+  assert.equal(pdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);
   if (process.env.BUTTON_REPORT_SAMPLE_DIR) {
     const root = process.env.BUTTON_REPORT_SAMPLE_DIR;
     fs.mkdirSync(root, { recursive: true });
-    fs.writeFileSync(path.join(root, 'button-activity-reference.pdf'), pdf);
-    fs.writeFileSync(path.join(root, 'reference-model.json'), JSON.stringify(report, null, 2));
+    fs.writeFileSync(path.join(root, 'button-activity-layout.pdf'), pdf);
   }
-  const asOf = new Date('2026-11-01T08:00:00Z');
-  const long = buildButtonReport({ ...fixture, asOf,
-    bounds: reportBounds({ start_date: '2026-10-01', end_date: '2026-10-31' }, fixture.course.timezone, asOf),
-    retentionStart: '2026-10-02T08:00:00Z' });
-  const longPdf = await renderButtonReport(long);
-  assert.equal(longPdf.toString('latin1').match(/\/Type \/Page\b/g).length, 3);
-  if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-31-day-layout.pdf'), longPdf);
-  const eighteen = { ...report, devices: [...report.devices, ...Array.from({ length: 12 }, (_, i) => {
-    const id = `FRB-${String(i + 7).padStart(4, '0')}`;
-    return { device_id: id, color: deviceColor(id), label: id };
-  })] };
+  const at = new Date('2026-11-01T08:00:00Z');
+  const long = buildButtonReport({ customer: fixture.customer, course: fixture.course, asOf: at,
+    bounds: reportBounds({ start_date: '2026-10-01', end_date: '2026-10-31' }, fixture.course.timezone, at), requests: fixture.requests });
+  assert.equal((await renderButtonReport(long)).toString('latin1').match(/\/Type \/Page\b/g).length, 3);
+  const eighteen = { ...report, locations: Array.from({ length: 18 }, (_, i) => ({ label: `Hole ${i + 1}`, color: LOCATION_COLORS[i] })) };
   const eighteenPdf = await renderButtonReport(eighteen);
   assert.equal(eighteenPdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1);
-  if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-18-device-layout.pdf'), eighteenPdf);
-  assert.throws(() => renderButtonReport({ ...report, devices: Array(19).fill(report.devices[0]) }), /18 devices/);
+  if (process.env.BUTTON_REPORT_SAMPLE_DIR) fs.writeFileSync(path.join(process.env.BUTTON_REPORT_SAMPLE_DIR, 'button-activity-18-location-layout.pdf'), eighteenPdf);
+  assert.throws(() => renderButtonReport({ ...report, locations: Array(19).fill(report.locations[0]) }), /18 locations/);
   assert.throws(() => renderButtonReport({ ...report, course: { ...report.course, course_name: '\u65e5\u672c' } }), /unsupported.*PDF font/);
-  await assert.rejects(renderButtonReport({ ...report, course: { ...report.course, course_name: 'Very long name '.repeat(30) } }), /heading limit/);
+  await assert.rejects(renderButtonReport({ ...report, course: { ...report.course, course_name: 'Very long name '.repeat(60) } }), /heading limit/);
 });

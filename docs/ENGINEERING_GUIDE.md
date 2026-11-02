@@ -113,8 +113,9 @@ resource-specific preservation checks are owned by the
 ### Admin Button Activity Report review increment
 
 The bounded Admin report uses one model/counting owner,
-`lib/button_activity_report.js`, with read-only adapters for the existing
-retained receiver logs and `requests`. `lib/button_report_pdf.js` consumes
+`lib/button_activity_report.js`, with a read-only adapter for saved
+`requests` (and current device placement only as a missing-label fallback);
+since the 2026-11-02 layout revision it no longer reads receiver logs. `lib/button_report_pdf.js` consumes
 that finished model; it does not query or recount. No ingestion pipeline,
 reporting database, new account model, request writer or scheduled delivery
 is introduced. Course-local receipt-time grouping is intentionally distinct

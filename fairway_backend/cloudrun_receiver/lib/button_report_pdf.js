@@ -3,10 +3,44 @@
 const PDFDocument = require('pdfkit');
 const { ButtonReportError } = require('./button_activity_report');
 
+const FIRST_HOUR = 6;
+const LAST_HOUR = 21;
+const INK = '#52616B';
+const MAX_LOCATIONS = 18;
+
+function dayDate(day) {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, date, 12));
+}
+
+function hourLabel(hour) {
+  return `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+function windowText(report) {
+  const format = (day, options) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(dayDate(day));
+  const first = report.days[0].day;
+  const last = report.days[report.days.length - 1].day;
+  const sameYear = first.slice(0, 4) === last.slice(0, 4);
+  const dates = first === last ? format(first, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) :
+    `${format(first, { weekday: 'short', month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })} \u2013 ` +
+    format(last, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const zone = new Intl.DateTimeFormat('en-US', { timeZone: report.course.timezone, timeZoneName: 'longGeneric' })
+    .formatToParts(new Date(report.start)).find(part => part.type === 'timeZoneName')?.value || report.course.timezone;
+  let text = `${dates}, ${hourLabel(FIRST_HOUR)} to ${hourLabel(LAST_HOUR)} each day (${zone})`;
+  if (!report.end_exclusive) {
+    text += `, through ${new Intl.DateTimeFormat('en-US', { timeZone: report.course.timezone, month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit' }).format(new Date(report.end))}`;
+  }
+  return text;
+}
+
 function renderButtonReport(report) {
-  if (report.devices.length > 18) throw new ButtonReportError('More than 18 devices exceed the readable legend limit. Choose a shorter range.', 413);
+  if (report.locations.length > MAX_LOCATIONS) {
+    throw new ButtonReportError(`More than ${MAX_LOCATIONS} locations exceed the readable legend limit. Choose a shorter range.`, 413);
+  }
   const labels = [report.customer.customer_name || report.customer.customer_id, report.course.course_name,
-    ...report.devices.map(device => device.label)];
+    ...report.locations.map(location => location.label)];
   if (labels.some(label => typeof label !== 'string' ||
       /[^\u0020-\u007e\u00a0-\u00ff\u2013-\u2014\u2018-\u2019\u201c-\u201d]/.test(label))) {
     throw new ButtonReportError('A report name contains characters unsupported by the PDF font. No PDF was generated.', 422);
@@ -21,77 +55,77 @@ function renderButtonReport(report) {
     const text = (value, x, y, size = 8, options = {}) => {
       pdf.font('Helvetica').fontSize(size).fillColor('#253238').text(String(value), x, y, { lineBreak: false, ...options });
     };
-    const localBoundary = value => new Intl.DateTimeFormat('en-US', { timeZone: report.course.timezone,
-      year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3,
-      timeZoneName: 'short' }).format(new Date(value));
+    const marker = (series, x, y, color, size = 1) => {
+      if (series === 'completed') pdf.circle(x, y, 3.2 * size).fill(color);
+      else if (series === 'suspended') pdf.circle(x, y, 3.4 * size).lineWidth(1.15).stroke(color);
+      else {
+        const r = 3.1 * size;
+        pdf.moveTo(x - r, y - r).lineTo(x + r, y + r).moveTo(x - r, y + r).lineTo(x + r, y - r).lineWidth(1.3).stroke(color);
+      }
+    };
+    const colors = new Map(report.locations.map(location => [location.label, location.color]));
+    const window = windowText(report);
     const pages = Math.ceil(report.days.length / 12);
     for (let page = 0; page < pages; page++) {
       pdf.addPage();
       const days = report.days.slice(page * 12, page * 12 + 12);
       const title = `${report.customer.customer_name || report.customer.customer_id}: empty attempts and completed button requests`;
-      const courseTitle = `${report.course.course_name} | ${report.course.timezone} | Plotted at server receipt time`;
       if (pdf.fontSize(15).heightOfString(title, { width: 720 }) > 36 ||
-          pdf.fontSize(9).widthOfString(courseTitle) > 720) {
+          pdf.fontSize(10).widthOfString(report.course.course_name) > 720) {
         throw new ButtonReportError('Customer or Course name exceeds the readable report heading limit.', 413);
       }
       text(title, 36, 27, 15, { width: 720, lineBreak: true });
-      text(courseTitle, 36, 65, 9);
-      const window = `Window: ${localBoundary(report.start)} to ${localBoundary(report.end)} ${report.end_exclusive ? '(end exclusive)' : '(inclusive)'} | As of: ${localBoundary(report.as_of)}`;
-      text(window, 36, 80, 7.5, { width: 720, lineBreak: true });
-      const devices = new Map(report.devices.map(device => [device.device_id, device]));
-      report.devices.forEach((device, index) => {
-        const x = 49 + index % 3 * 240, y = 103 + Math.floor(index / 3) * 21;
-        if (pdf.fontSize(7.5).heightOfString(device.label, { width: 220 }) > 20) {
-          throw new ButtonReportError('A device label exceeds the readable legend limit.', 413);
+      text(report.course.course_name, 36, 64, 10);
+      text(window, 36, 80, 8.5, { width: 720 });
+      report.locations.forEach((location, index) => {
+        const x = 49 + index % 3 * 240, y = 103 + Math.floor(index / 3) * 18;
+        if (pdf.fontSize(8).widthOfString(location.label) > 220) {
+          throw new ButtonReportError('A location name exceeds the readable legend limit.', 413);
         }
-        pdf.circle(x, y + 3, 2.5).fill(device.color);
-        text(device.label, x + 8, y - 2, 7.5, { width: 220, height: 21, lineBreak: true });
+        pdf.rect(x - 3, y, 7, 7).fill(location.color);
+        text(location.label, x + 9, y - 0.5, 8, { width: 220 });
       });
-      const legendBottom = 107 + Math.ceil(report.devices.length / 3) * 21;
-      pdf.circle(49, legendBottom + 3, 2.2).fill('#52616B');
-      text(`Empty: ${report.totals.empty} observed rejection attempts (retries included)`, 59, legendBottom - 1, 8);
-      pdf.circle(406, legendBottom + 3, 4).lineWidth(1.2).stroke('#52616B');
-      text(`Completed: ${report.totals.completed} completed requests`, 417, legendBottom - 1, 8);
-      text('Daily counts: empty / completed; N/A = unavailable; * = partial retained coverage', 36, legendBottom + 16, 7);
-      const notes = [
-        `Retained log window begins ${localBoundary(report.retention_start)}. Coverage: ${report.coverage}. Zero means no observed matching records, not proof of no pushes.`,
-        ...report.notes,
-      ].join(' ');
-      const notesHeight = pdf.fontSize(7).heightOfString(notes, { width: 720, lineGap: 1.5 });
-      const left = 73, right = 755, top = legendBottom + 61, bottom = Math.min(457, 576 - notesHeight - 42);
+      const legendBottom = 107 + Math.ceil(report.locations.length / 3) * 18;
+      [['completed', 'Completed'], ['suspended', 'Service suspended'], ['cancelled', 'Cancelled']].forEach(([series, name], index) => {
+        const x = 49 + index * 240;
+        marker(series, x, legendBottom + 4, INK);
+        text(`${name}: ${report.totals[series]}`, x + 9, legendBottom, 8.5);
+      });
+      const left = 73, right = 755, top = legendBottom + 52, bottom = 540;
       if (bottom - top < 150) throw new ButtonReportError('Report content exceeds the readable page limit. Choose a shorter range.', 413);
       const step = (right - left) / days.length;
       const px = index => left + step * (index + 0.5);
-      const py = hour => bottom - hour / 24 * (bottom - top);
+      const py = hour => bottom - (Math.min(LAST_HOUR, Math.max(FIRST_HOUR, hour)) - FIRST_HOUR) / (LAST_HOUR - FIRST_HOUR) * (bottom - top);
       days.forEach((day, index) => {
         if (index % 2 === 0) pdf.rect(left + index * step, top, step, bottom - top).fill('#F5F8FA');
         pdf.moveTo(px(index), top).lineTo(px(index), bottom).lineWidth(0.35).stroke('#E4EAEE');
-        text(`${day.empty ?? 'N/A'}${day.coverage === 'partial' ? '*' : ''} / ${day.completed ?? 'N/A'}`,
-          px(index) - step / 2, top - 15, 8, { width: step, align: 'center' });
-        text(day.day.slice(5), px(index) - step / 2, bottom + 7, 8, { width: step, align: 'center' });
+        if (day.completed !== null) {
+          const counts = ['completed', 'suspended', 'cancelled'];
+          const widths = counts.map(series => 9 + pdf.font('Helvetica').fontSize(7).widthOfString(String(day[series])));
+          let x = px(index) - (widths.reduce((sum, width) => sum + width, 0) + 4 * (counts.length - 1)) / 2;
+          counts.forEach((series, position) => {
+            marker(series, x + 3, top - 10, INK, 0.75);
+            text(day[series], x + 8, top - 13, 7);
+            x += widths[position] + 4;
+          });
+        }
+        text(new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(dayDate(day.day)),
+          px(index) - step / 2, bottom + 7, 7.5, { width: step, align: 'center' });
       });
-      for (let hour = 0; hour <= 24; hour += 2) {
-        pdf.moveTo(left, py(hour)).lineTo(right, py(hour)).lineWidth(0.4).stroke('#D8E0E5');
-        const label = hour === 24 ? 'Midnight' : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
-        text(label, 29, py(hour) - 3, 7, { width: 39, align: 'right' });
+      for (let hour = FIRST_HOUR; hour <= LAST_HOUR; hour++) {
+        pdf.moveTo(left, py(hour)).lineTo(right, py(hour)).lineWidth(hour % 3 === 0 ? 0.5 : 0.25).stroke('#D8E0E5');
+        text(hourLabel(hour), 29, py(hour) - 3, 7, { width: 39, align: 'right' });
       }
       pdf.rect(left, top, right - left, bottom - top).lineWidth(0.6).stroke('#88969F');
       for (const point of report.points) {
         const index = days.findIndex(day => day.day === point.day);
-        if (index < 0) continue;
-        const color = devices.get(point.device_id).color;
-        if (point.series === 'empty') {
-          pdf.circle(px(index), py(point.hour), 2.15).fillOpacity(0.7).fill(color).fillOpacity(1);
-        } else {
-          pdf.circle(px(index), py(point.hour), 4).lineWidth(1.15).stroke(color);
-        }
+        if (index >= 0) marker(point.series, px(index), py(point.hour), colors.get(point.label));
       }
-      text(`Date | Page ${page + 1}/${pages} (totals cover the entire selected window)`, 73, bottom + 23, 8, { width: 682, align: 'center' });
-      text(notes, 36, bottom + 42, 7, { width: 720, lineBreak: true, lineGap: 1.5 });
-      text('Time of day (local)', 36, top - 29, 7);
+      text('Time of day', 36, top - 29, 7);
+      if (pages > 1) text(`Page ${page + 1} of ${pages}`, left, bottom + 24, 8, { width: right - left, align: 'center' });
     }
     pdf.end();
   });
 }
 
-module.exports = { renderButtonReport };
+module.exports = { renderButtonReport, windowText, FIRST_HOUR, LAST_HOUR };

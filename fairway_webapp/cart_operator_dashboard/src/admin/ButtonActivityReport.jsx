@@ -37,7 +37,7 @@ export default function ButtonActivityReport({ user, apiBaseUrl, customers, dire
   }
   return <section className="a-view" aria-labelledby="button-report-title">
     <div className="a-heading"><div><p>REPORTS</p><h2 id="button-report-title">Button Activity</h2></div></div>
-    <p>Filled dots show received service-unavailable attempts, including retries. Open circles show completed physical-button requests at their receipt times. QR activity is excluded.</p>
+    <p>Each physical-button request is plotted at its receipt time from 6 AM to 9 PM: solid dots are completed, open circles were received while service was suspended, and X marks were cancelled. Colors show the Hole or custom location in use when the button was pressed. Requests excluded by an Admin and QR activity are not shown.</p>
     <form className="a-form a-panel" onSubmit={generate}>
       <div className="a-form-grid">
         <label>Customer<select aria-label="Customer" required value={customerId} onChange={event => {
@@ -51,13 +51,12 @@ export default function ButtonActivityReport({ user, apiBaseUrl, customers, dire
         <label>End date<input type="date" required min={start || undefined} value={end} onChange={event => change(setEnd, event.target.value)} /></label>
       </div>
       <p>Dates use the Course timezone{course?.timezone ? `: ${course.timezone}` : ' (select a Course)'}. Maximum 31 calendar days; charts continue after 12 days per landscape Letter page.</p>
-      <p>Retained logs are queried at generation time. Unavailable/partial history is marked, not treated as zero. Legend labels show device IDs only; historical locations are not inferred.</p>
       {(error || directoryError) && <div className="a-notice a-error" role="alert">{error || directoryError}</div>}
       <button className="a-primary" type="submit" disabled={pending || !course || Boolean(directoryError)}>
         {pending ? 'Generating...' : 'Generate'}
       </button>
     </form>
-    {result && <div className="a-panel" role="status"><p>Report generated. Download the landscape Letter PDF to review its counts, scatterplot, coverage and as-of boundary.</p>
+    {result && <div className="a-panel" role="status"><p>Report generated. Download the landscape Letter PDF to review its daily counts and chart.</p>
       <button className="a-primary" type="button" onClick={() => downloadBlob(result.blob, result.filename)}>Download PDF</button>
     </div>}
   </section>;

@@ -274,56 +274,47 @@ validates the Course's selected Customer parent before reading report sources.
 Ordinary Customer accounts cannot call the report endpoint. No account,
 entitlement, service state or operational data is changed.
 
-- Preserve the accepted one-off scatterplot: dates horizontally, Course-local
-  time vertically; device-colored filled dots for received service-unavailable
-  rejection attempts, including each separate transport retry. Larger open
-  circles represent accepted physical-button requests completed by the explicit
-  as-of boundary, once per request, plotted at **receipt**, not completion.
-  Completed-request points use the shared request reporting eligibility rule:
-  missing `reporting_state` means `active`, `active` contributes, and `excluded`
-  does not. Logging-based service-unavailable attempts paired with an excluded
-  persisted request are omitted, as defined under request reporting exclusion;
-  unpaired attempts remain counted.
-  Cancelled/open requests and QR activity are excluded. This does not change
-  existing Service History's completion-time metrics.
-- The PDF is landscape US Letter, with a three-column device legend, daily
-  empty/completed counts above date columns, observed totals, exact local
-  window/as-of boundaries including milliseconds, timezone and explanatory
-  notes. Original and replacement devices keep distinct identities/colors;
-  numeric FRB colors preserve the reference and other IDs have deterministic
-  colors independent of the selected date range. Overlapping events remain
-  counted even when individual marks overlap.
-- Location labels must not be inferred from current deployment or unverified
-  request label snapshots. Current retained sources have no verified historical
-  assignment timeline. Per the CPO's accepted release correction, legend labels
-  show **only the device ID**, such as `FRB-0002`. Original/replacement units
-  remain distinct through their separate IDs and stable colors. Historical
-  uncertainty remains explained in the notes, not appended to each label.
-  The CPO's supplied
-  reference hole/replacement labels remain documented fixture evidence only;
-  they are not application mappings or proof of historical effective dates.
+- **CPO layout revision (2026-11-02).** Dates run horizontally and
+  Course-local time vertically, limited to **6 AM–9 PM**; any point outside
+  that band is pinned to the nearest edge and still counted. Every point is a
+  saved physical-button (`nrf9151`, `button_press`) request plotted at
+  **receipt**, once per request: a solid dot is **Completed** (completed by the
+  as-of boundary), an open circle is **Service suspended** (rejected with
+  `service_suspended`), and an X is **Cancelled**. Open and other requests, and
+  QR activity, are not plotted. Every series uses the shared request reporting
+  eligibility rule, so Admin-excluded requests are omitted. Service-suspended
+  requests have been saved only since 2026-10-30, so earlier dates show none.
+  Cloud Logging is no longer read; there is no retention coverage, N/A or
+  partial-day marker. This does not change Service History's completion-time
+  metrics.
+- Below the unchanged title, the PDF shows the Course name alone, then one
+  plain line giving the dates, the 6 AM–9 PM daily hours and the Course time
+  zone, plus "through" the as-of time when the window ends before midnight.
+  It has no disclaimer or explanatory notes.
+- The legend is by location, not device: each Hole or custom name has its own
+  color, assigned in natural order within the report from an 18-color palette.
+  Each point uses the `device_label` snapshot stored on its request at receipt,
+  so a device moved during the range appears under each location it had, and
+  replacement units at one location share its color. When a request lacks a
+  snapshot, its `hole` is used, then the device's current registry placement
+  if it is still at this Course, then its device ID. Totals for each category
+  appear with their markers beneath the legend; each date column shows its
+  completed, suspended and cancelled counts with the same markers.
 - Dates are 1–31 inclusive Course-local calendar days using its IANA timezone,
   including daylight-saving changes. The end boundary is the next local
   midnight, exclusive, or the generation as-of instant, inclusive, if earlier.
-  Future-only ranges fail. Subsequent future dates in a selected range are
-  marked outside the window rather than counted as zero.
-- Charts continue after 12 dates per landscape page, without dropping records.
-  Up to 18 devices are supported subject to measured text/chart fit; excessive
-  headings, labels or content fail explicitly rather than clip. Source caps
-  are 20,000 records **per source**, 200 Logging pages and a 45-second source
-  read budget. Exceeding a practical limit returns an error asking for a
-  shorter range, never a partial successful PDF.
-  The current standard PDF font supports Latin-1 and common typographic
-  punctuation; unsupported name characters are an explicit error, never
-  silently substituted or emitted as unreadable labels.
-- Current bucket retention is read at generation time. Dates outside that
-  window show **N/A**, not zero, for empty attempts; partly retained days use
-  an asterisk. Any older records still returned are observed partial evidence,
-  not proof of full coverage. Completion counts use the consistent as-of
-  Firestore snapshot and can change on subsequent generation after additional
-  completions. Retention does not prove historical routing/exclusion coverage;
-  ingestion delay may omit attempts. Zero means no observed matching records,
-  not proof that no physical pushes occurred or reached the server.
+  Future-only ranges fail. Future dates within a selected range show no
+  counts rather than zero.
+- Charts continue after 12 dates per landscape page, with "Page n of N" on
+  multi-page reports, without dropping records. Up to 18 locations are
+  supported; excessive headings, labels or content fail explicitly rather than
+  clip. The source cap is 20,000 requests with a 45-second read budget.
+  Exceeding a practical limit returns an error asking for a shorter range,
+  never a partial successful PDF. The current standard PDF font supports
+  Latin-1 and common typographic punctuation; unsupported name characters are
+  an explicit error, never silently substituted or emitted as unreadable
+  labels. Counts use one consistent as-of Firestore snapshot and can change on
+  subsequent generation after later completions, cancellations or exclusions.
 - A query, metadata, ownership or permission failure is an error, never a
   zero-activity report. Changing inputs clears the downloadable result;
   stale/unmounted generations cannot replace the selected report. Download
@@ -1024,13 +1015,8 @@ Deployment Guide.
   server time, and from/to states. Cart Operators have no exclusion or restore
   controls. The same eligibility rule applies to Service History, Completed
   Requests, Average Completion Time, Requests per Hour, and completed
-  physical-button contributions in Button Activity. Button Activity's
-  Logging-based empty (service-unavailable) points also honour exclusion: each
-  persisted service-suspended request is paired with the latest unused rejection
-  log for the same device and Course received up to 2 seconds before it, and
-  the log point is omitted when that request is not reporting-eligible. Logs
-  with no paired request (for example, before rejected requests were persisted)
-  remain counted. Active Cart Hours remain based solely on service
+  physical-button completed, service-suspended and cancelled points in Button
+  Activity, which reads only saved requests. Active Cart Hours remain based solely on service
   transition events and are unchanged by request reporting state.
 - Started periods with no activity display 0. Zero Active Cart Hours produces
   0 for Requests per Hour. Do not restore a mandatory "Rate unavailable"
