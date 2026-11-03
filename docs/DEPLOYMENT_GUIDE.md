@@ -1,5 +1,45 @@
 # Deployment Guide
 
+## Cart Request Performance Report production release (2026-11-03)
+
+**CPO-authorized Admin and Hosting release with one CPO-authorized data
+write.** Source is `35e7c6c` (`feature/button-report-one-page`: `466b6d5`,
+`589eeee`, `1de944c`, `35e7c6c` on `370b2a5`). The Button Activity report is
+renamed the **Cart Request Performance Report** (PDF title and Title metadata,
+Admin Reports heading, download filenames `cart-request-performance-…pdf`; the
+API route is unchanged) and has a redesigned header: title, one
+Customer · Course · dates subtitle, four large total tiles as the primary
+legend and a compact Button location key. The temperature line shows the
+time-weighted 9:30 AM–5:30 PM average ("Avg"), and the rain drop marks only
+precipitation from midnight to 5:30 PM; Course weather register rows without
+`avg_f` or `precipitation_to_1730_in` are refetched once. Reviewed
+`service_days` corrections replace a day's computed first start and/or last
+end of service. A Driving Range Request Performance Report was added to the
+feature backlog. Receiver, Firestore rules, indexes, firmware and
+infrastructure were unchanged.
+
+- Admin revision `fairway-admin-cartperf-35e7c6c` (tag `cartperf-release`) at
+  100%; rollback target `fairway-admin-svchours-19f7f29` (tag
+  `svchours-release`). Uploaded source (zip SHA-256 `2ae11b32…7956`) matched the
+  commit (only `.gcloudignore` and `test/fixtures` excluded); configuration
+  identical to the prior revision; 401 unauthenticated and 204 preflight on the
+  tagged URL and 401 on the service URL after cutover; only those smoke-test
+  401s were logged.
+- Hosting version `c6a6de50274e48b5`, release `1793731609557000`; rollback
+  target version `66967ac5f95e5070`. Two clean builds of 127 files were
+  byte-identical, with 107 Driving Range assets and the protected mapping
+  (`23b2c3fa…6b87`) and installation PDF (`f5296676…f425`) unchanged; only the
+  JavaScript bundles and `index.html` changed. All 127 files matched byte for
+  byte on `app.fairwayrefresh.com` and `savvy-kit-496703-r5.web.app`.
+- Data write: `customers/CUST-0001/courses/COURSE-0001/service_days/2026-10-17`
+  created (precondition: did not exist) with `start_local: "09:38"`,
+  `end_local: null`, `source: "reviewed_correction"`, note "Opening day:
+  service started at 9:38 AM (CPO, 2026-11-03)". On the production data
+  2026-10-17 becomes 6.9 cart hours (9:38 AM–4:32 PM). Rollback: delete the
+  document.
+- Backend 14 files and frontend 89 unit plus 28 browser tests passed on the
+  release commit.
+
 ## Button report one-page layout and service-hours anchoring production release (2026-11-03)
 
 **CPO-authorized Admin-only release.** Source is `19f7f29`
