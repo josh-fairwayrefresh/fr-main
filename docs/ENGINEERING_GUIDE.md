@@ -112,6 +112,9 @@ resource-specific preservation checks are owned by the
 
 ### Admin Button Activity Report review increment
 
+The report is presented as the **Cart Request Performance Report** since
+2026-11-03; module names, the API route and this heading are unchanged.
+
 The bounded Admin report uses one model/counting owner,
 `lib/button_activity_report.js`, with a read-only adapter for saved
 `requests` (and current device placement only as a missing-label fallback);

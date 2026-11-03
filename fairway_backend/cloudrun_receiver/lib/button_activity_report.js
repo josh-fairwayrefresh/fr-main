@@ -213,7 +213,7 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
   const service = serviceByDay(serviceEvents, bounds, course.timezone, operatorActions, serviceCorrections);
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);
-    const dayWeather = weather?.get(day) ? { high_f: weather.get(day).high_f, rain: weather.get(day).rain } : null;
+    const dayWeather = weather?.get(day) ? { avg_f: weather.get(day).avg_f, rain: weather.get(day).rain } : null;
     return start >= bounds.end ? { day, completed: null, suspended: null, cancelled: null, cart_hours: null, service: [], weather: null, sales_minor: null } :
       { day, ...count(points.filter(point => point.day === day)), cart_hours: hours(service.get(day).minutes),
         service: service.get(day).periods, weather: dayWeather,

@@ -92,7 +92,7 @@ test('report generation reads current placement only for unlabelled requests at 
   assert.deepEqual(report.locations.map(location => location.label), ['Clubhouse', 'FRB-0008', 'Hole 7']);
 });
 
-test('the daily high and rain come from the Course weather register and fit the page with the logo', async () => {
+test('the 9:30 AM-5:30 PM average temperature and rain come from the Course weather register and fit the page with the logo', async () => {
   const db = await database();
   await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
     .update({ course_location: { label: 'San Leandro, CA', latitude: 37.72493, longitude: -122.15608 } });
@@ -103,7 +103,9 @@ test('the daily high and rain come from the Course weather register and fit the 
     const time = [];
     for (let day = params.get('start_date'); day <= params.get('end_date');
       day = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)) time.push(day);
-    return { ok: true, json: async () => ({ daily: { time, temperature_2m_max: time.map((_, i) => 60.4 + i),
+    const hours = time.flatMap((day, i) => Array.from({ length: 24 }, (_, hour) => [`${day}T${String(hour).padStart(2, '0')}:00`, 58.4 + i]));
+    return { ok: true, json: async () => ({ hourly: { time: hours.map(([stamp]) => stamp), temperature_2m: hours.map(([, value]) => value) },
+      daily: { time, temperature_2m_max: time.map((_, i) => 60.4 + i),
       precipitation_sum: time.map(day => day === '2026-10-20' ? 0.2 : 0) } }) };
   };
   const at = new Date('2026-10-21T19:30:00Z');
@@ -112,8 +114,8 @@ test('the daily high and rain come from the Course weather register and fit the 
   const report = await generateButtonReport(db, input, { asOf: at, source: { requests: async () => [], serviceEvents: async () => [],
     currentLabels: async () => ({}), weather: sources.weather } });
   assert.equal(report.weather_available, true);
-  assert.deepEqual(report.days.map(day => day.weather), [{ high_f: 60.4, rain: false }, { high_f: 61.4, rain: true },
-    { high_f: 62.4, rain: false }, null]);
+  assert.deepEqual(report.days.map(day => day.weather), [{ avg_f: 58.4, rain: false }, { avg_f: 59.4, rain: true },
+    { avg_f: 60.4, rain: false }, null]);
   assert.equal(new URL(calls[0]).searchParams.get('end_date'), '2026-10-21', 'weather is requested only through today');
   const stored = await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
     .collection('weather_days').doc('2026-10-20').get();
@@ -361,6 +363,8 @@ test('actual Admin route denies unsigned/non-Admin callers and returns a PDF onl
   assert.equal(result.statusCode, 200);
   assert.equal(result.headers['Content-Type'], 'application/pdf');
   assert.equal(result.headers['Cache-Control'], 'no-store');
+  assert.equal(result.headers['Content-Disposition'], 'attachment; filename="cart-request-performance-2026-10-17-2026-10-28.pdf"');
+  assert.ok(result.body.includes(Buffer.from('(Cart Request Performance Report)')), 'the PDF Title metadata names the report');
   assert.equal(result.body.subarray(0, 4).toString(), '%PDF');
 });
 
@@ -389,7 +393,7 @@ test('renderer shows only the start and end dates, the 6 AM-9 PM axis and no dis
   assert.equal((await renderButtonReport(long)).toString('latin1').match(/\/Type \/Page\b/g).length, 1, 'a 31-day range fits one page');
   const busiest = { ...long, weather_available: true,
     locations: Array.from({ length: 18 }, (_, i) => ({ label: `Hole ${i + 1}`, color: LOCATION_COLORS[i] })),
-    days: long.days.map(day => ({ ...day, cart_hours: 12.3, weather: { high_f: 101.4, rain: true }, sales_minor: 1234567,
+    days: long.days.map(day => ({ ...day, cart_hours: 12.3, weather: { avg_f: 101.4, rain: true }, sales_minor: 1234567,
       completed: 199, suspended: 99, cancelled: 99 })) };
   const busiestPdf = await renderButtonReport(busiest);
   assert.equal(busiestPdf.toString('latin1').match(/\/Type \/Page\b/g).length, 1, '31 days, 18 locations, weather and sales fit one page');

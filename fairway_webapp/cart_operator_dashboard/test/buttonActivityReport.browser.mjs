@@ -49,7 +49,7 @@ test('Admin Reports filters existing Customer/Courses, generates/downloads, reje
       const downloadPromise = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Download PDF', exact: true }).click();
       const download = await downloadPromise;
-      assert.equal(download.suggestedFilename(), 'button-activity-CUST-0002-COURSE-0002-2026-10-17-2026-10-28.pdf');
+      assert.equal(download.suggestedFilename(), 'cart-request-performance-CUST-0002-COURSE-0002-2026-10-17-2026-10-28.pdf');
       assert.equal(await readFile(await download.path(), 'utf8'), '%PDF-1.3\nisolated-browser-download-fixture\n');
     }
     assert.equal(await page.evaluate(() => reportCalls.filter(call => call.method === 'POST').length), 1);

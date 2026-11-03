@@ -110,11 +110,13 @@ The hierarchy is Customer → Course → Device:
   geocoding (US only), re-resolving only when the label changes. Its daily
   weather register is
   `customers/{customerId}/courses/{courseId}/weather_days/{YYYY-MM-DD}`:
-  Course-local `high_f` (°F) and `precipitation_in`, the coordinates used,
+  Course-local `avg_f` (time-weighted 9:30 AM–5:30 PM average, °F), `high_f`
+  (°F) and `precipitation_in`, the coordinates used,
   `source: open-meteo`, `fetched_at`, and `final`. The Admin backend fills it
-  from Open-Meteo when a Button Activity report needs a missing day; days
+  from Open-Meteo when a Cart Request Performance Report needs a missing day; days
   ending at least two days earlier are final and reused, and more recent days,
-  or days fetched for different coordinates, are refreshed. Client access is
+  days fetched for different coordinates, or rows written before `avg_f` was
+  added, are refreshed. Client access is
   denied by the Firestore rules catch-all.
 - A Course's **Total Sales Register** is
   `customers/{customerId}/courses/{courseId}/sales_days/{YYYY-MM-DD}`:
@@ -122,7 +124,7 @@ The hierarchy is Customer → Course → Device:
   day. `source: closeout` days total that day's operator shift close-outs
   (`inventory_shift_closures.amount_minor`, by Course-local `closed_at`) and
   also store `closeout_count` and `closeout_total_minor`; the Admin backend
-  creates or refreshes them when a Button Activity report covers the day.
+  creates or refreshes them when a Cart Request Performance Report covers the day.
   `source: paper_record` (prior paper records) and `source: reviewed_correction`
   (a CPO-reviewed total replacing the close-out sum, with `note`) are entered
   only by a recorded, CPO-authorized write and are never overwritten by
@@ -132,7 +134,7 @@ The hierarchy is Customer → Course → Device:
   `customers/{customerId}/courses/{courseId}/service_days/{YYYY-MM-DD}`:
   `{ day, start_local, end_local, source: "reviewed_correction", note, updated_at }`
   with Course-local `HH:MM` times (either may be null). They replace the
-  Button Activity report's computed first start and/or last end of service
+  Cart Request Performance Report's computed first start and/or last end of service
   for that day, for one-off cases the service event stream cannot represent
   (such as opening day). They are entered only by a recorded, CPO-authorized
   write; `service_events` and Cart KPI Active Cart Hours are not changed.

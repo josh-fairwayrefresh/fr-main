@@ -4,7 +4,9 @@
 // (open data, no API key): geocoding resolves "City, ST" to coordinates when
 // an Admin saves a Course location, and the daily register
 // customers/{c}/courses/{k}/weather_days/{YYYY-MM-DD} caches each Course-local
-// day's high temperature and precipitation for the Button Activity report.
+// day's average temperature over the 9:30 AM-5:30 PM playing window (CPO
+// 2026-11-03), high temperature and precipitation for the Cart Request
+// Performance Report.
 
 const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -14,6 +16,8 @@ const WEATHER_SUBCOLLECTION = 'weather_days';
 const FORECAST_PAST_DAYS = 85;
 const RAIN_THRESHOLD_IN = 0.01;
 const FETCH_TIMEOUT_MS = 8000;
+const AVERAGE_FROM_HOUR = 9.5;
+const AVERAGE_TO_HOUR = 17.5;
 
 const US_STATES = {
   AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut',
@@ -81,8 +85,31 @@ function shiftDay(day, delta) {
 
 function weatherUrl(base, location, timezone, start, end) {
   return `${base}?latitude=${location.latitude}&longitude=${location.longitude}` +
-    '&daily=temperature_2m_max,precipitation_sum&temperature_unit=fahrenheit&precipitation_unit=inch' +
+    '&hourly=temperature_2m&daily=temperature_2m_max,precipitation_sum&temperature_unit=fahrenheit&precipitation_unit=inch' +
     `&timezone=${encodeURIComponent(timezone)}&start_date=${start}&end_date=${end}`;
+}
+
+// Time-weighted mean of the hourly Course-local readings, linearly
+// interpolated, over the 9:30 AM-5:30 PM window; null when any needed hour is missing.
+function windowAverage(hourly, day) {
+  const temperatures = new Map((hourly?.time || []).map((time, index) => [time, hourly.temperature_2m?.[index]]));
+  const at = hour => temperatures.get(`${day}T${String(hour).padStart(2, '0')}:00`);
+  const first = Math.floor(AVERAGE_FROM_HOUR), last = Math.ceil(AVERAGE_TO_HOUR);
+  const readings = [];
+  for (let hour = first; hour <= last; hour++) readings.push(at(hour));
+  if (!readings.every(Number.isFinite)) return null;
+  const value = hour => {
+    const base = Math.min(Math.floor(hour), last - 1);
+    return readings[base - first] + (readings[base - first + 1] - readings[base - first]) * (hour - base);
+  };
+  const points = [AVERAGE_FROM_HOUR];
+  for (let hour = first + 1; hour < AVERAGE_TO_HOUR; hour++) points.push(hour);
+  points.push(AVERAGE_TO_HOUR);
+  let area = 0;
+  for (let index = 1; index < points.length; index++) {
+    area += (points[index] - points[index - 1]) * (value(points[index]) + value(points[index - 1])) / 2;
+  }
+  return Number((area / (AVERAGE_TO_HOUR - AVERAGE_FROM_HOUR)).toFixed(1));
 }
 
 async function fetchDailyWeather({ location, timezone, days, today, fetchImpl = fetch }) {
@@ -96,8 +123,9 @@ async function fetchDailyWeather({ location, timezone, days, today, fetchImpl = 
     (daily.time || []).forEach((day, index) => {
       const high = daily.temperature_2m_max?.[index];
       const precipitation = daily.precipitation_sum?.[index];
-      if (group.includes(day) && Number.isFinite(high) && Number.isFinite(precipitation)) {
-        rows.set(day, { high_f: Number(high.toFixed(1)), precipitation_in: Number(precipitation.toFixed(3)) });
+      const average = windowAverage(body.hourly, day);
+      if (group.includes(day) && average !== null && Number.isFinite(high) && Number.isFinite(precipitation)) {
+        rows.set(day, { avg_f: average, high_f: Number(high.toFixed(1)), precipitation_in: Number(precipitation.toFixed(3)) });
       }
     });
   }
@@ -108,9 +136,9 @@ function sameLocation(row, location) {
   return row && row.latitude === location.latitude && row.longitude === location.longitude;
 }
 
-// Returns Map(day -> { high_f, precipitation_in, rain }) for the requested
+// Returns Map(day -> { avg_f, high_f, precipitation_in, rain }) for the requested
 // Course-local days through today, or null when the Course has no location.
-// Missing, provisional or relocated days are refreshed from Open-Meteo and
+// Missing, provisional, relocated or pre-average days are refreshed from Open-Meteo and
 // written to the register; lookup failures leave those days blank.
 async function readCourseWeather(db, { customerId, courseId, course, days, today, fetchImpl = fetch, now = new Date() }) {
   const location = course.course_location;
@@ -123,7 +151,8 @@ async function readCourseWeather(db, { customerId, courseId, course, days, today
     const docs = await Promise.all(wanted.map(day => register.doc(day).get()));
     docs.forEach((doc, index) => { if (doc.exists) stored.set(wanted[index], doc.data()); });
   }
-  const stale = wanted.filter(day => !stored.get(day)?.final || !sameLocation(stored.get(day), location));
+  const stale = wanted.filter(day => !stored.get(day)?.final || !Number.isFinite(stored.get(day).avg_f) ||
+    !sameLocation(stored.get(day), location));
   if (stale.length) {
     try {
       const fetched = await fetchDailyWeather({ location, timezone: course.timezone, days: stale, today, fetchImpl });
@@ -139,13 +168,13 @@ async function readCourseWeather(db, { customerId, courseId, course, days, today
       console.error('Course weather refresh failed:', { courseId, message: error.message });
     }
   }
-  return new Map(wanted.filter(day => sameLocation(stored.get(day), location)).map(day => {
+  return new Map(wanted.filter(day => sameLocation(stored.get(day), location) && Number.isFinite(stored.get(day).avg_f)).map(day => {
     const row = stored.get(day);
-    return [day, { high_f: row.high_f, precipitation_in: row.precipitation_in, rain: row.precipitation_in >= RAIN_THRESHOLD_IN }];
+    return [day, { avg_f: row.avg_f, high_f: row.high_f, precipitation_in: row.precipitation_in, rain: row.precipitation_in >= RAIN_THRESHOLD_IN }];
   }));
 }
 
 module.exports = {
   CourseLocationError, RAIN_THRESHOLD_IN, WEATHER_SUBCOLLECTION, US_STATES,
-  parseLocationLabel, geocodeCourseLocation, fetchDailyWeather, readCourseWeather, shiftDay,
+  parseLocationLabel, geocodeCourseLocation, fetchDailyWeather, readCourseWeather, shiftDay, windowAverage,
 };

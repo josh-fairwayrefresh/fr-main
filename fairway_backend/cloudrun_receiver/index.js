@@ -1263,7 +1263,7 @@ function createFairwayHandlers(db, {
         const pdf = await renderButtonReport(report);
         res.set('Cache-Control', 'no-store');
         res.set('Content-Type', 'application/pdf');
-        res.set('Content-Disposition', `attachment; filename="button-activity-${req.body.start_date}-${req.body.end_date}.pdf"`);
+        res.set('Content-Disposition', `attachment; filename="cart-request-performance-${req.body.start_date}-${req.body.end_date}.pdf"`);
         return res.status(200).send(pdf);
       }
       const staffMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/staff(?:\/([^/]+))?$/);

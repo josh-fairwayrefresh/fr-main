@@ -27,7 +27,7 @@ export default function ButtonActivityReport({ user, apiBaseUrl, customers, dire
         body: { customer_id: customerId, course_id: courseId, start_date: start, end_date: end },
       });
       if (sequence === version.current) {
-        setResult({ blob, filename: `button-activity-${customerId}-${courseId}-${start}-${end}.pdf` });
+        setResult({ blob, filename: `cart-request-performance-${customerId}-${courseId}-${start}-${end}.pdf` });
       }
     } catch (reason) {
       if (sequence === version.current) setError(reason.message);
@@ -36,8 +36,8 @@ export default function ButtonActivityReport({ user, apiBaseUrl, customers, dire
     }
   }
   return <section className="a-view" aria-labelledby="button-report-title">
-    <div className="a-heading"><div><p>REPORTS</p><h2 id="button-report-title">Button Activity</h2></div></div>
-    <p>Each physical-button request is plotted at its receipt time from 6 AM to 9 PM: solid dots are completed, open circles were received while service was suspended, and X marks were cancelled. Colors show the Hole or custom location in use when the button was pressed. Green shading marks when service was on between each day's first and last service change, with that day's cart hours above its column and, when the Course location is set, the day's high temperature (a drop marks rain). A day's recorded total sales appear in bold on the 8 PM line. Requests excluded by an Admin and QR activity are not shown.</p>
+    <div className="a-heading"><div><p>REPORTS</p><h2 id="button-report-title">Cart Request Performance Report</h2></div></div>
+    <p>Each physical-button request is plotted at its receipt time from 6 AM to 9 PM: solid dots are completed, open circles were received while service was suspended, and X marks were cancelled. Colors show the Hole or custom location in use when the button was pressed. Green shading marks when service was on between each day's first and last service change, with that day's cart hours above its column and, when the Course location is set, the day's average temperature from 9:30 AM to 5:30 PM (a drop marks rain). A day's recorded total sales appear in bold on the 8 PM line. Requests excluded by an Admin and QR activity are not shown.</p>
     <form className="a-form a-panel" onSubmit={generate}>
       <div className="a-form-grid">
         <label>Customer<select aria-label="Customer" required value={customerId} onChange={event => {

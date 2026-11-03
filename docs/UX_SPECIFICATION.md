@@ -278,6 +278,13 @@ add or refresh days in the Course weather register. The Admin Course form has a
 and shown on the Course card with its coordinates; clearing it removes the
 location. An unrecognized location is rejected with an error.
 
+Since 2026-11-03 (CPO) the report is named the **Cart Request Performance
+Report**: the Admin Reports heading, the PDF title and document Title, and the
+downloaded filename (`cart-request-performance-…pdf`) all use that name. The
+API route `/api/v1/admin/reports/button-activity` and this section's anchor
+are unchanged. A separate Driving Range Request Performance Report is in the
+[feature backlog](feature_backlog.md).
+
 - **CPO layout revision (2026-11-02).** Dates run horizontally and
   Course-local time vertically, limited to **6 AM–9 PM**; any point outside
   that band is pinned to the nearest edge and still counted. Every point is a
@@ -291,18 +298,22 @@ location. An unrecognized location is rejected with an error.
   Cloud Logging is no longer read; there is no retention coverage, N/A or
   partial-day marker. This does not change Service History's completion-time
   metrics.
-- The title is **"[Customer name]: Button Request Service Performance"**
-  (Customer ID if no name is set). Below it, the PDF shows the Course name alone, then one
-  line giving only the start and end dates. It has no disclaimer or
-  explanatory notes. The official Fairway Refresh horizontal logo (trimmed
+- The header is the bold navy title **"Cart Request Performance Report"**
+  with one gray subtitle line, **"[Customer name] · [Course name] · [start] –
+  [end]"** (Customer ID if no name is set), above a navy rule. A subtitle too
+  wide for the page fails explicitly. It has no disclaimer or explanatory
+  notes. The official Fairway Refresh horizontal logo (trimmed
   from `docs/logo_source_files/fairway-refresh/fairway-refresh-horizontal-transparent.png`)
   sits at the top right of the page.
 - When the Course has a location, a line above each past or current date's
-  cart hours shows that Course-local day's **high temperature** ("High 68°F",
-  rounded; "High" and then "F" are dropped when columns are too narrow) with a
-  blue water drop when precipitation was at least 0.01 in.
+  cart hours shows that Course-local day's **average temperature from 9:30 AM
+  to 5:30 PM** ("Avg 68°F", rounded; "Avg" and then "F" are dropped when
+  columns are too narrow; the row is labeled "Avg temp" in the left margin)
+  with a blue water drop when the day's precipitation
+  was at least 0.01 in. The average is time-weighted over the window from
+  Open-Meteo hourly temperatures, linearly interpolated between hours.
   Values come from the Course weather register (Open-Meteo). A day whose weather
-  could not be obtained shows "High —"; without a Course location, or if the
+  could not be obtained shows "Avg —"; without a Course location, or if the
   register cannot be read, the line is omitted and the report still generates.
 - Each date with a recorded total in the Course **Total Sales Register** shows
   that amount in bold whole US dollars, rounded to the nearest dollar with no
@@ -338,6 +349,11 @@ location. An unrecognized location is rejected with an error.
   if it is still at this Course, then its device ID. Totals for each category
   appear with their markers beneath the legend; each date column shows its
   completed, suspended and cancelled counts with the same markers.
+  The primary visual anchor beneath the header is a row of four large tiles,
+  each giving the range total with its marker: **Completed**, **Service
+  suspended**, **Cancelled** and **Cart hours in service** (green swatch). The
+  location colors form a compact **Button location** key in a light panel to
+  their right, in two columns (three above 12 locations).
 - Dates are 1–31 inclusive Course-local calendar days using its IANA timezone,
   including daylight-saving changes. The end boundary is the next local
   midnight, exclusive, or the generation as-of instant, inclusive, if earlier.
