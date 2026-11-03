@@ -49,6 +49,18 @@ function createReportSources(db, { fetchImpl = (...args) => fetch(...args) } = {
       if (period.size > MAX_RECORDS) throw new ButtonReportError('Too many service records. Choose a shorter range.', 413);
       return [...prior.docs, ...period.docs].map(doc => doc.data());
     },
+    // Reviewed service start/end corrections, keyed by Course-local day.
+    async serviceCorrections({ customerId, courseId, days }) {
+      checkDeadline();
+      const register = db.collection('customers').doc(customerId).collection('courses').doc(courseId)
+        .collection('service_days');
+      const docs = await Promise.all(days.map(day => register.doc(day).get())).catch(error => {
+        console.error('Button report service correction read failed:', { code: error.code, message: error.message });
+        throw new ButtonReportError('Service hours read failed. Retry.', 503);
+      });
+      return new Map(docs.filter(doc => doc.exists && doc.data().source === 'reviewed_correction')
+        .map(doc => [doc.id, doc.data()]));
+    },
     // Weather is supplementary: any failure leaves the report without it.
     async weather({ customerId, courseId, course, days, today, now }) {
       checkDeadline();

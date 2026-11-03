@@ -128,6 +128,15 @@ The hierarchy is Customer → Course → Device:
   only by a recorded, CPO-authorized write and are never overwritten by
   close-out sync. Close-out records themselves are not changed. Client access
   is denied by the Firestore rules catch-all.
+- A Course's **service day corrections** are
+  `customers/{customerId}/courses/{courseId}/service_days/{YYYY-MM-DD}`:
+  `{ day, start_local, end_local, source: "reviewed_correction", note, updated_at }`
+  with Course-local `HH:MM` times (either may be null). They replace the
+  Button Activity report's computed first start and/or last end of service
+  for that day, for one-off cases the service event stream cannot represent
+  (such as opening day). They are entered only by a recorded, CPO-authorized
+  write; `service_events` and Cart KPI Active Cart Hours are not changed.
+  Client access is denied by the Firestore rules catch-all.
 - A Device has a permanent identity as the Firestore document ID `devices/{FRB-XXXX}`.
 - IDs use `CUST-XXXX`, `COURSE-XXXX`, and `FRB-XXXX` formats. Backend allocation is centralized and transaction-backed; clients do not guess IDs.
 - Active assignment is represented by `customer_id`/`customer_name`, `course_id`/`course_name`, and one `location`. A device in `in_inventory` has all assignment fields null. Do not duplicate device identity, hole, label, or active status in separate fields.

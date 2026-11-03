@@ -121,7 +121,35 @@ function serviceIntervals(serviceEvents, end, timezone) {
   return intervals;
 }
 
-function serviceByDay(serviceEvents, bounds, timezone, operatorActions = []) {
+// A reviewed correction in the Course service_days register (CPO 2026-11-03)
+// replaces the day's computed first start and/or last end, given as
+// Course-local HH:MM.
+function localTimeUtc(day, time, timezone) {
+  if (typeof time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
+  const [hour, minute] = time.split(':').map(Number);
+  let at = localMidnightUtc(parseDay(day), timezone).getTime() + (hour * 60 + minute) * 60000;
+  at += Math.round((hour + minute / 60 - localPoint(new Date(at), timezone).hour) * 60) * 60000;
+  return localPoint(new Date(at), timezone).day === day ? at : null;
+}
+
+function applyCorrection(ranges, correction, day, timezone, limit) {
+  if (!correction) return ranges;
+  const start = localTimeUtc(day, correction.start_local, timezone);
+  const end = localTimeUtc(day, correction.end_local, timezone);
+  let result = ranges.map(range => [...range]);
+  if (start !== null && start < limit) {
+    result = result.filter(range => range[1] > start);
+    if (result.length) result[0][0] = start;
+    else if (end !== null) result.push([start, Math.min(end, limit)]);
+  }
+  if (end !== null) {
+    result = result.filter(range => range[0] < end);
+    if (result.length) result[result.length - 1][1] = Math.min(end, limit);
+  }
+  return result.filter(range => range[0] < range[1]);
+}
+
+function serviceByDay(serviceEvents, bounds, timezone, operatorActions = [], corrections = null) {
   const end = bounds.end.getTime();
   const closedAtEnd = serviceEvents.some(event => event.type === 'suspended' &&
     dateValue(event.recorded_at).getTime() === end);
@@ -132,8 +160,7 @@ function serviceByDay(serviceEvents, bounds, timezone, operatorActions = []) {
     const nextDay = index + 1 < bounds.days.length ? bounds.days[index + 1] : null;
     const dayEnd = Math.min(end, (nextDay ? localMidnightUtc(parseDay(nextDay), timezone) :
       localMidnightUtc(addLocalDays(parseDay(day), 1), timezone)).getTime());
-    const periods = [];
-    let seconds = 0;
+    let ranges = [];
     for (const interval of intervals) {
       const from = Math.max(interval.start.getTime(), dayStart);
       const to = Math.min(interval.end.getTime(), dayEnd);
@@ -145,15 +172,17 @@ function serviceByDay(serviceEvents, bounds, timezone, operatorActions = []) {
       const periodStart = carriedIn ? within[0] : from;
       const periodEnd = carriedOut ? within[within.length - 1] : to;
       if (periodStart === undefined || periodEnd === undefined || periodStart >= periodEnd) continue;
-      seconds += (periodEnd - periodStart) / 1000;
-      periods.push({ start_hour: localPoint(new Date(periodStart), timezone).hour,
-        end_hour: localPoint(new Date(periodEnd), timezone).hour });
+      ranges.push([periodStart, periodEnd]);
     }
+    if (dayStart < end) ranges = applyCorrection(ranges, corrections?.get(day), day, timezone, dayEnd);
+    const seconds = ranges.reduce((sum, [from, to]) => sum + (to - from) / 1000, 0);
+    const periods = ranges.map(([from, to]) => ({ start_hour: localPoint(new Date(from), timezone).hour,
+      end_hour: localPoint(new Date(to), timezone).hour }));
     return [day, { periods, minutes: Math.round(seconds / 60) }];
   }));
 }
 
-function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [], weather = null, sales = null }) {
+function buildButtonReport({ customer, course, bounds, asOf, requests, currentLabels = {}, serviceEvents = [], serviceCorrections = null, weather = null, sales = null }) {
   if (requests.length > MAX_RECORDS) {
     throw new ButtonReportError('Report exceeds 20,000 source records. Choose a shorter range.', 413);
   }
@@ -181,7 +210,7 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
     .map((label, index) => ({ label, color: LOCATION_COLORS[index % LOCATION_COLORS.length] }));
   const count = rows => Object.fromEntries(SERIES.map(series => [series, rows.filter(point => point.series === series).length]));
   const hours = minutes => Number((minutes / 60).toFixed(1));
-  const service = serviceByDay(serviceEvents, bounds, course.timezone, operatorActions);
+  const service = serviceByDay(serviceEvents, bounds, course.timezone, operatorActions, serviceCorrections);
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);
     const dayWeather = weather?.get(day) ? { high_f: weather.get(day).high_f, rain: weather.get(day).rain } : null;
@@ -218,16 +247,18 @@ async function generateButtonReport(db, input, { asOf = new Date(), source, fetc
   const unlabeled = [...new Set(requests.filter(request => request.device_id && !request.device_label &&
     !Number.isInteger(request.hole)).map(request => request.device_id))];
   const today = localPoint(asOf, course.timezone).day;
-  const [currentLabels, serviceEvents, weather, sales] = await Promise.all([
+  const [currentLabels, serviceEvents, serviceCorrections, weather, sales] = await Promise.all([
     unlabeled.length ? sources.currentLabels({ deviceIds: unlabeled, courseId: input.course_id }) : {},
     sources.serviceEvents({ ...bounds, customerId: input.customer_id, courseId: input.course_id }),
+    sources.serviceCorrections ? sources.serviceCorrections({ customerId: input.customer_id, courseId: input.course_id,
+      days: bounds.days }) : null,
     sources.weather ? sources.weather({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
       today, now: asOf }) : null,
     sources.sales ? sources.sales({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
       today, start: bounds.start, end: bounds.end, now: asOf }) : null,
   ]);
   return buildButtonReport({ customer, course: { course_id: course.course_id, course_name: course.course_name, timezone: course.timezone },
-    bounds, asOf, requests, currentLabels, serviceEvents, weather, sales });
+    bounds, asOf, requests, currentLabels, serviceEvents, serviceCorrections, weather, sales });
 }
 
 module.exports = { ButtonReportError, MAX_DAYS, MAX_RECORDS, LOCATION_COLORS, reportBounds, requestLabel,

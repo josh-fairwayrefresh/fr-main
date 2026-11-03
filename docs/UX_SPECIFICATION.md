@@ -323,7 +323,9 @@ location. An unrecognized location is rejected with an error.
   past the end of the day, that period ends at the day's last operator
   Complete or Cancel after the Resume. Without such operator activity the
   open-ended time is excluded. Rejected presses and Admin-excluded requests are
-  not operator activity. On the in-progress final day, service still ON counts
+  not operator activity. A CPO-reviewed correction in the Course
+  `service_days` register replaces a day's computed first start and/or last
+  end (used once, for the 2026-10-17 opening at 9:38 AM). On the in-progress final day, service still ON counts
   through the report time. Hours use minute rounding and are shown to one decimal. These report hours
   can therefore be lower than the Cart KPI **Active Cart Hours**, which counts
   recorded service as-is. Future dates show no cart hours.

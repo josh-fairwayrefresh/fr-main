@@ -180,6 +180,11 @@ test('in-service shading and cart hours count only time between each day\'s firs
   await stream.doc('late').set({ type: 'suspended', recorded_at: new Date('2026-10-23T00:00:00Z') });
   const read = await createReportSources(db).serviceEvents({ ...range, customerId: 'CUST-0001', courseId: 'COURSE-0001' });
   assert.deepEqual(read.map(event => event.recorded_at.toISOString()), events.map(event => event.recorded_at.toISOString()));
+  const register = db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001').collection('service_days');
+  await register.doc('2026-10-19').set({ day: '2026-10-19', start_local: '09:38', source: 'reviewed_correction' });
+  await register.doc('2026-10-20').set({ day: '2026-10-20', start_local: '08:00', source: 'draft' });
+  const corrections = await createReportSources(db).serviceCorrections({ customerId: 'CUST-0001', courseId: 'COURSE-0001', days: range.days });
+  assert.deepEqual([...corrections.keys()], ['2026-10-19'], 'only reviewed corrections are applied');
   await assert.rejects(createReportSources({ collection() { return this; }, doc() { return this; }, where() { return this; },
     orderBy() { return this; }, limit() { return this; }, get: async () => { throw Object.assign(new Error('denied'), { code: 7 }); } })
     .serviceEvents({ ...range, customerId: 'CUST-0001', courseId: 'COURSE-0001' }), error => error.status === 503);
@@ -223,6 +228,18 @@ test('service already on at midnight, legacy midnight expiry or left on overnigh
   assert.deepEqual(byDay['2026-10-25'].service.map(period => Number(period.end_hour.toFixed(3))), [9.97, 17.15],
     'an Admin-excluded request does not extend service');
   assert.equal(byDay['2026-10-26'].cart_hours, 0, 'carried in without operator activity before the Suspend');
+
+  const corrected = buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds: range, asOf: at,
+    requests, serviceEvents: events, serviceCorrections: new Map([
+      ['2026-10-17', { source: 'reviewed_correction', start_local: '09:38' }],
+      ['2026-10-26', { source: 'reviewed_correction', start_local: 'bad' }]]) });
+  const fixed = Object.fromEntries(corrected.days.map(day => [day.day, day]));
+  assert.deepEqual(fixed['2026-10-17'].service, [{ start_hour: 9 + 38 / 60, end_hour: 16 + 32 / 60 + 16 / 3600 }],
+    'a reviewed start correction replaces the computed opening time');
+  assert.equal(fixed['2026-10-17'].cart_hours, 6.9);
+  assert.equal(fixed['2026-10-26'].cart_hours, 0, 'an invalid correction time is ignored');
+  assert.deepEqual(corrected.days.filter(day => day.day !== '2026-10-17').map(day => day.cart_hours),
+    report.days.filter(day => day.day !== '2026-10-17').map(day => day.cart_hours), 'other days are unchanged');
 });
 
 test('exclusive end midnight, as-of boundaries and missing timestamps are explicit', () => {
