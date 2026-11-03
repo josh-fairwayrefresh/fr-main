@@ -185,6 +185,46 @@ test('in-service shading and cart hours count only time between each day\'s firs
     .serviceEvents({ ...range, customerId: 'CUST-0001', courseId: 'COURSE-0001' }), error => error.status === 503);
 });
 
+test('service already on at midnight, legacy midnight expiry or left on overnight is anchored to operator activity', () => {
+  // Production Tony Lema sequences (PDT = UTC-7) for 10/17, 10/22 and 10/25.
+  const events = [
+    { type: 'resumed', recorded_at: new Date('2026-10-15T05:32:37Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-17T23:32:16Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-21T21:59:32Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-21T23:41:23Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-22T22:50:25Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-25T16:55:54Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-25T16:58:13Z') },
+    { type: 'resumed', recorded_at: new Date('2026-10-25T19:43:05Z') },
+    { type: 'suspended', recorded_at: new Date('2026-10-26T16:51:54Z') },
+  ];
+  const requests = [
+    request('early', 'completed', '2026-10-17T16:39:00Z', { completed_at: '2026-10-17T17:50:00Z' }),
+    request('last', 'completed', '2026-10-17T23:20:00Z', { completed_at: '2026-10-17T23:24:00Z' }),
+    request('first22', 'completed', '2026-10-22T18:14:00Z', { completed_at: '2026-10-22T18:27:00Z' }),
+    request('cancel22', 'cancelled', '2026-10-22T20:43:00Z', { cancelled_at: '2026-10-22T21:09:00Z' }),
+    request('open25', 'completed', '2026-10-25T21:26:00Z', { completed_at: '2026-10-26T00:09:00Z' }),
+    request('excluded25', 'completed', '2026-10-25T22:00:00Z', { completed_at: '2026-10-26T02:00:00Z',
+      reporting_state: 'excluded' }),
+    request('rejected', 'rejected', '2026-10-20T14:00:00Z'),
+  ];
+  const at = new Date('2026-10-28T19:00:00Z');
+  const range = reportBounds({ start_date: '2026-10-17', end_date: '2026-10-26' }, fixture.course.timezone, at);
+  const report = buildButtonReport({ customer: fixture.customer, course: fixture.course, bounds: range, asOf: at,
+    requests, serviceEvents: events });
+  const byDay = Object.fromEntries(report.days.map(day => [day.day, day]));
+  assert.equal(byDay['2026-10-17'].cart_hours, 5.7, 'on since before the day: first operator action to Suspend');
+  assert.deepEqual(byDay['2026-10-17'].service, [{ start_hour: 10 + 50 / 60, end_hour: 16 + 32 / 60 + 16 / 3600 }]);
+  assert.equal(byDay['2026-10-20'].cart_hours, 0, 'a rejected press is not operator activity');
+  assert.equal(byDay['2026-10-21'].cart_hours, 1.7);
+  assert.equal(byDay['2026-10-22'].cart_hours, 4.4, 'a repeated Suspend implies the legacy midnight resume');
+  assert.equal(byDay['2026-10-22'].service[0].start_hour, 11 + 27 / 60);
+  assert.equal(byDay['2026-10-25'].cart_hours, 4.5, 'left on overnight: Resume to last operator action');
+  assert.deepEqual(byDay['2026-10-25'].service.map(period => Number(period.end_hour.toFixed(3))), [9.97, 17.15],
+    'an Admin-excluded request does not extend service');
+  assert.equal(byDay['2026-10-26'].cart_hours, 0, 'carried in without operator activity before the Suspend');
+});
+
 test('exclusive end midnight, as-of boundaries and missing timestamps are explicit', () => {
   const at = new Date('2026-10-29T12:00:00Z');
   const range = reportBounds({ start_date: '2026-10-28', end_date: '2026-10-28' }, 'UTC', at);

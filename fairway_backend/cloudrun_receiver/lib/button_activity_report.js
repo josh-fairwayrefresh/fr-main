@@ -1,6 +1,6 @@
 'use strict';
 
-const { activeIntervals, addLocalDays, localMidnightUtc } = require('./service_reporting');
+const { addLocalDays, localMidnightUtc } = require('./service_reporting');
 const { isRequestReportingEligible } = require('./request_reporting');
 
 const MAX_DAYS = 31;
@@ -86,29 +86,68 @@ function localPoint(timestamp, timezone) {
 }
 
 // Port of the accepted one-off generator: every series is plotted at receipt time, not completion time.
-// In-service periods follow the On-course Resume/Suspend events, but a day only
-// counts time between its own first and last service change (CPO 2026-11-02):
-// service carried over from a prior day or left on after the day's last change
-// is not shown. Service still on during the in-progress final day counts
-// through the report time.
-function serviceByDay(serviceEvents, bounds, timezone) {
+// In-service periods follow the On-course Resume/Suspend events, split at
+// Course-local midnight. A day counts from its own Resume to its own Suspend
+// (CPO 2026-11-02). Where a day has no logged change for one side -- service
+// already on at midnight or left on past midnight -- that side is anchored to
+// the day's first or last operator Complete/Cancel within the period (CPO
+// 2026-11-03); without such activity the open-ended time is not shown.
+// Before 2026-10-22 a Suspend expired at the Course's next scheduled start
+// (midnight) without a Resume event, so a Suspend that follows a Suspend
+// implies service was on from that day's midnight (or the prior Suspend).
+// Service still on during the in-progress final day counts through the report
+// time.
+function serviceIntervals(serviceEvents, end, timezone) {
+  const ordered = serviceEvents.map(event => ({ type: event.type, at: dateValue(event.recorded_at) }))
+    .filter(event => event.at <= end).sort((a, b) => a.at - b.at);
+  const intervals = [];
+  let activeSince = null;
+  let lastSuspend = null;
+  for (const { type, at } of ordered) {
+    if (type === 'resumed' && activeSince === null) activeSince = at;
+    else if (type === 'suspended') {
+      if (activeSince !== null) {
+        if (at > activeSince) intervals.push({ start: activeSince, end: at });
+        activeSince = null;
+      } else if (lastSuspend !== null) {
+        const start = new Date(Math.max(lastSuspend.getTime(),
+          localMidnightUtc(parseDay(localPoint(at, timezone).day), timezone).getTime()));
+        if (at > start) intervals.push({ start, end: at, impliedStart: true });
+      }
+      lastSuspend = at;
+    }
+  }
+  if (activeSince !== null && end > activeSince) intervals.push({ start: activeSince, end });
+  return intervals;
+}
+
+function serviceByDay(serviceEvents, bounds, timezone, operatorActions = []) {
   const end = bounds.end.getTime();
   const closedAtEnd = serviceEvents.some(event => event.type === 'suspended' &&
     dateValue(event.recorded_at).getTime() === end);
-  const intervals = activeIntervals(serviceEvents, bounds.end).filter(interval => {
-    const startDay = localPoint(interval.start, timezone).day;
-    if (interval.start < bounds.start) return false;
-    const ongoing = interval.end.getTime() === end && !closedAtEnd;
-    if (ongoing) return !bounds.endExclusive && startDay === localPoint(bounds.end, timezone).day;
-    return startDay === localPoint(interval.end, timezone).day;
-  });
-  return new Map(bounds.days.map(day => {
+  const intervals = serviceIntervals(serviceEvents, bounds.end, timezone);
+  const actions = operatorActions.map(action => action.getTime()).sort((a, b) => a - b);
+  return new Map(bounds.days.map((day, index) => {
+    const dayStart = localMidnightUtc(parseDay(day), timezone).getTime();
+    const nextDay = index + 1 < bounds.days.length ? bounds.days[index + 1] : null;
+    const dayEnd = Math.min(end, (nextDay ? localMidnightUtc(parseDay(nextDay), timezone) :
+      localMidnightUtc(addLocalDays(parseDay(day), 1), timezone)).getTime());
     const periods = [];
     let seconds = 0;
     for (const interval of intervals) {
-      if (localPoint(interval.start, timezone).day !== day) continue;
-      seconds += (interval.end - interval.start) / 1000;
-      periods.push({ start_hour: localPoint(interval.start, timezone).hour, end_hour: localPoint(interval.end, timezone).hour });
+      const from = Math.max(interval.start.getTime(), dayStart);
+      const to = Math.min(interval.end.getTime(), dayEnd);
+      if (from >= to) continue;
+      const carriedIn = interval.impliedStart || interval.start.getTime() < dayStart;
+      const truncated = interval.end.getTime() === end && !closedAtEnd;
+      const carriedOut = interval.end.getTime() > dayEnd || truncated && bounds.endExclusive;
+      const within = actions.filter(at => at >= from && at <= to);
+      const periodStart = carriedIn ? within[0] : from;
+      const periodEnd = carriedOut ? within[within.length - 1] : to;
+      if (periodStart === undefined || periodEnd === undefined || periodStart >= periodEnd) continue;
+      seconds += (periodEnd - periodStart) / 1000;
+      periods.push({ start_hour: localPoint(new Date(periodStart), timezone).hour,
+        end_hour: localPoint(new Date(periodEnd), timezone).hour });
     }
     return [day, { periods, minutes: Math.round(seconds / 60) }];
   }));
@@ -119,12 +158,15 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
     throw new ButtonReportError('Report exceeds 20,000 source records. Choose a shorter range.', 413);
   }
   const points = [];
+  const operatorActions = [];
   const seenRequests = new Set();
   for (const request of requests) {
     const series = requestSeries(request);
     if (!series || !isRequestReportingEligible(request) ||
         request.customer_id !== customer.customer_id || request.course_id !== course.course_id ||
         request.event_type !== 'button_press' || request.source !== 'nrf9151' || seenRequests.has(request.id)) continue;
+    const action = series === 'completed' ? request.completed_at : series === 'cancelled' ? request.cancelled_at : null;
+    if (action && dateValue(action) <= asOf) operatorActions.push(dateValue(action));
     const received = dateValue(request.received_at);
     if (received < bounds.start || received > bounds.end || bounds.endExclusive && received >= bounds.end || received > asOf) continue;
     if (series === 'completed' && dateValue(request.completed_at) > asOf) continue;
@@ -139,7 +181,7 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
     .map((label, index) => ({ label, color: LOCATION_COLORS[index % LOCATION_COLORS.length] }));
   const count = rows => Object.fromEntries(SERIES.map(series => [series, rows.filter(point => point.series === series).length]));
   const hours = minutes => Number((minutes / 60).toFixed(1));
-  const service = serviceByDay(serviceEvents, bounds, course.timezone);
+  const service = serviceByDay(serviceEvents, bounds, course.timezone, operatorActions);
   const days = bounds.days.map(day => {
     const start = localMidnightUtc(parseDay(day), course.timezone);
     const dayWeather = weather?.get(day) ? { high_f: weather.get(day).high_f, rain: weather.get(day).rain } : null;

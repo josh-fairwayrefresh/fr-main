@@ -314,12 +314,17 @@ location. An unrecognized location is rejected with an error.
   service was ON, and a field above that column's counts shows that day's
   **cart hours** in service; the key gives the range total. Periods come from
   the On-course operator Resume/Suspend `service_events` stream (Amenity Areas
-  transitions excluded). Only time between a day's own Resume and a later
-  Suspend on the same Course-local day counts: service carried over from a
-  previous day (before the day's first change) and service left ON after the
-  day's last change, including overnight, are excluded. On the in-progress
-  final day, service resumed that day and still ON counts through the report
-  time. Hours use minute rounding and are shown to one decimal. These report hours
+  transitions excluded). Time between a day's own Resume and a later Suspend
+  on the same Course-local day counts. Where service was already ON at the
+  start of the day (carried over, or, before the 2026-10-22 persistent-service
+  release, a Suspend that expired at midnight without a Resume event, shown by
+  a Suspend following a Suspend), that period starts at the day's first
+  operator Complete or Cancel before the Suspend. Where service was left ON
+  past the end of the day, that period ends at the day's last operator
+  Complete or Cancel after the Resume. Without such operator activity the
+  open-ended time is excluded. Rejected presses and Admin-excluded requests are
+  not operator activity. On the in-progress final day, service still ON counts
+  through the report time. Hours use minute rounding and are shown to one decimal. These report hours
   can therefore be lower than the Cart KPI **Active Cart Hours**, which counts
   recorded service as-is. Future dates show no cart hours.
 - The legend is by location, not device: each Hole or custom name has its own
