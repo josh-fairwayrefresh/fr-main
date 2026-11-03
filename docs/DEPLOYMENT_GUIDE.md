@@ -1,5 +1,30 @@
 # Deployment Guide
 
+## Button report one-page layout and service-hours anchoring production release (2026-11-03)
+
+**CPO-authorized Admin-only release.** Source is `19f7f29`
+(`feature/button-report-one-page`: `fd115b4`, `19f7f29` on `ea35a5d`). The
+Button Activity PDF fits on one page for any range up to 31 days, shows cart
+hours to one decimal and total sales in whole dollars (rounded to the nearest
+dollar). Service shading now anchors a day's open-ended side to operator
+activity: service already ON at the start of the day (including a legacy
+pre-2026-10-22 Suspend that expired at midnight without a Resume event, seen
+as a Suspend following a Suspend) starts at the day's first operator
+Complete/Cancel, and service left ON past the end of the day ends at the day's
+last operator Complete/Cancel. On the Tony Lema Course production data,
+2026-10-17 changes from 0 to 5.7 hours, 10-22 from 0.1 to 4.4 and 10-25 from 0
+to 4.5; no other day in Oct 17 - Nov 2 changes. Hosting, Receiver, Firestore
+data, rules, indexes, firmware and infrastructure were unchanged.
+
+- Admin revision `fairway-admin-svchours-19f7f29` (tag `svchours-release`) at
+  100%; rollback target `fairway-admin-sales-12f60f0` (tag `sales-release`).
+  Uploaded source matched the commit (only `.gcloudignore` and
+  `test/fixtures` excluded); configuration identical to the prior revision;
+  401 unauthenticated and 204 preflight on the tagged URL and 401 on the
+  service URL after cutover; only those smoke-test 401s were logged.
+- Backend all passing on the release commit (including a regression test built
+  from the production 10/17, 10/22 and 10/25 event sequences).
+
 ## Button report title, logo, weather and total sales production release (2026-11-02)
 
 **CPO-authorized Admin and Hosting release with two CPO-authorized data
