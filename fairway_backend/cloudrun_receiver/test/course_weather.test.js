@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { FakeFirestore } = require('./fake_firestore');
-const { parseLocationLabel, readCourseWeather, shiftDay, windowAverage } = require('../lib/course_weather');
+const { parseLocationLabel, precipitationBeforeCutoff, readCourseWeather, shiftDay, windowAverage } = require('../lib/course_weather');
 
 const location = { label: 'San Leandro, CA', latitude: 37.72493, longitude: -122.15608 };
 const course = { timezone: 'America/Los_Angeles', course_location: location };
@@ -15,9 +15,11 @@ function weatherFetch(calls, values = {}) {
     const params = new URL(url).searchParams;
     const time = [];
     for (let day = params.get('start_date'); day <= params.get('end_date'); day = shiftDay(day, 1)) time.push(day);
-    const hours = time.flatMap(day => Array.from({ length: 24 }, (_, hour) => [day, `${day}T${String(hour).padStart(2, '0')}:00`]));
+    // values[day] = [daily high, daily precipitation, hourly temperature, { hour ending: precipitation }]
+    const hours = time.flatMap(day => Array.from({ length: 24 }, (_, hour) => [day, hour, `${day}T${String(hour).padStart(2, '0')}:00`]));
     return { ok: true, json: async () => ({
-      hourly: { time: hours.map(([, stamp]) => stamp), temperature_2m: hours.map(([day]) => values[day]?.[2] ?? 62.04) },
+      hourly: { time: hours.map(([, , stamp]) => stamp), temperature_2m: hours.map(([day]) => values[day]?.[2] ?? 62.04),
+        precipitation: hours.map(([day, hour]) => values[day]?.[3]?.[hour] ?? 0) },
       daily: { time,
       temperature_2m_max: time.map(day => values[day]?.[0] ?? 66.24),
       precipitation_sum: time.map(day => values[day]?.[1] ?? 0) } }) };
@@ -38,7 +40,8 @@ test('Course locations must be "City, ST" with a known US state', () => {
 test('daily weather is fetched once, stored in the Course register, and reused when final', async () => {
   const db = new FakeFirestore();
   const calls = [];
-  const fetchImpl = weatherFetch(calls, { '2026-11-01': [65, 0.169, 61.5], '2026-10-31': [64.1, 0.004] });
+  const fetchImpl = weatherFetch(calls, { '2026-11-01': [65, 0.169, 61.5, { 10: 0.169 }], '2026-10-31': [64.1, 0.004, 62.04, { 9: 0.004 }],
+    '2026-10-30': [66, 0.3, 62.04, { 20: 0.3 }] });
   const input = { customerId: 'CUST-0001', courseId: 'COURSE-0001', course, days, today: '2026-11-02', fetchImpl,
     now: new Date('2026-11-02T21:00:00Z') };
   const first = await readCourseWeather(db, input);
@@ -49,10 +52,11 @@ test('daily weather is fetched once, stored in the Course register, and reused w
   assert.equal(url.searchParams.get('end_date'), '2026-11-02', 'future days are not requested');
   assert.equal(url.searchParams.get('temperature_unit'), 'fahrenheit');
   assert.equal(url.searchParams.get('timezone'), 'America/Los_Angeles');
-  assert.equal(url.searchParams.get('hourly'), 'temperature_2m');
+  assert.equal(url.searchParams.get('hourly'), 'temperature_2m,precipitation');
   assert.deepEqual([...first.keys()], days.slice(0, 4));
-  assert.deepEqual(first.get('2026-11-01'), { avg_f: 61.5, high_f: 65, precipitation_in: 0.169, rain: true });
+  assert.deepEqual(first.get('2026-11-01'), { avg_f: 61.5, high_f: 65, precipitation_in: 0.169, precipitation_to_1730_in: 0.169, rain: true });
   assert.equal(first.get('2026-10-31').rain, false, 'a trace below 0.01 in is not rain');
+  assert.equal(first.get('2026-10-30').rain, false, 'rain only after 5:30 PM does not mark the day');
   const stored = (await register(db).doc('2026-10-31').get()).data();
   assert.equal(stored.final, true);
   assert.equal(stored.source, 'open-meteo');
@@ -96,17 +100,28 @@ test('the average temperature is time-weighted over 9:30 AM-5:30 PM Course-local
     'a missing hour leaves the day blank');
 });
 
-test('final register rows written before the average was added are refetched once', async () => {
+test('final register rows written before the average and 5:30 PM rain were added are refetched once', async () => {
   const db = new FakeFirestore();
   await register(db).doc('2026-10-30').set({ day: '2026-10-30', high_f: 70, precipitation_in: 0, final: true,
     latitude: location.latitude, longitude: location.longitude, source: 'open-meteo' });
   const calls = [];
   const input = { customerId: 'CUST-0001', courseId: 'COURSE-0001', course, days: ['2026-10-30'], today: '2026-11-02',
     now: new Date('2026-11-02T21:00:00Z'), fetchImpl: weatherFetch(calls, { '2026-10-30': [70, 0, 66] }) };
-  assert.deepEqual((await readCourseWeather(db, input)).get('2026-10-30'), { avg_f: 66, high_f: 70, precipitation_in: 0, rain: false });
+  assert.deepEqual((await readCourseWeather(db, input)).get('2026-10-30'), { avg_f: 66, high_f: 70, precipitation_in: 0, precipitation_to_1730_in: 0, rain: false });
   assert.equal(calls.length, 1);
   await readCourseWeather(db, input);
   assert.equal(calls.length, 1, 'the refreshed row is final and reused');
   const failed = await readCourseWeather(new FakeFirestore(), { ...input, fetchImpl: async () => { throw new Error('down'); } });
   assert.equal(failed.size, 0);
+});
+
+test('rain counts precipitation from midnight to 5:30 PM Course-local time', () => {
+  const day = '2026-10-22';
+  const hourly = amounts => ({ time: Array.from({ length: 24 }, (_, hour) => `${day}T${String(hour).padStart(2, '0')}:00`),
+    precipitation: Array.from({ length: 24 }, (_, hour) => amounts[hour] ?? 0) });
+  assert.equal(precipitationBeforeCutoff(hourly({ 0: 0.5 }), day), 0, 'the hour ending at midnight belongs to the previous day');
+  assert.equal(precipitationBeforeCutoff(hourly({ 1: 0.02, 17: 0.1 }), day), 0.12);
+  assert.equal(precipitationBeforeCutoff(hourly({ 18: 0.2 }), day), 0.1, 'half of the 5-6 PM hour falls before 5:30 PM');
+  assert.equal(precipitationBeforeCutoff(hourly({ 19: 0.4, 23: 0.4 }), day), 0, 'evening rain is excluded');
+  assert.equal(precipitationBeforeCutoff({ time: [], precipitation: [] }, day), null);
 });

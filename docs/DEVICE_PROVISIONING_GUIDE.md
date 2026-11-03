@@ -111,12 +111,13 @@ The hierarchy is Customer → Course → Device:
   weather register is
   `customers/{customerId}/courses/{courseId}/weather_days/{YYYY-MM-DD}`:
   Course-local `avg_f` (time-weighted 9:30 AM–5:30 PM average, °F), `high_f`
-  (°F) and `precipitation_in`, the coordinates used,
+  (°F), daily `precipitation_in`, `precipitation_to_1730_in` (midnight–5:30 PM,
+  which alone sets the report's rain mark), the coordinates used,
   `source: open-meteo`, `fetched_at`, and `final`. The Admin backend fills it
   from Open-Meteo when a Cart Request Performance Report needs a missing day; days
   ending at least two days earlier are final and reused, and more recent days,
-  days fetched for different coordinates, or rows written before `avg_f` was
-  added, are refreshed. Client access is
+  days fetched for different coordinates, or rows missing `avg_f` or
+  `precipitation_to_1730_in`, are refreshed. Client access is
   denied by the Firestore rules catch-all.
 - A Course's **Total Sales Register** is
   `customers/{customerId}/courses/{courseId}/sales_days/{YYYY-MM-DD}`:

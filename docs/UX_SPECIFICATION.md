@@ -309,8 +309,9 @@ are unchanged. A separate Driving Range Request Performance Report is in the
   cart hours shows that Course-local day's **average temperature from 9:30 AM
   to 5:30 PM** ("Avg 68°F", rounded; "Avg" and then "F" are dropped when
   columns are too narrow; the row is labeled "Avg temp" in the left margin)
-  with a blue water drop when the day's precipitation
-  was at least 0.01 in. The average is time-weighted over the window from
+  with a blue water drop when at least 0.01 in of precipitation fell from
+  midnight to 5:30 PM Course-local time that day (Open-Meteo hourly amounts;
+  half of the 5–6 PM hour counts); later evening rain does not mark the day. The average is time-weighted over the window from
   Open-Meteo hourly temperatures, linearly interpolated between hours.
   Values come from the Course weather register (Open-Meteo). A day whose weather
   could not be obtained shows "Avg —"; without a Course location, or if the

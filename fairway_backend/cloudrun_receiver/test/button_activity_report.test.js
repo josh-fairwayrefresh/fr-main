@@ -103,10 +103,12 @@ test('the 9:30 AM-5:30 PM average temperature and rain come from the Course weat
     const time = [];
     for (let day = params.get('start_date'); day <= params.get('end_date');
       day = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)) time.push(day);
-    const hours = time.flatMap((day, i) => Array.from({ length: 24 }, (_, hour) => [`${day}T${String(hour).padStart(2, '0')}:00`, 58.4 + i]));
-    return { ok: true, json: async () => ({ hourly: { time: hours.map(([stamp]) => stamp), temperature_2m: hours.map(([, value]) => value) },
+    const hours = time.flatMap((day, i) => Array.from({ length: 24 }, (_, hour) => [`${day}T${String(hour).padStart(2, '0')}:00`, 58.4 + i,
+      day === '2026-10-20' && hour === 14 ? 0.2 : day === '2026-10-21' && hour === 20 ? 0.3 : 0]));
+    return { ok: true, json: async () => ({ hourly: { time: hours.map(([stamp]) => stamp), temperature_2m: hours.map(([, value]) => value),
+      precipitation: hours.map(([, , amount]) => amount) },
       daily: { time, temperature_2m_max: time.map((_, i) => 60.4 + i),
-      precipitation_sum: time.map(day => day === '2026-10-20' ? 0.2 : 0) } }) };
+      precipitation_sum: time.map(day => day === '2026-10-20' ? 0.2 : day === '2026-10-21' ? 0.3 : 0) } }) };
   };
   const at = new Date('2026-10-21T19:30:00Z');
   const sources = createReportSources(db, { fetchImpl });
