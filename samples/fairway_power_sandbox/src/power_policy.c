@@ -1,10 +1,7 @@
 #include "power_policy.h"
 
 #include <zephyr/device.h>
-#include <zephyr/drivers/mfd/npm13xx.h>
 #include <zephyr/drivers/regulator.h>
-#include <zephyr/drivers/sensor.h>
-#include <zephyr/drivers/sensor/npm13xx_charger.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
@@ -12,11 +9,7 @@
 LOG_MODULE_REGISTER(power_policy);
 
 static const struct device *i2c2_dev = DEVICE_DT_GET(DT_NODELABEL(i2c2));
-static const struct device *npm1300_pmic_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_pmic));
-static const struct device *npm1300_charger_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_charger));
 static const struct device *buck2_dev = DEVICE_DT_GET(DT_NODELABEL(npm1300_buck2));
-
-static struct gpio_callback vbus_cb;
 
 static volatile bool interaction_awake_active;
 
@@ -52,7 +45,7 @@ void power_policy_set_interaction_awake(bool active)
 	}
 }
 
-static int apply_buck2_power_policy(bool vbus_present)
+static int set_buck2_service_rail(bool enabled)
 {
 	int ret;
 
@@ -60,51 +53,22 @@ static int apply_buck2_power_policy(bool vbus_present)
 		return -ENODEV;
 	}
 
-	if (vbus_present) {
-		if (regulator_is_enabled(buck2_dev)) {
-			return 0;
-		}
-
-		ret = regulator_enable(buck2_dev);
-		if (ret == 0) {
-			LOG_INF("VBUS present: BUCK2 service rail enabled");
-		}
-		return ret;
-	}
-
-	if (!regulator_is_enabled(buck2_dev)) {
+	if (regulator_is_enabled(buck2_dev) == enabled) {
+		LOG_INF("BUCK2 debugger service rail already %s",
+			enabled ? "enabled for service" : "disabled for normal operation");
 		return 0;
 	}
 
-	ret = regulator_disable(buck2_dev);
+	ret = enabled ? regulator_enable(buck2_dev) : regulator_disable(buck2_dev);
 	if (ret == 0) {
-		LOG_INF("VBUS absent: BUCK2 service rail disabled");
+		LOG_INF("BUCK2 debugger service rail %s",
+			enabled ? "enabled for service mode" : "disabled for normal operation");
 	}
 	return ret;
 }
 
-static void vbus_event_callback(const struct device *dev, struct gpio_callback *cb,
-				uint32_t pins)
+int power_policy_init(bool service_mode)
 {
-	ARG_UNUSED(dev);
-	ARG_UNUSED(cb);
-
-	if ((pins & BIT(NPM13XX_EVENT_VBUS_DETECTED)) != 0U) {
-		if (apply_buck2_power_policy(true) < 0) {
-			LOG_ERR("BUCK2 enable after VBUS detection failed");
-		}
-	}
-
-	if ((pins & BIT(NPM13XX_EVENT_VBUS_REMOVED)) != 0U) {
-		if (apply_buck2_power_policy(false) < 0) {
-			LOG_ERR("BUCK2 disable after VBUS removal failed");
-		}
-	}
-}
-
-int power_policy_init(void)
-{
-	struct sensor_value vbus_present;
 	int ret;
 
 	if (!device_is_ready(i2c2_dev)) {
@@ -118,24 +82,5 @@ int power_policy_init(void)
 		return ret;
 	}
 
-	if (!device_is_ready(npm1300_pmic_dev) || !device_is_ready(npm1300_charger_dev)) {
-		return -ENODEV;
-	}
-
-	gpio_init_callback(&vbus_cb, vbus_event_callback,
-			   BIT(NPM13XX_EVENT_VBUS_DETECTED) | BIT(NPM13XX_EVENT_VBUS_REMOVED));
-	ret = mfd_npm13xx_add_callback(npm1300_pmic_dev, &vbus_cb);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = sensor_attr_get(npm1300_charger_dev, SENSOR_CHAN_NPM13XX_CHARGER_VBUS_STATUS,
-			      SENSOR_ATTR_NPM13XX_CHARGER_VBUS_PRESENT, &vbus_present);
-	if (ret < 0) {
-		return ret;
-	}
-
-	LOG_INF("BUCK2 boot policy: VBUS present=%d", vbus_present.val1 != 0);
-
-	return apply_buck2_power_policy(vbus_present.val1 != 0);
+	return set_buck2_service_rail(service_mode);
 }

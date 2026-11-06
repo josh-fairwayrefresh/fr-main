@@ -38,7 +38,7 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 | `http_transport.c` | DNS handling and bounded HTTPS transport |
 | `transaction_scheduler.c` | Sole transaction worker shared by golfer and COMPLETE traffic |
 | `modem_service.c` | Modem/certificate/LTE initialization and registration handling |
-| `power_policy.c` | VBUS/BUCK2 and bounded interaction-awake policy |
+| `power_policy.c` | BUCK2 service-rail and bounded interaction-awake policy |
 
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
@@ -59,10 +59,11 @@ its normal idle/WFI path whether VBUS is present or absent.
 
 Increment 1.0 requests LTE PSM from `modem_service` independently of VBUS,
 using the existing PSM parameters. `power_policy` retains VBUS detection only
-for the existing nPM1300 BUCK2 service-rail policy and does not control modem
-PSM. The modem event handler records network-reported PSM timers when the LTE
-link-control library provides a PSM update. This reports network configuration;
-it does not by itself prove the modem entered PSM.
+for the then-existing nPM1300 BUCK2 service-rail policy and does not control
+modem PSM. The later BUCK2 correction below supersedes that service-rail
+behavior. The modem event handler records network-reported PSM timers when the
+LTE link-control library provides a PSM update. This reports network
+configuration; it does not by itself prove the modem entered PSM.
 
 The candidate preserves modem lifecycle, button transaction, HTTPS transport,
 credentials, bounded interaction-awake behavior, and LED feedback. The Circuit
@@ -94,6 +95,43 @@ not actual PSM entry during the field measurement. The pulse's absence cannot
 be causally attributed to PSM without further evidence. Increment 1.0 remains
 unaccepted pending CPO acceptance; complete device-specific evidence is in
 `docs/DEPLOYMENT_GUIDE.md`.
+
+In a subsequent FRB-0005 isolation diagnostic, a temporary image explicitly
+requested LTE functional-mode power-off after registration. The CPO reports
+that field-powered PPK2 current remained at 23–25 mA through that event, with
+no discernible reduction. This weighs against active LTE/radio operation as
+the dominant source of the sustained draw, but does not identify the
+remaining load or prove PSM behavior. The supplied one-minute CSV excerpt
+does not contain the modem-off event. At that time, VBUS enabled the
+established BUCK2 service rail, so its contribution, including the board
+debugger load, had not been isolated. The subsequent BUCK2 correction is
+described below. See `docs/DEPLOYMENT_GUIDE.md` for the diagnostic image
+identity and exact capture limits.
+
+## FRB-0005 BUCK2 low-power correction
+
+The current `power_policy` implementation disables BUCK2 during normal
+operation regardless of VBUS; CPU idle/WFI remains available outside bounded
+golfer interactions, and `modem_service` continues to own LTE PSM independently.
+BUCK2 is enabled only in explicit debugger service mode, selected by holding
+the PV8 button through boot. In service mode, the application leaves the
+debugger rail on and does not start LTE or golfer-request runtime. The service
+mode exists to preserve an intentional development/programming path; it is
+not part of normal golfer operation. Exact build, programming, and field
+validation evidence is owned by `docs/DEPLOYMENT_GUIDE.md`.
+
+The first five-minute FRB-0005 field-power PPK2 capture after this change had
+a 4.131 mA median and 9.215 mA mean, with recurring multi-second current
+bursts. During the subsequent interval, the CPO reports a stable displayed
+average of 3.46 mA and maximum of 3.73 mA over approximately 86.8 seconds;
+the CPO reports the same readings held for the rest of the five-minute
+interval. A full raw export is unavailable. The displayed average is 86.3%
+below Increment 1.0's 25.168 mA under the previously confirmed measurement
+configuration. These results indicate substantially lower normal-operation
+current, but the first capture's bursts and missing second export limit
+full-window comparison. They do not prove CPU or modem sleep residency. See
+the deployment record for the capture checksum, distribution, build identity,
+and remaining validation.
 
 ## Pilot 1.1 validation status
 

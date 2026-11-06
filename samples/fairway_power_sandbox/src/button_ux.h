@@ -26,6 +26,11 @@
  */
 int button_ux_init(struct k_sem *wake_sem);
 
+/* Reads the configured PV8 input; used at boot to select normal or explicit
+ * debugger service mode.
+ */
+int button_ux_is_pressed(bool *pressed);
+
 void button_ux_startup_flash(void);
 
 /* Disabled while an accepted press is being handled, so switch bounce

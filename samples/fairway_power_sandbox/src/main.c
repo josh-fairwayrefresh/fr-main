@@ -4,7 +4,7 @@
  * This file wires together focused modules (see each header for its
  * owned concern) and contains only the golfer button/LED sequencing
  * itself:
- *   power_policy        - VBUS/BUCK2 and bounded interaction-awake keeper
+ *   power_policy        - BUCK2 service rail and bounded interaction-awake keeper
  *   modem_service        - modem/cert/LTE bring-up, registration-triggered
  *                           DNS prewarm, and LTE PSM ownership
  *   http_transport        - DNS cache/resolver + bounded HTTPS primitive
@@ -144,23 +144,39 @@ int main(void)
 		return 0;
 	}
 
-	ret = power_policy_init();
+	ret = button_ux_init(&button_wake_sem);
+	if (ret < 0) {
+		LOG_ERR("Button/indicator initialization failed: %d", ret);
+		return 0;
+	}
+
+	bool service_mode = false;
+	ret = button_ux_is_pressed(&service_mode);
+	if (ret < 0) {
+		LOG_ERR("Boot button state read failed: %d", ret);
+		return 0;
+	}
+
+	ret = power_policy_init(service_mode);
 	if (ret < 0) {
 		LOG_ERR("Power policy initialization failed: %d", ret);
 		return 0;
 	}
-
-	LOG_INF("Fairway Refresh state-machine feedback test starting");
 
 	/* Local hardware first: button/LED GPIO, callback, and interrupt are
 	 * configured and armed, and this thread reaches its event loop,
 	 * before any modem/network call is made -- the golfer button is live
 	 * regardless of what modem_service does next or how long it takes.
 	 */
-	ret = button_ux_init(&button_wake_sem);
-	if (ret < 0) {
-		LOG_ERR("Button/indicator initialization failed: %d", ret);
-		return 0;
+	LOG_INF("Fairway Refresh state-machine feedback test starting");
+
+	if (service_mode) {
+		button_ux_set_interrupt_enabled(false);
+		button_ux_all_off();
+		LOG_INF("Debugger service mode: boot button held; LTE and golfer runtime are disabled");
+		while (1) {
+			k_sleep(K_FOREVER);
+		}
 	}
 
 	button_ux_startup_flash();

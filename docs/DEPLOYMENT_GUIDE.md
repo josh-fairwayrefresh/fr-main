@@ -1762,11 +1762,24 @@ The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tr
 
 ### Flash Procedure
 
-The current Fairway programming and recovery path is probe-rs with the
-Circuit Dojo recovery utility for a locked target. In USB/debug/service mode,
-disconnect V25/V50/V75 field power and PPK2 before connecting Feather USB.
-Prototype 3.3 field and USB development/service configurations are mutually
-exclusive, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+The current Fairway programming and recovery path is erase-all followed by
+complete-image programming and read-back verification with probe-rs. The
+separate Circuit Dojo recovery utility is not the current procedure. In
+USB/debug/service mode, disconnect V25/V50/V75 field power and PPK2 before
+connecting Feather USB. Prototype 3.3 field and USB development/service
+configurations are mutually exclusive, as specified by
+`docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+The current low-power firmware disables BUCK2 during normal operation, which
+removes power from the Feather's RP2040 debugger. To enter its explicit
+development/service mode, keep the PV8 button pressed while applying USB
+service power or pressing RESET, and hold it through startup. The firmware
+then keeps BUCK2 enabled and does not start LTE or golfer-request runtime.
+Wait for the CMSIS-DAP probe to enumerate before programming. Release PV8
+before the final reset to return to normal operation, where BUCK2 is disabled.
+The two-second application startup initialization remains unchanged and is
+distinct from Circuit Dojo's separate early-erase timing for firmware without
+this service mode.
 
 Build and independently verify the complete device-specific image using the
 procedure above. Confirm the attached probe serial identifies the authorized
@@ -1775,24 +1788,18 @@ target. Program the complete merged Intel HEX image and read it back:
 ```sh
 probe-rs download --chip nRF9151_xxAA \
   --probe 2e8a:000c:<probe-serial> --non-interactive \
-  --binary-format hex --verify <merged.hex>
+  --chip-erase --allow-erase-all --binary-format hex --verify <merged.hex>
 ```
 
-If normal probe access fails because the nRF91 target is locked or its access
-ports are unavailable, use the established recovery utility to unlock the
-identified device, then program the **complete verified image** as above:
-
-```sh
-~/.zephyrtools/recovery/recovery --serial <probe-serial> --unlock-only
-```
-
-Unlocking a locked nRF91 performs erase-all through CTRL-AP and clears target
-flash. This is an established development programming/recovery operation, not
-a reason to abandon an authorized firmware update. It does not update or rotate
-backend credentials. The complete device-specific image must be programmed
-afterward; do not treat an application-only image as restoration. Successful
-programming is indicated by probe-rs completing and reporting success. Reset
-the target after programming:
+Erase-all clears target flash, so always use the complete, independently
+verified, device-specific merged image; an application-only image is not
+restoration. This is the established development programming workflow, not a
+reason to abandon an authorized firmware update. It does not update or rotate
+backend credentials. On the validated FRB-0005 probe, probe-rs reported that
+Core 0 was locked and initiated its erase/unlock procedure when this complete
+image command was run; programming and read-back verification then succeeded.
+Successful programming is indicated by probe-rs completing and reporting
+success. Reset the target after programming:
 
 ```sh
 probe-rs reset --chip nRF9151_xxAA \
@@ -1801,11 +1808,11 @@ probe-rs reset --chip nRF9151_xxAA \
 
 The board's existing `startup.c` application initialization sets the PMIC VBUS
 input limit and then delays application startup by exactly two seconds. Keep
-that initialization unchanged. It is distinct from Circuit Dojo's recovery
-instruction to issue `probe-rs erase` within the first second after reconnect
-for firmware that disables BUCK2 and powers down the RP2040 debugger. That
-special timing applies to the BUCK2-disabled condition, not to the normal
-Increment 0.5 programming path, which preserves BUCK2 policy.
+that initialization unchanged. The service-button procedure above is the
+current normal programming path; it does not depend on issuing an erase during
+that startup delay. The separate Circuit Dojo early-erase instruction is not
+the current Fairway procedure and the Circuit Dojo recovery utility is not
+used.
 
 The recovery procedure above is the single Fairway programming/recovery
 procedure. After an erase-all, verify the boot and device-specific behavior
@@ -1850,10 +1857,13 @@ The known-working recovery image was preserved and independently reverified:
 SHA-256
 `d6cb053267f390b7158d731f182c0339b98e5b775568406806b24a26f58b0213`.
 
-The identified FRB-0005 probe (serial `E66550A147969135`) was locked. The
-established recovery utility's `--unlock-only` procedure performed erase-all;
-probe-rs then programmed and read-back verified the complete merged image
-with `--verify`, and reset succeeded. The CPO subsequently reported a
+The identified FRB-0005 probe (serial `E66550A147969135`) was locked. At that
+time, the recovery utility's `--unlock-only` action was recorded as performing
+erase-all; probe-rs then programmed and read-back verified the complete merged
+image with `--verify`, and reset succeeded. This is a historical record of
+that tool sequence, not validation of the utility as an AP-FAULT recovery
+method; the current programming/recovery procedure is the probe-rs
+erase-all/full-image procedure above. The CPO subsequently reported a
 successful field-powered button transaction. The exact LED sequence and a
 request-correlated post-test UI record were not separately captured.
 
@@ -1974,6 +1984,178 @@ whether the modem entered PSM during this exact field capture, or whether the
 higher average is due to the measurement boundary, modem state, or another
 load. No corrective changes outside Increment 1.0 were made.
 
+#### Follow-up modem functional-off isolation (2026-11-06)
+
+A temporary diagnostic image, built from the Increment 1.0 source with a
+one-time modem-off diagnostic, was programmed for this investigation. Its
+complete image is
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-lowpower-diagnostic-20261105-2215/fairway-FRB-0005-merged.hex`,
+SHA-256
+`02320635c0242574648069110d8d0839df5aa8fd6c851df3838423cfe10e476b`.
+After LTE registration, it waited 360 seconds and then requested
+`LTE_LC_FUNC_MODE_POWER_OFF`. The protected UART log recorded registration,
+network-reported `TAU=13200 s, active_time=0 s`, registration loss, and
+successful LTE functional-mode power-off at about 6:16 after boot. This
+forced functional-mode shutdown is not evidence that the network granted PSM
+or that the normal firmware entered PSM.
+
+The CPO reports that the field-powered PPK2 observation ran for more than five
+minutes, included this modem-off event, and remained in the 23–25 mA range,
+with no discernible current reduction at the event. This supports the
+conclusion that active LTE/radio operation is not the dominant source of the
+sustained approximately 25 mA draw. It is a CPO-reported observation; the
+supplied CSV `ppk-20261106T064005.csv` (SHA-256
+`5ce688f8caf8b4550c2d89cc488342ebe7a4b4669c4f54b34664a6ad8dcb3dd6`) contains
+only 60,001 samples from 0 to 60,000 ms and does not itself include the
+six-minute modem-off event. In its settled portion from 22 to 60 seconds, the
+CSV mean is 24.740 mA, median 24.891 mA, minimum 19.608 mA, maximum 25.087 mA,
+and standard deviation 0.755 mA. Its first approximately six seconds precede
+device startup, so the full-file average is not an idle-current estimate.
+
+At the time of this diagnostic, field VBUS enabled BUCK2 and powered the
+RP2040 debugger service domain. The application source has no scheduled
+background networking outside a bounded active golfer demand window; the
+main, modem-service, and transaction threads otherwise wait on their
+synchronization events. The CPO subsequently authorized removing the VBUS
+dependency; the BUCK2 correction and its validation are recorded below.
+
+The normal Increment 1.0 image was rebuilt after removing the temporary
+diagnostic instrumentation and independently verified for FRB-0005 identity;
+SHA-256
+`e241bc7d32dd45f2c3b86832a00e1475f56d3ed389367673213deba3b78e1f5c`.
+After the CPO confirmed field power and PPK2 were disconnected and USB service
+power was connected, the complete image was programmed with
+`probe-rs download --chip-erase --allow-erase-all --verify`; probe-rs reported
+the target locked, initiated erase-all, and completed programming and
+verification in 31.47 seconds. `probe-rs reset` then succeeded. This normal
+Increment 1.0 image is now the last image confirmed programmed to FRB-0005.
+Field-powered request behavior and PPK2 current were not retested after this
+restoration.
+
+### FRB-0005 Low-Power Increment 2.0 — closeout and source-review record
+
+Increment 2.0 builds on the published Increment 1.0 source checkpoint
+`cd9d0831aa2b6494c54d7ef138dafc7039664c57` on branch
+`review/frb0005-increment-1.0-source-checkpoint-20261105`. Its complete local
+source delta against that checkpoint is five firmware files:
+
+- `samples/fairway_power_sandbox/src/button_ux.c` and `button_ux.h` add a
+  checked read of the PV8 state at boot to select normal or service mode.
+- `samples/fairway_power_sandbox/src/main.c` initializes the button before
+  power policy, selects service mode from the held-at-boot button, and in
+  service mode keeps the debugger rail on without starting modem or golfer
+  runtime. Normal button/request orchestration is otherwise unchanged.
+- `samples/fairway_power_sandbox/src/power_policy.c` and `power_policy.h`
+  remove VBUS sensing and callbacks. The power-policy owner disables BUCK2
+  for normal operation and enables it only for explicit service mode.
+
+There are no Increment 2.0 changes to `modem_service.c/.h` or to the
+interaction-awake keeper. The published checkpoint already contains the
+CPU-awake correction: no unconditional VBUS hold prevents CPU idle/WFI outside
+bounded interactions. It also contains modem-service-owned LTE PSM requested
+independently of VBUS. Increment 2.0 changes neither behavior. In the current
+source, VBUS does not control CPU idle, PSM, or BUCK2; only the held-at-boot
+PV8 service-mode choice enables the debugger rail. No golfer protocol,
+transaction scheduling, HTTPS, LED implementation, demand-window, or COMPLETE
+implementation was changed.
+
+The low-power correction removes VBUS detection and VBUS callbacks from
+`power_policy`. Normal operation disables the nPM1300 BUCK2 debugger service
+rail irrespective of VBUS. To preserve deliberate development access, holding
+the PV8 button through boot selects service mode: BUCK2 remains enabled and
+the modem/golfer runtime does not start. Outside that mode, the existing
+bounded golfer interaction-awake hold remains unchanged, CPU idle/WFI remains
+available, and modem-service continues to own LTE PSM independently. The
+button, HTTPS, LED, demand-window, and COMPLETE protocol implementations were
+not changed.
+
+The device-specific build used NCS 3.1.1, Nordic toolchain `561dce9adf`,
+West 1.4.0, board
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, `prj_a.conf`, and the established
+FRB-0005 builder/verifier and protected device-specific provisioning input.
+Artifact:
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-lowpower-buck2-20261105-2340/fairway-FRB-0005-merged.hex`,
+521,204 bytes, SHA-256
+`e051d16bfd3901dcc7e99f040f1a7c01bf01164ec1be30600c559fc108c35e90`.
+The manifest records source commit `cd9d0831aa2b6494c54d7ef138dafc7039664c57`,
+and the dirty source tree.
+Artifact identity and embedded credential verification passed. Builder
+regression tests passed 30/30 and the COMPLETE/demand-window host suite passed
+16/16. The known-working recovery image remains preserved at
+`/Users/DuplexLoop/fairway-builds/FRB-0005-https-recovery-20261105-1639/fairway-FRB-0005-merged.hex`,
+SHA-256
+`d6cb053267f390b7158d731f182c0339b98e5b775568406806b24a26f58b0213`.
+The build emitted the standard NCS Kconfig warnings and MCUboot default debug
+signing-key warning. This is a development-validation image, not a production
+release or production-signing qualification.
+
+The manifest records `source_worktree_dirty=true`; its source fingerprint is
+`f991ec4dd8a62d465fff01371fe0a14e66ec8f3d56f9a78285879906df164a96`.
+The current application/board source tree was re-fingerprinted and matches
+this manifest value exactly. Unlike the earlier Increment 1.0 fingerprint
+recorded above, this Increment 2.0 fingerprint is reproducible from the
+current application/board tree: the two HEX files named in the Increment 1.0
+record are no longer present under `samples/fairway_power_sandbox/artifacts/`.
+The builder hashes all regular files under the application and `boards/`,
+including ignored files if present, while excluding secrets and build
+directories. The firmware source delta is nevertheless not yet on GitHub:
+the published checkpoint contains only the Increment 1.0 baseline. Building
+for FRB-0005 also requires authorized access to its protected, untracked
+credential input. The manifest records that input's filename and successful
+embedded-input verification without exposing the credential.
+
+After the CPO confirmed USB service power only, the complete image was
+programmed using probe-rs erase-all, full-image programming, read-back
+verification, and reset. The operation completed successfully in 30.83
+seconds. After normal boot, the CMSIS-DAP debugger disappeared from USB and
+`probe-rs list` found no probes, consistent with BUCK2 powering down the
+debugger service domain. This establishes the expected debugger power-state
+change. It does not validate service-mode re-entry or the new firmware's
+programming recovery path; those have not been physically exercised.
+
+The CPO confirms FRB-0005 operates normally under field power and that golfer
+button requests successfully reach the Cart Operator UI. The precise
+Increment 2.0 LED sequence and one-request correlation evidence were not
+separately captured in the engineering record. Current normal boot and LTE
+registration logs were not captured after BUCK2 shutdown; successful field
+request delivery is the direct end-to-end evidence that the necessary
+connectivity worked for that request.
+
+The first CPO-supplied field-power PPK2 capture,
+`/Users/DuplexLoop/Downloads/2point0 5min.csv`, has 30,001 samples at 100 Hz
+over 300 seconds; SHA-256
+`fb19cb7e8029aa3f853c6328b3ad1d8d4a0c4831432dd48b7e990d427bc07268`.
+All digital channels were zero. Full-capture mean was 9.215 mA, median
+4.131 mA, minimum 2.488 mA, maximum 81.259 mA, and standard deviation
+8.933 mA. During seconds 10–300, mean was 8.861 mA and median was 3.992 mA;
+about 20.9% of those samples exceeded 20 mA. The trace contains recurring
+multi-second high-current periods, so its full mean is not a clean
+steady-idle estimate. The low baseline is substantially below Increment
+1.0's 25.168 mA mean, but the capture is not directly duration- or
+state-matched to that result.
+
+During the subsequent five-minute capture, the CPO-provided live PPK2 screen
+showed 3.46 mA window average and 3.73 mA maximum at approximately 86.8
+seconds. The CPO confirms these were the steady-state readings and that the
+remaining interval did not change. The screenshot is a CPO-confirmed
+observation, not a complete exported dataset; no raw export for this second
+interval is available. The CPO reports Increment 1.0's 25.168 mA baseline was
+measured under the previously confirmed measurement configuration. The
+3.46 mA reported average is a 21.708 mA (86.3%) reduction from that baseline.
+Do not infer CPU or modem sleep residency from this current measurement.
+
+The BUCK2 power-state change is confirmed by the loss of CMSIS-DAP enumeration
+in normal mode. CPU sleep residency and actual modem PSM residency remain
+unverified. The host suite validates COMPLETE/demand-window module behavior,
+but a field COMPLETE interaction and five-minute demand-window behavior were
+not demonstrated for Increment 2.0. The button-request delivery is
+CPO-confirmed; precise LED behavior was not captured. Physical service-mode
+entry and programming recovery remain unvalidated. The second PPK2 interval
+has no raw export, so the 3.46/3.73 mA values cannot be recomputed from samples.
+The exact Increment 2.0 source changes and manifest are therefore ready for
+review locally, but are not independently accessible from the current remote
+checkpoint.
+
 ### USB/VBUS Service-Mode Debug and Recovery Evidence
 
 Historical Fairway firmware prevented Zephyr idle/WFI while USB/VBUS was
@@ -2012,15 +2194,12 @@ These tests required no erase, reflash, or UICR modification during
 service-entry troubleshooting. They do not establish non-destructive debug
 access after every field-to-USB cycle.
 
-When the target is locked, the recovery utility's unlock-only command is the
-established path:
-
-```sh
-~/.zephyrtools/recovery/recovery --serial <probe-serial> --unlock-only
-```
-
-Unlocking erases target flash; program the complete independently verified
-device-specific image using the procedure above.
+An earlier FRB-0005 validation record documents use of the recovery utility's
+`--unlock-only` command before probe-rs programming. That is historical
+evidence only; it is not the current procedure and does not establish that the
+utility is appropriate for every access fault. Use the complete-image
+probe-rs erase-all, program, and verify procedure above. Do not substitute the
+recovery utility for that procedure.
 
 #### USB Runtime UART Console — Verified Development Connection
 
