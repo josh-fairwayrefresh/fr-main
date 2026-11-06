@@ -1683,6 +1683,14 @@ Flash authorization does not authorize runtime or manual testing.
 
 The technical procedure below describes how an already-approved operation is performed; it does not grant authorization to perform that operation.
 
+Development devices may use the established Nordic development signing
+configuration for development, recovery, and validation. This signing
+configuration does not provide production security qualification. Commercial
+production releases require an approved production signing key and its
+corresponding bootloader trust anchor to be configured and verified. Flashing
+a physical device requires explicit CPO authorization for the identified
+target and operation.
+
 ### Build Procedure
 
 Fairway `nfed` operates as a freestanding product repository built against the separately installed official NCS v3.1.1 SDK. A second Fairway-owned West/NCS reconstruction (`west init`/`west update` against `nfed`) is not required and is not the validated procedure.
@@ -1754,21 +1762,56 @@ The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tr
 
 ### Flash Procedure
 
-The current Fairway programming path is probe-rs. In USB/debug/service mode, disconnect V25/V50/V75 field power and PPK2 before connecting Feather USB. Prototype 3.3 field and USB development/service configurations are mutually exclusive, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+The current Fairway programming and recovery path is probe-rs with the
+Circuit Dojo recovery utility for a locked target. In USB/debug/service mode,
+disconnect V25/V50/V75 field power and PPK2 before connecting Feather USB.
+Prototype 3.3 field and USB development/service configurations are mutually
+exclusive, as specified by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
-After separate CPO authorization to flash, program the verified Intel HEX artifact:
+Build and independently verify the complete device-specific image using the
+procedure above. Confirm the attached probe serial identifies the authorized
+target. Program the complete merged Intel HEX image and read it back:
 
 ```sh
-probe-rs download --chip nRF9151_xxAA --binary-format hex <merged.hex>
+probe-rs download --chip nRF9151_xxAA \
+  --probe 2e8a:000c:<probe-serial> --non-interactive \
+  --binary-format hex --verify <merged.hex>
 ```
 
-Successful programming is indicated by probe-rs completing erase and programming and reporting completion. After successful programming, a normal reset may be issued:
+If normal probe access fails because the nRF91 target is locked or its access
+ports are unavailable, use the established recovery utility to unlock the
+identified device, then program the **complete verified image** as above:
 
 ```sh
-probe-rs reset --chip nRF9151_xxAA
+~/.zephyrtools/recovery/recovery --serial <probe-serial> --unlock-only
 ```
 
-Debug-access recovery for this procedure (including the non-destructive service-entry response and the exceptional destructive erase-all) is owned by the "USB/VBUS Service-Mode Debug-Lock Prevention and Exceptional Recovery" section below; there is no separate normal recovery-diagnostic step as part of ordinary flashing.
+Unlocking a locked nRF91 performs erase-all through CTRL-AP and clears target
+flash. This is an established development programming/recovery operation, not
+a reason to abandon an authorized firmware update. It does not update or rotate
+backend credentials. The complete device-specific image must be programmed
+afterward; do not treat an application-only image as restoration. Successful
+programming is indicated by probe-rs completing and reporting success. Reset
+the target after programming:
+
+```sh
+probe-rs reset --chip nRF9151_xxAA \
+  --probe 2e8a:000c:<probe-serial> --non-interactive
+```
+
+The board's existing `startup.c` application initialization sets the PMIC VBUS
+input limit and then delays application startup by exactly two seconds. Keep
+that initialization unchanged. It is distinct from Circuit Dojo's recovery
+instruction to issue `probe-rs erase` within the first second after reconnect
+for firmware that disables BUCK2 and powers down the RP2040 debugger. That
+special timing applies to the BUCK2-disabled condition, not to the normal
+Increment 0.5 programming path, which preserves BUCK2 policy.
+
+The recovery procedure above is the single Fairway programming/recovery
+procedure. After an erase-all, verify the boot and device-specific behavior
+using the manual validation procedure below. The historical physical-RESET
+service-entry evidence is retained below as supporting context; it is not a
+prerequisite to normal authorized erase-all/reflash.
 
 ### Manual Validation
 
@@ -1785,15 +1828,169 @@ For the validated field/measurement path:
 
 The accepted production field dormant-current result and its implementation context are owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
-### USB/VBUS Service-Mode Debug-Lock Prevention and Exceptional Recovery
+### FRB-0005 Low-Power Increment 0.5 Validation Record (2026-11-05)
 
-The current accepted engineering strategy is prevention, not recovery. The implementation is owned by `docs/FIRMWARE_SPECIFICATION.md`: the reference nRF9151 device is within the silicon family covered by Nordic Errata 36, and Fairway firmware keeps the application CPU out of Zephyr idle/WFI for as long as USB/VBUS is present. This was directly validated to preserve ordinary probe-rs access across the tested service interval. Ordinary Fairway flashing remains the normal `probe-rs download` procedure above; no separate recovery architecture is part of normal development workflow.
+This is a device-specific development-candidate record, not a fleet release.
+The restored working image first completed a CPO-confirmed button-to-Cart UI
+transaction under normal field power. Increment 0.5 then removed only the
+unconditional VBUS CPU-awake hold; LTE PSM policy, BUCK2 policy, button
+handling, HTTPS, identity, credentials, and LED implementation were preserved.
+
+The candidate was built from the October 17 firmware source baseline
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` on
+`validation/firmware-oct17-baseline`, using NCS 3.1.1, toolchain bundle
+`561dce9adf`, board `circuitdojo_feather_nrf9151@1/nrf9151/ns`, and
+`prj_a.conf`. The protected FRB-0005 artifact is
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-increment0.5-20261105-1954/fairway-FRB-0005-merged.hex`,
+522,048 bytes, SHA-256
+`1755cff058f8890cb29118fa6e12a7f69cf1503d53c8c09c4a2240f6c47f356b`.
+Independent verification confirmed the device identity and protected-input
+credential match. The artifact-builder regression suite passed 30/30 tests.
+The known-working recovery image was preserved and independently reverified:
+SHA-256
+`d6cb053267f390b7158d731f182c0339b98e5b775568406806b24a26f58b0213`.
+
+The identified FRB-0005 probe (serial `E66550A147969135`) was locked. The
+established recovery utility's `--unlock-only` procedure performed erase-all;
+probe-rs then programmed and read-back verified the complete merged image
+with `--verify`, and reset succeeded. The CPO subsequently reported a
+successful field-powered button transaction. The exact LED sequence and a
+request-correlated post-test UI record were not separately captured.
+
+The CPO-provided `baseline11_4.csv` contains 60,001 samples over 60.000
+seconds: mean 27.725 mA, median 27.262 mA, minimum 8.364 mA, maximum
+76.286 mA, and standard deviation 4.133 mA. The Increment 0.5 file named
+`increment0.5-idle-60s.csv` contains 16,368 samples over only 16.367 seconds:
+mean 14.024 mA, median 13.834 mA, minimum 10.263 mA, maximum 36.893 mA, and
+standard deviation 1.925 mA. The CPO considers this capture sufficient for
+the Increment 0.5 review; its filename does not represent its actual duration.
+The shorter candidate trace indicates lower observed average current, but the
+duration differs from the later Increment 1.0 capture. The CPO's subsequent
+confirmation that both captures used the same electrical setup is recorded
+with the Increment 1.0 results below.
+
+The candidate trace contains repeatable current pulses approximately every
+1.264 seconds. The CPO notes that earlier abandoned-build traces lacked the
+periodic tick; those traces are not this candidate and do not establish its
+cause. Do not claim the tick is eliminated or attribute it to CPU, modem, or
+LTE behavior from these data. Source inspection confirms the VBUS awake hold
+is removed, but the current trace alone does not prove CPU WFI entry.
+Debugger/recovery accessibility after field operation was not tested.
+Increment 0.5 remains an unaccepted development candidate pending CPO
+acceptance; the remaining evidence limits are explicit rather than inferred.
+
+### FRB-0005 Low-Power Increment 1.0 Validation Record (2026-11-05)
+
+Increment 1.0 applies LTE PSM decoupling to the Increment 0.5 source: modem
+service configures the existing PSM parameters and requests PSM independently
+of VBUS; power policy no longer stores VBUS for PSM or calls modem-service PSM
+controls. VBUS continues to control only the existing BUCK2 policy in that
+module. The bounded interaction-awake behavior is unchanged. The modem event
+handler logs network-reported PSM TAU and active-time values when a PSM update
+event is received; a successful request log alone is not evidence that the
+network granted PSM.
+
+The FRB-0005 candidate was built from source commit
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` plus the current uncommitted
+Increment 0.5 and Increment 1.0 changes. Build source fingerprint:
+`2a1d5ee563a53a1fc078df0fca74322a6a56c92fd5748606fb4fa9be6335862c`.
+The original fingerprint included two ignored generated HEX files under
+`samples/fairway_power_sandbox/artifacts/`:
+`frb0002_runtime_reliability_candidate_merged.hex` and
+`fairway_system_identity_candidate_merged.hex`. They are not part of this
+checkpoint. The fingerprint is retained as build-time provenance, but must
+not be represented as reproducible from the committed source tree alone.
+The build used NCS 3.1.1, Nordic toolchain bundle `561dce9adf`, West 1.4.0,
+board `circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. The
+protected complete image is
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-increment1.0-20261105-2120/fairway-FRB-0005-merged.hex`,
+521,656 bytes, SHA-256
+`9555cc03eb39c3d90e6d533381fd8ebf9be186941c5d8b0d8268005b1bd7c935`.
+The builder's independent artifact verification passed for FRB-0005 identity,
+protected-input credential match, and artifact integrity. Builder regression
+tests passed 30/30. The build used the NCS-distributed `root-ec-p256.pem`
+MCUboot debug signing key; its standard warning means this artifact is for the
+established device-development workflow only, not a production release.
+
+The known-working recovery image remains preserved at
+`/Users/DuplexLoop/fairway-builds/FRB-0005-https-recovery-20261105-1639/fairway-FRB-0005-merged.hex`,
+SHA-256
+`d6cb053267f390b7158d731f182c0339b98e5b775568406806b24a26f58b0213`.
+
+The correct FRB-0005 probe was identified as CMSIS-DAP serial
+`E66550A147969135`. `probe-rs download` used the established full-image
+`--chip-erase --allow-erase-all --verify` procedure and completed successfully
+after 31.38 seconds; a normal `probe-rs reset` also succeeded. No Circuit Dojo
+AP-FAULT recovery utility was used.
+
+A protected USB diagnostic capture at
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-increment1.0-20261105-2120/runtime-usb-boot-20261105-2119.log`
+recorded: modem library initialization succeeded; PSM request returned
+success with `RPTAU=default`, `RAT=0 s`; LTE registration progressed from
+status 2 to registered status 5; and the modem reported a network PSM update
+of `TAU=3600 s`, `active_time=0 s`. The capture credential scan found no
+device credential in the log. This was captured over USB/debug power, not the
+field-power configuration; the PSM update demonstrates a network-reported
+configuration but does not establish actual PSM entry or equivalent field
+behavior.
+
+For field validation, the CPO confirmed FRB-0005 was returned to normal
+field-power configuration and pressed the physical button once. The CPO
+observed orange then green success feedback and reported successful delivery
+to the Cart Operator UI. The UI was on `Placeholder Hills / Test Links 18`,
+service ON; its request queue increased from two existing requests to three,
+with one new `Hole 1` request. No second button press was made. This confirms
+the field-powered end-to-end request path for this test.
+
+The COMPLETE flow was not tested: by the time the new request was isolated in
+the UI, its displayed age had reached approximately five minutes, so it was
+not counted as a valid in-window COMPLETE test. The request was left untouched.
+Field-mode modem registration/PSM logs, direct observation of the idle-hold
+release, and COMPLETE behavior were not directly observed. A subsequent
+CPO-supplied PPK2 CSV, `increment 1.csv`, contains 60,001 samples over 60.000
+seconds. It records a mean of 25.168 mA, median 25.316 mA, minimum 17.685 mA,
+maximum 25.570 mA, and standard deviation 0.750 mA. The digital channels were
+all zero. The trace has no observed high-current pulses recurring at the
+Increment 0.5 capture's approximately 1.264-second interval; its maximum
+remains below 25.6 mA over the full capture. This is evidence that the pulse
+was absent in this sampled interval, not proof it can never recur.
+
+The Increment 1.0 mean is 11.144 mA (79.5%) higher than the Increment 0.5
+16.367-second capture's 14.024 mA mean. The Increment 1.0 maximum is lower
+than that shorter trace's 36.893 mA maximum, but the current average did not
+improve relative to the available Increment 0.5 result. The Increment 0.5
+capture was deliberately stopped early. The CPO confirmed that both captures
+used exactly the same power supply, wiring, PPK2 measurement boundary, and
+operating setup. The higher observed mean is therefore a real difference
+under the same electrical setup, while the 16.367-second and 60.000-second
+capture durations remain unequal and limit direct comparison of their
+averages. These measurements do not by themselves attribute the difference
+to PSM. The Increment 1.0 capture was supplied after the field request and
+after its five-minute demand window had expired; it is consistent with
+settled idle, though the field runtime log was not captured.
+
+No PPK2 evidence establishes why the periodic pulse is absent in this trace,
+whether the modem entered PSM during this exact field capture, or whether the
+higher average is due to the measurement boundary, modem state, or another
+load. No corrective changes outside Increment 1.0 were made.
+
+### USB/VBUS Service-Mode Debug and Recovery Evidence
+
+Historical Fairway firmware prevented Zephyr idle/WFI while USB/VBUS was
+present to protect debugger access on Errata-36-family silicon. Increment 0.5
+removes that unconditional CPU-awake behavior while preserving BUCK2 and the
+board startup initialization. Use the programming and recovery procedure
+above; do not infer permanent non-destructive debugger access from the startup
+delay.
 
 A bounded investigation into a separate field→USB debug-access gap (probe-rs access unavailable after actual field-powered operation, before USB was reconnected) found that a Fairway-owned TF-M secure-service reapply mechanism does not close this gap: it was implemented, built, and hardware-tested, and failed its physical acceptance criterion even after separately confirming `UICR.APPROTECT`/`UICR.SECUREAPPROTECT` were provisioned `HwUnprotected` on the test device. That experimental implementation has been fully removed from the codebase and is not current firmware architecture.
 
-#### Non-Destructive Service-Entry Response
+#### Historical Non-Destructive Service-Entry Validation
 
-Direct CPO-confirmed physical validation established a non-destructive response to this specific condition, validated on a second tested instance during the WP4 physical-validation campaign in addition to the original tested instance:
+Historical CPO-confirmed validation found that a physical RESET press after
+USB service entry could restore Memory AP access on two tested instances.
+This remains useful diagnostic context, but is not a prerequisite or
+replacement for the programming/recovery procedure above:
 
 1. Connect USB using the installed generation's safe power-isolation procedure in `docs/HARDWARE_ASSEMBLY_GUIDE.md`: for Prototype 3.3, disconnect V25/V50/V75 field power first. The 6106/J4 isolation instruction applies only to the historical 3.2 architecture; its solar/LiPo side may remain connected to the 6106 when following that historical procedure.
 2. Attempt the normal `probe-rs` operation (for example `probe-rs reset --chip nRF9151_xxAA`).
@@ -1804,32 +2001,114 @@ Direct CPO-confirmed physical validation established a non-destructive response 
 probe-rs info --chip nRF9151_xxAA
 ```
 
-A successful CoreSight/AP walk (including the AP that previously faulted) confirms recovered access without needing to issue and risk-reproducing another reset.
+A successful CoreSight/AP walk (including the AP that previously faulted)
+confirmed recovered access in those tests.
 
-Do not repeatedly issue `probe-rs reset` solely to test whether access has recovered; use the non-resetting check in step 4 instead. Do not escalate automatically to destructive erase/recovery/APPROTECT-unlock actions when this non-destructive response succeeds; destructive recovery remains exceptional and separately authorized, as described below.
+Do not repeatedly issue `probe-rs reset` solely to test whether access has
+recovered; use the non-resetting check in step 4 instead. If access remains
+unavailable, use the established programming/recovery procedure above.
 
-This response required no erase, no reflash, and no UICR modification during service entry, and used no recovery utility. This is not a recovery architecture; it is the current non-destructive first response to this specific condition. It has now been validated on two tested instances; reliability across repeated field→USB cycles is not yet established.
+These tests required no erase, reflash, or UICR modification during
+service-entry troubleshooting. They do not establish non-destructive debug
+access after every field-to-USB cycle.
 
-If a development reference Feather nevertheless remains AP-inaccessible after the above response, destructive erase-all is an exceptional, manually authorized recovery action only, using the currently established command:
+When the target is locked, the recovery utility's unlock-only command is the
+established path:
 
 ```sh
-~/.zephyrtools/recovery/recovery --unlock-only
+~/.zephyrtools/recovery/recovery --serial <probe-serial> --unlock-only
 ```
 
-This command is destructive and requires explicit authorization before use. After an authorized erase-all, normal Fairway flashing and provisioning is required to restore the device.
+Unlocking erases target flash; program the complete independently verified
+device-specific image using the procedure above.
 
-#### Serial/UART Console — Current Truth
+#### USB Runtime UART Console — Verified Development Connection
 
-No canonical host USB serial-console path has yet been established for the current Mac + CMSIS-DAP composite-probe arrangement. During the WP4 physical-validation campaign:
+The CPO confirmed on 2026-11-05 that the Feather's existing single USB
+development connection is the authorized runtime-diagnostics connection; no
+additional UART cable or hardware modification is required. A live FRB-0005
+capture verified that this connection exposes the firmware's Zephyr console
+through the CMSIS-DAP probe's USB CDC-ACM interface.
 
-- The composite CMSIS-DAP probe enumerates multiple serial nodes (for example, distinct `/dev/cu.usbmodem...` entries) in addition to its debug/SWD function.
-- The numeric `/dev/cu.usbmodem...` suffixes are assigned by the host per connection/enumeration and are ephemeral; they must NOT be treated as a canonical, stable interface identity across sessions.
-- One such interface was unavailable/busy (held by another process) at the time of investigation.
-- One accessible interface produced no output at 115200 8N1 across a reset.
-- Another reset-reactive interface (i.e., one that produced activity correlated with a device reset) produced binary/non-console data at 115200 8N1, not readable Zephyr log text.
-- Enumeration and reset-reactivity alone therefore do NOT prove a given host interface is the Feather's Zephyr UART console; none of the interfaces tried were confirmed as a working console path.
+The verified console configuration is `uart0`, selected by
+`zephyr,console` in the board DTS and enabled by `CONFIG_UART_CONSOLE` and
+`CONFIG_LOG_BACKEND_UART` in `prj_a.conf`. The board pin configuration is
+UART0 TX P0.11 / RX P0.10; the console is 115200 baud, 8 data bits, no parity,
+1 stop bit, with hardware flow control disabled. Modem trace uses the separate
+UART1 at 1,000,000 baud and is not the Zephyr log console.
 
-Canonical operational rule: do not hunt-and-peck across arbitrary `/dev/cu.*` ports, arbitrary baud rates, or parity/framing combinations to find a working console, and do not attempt to work around this by changing `.vscode` settings or shell configuration. If direct UART logs are genuinely required for a task, first verify the physical UART bridge/wiring between the debug probe and the Feather console UART with the CPO. Only after a readable console is physically established should this Guide be updated with the exact Feather UART pins, bridge wiring, probe interface identity, baud, data bits, parity, stop bits, flow control, a deterministic macOS interface-selection rule, and the exact known-good console command. An unverified current USB serial path must not be documented here as canonical.
+Identify the interface on each connection; do not rely on an old numeric port
+suffix:
+
+1. Run `system_profiler SPUSBDataType -detailLevel full` and identify the
+   Raspberry Pi `Debug Probe (CMSIS-DAP)` by its USB serial number. For FRB-0005
+   the verified serial is `E66550A147969135` (VID:PID `2e8a:000c`).
+2. Run `ioreg -r -c AppleUSBACMData -l -w0`. Select the CDC-ACM data interface
+   whose VID:PID is `11914:12` (hex `2e8a:000c`), then map its `IOTTYSuffix` to
+   `/dev/cu.usbmodem<SUFFIX>`. In the verified session this was
+   `/dev/cu.usbmodem1102`. The other two `/dev/cu.usbmodem...` nodes were the
+   Nordic PPK2 (VID:PID `1915:c00a`, serial `DE864DA734D0`) and are not the
+   target console. Host suffixes are ephemeral.
+3. Open only the port mapped to the identified probe. A tested capture used
+   Python's standard-library `termios` at 115200 baud in raw mode, writing the
+   unmodified bytes to a newly created mode-0600 log outside the repository.
+   The following equivalent capture loop uses no extra package; Ctrl-C closes
+   the log and port:
+
+   ```sh
+   PORT=/dev/cu.usbmodem<SUFFIX>
+   LOG="$HOME/fairway-builds/FRB-0005-runtime-$(date +%Y%m%d-%H%M%S).log"
+   python3 - "$PORT" "$LOG" <<'PY'
+   import os, select, sys, termios, tty
+
+   fd = os.open(sys.argv[1], os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+   tty.setraw(fd)
+   attrs = termios.tcgetattr(fd)
+   attrs[4] = attrs[5] = termios.B115200
+   attrs[2] &= ~(termios.CSIZE | termios.PARENB | termios.CSTOPB)
+   attrs[2] |= termios.CS8 | termios.CLOCAL | termios.CREAD
+   if hasattr(termios, "CRTSCTS"):
+       attrs[2] &= ~termios.CRTSCTS
+   termios.tcsetattr(fd, termios.TCSANOW, attrs)
+   log = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+   try:
+       while True:
+           ready, _, _ = select.select([fd], [], [], 1.0)
+           if ready:
+               data = os.read(fd, 4096)
+               if data:
+                   os.write(log, data)
+                   os.write(1, data)
+   except KeyboardInterrupt:
+       pass
+   finally:
+       os.close(log)
+       os.close(fd)
+   PY
+   ```
+
+The 2026-11-05 FRB-0005 capture established this as a working runtime console.
+One button event was detected; DNS resolved the production receiver hostname
+to `34.143.78.2`; the TLS connect/handshake returned `-116` (`ETIMEDOUT`)
+after the transaction's approximately 15-second attempt budget; the
+application entered `STATE_FAILURE` and then `STATE_IDLE`. The firmware did
+not log a successful socket connection or HTTPS request send. The capture
+started after boot, so it did not establish modem initialization or LTE
+registration state. A normal probe reset could not be used to capture startup:
+`probe-rs` reported the core locked and requested `erase_all`; no erase or
+recovery was performed. Cloud Run log correlation was unavailable because
+the local `gcloud` session required interactive reauthentication. The
+corresponding Cart Operator queue remained empty. This proves a TLS handshake
+timeout as the first observed transaction failure, but does not establish
+whether its underlying cause is radio/link quality, modem state, transport
+behavior, or receiver-side connectivity.
+
+Historical note: the earlier WP4 investigation found no readable console in
+the interfaces it tried at that time. That evidence is retained as a record of
+those attempts; it is superseded for the CPO-confirmed FRB-0005 single-USB
+development connection by the device-identified, readable capture above.
+Never hunt-and-peck across unrelated serial nodes or baud/framing combinations;
+identify the CMSIS-DAP parent and console interface as described here.
 
 #### Functional Validation Evidence Rule
 

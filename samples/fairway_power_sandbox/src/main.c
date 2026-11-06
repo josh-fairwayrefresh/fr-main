@@ -4,9 +4,9 @@
  * This file wires together focused modules (see each header for its
  * owned concern) and contains only the golfer button/LED sequencing
  * itself:
- *   power_policy        - VBUS/BUCK2/PSM/Errata-36 awake keeper
+ *   power_policy        - VBUS/BUCK2 and bounded interaction-awake keeper
  *   modem_service        - modem/cert/LTE bring-up, registration-triggered
- *                           DNS prewarm, PSM request/withdraw
+ *                           DNS prewarm, and LTE PSM ownership
  *   http_transport        - DNS cache/resolver + bounded HTTPS primitive
  *   golfer_txn            - the accepted-transaction handoff/completion state
  *   golfer_protocol       - the golfer button_press wire protocol + retries
@@ -315,4 +315,3 @@ int main(void)
 
 	return 0;
 }
-

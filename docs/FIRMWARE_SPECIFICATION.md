@@ -38,7 +38,7 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 | `http_transport.c` | DNS handling and bounded HTTPS transport |
 | `transaction_scheduler.c` | Sole transaction worker shared by golfer and COMPLETE traffic |
 | `modem_service.c` | Modem/certificate/LTE initialization and registration handling |
-| `power_policy.c` | VBUS/BUCK2 and Errata-36 awake-keeper policy |
+| `power_policy.c` | VBUS/BUCK2 and bounded interaction-awake policy |
 
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
@@ -49,6 +49,51 @@ The board device tree and current source define the pins consumed by the impleme
 - Repeat-press transport and persistence are not implemented.
 - No MQTT, LwM2M, firmware-over-the-air, persistent socket, or background Health network path is part of the accepted runtime.
 - LTE registration or one successful transaction is not evidence of pack autonomy, endurance, PPK2 consumption, or a statistical request-reliability guarantee.
+
+## Low-power Increment 1.0 — FRB-0005 development candidate
+
+Increment 0.5 removed VBUS presence as a reason to keep the application CPU
+continuously runnable. Increment 1.0 preserves that behavior: the awake keeper
+is active only during a bounded golfer interaction; otherwise Zephyr may enter
+its normal idle/WFI path whether VBUS is present or absent.
+
+Increment 1.0 requests LTE PSM from `modem_service` independently of VBUS,
+using the existing PSM parameters. `power_policy` retains VBUS detection only
+for the existing nPM1300 BUCK2 service-rail policy and does not control modem
+PSM. The modem event handler records network-reported PSM timers when the LTE
+link-control library provides a PSM update. This reports network configuration;
+it does not by itself prove the modem entered PSM.
+
+The candidate preserves modem lifecycle, button transaction, HTTPS transport,
+credentials, bounded interaction-awake behavior, and LED feedback. The Circuit
+Dojo board's existing two-second application startup initialization remains
+unchanged.
+Programming and recovery procedures, including the distinction between that
+startup delay and vendor recovery timing, are owned by
+`docs/DEPLOYMENT_GUIDE.md`.
+
+Increment 1.0 is a device-specific development candidate, not an accepted
+fleet firmware generation. FRB-0005 completed a CPO-reported field-powered
+button-to-Cart UI transaction with orange then green feedback. A USB-powered
+startup capture recorded LTE registration and a network PSM update of
+`TAU=3600 s`, `active_time=0 s`; field-mode PSM grant was not directly logged.
+After the five-minute demand window, a 60-second PPK2 trace showed no
+approximately 1.264-second high-current pulse, but its 25.168 mA mean was
+higher than the 14.024 mA mean from the shorter Increment 0.5 trace. The CPO
+confirmed both captures used exactly the same supply, wiring, PPK2 measurement
+boundary, and operating setup; the Increment 0.5 capture was deliberately
+stopped early. The 11.144 mA observed increase is real same-setup evidence,
+but the 16.367-second and 60-second captures have unequal durations and are
+not equal-duration comparisons. This difference alone does not identify PSM
+as its cause. See `docs/DEPLOYMENT_GUIDE.md` for exact capture and artifact
+evidence.
+
+PSM request success is not proof of network grant or actual modem sleep.
+The observed network PSM update confirms reported timers in the USB capture,
+not actual PSM entry during the field measurement. The pulse's absence cannot
+be causally attributed to PSM without further evidence. Increment 1.0 remains
+unaccepted pending CPO acceptance; complete device-specific evidence is in
+`docs/DEPLOYMENT_GUIDE.md`.
 
 ## Pilot 1.1 validation status
 

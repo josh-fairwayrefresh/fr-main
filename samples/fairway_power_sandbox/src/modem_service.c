@@ -11,7 +11,6 @@
 
 #include "complete_poll.h"
 #include "http_transport.h"
-#include "power_policy.h"
 #include "thread_priorities.h"
 
 LOG_MODULE_REGISTER(modem_service);
@@ -30,7 +29,6 @@ static K_SEM_DEFINE(local_hw_ready_sem, 0, 1);
 static K_SEM_DEFINE(network_wake_sem, 0, 1);
 
 static volatile bool lte_registered_pending;
-static volatile bool modem_ready;
 
 /* Registration state is written by the LTE callback and read by COMPLETE
  * (via modem_service_lte_is_registered()).
@@ -69,28 +67,6 @@ bool modem_service_lte_is_registered(void)
 		snapshot.registration_state == LTE_LC_NW_REG_REGISTERED_ROAMING);
 }
 
-void modem_service_set_psm_requested(bool requested)
-{
-	int ret;
-
-	if (!modem_ready) {
-		LOG_INF("PSM request deferred: modem not yet ready");
-		return;
-	}
-
-	ret = lte_lc_psm_req(requested);
-	if (ret) {
-		LOG_ERR("lte_lc_psm_req(%d) failed: %d", requested, ret);
-		return;
-	}
-
-	if (requested) {
-		LOG_INF("PSM requested: RPTAU=default, RAT=0 s");
-	} else {
-		LOG_INF("PSM request withdrawn: VBUS service hold active");
-	}
-}
-
 /* Single globally-registered LTE event handler (lte_lc_connect_async() and
  * lte_lc_register_handler() both only support one handler at a time).
  * Runs on the LTE link-control library's own notification context, never
@@ -115,6 +91,12 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 			LOG_INF("LTE registration status update: %d", evt->nw_reg_status);
 		}
 		break;
+#if defined(CONFIG_LTE_LC_PSM_MODULE)
+	case LTE_LC_EVT_PSM_UPDATE:
+		LOG_INF("Network PSM update: TAU=%d s, active_time=%d s",
+			evt->psm_cfg.tau, evt->psm_cfg.active_time);
+		break;
+#endif
 	default:
 		break;
 	}
@@ -129,7 +111,13 @@ static void configure_psm(void)
 		return;
 	}
 
-	modem_service_set_psm_requested(!power_policy_vbus_hold_active());
+	ret = lte_lc_psm_req(true);
+	if (ret) {
+		LOG_ERR("lte_lc_psm_req(true) failed: %d", ret);
+		return;
+	}
+
+	LOG_INF("PSM requested: RPTAU=default, RAT=0 s");
 }
 
 static int provision_fairway_ca_certificate(void)
@@ -214,7 +202,6 @@ static void modem_service_thread_entry(void *p1, void *p2, void *p3)
 		LOG_ERR("Modem library init failed: %d", ret);
 	} else {
 		LOG_INF("Modem library init succeeded");
-		modem_ready = true;
 
 		configure_psm();
 
