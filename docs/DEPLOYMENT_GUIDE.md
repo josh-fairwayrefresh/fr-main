@@ -2032,12 +2032,14 @@ Increment 1.0 image is now the last image confirmed programmed to FRB-0005.
 Field-powered request behavior and PPK2 current were not retested after this
 restoration.
 
-### FRB-0005 Low-Power Increment 2.0 — closeout and source-review record
+### FRB-0005 Low-Power Increment 2.0 — CPO acceptance and closeout record
 
 Increment 2.0 builds on the published Increment 1.0 source checkpoint
 `cd9d0831aa2b6494c54d7ef138dafc7039664c57` on branch
-`review/frb0005-increment-1.0-source-checkpoint-20261105`. Its complete local
-source delta against that checkpoint is five firmware files:
+`review/frb0005-increment-1.0-source-checkpoint-20261105`. Its five-file
+firmware delta and two owner-document updates were published together at
+checkpoint `1a937562f8025cea13e5c9ce7c92a1fca4dacb88` on that review branch.
+The firmware delta is:
 
 - `samples/fairway_power_sandbox/src/button_ux.c` and `button_ux.h` add a
   checked read of the PV8 state at boot to select normal or service mode.
@@ -2098,11 +2100,11 @@ current application/board tree: the two HEX files named in the Increment 1.0
 record are no longer present under `samples/fairway_power_sandbox/artifacts/`.
 The builder hashes all regular files under the application and `boards/`,
 including ignored files if present, while excluding secrets and build
-directories. The firmware source delta is nevertheless not yet on GitHub:
-the published checkpoint contains only the Increment 1.0 baseline. Building
-for FRB-0005 also requires authorized access to its protected, untracked
-credential input. The manifest records that input's filename and successful
-embedded-input verification without exposing the credential.
+directories. The seven-file Increment 2.0 source/documentation checkpoint is
+published at `1a937562f8025cea13e5c9ce7c92a1fca4dacb88`. Building for FRB-0005
+also requires authorized access to its protected, untracked credential input.
+The manifest records that input's filename and successful embedded-input
+verification without exposing the credential.
 
 After the CPO confirmed USB service power only, the complete image was
 programmed using probe-rs erase-all, full-image programming, read-back
@@ -2110,16 +2112,30 @@ verification, and reset. The operation completed successfully in 30.83
 seconds. After normal boot, the CMSIS-DAP debugger disappeared from USB and
 `probe-rs list` found no probes, consistent with BUCK2 powering down the
 debugger service domain. This establishes the expected debugger power-state
-change. It does not validate service-mode re-entry or the new firmware's
-programming recovery path; those have not been physically exercised.
+change in that normal-mode observation.
 
-The CPO confirms FRB-0005 operates normally under field power and that golfer
-button requests successfully reach the Cart Operator UI. The precise
-Increment 2.0 LED sequence and one-request correlation evidence were not
-separately captured in the engineering record. Current normal boot and LTE
-registration logs were not captured after BUCK2 shutdown; successful field
-request delivery is the direct end-to-end evidence that the necessary
-connectivity worked for that request.
+On 2026-11-06, the CPO physically confirmed service-mode entry by holding PV8
+through USB-powered boot. The CPO observed no LED activity, consistent with
+the service-mode path disabling golfer runtime and indicators. `probe-rs list`
+detected a CMSIS-DAP probe at VID:PID `2e8a:000c`, serial
+`E66550A147969135`; macOS USB enumeration independently showed a
+`Debug Probe (CMSIS-DAP)` with the same VID:PID and serial. This matches the
+previously recorded FRB-0005 debugger identity. No reset, erase, unlock, flash,
+or recovery operation was performed. Probe enumeration confirms USB probe
+availability and identity, but does not establish successful target
+identification or target programming in service mode. The earlier complete
+Increment 2.0 image installation and read-back verification are recorded
+separately above.
+
+After disconnecting USB and restoring field power, the CPO confirmed that the
+golfer button operated normally and a request successfully reached the Cart
+Operator UI. The CPO accepts FRB-0005 Increment 2.0 as closed. This physical
+return validates normal request operation after the observed service-mode
+cycle. The precise Increment 2.0 golfer LED sequence and one-request
+correlation evidence were not separately captured in the engineering record.
+Current normal boot and LTE registration logs were not captured after BUCK2
+shutdown; successful field request delivery is the direct end-to-end evidence
+that the necessary connectivity worked for that request.
 
 The first CPO-supplied field-power PPK2 capture,
 `/Users/DuplexLoop/Downloads/2point0 5min.csv`, has 30,001 samples at 100 Hz
@@ -2141,20 +2157,29 @@ remaining interval did not change. The screenshot is a CPO-confirmed
 observation, not a complete exported dataset; no raw export for this second
 interval is available. The CPO reports Increment 1.0's 25.168 mA baseline was
 measured under the previously confirmed measurement configuration. The
-3.46 mA reported average is a 21.708 mA (86.3%) reduction from that baseline.
-Do not infer CPU or modem sleep residency from this current measurement.
+3.46 mA reported settled-current average is a 21.708 mA (86.3%) reduction
+from that baseline. This settled interval is distinct from the first capture's
+burst-containing five-minute measurement; the two capture means should not be
+conflated. The CPO accepts the settled-current result. Do not infer CPU or
+modem sleep residency from these current measurements.
 
 The BUCK2 power-state change is confirmed by the loss of CMSIS-DAP enumeration
-in normal mode. CPU sleep residency and actual modem PSM residency remain
-unverified. The host suite validates COMPLETE/demand-window module behavior,
-but a field COMPLETE interaction and five-minute demand-window behavior were
-not demonstrated for Increment 2.0. The button-request delivery is
-CPO-confirmed; precise LED behavior was not captured. Physical service-mode
-entry and programming recovery remain unvalidated. The second PPK2 interval
-has no raw export, so the 3.46/3.73 mA values cannot be recomputed from samples.
-The exact Increment 2.0 source changes and manifest are therefore ready for
-review locally, but are not independently accessible from the current remote
-checkpoint.
+in normal mode; service-mode probe enumeration and return to normal field
+request operation were physically confirmed by the CPO. CPU sleep residency
+and actual modem PSM residency remain unverified. The host suite validates
+COMPLETE/demand-window module behavior, but a field COMPLETE interaction and
+five-minute demand-window behavior were not demonstrated for Increment 2.0.
+The precise golfer LED sequence was not captured. Service-mode target
+identification and target programming were not tested. The second PPK2
+interval has no raw export, so the 3.46/3.73 mA values cannot be recomputed
+from samples.
+
+Circuit Dojo's [nRF9151 Feather low-power report](https://www.circuitdojo.com/posts/chasing-microamps-nrf9151-feather-active-sleep)
+describes a regulator reference-counting concern associated with a low-VBAT
+power-failure event that may prevent `regulator_disable()` from actually
+turning BUCK2 off. This remains a future robustness risk, not an observed
+FRB-0005 defect; see `docs/FIRMWARE_SPECIFICATION.md`. No further
+investigation or implementation is implied by this closure.
 
 ### USB/VBUS Service-Mode Debug and Recovery Evidence
 

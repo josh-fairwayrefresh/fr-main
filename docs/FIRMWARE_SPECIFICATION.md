@@ -108,7 +108,7 @@ debugger load, had not been isolated. The subsequent BUCK2 correction is
 described below. See `docs/DEPLOYMENT_GUIDE.md` for the diagnostic image
 identity and exact capture limits.
 
-## FRB-0005 BUCK2 low-power correction
+## FRB-0005 BUCK2 low-power correction — Increment 2.0
 
 The current `power_policy` implementation disables BUCK2 during normal
 operation regardless of VBUS; CPU idle/WFI remains available outside bounded
@@ -120,6 +120,18 @@ mode exists to preserve an intentional development/programming path; it is
 not part of normal golfer operation. Exact build, programming, and field
 validation evidence is owned by `docs/DEPLOYMENT_GUIDE.md`.
 
+The CPO accepted this FRB-0005-specific Increment 2.0 outcome on 2026-11-06.
+This device-specific acceptance does not change the accepted fleet firmware
+baseline stated above. In the physical service-mode check, holding PV8 through
+USB-powered boot produced no LED activity, as expected for the runtime-gated
+service mode. `probe-rs list` and macOS USB enumeration both detected the
+Circuit Dojo CMSIS-DAP probe, VID:PID `2e8a:000c`, serial
+`E66550A147969135`. After USB was disconnected and field power restored, the
+CPO confirmed normal golfer-button operation and successful request delivery
+to the Cart Operator UI. This validates service-mode entry and return to normal
+operation for the observed cycle; probe enumeration did not verify target
+identification or programming in service mode.
+
 The first five-minute FRB-0005 field-power PPK2 capture after this change had
 a 4.131 mA median and 9.215 mA mean, with recurring multi-second current
 bursts. During the subsequent interval, the CPO reports a stable displayed
@@ -129,9 +141,24 @@ interval. A full raw export is unavailable. The displayed average is 86.3%
 below Increment 1.0's 25.168 mA under the previously confirmed measurement
 configuration. These results indicate substantially lower normal-operation
 current, but the first capture's bursts and missing second export limit
-full-window comparison. They do not prove CPU or modem sleep residency. See
-the deployment record for the capture checksum, distribution, build identity,
-and remaining validation.
+full-window comparison. The 3.46 mA settled-current observation is distinct
+from the first capture's burst-containing five-minute mean; it is not a
+recomputed full-window average. The CPO accepted the reported settled-current
+result. Neither current result proves CPU or modem sleep residency. See the
+deployment record for capture checksum, distribution, build identity, and
+validation limits.
+
+Circuit Dojo's [nRF9151 Feather low-power report](https://www.circuitdojo.com/posts/chasing-microamps-nrf9151-feather-active-sleep)
+describes a regulator reference-counting failure associated with a low-VBAT
+power-failure event on Feather hardware, where `regulator_disable()` could
+return success without turning BUCK2 off. This remains a future robustness
+risk for the current regulator-API policy, not an observed FRB-0005 defect:
+the reported event has not been demonstrated on FRB-0005 in its field-power
+configuration, and the CPO-confirmed service-mode/normal-operation cycle
+completed successfully. CPU sleep residency, modem PSM residency, and
+service-mode target programming were not independently verified for this
+increment. Further implementation or investigation is not implied by this
+acceptance record.
 
 ## Pilot 1.1 validation status
 
