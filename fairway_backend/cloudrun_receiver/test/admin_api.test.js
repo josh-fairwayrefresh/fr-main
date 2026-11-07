@@ -4,6 +4,11 @@ const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
 const { deriveCredentialVerifier } = require('../lib/fleet/credentials');
 const {
+  getDeviceForAuthentication,
+  authenticateDeviceCredential,
+} = require('../lib/fleet/devices');
+const { activateCredentialRotation } = require('../lib/fleet/credential_lifecycle');
+const {
   createFairwayHandlers,
   resolveProtectedSystemAdminUids,
 } = require('../index');
@@ -87,7 +92,7 @@ function createAdminApi(db) {
     },
   });
 
-  return async ({ method, path, body, token = 'admin-token' }) => {
+  return async ({ method, path, body, headers = {}, token = 'admin-token' }) => {
     if (token === 'admin-token' || token === 'staff-token') {
       await db.collection('user_access').doc('staff-uid').set({
         schema_version: 2,
@@ -109,7 +114,7 @@ function createAdminApi(db) {
       method,
       path,
       body,
-      headers: token ? { authorization: `Bearer ${token}` } : {},
+      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
     }), res);
     return res;
   };
@@ -418,6 +423,121 @@ test('credential rotation routes require Admin access and redact status and flee
   assert.strictEqual(cancelled.headers['Cache-Control'], 'no-store');
 });
 
+test('credential rotation and authorized reassignment preserve permanent identity and historical records', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0002').set({
+    course_name: 'Second Course',
+    timezone: 'UTC',
+    service_schedule: SERVICE_SCHEDULE,
+    service_suspension: null,
+  });
+  const activeSecret = 'identity-continuity-active-secret';
+  await db.collection('devices').doc('FRB-0001').set({
+    state: 'deployed',
+    customer_id: 'CUST-0001',
+    customer_name: 'Old Customer',
+    course_id: 'COURSE-0001',
+    course_name: 'Old Course',
+    location: { type: 'hole', hole: 7 },
+    credential: deriveCredentialVerifier(activeSecret),
+    credential_generation: 4,
+  });
+  await db.collection('requests').doc('historical-request').set({
+    device_id: 'FRB-0001',
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    course_name: 'Old Course',
+    status: 'completed',
+    received_at: new Date('2026-01-02T03:04:05.000Z'),
+    completed_at: new Date('2026-01-02T03:10:05.000Z'),
+    operator_id: 'operator-legacy',
+  });
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .collection('inventory_events').doc('inventory-event').set({ action: 'product_updated', revision: 3 });
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .collection('service_events').doc('service-event').set({ action: 'suspended', recorded_at: new Date() });
+  await db.collection('user_access').doc('operator-legacy').set({
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
+    course_ids: ['COURSE-0001'],
+  });
+
+  const protectedPaths = [
+    'customers/CUST-0001',
+    'customers/CUST-0001/courses/COURSE-0001',
+    'customers/CUST-0001/courses/COURSE-0002',
+    'customers/CUST-0001/courses/COURSE-0001/inventory_events/inventory-event',
+    'customers/CUST-0001/courses/COURSE-0001/service_events/service-event',
+    'requests/historical-request',
+    'user_access/operator-legacy',
+  ];
+  const protectedSnapshot = () => JSON.stringify(
+    protectedPaths.map((path) => [path, db._docs.get(path)])
+  );
+  const historyBefore = protectedSnapshot();
+  const request = createAdminApi(db);
+  const deviceBeforeFailedActivation = JSON.stringify(
+    (await db.collection('devices').doc('FRB-0001').get()).data()
+  );
+  const prepared = await request({
+    method: 'POST',
+    path: '/api/v1/admin/devices/FRB-0001/credential-rotations',
+    body: { reason: 'Identity continuity regression test' },
+  });
+  assert.strictEqual(prepared.statusCode, 201);
+  assert.strictEqual((await db.collection('devices').get()).size, 1);
+
+  db.failNextTransactionCommit = true;
+  await assert.rejects(() => activateCredentialRotation(db, {
+    deviceId: 'FRB-0001',
+    operationId: prepared.body.operation_id,
+    adminUid: 'staff-uid',
+    confirmed: true,
+  }), /Simulated transaction commit failure/);
+  assert.strictEqual(protectedSnapshot(), historyBefore, 'a failed credential update must not alter protected records');
+  assert.strictEqual(
+    JSON.stringify((await db.collection('devices').doc('FRB-0001').get()).data()),
+    deviceBeforeFailedActivation,
+    'a failed credential update must leave the Device record unchanged'
+  );
+  assert.strictEqual((await db.collection('devices').get()).size, 1);
+
+  const activated = await request({
+    method: 'POST',
+    path: `/api/v1/admin/devices/FRB-0001/credential-rotations/${prepared.body.operation_id}/activate`,
+    body: { confirmed: true },
+  });
+  assert.strictEqual(activated.statusCode, 200);
+  const rotatedDevice = await db.collection('devices').doc('FRB-0001').get();
+  assert.strictEqual(rotatedDevice.id, 'FRB-0001');
+  assert.strictEqual(rotatedDevice.data().credential_generation, 5);
+  assert.strictEqual(rotatedDevice.data().customer_id, 'CUST-0001');
+  assert.strictEqual(rotatedDevice.data().course_id, 'COURSE-0001');
+  assert.deepStrictEqual(rotatedDevice.data().location, { type: 'hole', hole: 7 });
+  assert.strictEqual(protectedSnapshot(), historyBefore, 'credential rotation must not rewrite operational history');
+
+  const reassigned = await request({
+    method: 'PATCH',
+    path: '/api/v1/admin/devices/FRB-0001/assignment',
+    body: {
+      customer_id: 'CUST-0001',
+      course_id: 'COURSE-0002',
+      location: { type: 'hole', hole: 8 },
+    },
+  });
+  assert.strictEqual(reassigned.statusCode, 200);
+  assert.strictEqual(reassigned.body.device_id, 'FRB-0001');
+  assert.strictEqual(reassigned.body.customer_id, 'CUST-0001');
+  assert.strictEqual(reassigned.body.course_id, 'COURSE-0002');
+  assert.strictEqual(protectedSnapshot(), historyBefore, 'authorized reassignment must not rewrite historical records or access');
+  const historicalRequest = await db.collection('requests').doc('historical-request').get();
+  assert.strictEqual(historicalRequest.data().device_id, 'FRB-0001');
+  assert.strictEqual(historicalRequest.data().course_id, 'COURSE-0001');
+  assert.strictEqual(historicalRequest.data().status, 'completed');
+});
+
 test('customer and Course routes allocate backend IDs, validate configuration, and synchronize Device display copies', async () => {
   const db = new FakeFirestore();
   const request = createAdminApi(db);
@@ -556,6 +676,25 @@ test('device provisioning returns plaintext once and never exposes or persists a
   assert.strictEqual(invalidStateOverride.statusCode, 400);
 });
 
+test('device provisioning preserves the established API contract without an idempotency header', async () => {
+  const db = new FakeFirestore();
+  const request = createAdminApi(db);
+  const first = await request({
+    method: 'POST',
+    path: '/api/v1/admin/devices',
+    body: { sim_iccid: '8900000000000000099', comments: 'device 1' },
+  });
+  assert.strictEqual(first.statusCode, 201);
+  const second = await request({
+    method: 'POST',
+    path: '/api/v1/admin/devices',
+    body: { sim_iccid: '8900000000000000100', comments: 'device 2' },
+  });
+  assert.strictEqual(second.statusCode, 201);
+  assert.notStrictEqual(second.body.device_id, first.body.device_id);
+  assert.strictEqual((await db.collection('devices').get()).size, 2);
+});
+
 test('partial provisioning failure returns the allocated Device ID and bounded recovery details', async () => {
   const db = new FakeFirestore();
   await seedHierarchy(db);
@@ -611,8 +750,74 @@ test('partial provisioning failure returns the allocated Device ID and bounded r
     method: 'POST',
     path: `/api/v1/admin/devices/${res.body.device_id}/credential-recovery`,
   });
-  assert.strictEqual(repeatedRecovery.statusCode, 409);
-  assert.match(repeatedRecovery.body.error, /already has a credential/i);
+  assert.strictEqual(repeatedRecovery.statusCode, 200);
+  assert.strictEqual(repeatedRecovery.body.device_id, res.body.device_id);
+  assert.notStrictEqual(repeatedRecovery.body.one_time_credential, recovery.body.one_time_credential);
+});
+
+test('Admin credential recovery rotates the exact inventory Device without changing assignments or history', async () => {
+  const db = new FakeFirestore();
+  await seedHierarchy(db);
+  const previousCredential = 'lost-initial-credential';
+  await db.collection('devices').doc('FRB-0001').set({
+    state: 'in_inventory',
+    customer_id: null,
+    customer_name: null,
+    course_id: null,
+    course_name: null,
+    location: null,
+    credential: deriveCredentialVerifier(previousCredential),
+    credential_generation: 2,
+  });
+  await db.collection('requests').doc('historical-request').set({
+    device_id: 'FRB-0001',
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    status: 'completed',
+    completed_at: new Date('2026-01-02T03:04:05.000Z'),
+  });
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .collection('inventory_events').doc('inventory-event').set({ action: 'updated', revision: 3 });
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .collection('service_events').doc('service-event').set({ action: 'suspended' });
+  await db.collection('user_access').doc('operator-legacy').set({
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0001',
+    course_ids: ['COURSE-0001'],
+  });
+  const protectedPaths = [
+    'requests/historical-request',
+    'customers/CUST-0001/courses/COURSE-0001/inventory_events/inventory-event',
+    'customers/CUST-0001/courses/COURSE-0001/service_events/service-event',
+    'user_access/operator-legacy',
+  ];
+  const historyBefore = JSON.stringify(protectedPaths.map((path) => [path, db._docs.get(path)]));
+
+  const response = await createAdminApi(db)({
+    method: 'POST',
+    path: '/api/v1/admin/devices/FRB-0001/credential-recovery',
+  });
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.device_id, 'FRB-0001');
+  assert.strictEqual(response.headers['Cache-Control'], 'no-store');
+  assert.strictEqual(typeof response.body.one_time_credential, 'string');
+
+  const device = await getDeviceForAuthentication(db, 'FRB-0001');
+  assert.strictEqual(authenticateDeviceCredential(device, previousCredential), false);
+  assert.strictEqual(authenticateDeviceCredential(device, response.body.one_time_credential), true);
+  const stored = await db.collection('devices').doc('FRB-0001').get();
+  assert.strictEqual(stored.id, 'FRB-0001');
+  assert.strictEqual(stored.data().credential_generation, 3);
+  assert.strictEqual(stored.data().state, 'in_inventory');
+  assert.strictEqual(stored.data().customer_id, null);
+  assert.strictEqual(stored.data().course_id, null);
+  assert.strictEqual(stored.data().location, null);
+  assert.strictEqual((await db.collection('devices').get()).size, 1);
+  assert.strictEqual(
+    JSON.stringify(protectedPaths.map((path) => [path, db._docs.get(path)])),
+    historyBefore
+  );
 });
 
 test('concurrent credential recovery returns exactly one one-time credential', async () => {
@@ -747,6 +952,9 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
   assert.strictEqual(metadata.statusCode, 200);
   assert.strictEqual(metadata.body.comments, 'serviced');
 
+  const beforeFirmwareMetadata = JSON.stringify(
+    (await db.collection('devices').doc('FRB-0001').get()).data()
+  );
   for (const field of ['hardware_revision', 'firmware_generation']) {
     const systemTruthMetadata = await request({
       method: 'PATCH',
@@ -755,6 +963,11 @@ test('assignment, state, metadata, service, and commission routes enforce canoni
     });
     assert.strictEqual(systemTruthMetadata.statusCode, 400);
   }
+  assert.strictEqual(
+    JSON.stringify((await db.collection('devices').doc('FRB-0001').get()).data()),
+    beforeFirmwareMetadata,
+    'rejected firmware metadata must not change Device identity or assignment'
+  );
 
   const forbiddenMetadata = await request({
     method: 'PATCH',
@@ -804,6 +1017,13 @@ test('CORS advertises GET, POST, PUT, and PATCH for admin browser clients', asyn
   assert.match(res.headers['Access-Control-Allow-Methods'], /GET/);
   assert.match(res.headers['Access-Control-Allow-Methods'], /PUT/);
   assert.match(res.headers['Access-Control-Allow-Methods'], /PATCH/);
+
+  const adminRes = createResponse();
+  await createFairwayHandlers(db).fairwayAdmin(createRequest({
+    method: 'OPTIONS',
+    path: '/api/v1/admin/devices',
+  }), adminRes);
+  assert.doesNotMatch(adminRes.headers['Access-Control-Allow-Headers'], /Idempotency-Key/);
 });
 
 test('Admin User Management reconciles provisioned, unprovisioned, malformed, and orphaned records read-only', async () => {

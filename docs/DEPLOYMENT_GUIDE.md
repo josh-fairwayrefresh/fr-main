@@ -1,20 +1,111 @@
 # Deployment Guide
 
-## Current Pilot 1.1 Operating State
+## Current Deployment and OTA Readiness
 
-The CPO confirms FRB-0001 through FRB-0006 are fully commissioned and in
-operation. Pilot 1.1 is an integrated product milestone; the accepted firmware
-source remains `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0`.
+This snapshot was reconciled on 2026-11-07 from canonical owner documents,
+repository configuration, and dated deployment evidence. “Last verified”
+means the date of the evidence, not a live check on 2026-11-07. Confirm actual
+serving state and obtain release-specific authorization before production
+changes.
 
-The Cart Operator responsive-layout release is live in production as recorded
-below. Its deployment/build checks passed, but the authenticated physical
-phone/Safari usability check and CPO mobile acceptance were not performed in
-that release record. Do not treat the release as proof of completed mobile
-acceptance; see `docs/feature_backlog.md`.
+| Area | Latest recorded state | Last verified / evidence limit |
+|---|---|---|
+| Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
+| Production Hosting | Production site `savvy-kit-496703-r5`; responsive release version `995c6b063a9af3c5` | Last recorded 2026-10-15. Authenticated physical-phone/Safari acceptance was not performed. Verify the live version before change. |
+| Production Admin / receiver | Admin `fairway-admin-00017-dvk`; receiver `fairway-button-receiver-roll-26b6201` | Admin last recorded Ready/100% traffic on 2026-10-17. Read-only Cloud Run metadata on 2026-11-07 showed receiver `roll-26b6201` Ready at 100%, image `sha256:cf29d45e7f3abe1dc5aa7b8ea69f48473a65e83a9605e466209cb7fe9ef45d56`, created `2026-11-02T21:14:05.229847Z`. Build/source annotations are recorded below; exact Git commit correspondence was not established. No authenticated production credential-lifecycle request was made. |
+| OTA implementation | Device-side MCUboot staging, descriptor validation, test activation, status, and trial confirmation are present in the local OTA source; no production caller, downloader, or release-assignment service exists | This is a development foundation, not end-to-end remote update capability. See `docs/FIRMWARE_SPECIFICATION.md`. |
+| Local OTA validation | OTA Increment 1 and the 2026-11-07 boot-health/service-mode correction have recorded local build and image-verification evidence in this guide | They were not physically OTA-qualified. No physical OTA activation, confirmation, reversion, power-loss recovery, or installed-device bootloader/trust-anchor match has been demonstrated. |
+| Field OTA authorization | Not authorized or qualified | Local build and verification evidence do not authorize deployment. No OTA image was flashed. |
+| Production OTA blockers | Approved production signing key and matching bootloader trust anchor; installed-device image/partition compatibility; physical activation, confirmation, reversion, and recovery evidence; trusted download/release assignment, caller authorization, signed hardware-compatibility metadata, and anti-rollback policy | No production OTA release or field update is authorized until the firmware owner’s gates are met. |
+| Production data | 2026-10-17 release evidence says that deployment did not change production records | No repository-controlled backup, restore, point-in-time recovery, or recovery-point verification procedure was found. Do not assume one exists or that code rollback restores data. |
+| Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
-Deployment and release entries below are retained as audit history. Historical
-entries describe the state at the time of each release and do not supersede
-current owner documents.
+The source snapshot contains local credential-recovery UI code, but the
+available deployment record does not establish that this UI is included in
+the production Hosting release. The Admin credential-lifecycle backend was
+deployed on 2026-10-17; no production credential operation or authenticated
+Admin lifecycle request was performed. See
+`docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+The Engineering Guide identifies `00022-wxk` as the CPO-designated Stable
+Pilot Baseline 1.0 receiver, not as the current live revision. The dated
+2026-10-17 deployment record below identifies `00026-kg5` as the receiver
+then serving 100% of traffic. A read-only Cloud Run check on 2026-11-07
+observed `roll-26b6201` Ready and serving 100%; it also showed tagged
+revisions `00031-5mx` (`qr-release`) and `excl-cf7d885` (`excl-release`)
+without explicit percentage fields. Thus the apparent `00022` versus `00026`
+cross-document discrepancy is resolved as an accepted historical baseline
+versus later deployment evidence; the current live receiver is `roll-26b6201`.
+The current revision has image digest
+`sha256:cf29d45e7f3abe1dc5aa7b8ea69f48473a65e83a9605e466209cb7fe9ef45d56`,
+Cloud Run build ID `d4dde314-fdf9-467c-8984-1790b072ad7f`, and source archive
+`gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-button-receiver/1793654018.090308-b160ecf08cd74872bfb93b8b15d61705.zip`.
+The archive metadata creation time is `2026-11-02T21:13:38Z`; the build ID
+could not be resolved through Cloud Build, so the exact Git source commit is
+unverified. Recheck live service state before any production operation.
+
+OTA Increment 1 and the November 7 boot-health/service-mode correction have
+recorded local builds and verification evidence, but are **not physically
+OTA-qualified and are not authorized for field deployment**. Their artifact
+hashes, exact build provenance, and validation limits remain in the dated
+records below. The local OTA candidate must not be described as the firmware
+currently deployed on the accepted Pilot 1.1 fleet.
+
+### Operational entry points
+
+- [Environment, service identities, and targets](#current-environment)
+- [Production release and change-safety gates](#production-change-safety)
+- [Firmware build and physical flashing](#firmware-deployment)
+- [Backend deployment](#backend-deployment)
+- [Web application deployment](#web-application-deployment)
+- [Firestore configuration and deployment boundary](#firestore-configuration)
+- [Operational verification](#operational-verification)
+- [Rollback and recovery](#rollback-procedure)
+- [Device identity and credential procedures](./DEVICE_PROVISIONING_GUIDE.md)
+- [Current firmware implementation and OTA limitations](./FIRMWARE_SPECIFICATION.md)
+- [Installed hardware and power configuration](./HARDWARE_BOM.md)
+- [Physical wiring and service-power isolation](./HARDWARE_ASSEMBLY_GUIDE.md)
+
+## Production Change Safety
+
+Classify each proposed operation before release: Hosting content, Admin
+service, receiver service, Firestore rules/indexes, production records or
+credentials, or physical firmware/hardware. Authorize and validate each
+target separately; a Hosting release does not deploy Cloud Run, Firestore, or
+firmware, and a code rollback does not reverse data, credential, or device
+changes.
+
+Before any production deployment, migration, credential change, or
+administrative operation that can create, modify, migrate, or delete Firestore
+records, device identity/credentials, user access, or historical operational
+data, the release owner must verify the configured production
+backup/recovery capability, its recovery point and retention, and the
+applicable restore procedure with the responsible platform owner. This
+repository contains no verified backup, restore, export, or point-in-time
+recovery procedure or current recovery-point evidence. Until that capability
+is independently established, do not claim production data is recoverable or
+proceed with a data-affecting operation; obtain CPO and Lead Architect
+direction. Do not use code rollback as a substitute for data restoration.
+This deployment gate does not replace routine application workflows or
+read-only operational checks.
+
+For each release, use a reviewed source revision and build artifact; record
+the source commit, relevant worktree changes included, tests, target
+project/service/site, approval, and post-deployment evidence. Never deploy an
+unreviewed dirty worktree or include unrelated OTA or provisioning changes
+without explicit scope approval. Recheck live service traffic, revision/image
+identity, Hosting release, environment target, and data/rules compatibility
+immediately before changing production.
+
+## Dated Readiness and Release Evidence
+
+The dated readiness records and Alignment Register below are retained for
+audit provenance. They describe only the state and authorization at their
+recorded dates; they are not current deployment instructions or proof of
+current live state. Current procedures begin under “Purpose and Operational
+Procedures” and the
+operational sections linked above. Preserve this history when updating the
+runbook.
 
 ## Increment 3C Readiness — FRB-0003 (synthetic validation; firmware not deployed)
 
@@ -242,7 +333,10 @@ FRB-0003 sequence and failure handling are owned by
 
 ## Alignment Register
 
-The Alignment Register is the canonical record mapping release milestones across source control, production services, web applications, authorization models, and firmware baselines. New entries are placed at the TOP of this register.
+The Alignment Register preserves historical release evidence and provenance;
+its entries describe the state at their recorded dates. It does not supersede
+the current subsystem owner Sources of Truth or newer accepted evidence
+summarized above. New entries are placed at the TOP of this register.
 
 ### Production Deployment: Cart Operator Mobile Responsiveness (2026-10-15)
 
@@ -404,7 +498,7 @@ The Alignment Register is the canonical record mapping release milestones across
 
 ---
 
-## Purpose
+## Purpose and Operational Procedures
 
 This document is the canonical deployment and operational guide for Fairway Refresh.
 
@@ -442,24 +536,25 @@ Context references:
 
 | Item | Source | Value |
 |------|--------|-------|
-| Google Cloud Project | Current Operational Evidence | savvy-kit-496703-r5 |
-| Project Number | Repository + Historical Working State | 936892386735 |
-| Firebase Project | Repository + Historical Working State | savvy-kit-496703-r5 |
-| Cloud Run Region | Current Operational Evidence | us-central1 |
-| Cloud Run Service | Current Operational Evidence | fairway-button-receiver |
-| Cloud Run URL | Repository + Current Operational Evidence | https://fairway-button-receiver-936892386735.us-central1.run.app |
-| Primary Production Application Origin | CPO Physical Acceptance | https://app.fairwayrefresh.com |
-| Firebase Hosting URL | Current Operational Evidence | https://savvy-kit-496703-r5.web.app |
-| Firestore Database | Current Operational Evidence | `(default)`, Native mode, `nam5` |
+| Google Cloud Project | Repository configuration and deployment evidence | `savvy-kit-496703-r5` |
+| Project Number | Repository/deployment evidence | `936892386735` |
+| Firebase Project | Repository configuration | `savvy-kit-496703-r5` |
+| Cloud Run Region | Deployment evidence | `us-central1` |
+| Receiver service | Deployment evidence | `fairway-button-receiver` |
+| Receiver URL | Repository/deployment evidence | `https://fairway-button-receiver-936892386735.us-central1.run.app` |
+| Primary Production Application Origin | CPO/deployment evidence | `https://app.fairwayrefresh.com` |
+| Firebase Hosting URL | Repository/deployment evidence | `https://savvy-kit-496703-r5.web.app` |
+| Firestore Database | Deployment evidence | `(default)`, Native mode, `nam5` |
 
-WP3 deployment validation on 2026-09-18 established that Cloud Run revision
-`fairway-button-receiver-00009-c5j` was healthy and receiving 100% of service
-traffic. That revision identifies the historical validation event only.
-Deployment procedures normally target the durable service name; the separate
-Stable Pilot Baseline 1.0 record below identifies the exact known-good
-production receiver revision and source provenance retained for rollback.
-Revision identification is a production traffic safeguard, not a restriction
-on source changes, builds, tests, or authorized Git commits.
+These are configured production identifiers. Read-only Cloud Run metadata
+checked on 2026-11-07 showed receiver revision
+`fairway-button-receiver-roll-26b6201` Ready and receiving 100% of explicit
+service traffic; its image digest and available source provenance are recorded
+in the Current Deployment and OTA Readiness section. The Admin revision
+`fairway-admin-00017-dvk` remains the latest recorded Admin deployment evidence
+from 2026-10-17, not a live check. Verify current readiness, traffic, image
+digests, and Hosting version immediately before any production operation.
+Earlier revision records below remain historical.
 
 ### WP5-S1 Isolated Sandbox Environment
 
@@ -474,7 +569,7 @@ claims, sessions, or runtime identities.
 | Region | `us-central1` |
 | Firestore Database | `(default)`, Native mode |
 | Cloud Run Service | `fairway-button-receiver-sandbox` |
-| Cloud Run Revision | `fairway-button-receiver-sandbox-00002-vh7` (100% traffic at WP5-S1 validation; superseded by a later revision not deployed as part of this work — see "Cart UI / Inventory Integration" below for the currently serving revision) |
+| Cloud Run Revision | `fairway-button-receiver-sandbox-00002-vh7` (100% traffic at WP5-S1 validation; superseded by a later revision recorded in "Cart UI / Inventory Integration" below. Verify actual serving revision before any operation.) |
 | Cloud Run API URL | `https://fairway-button-receiver-sandbox-269424081919.us-central1.run.app` |
 | Runtime Identity | `fairway-backend-sandbox@fairway-refresh-sandbox-260930.iam.gserviceaccount.com` |
 | Firebase Hosting URL | `https://fairway-refresh-sandbox-260930.web.app` |
@@ -531,8 +626,8 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Current Admin Revision | `fairway-admin-00015-l2g` (100% traffic as of 2026-10-13; schema-v2 authorization and protected-System-Administrator safeguard) |
-| Current Receiver Revision | `fairway-button-receiver-00026-kg5` (100% traffic as of 2026-10-13; schema-v2 authorization and additive dashboard `customer_id`) |
+| Latest recorded Admin Revision | `fairway-admin-00017-dvk` (Ready, 100% traffic as of 2026-10-17; credential-lifecycle capability) |
+| Latest recorded Receiver Revision | `fairway-button-receiver-00026-kg5` (100% traffic as of 2026-10-17) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user`, `roles/firebaseauth.admin` |
@@ -546,9 +641,10 @@ explicit supported `FAIRWAY_SERVICE_MODE`, and both project variables equal to
 origin allowlist (Firebase Hosting and `app.fairwayrefresh.com`); receiver mode
 rejects any Admin browser origin. The Admin target exposes only
 `/api/v1/admin/*`, and the receiver returns `404` for that surface.
-**Current deployed production authorization state (2026-10-13):** Admin revision
-`fairway-admin-00015-l2g` and receiver revision
-`fairway-button-receiver-00026-kg5` serve 100% of traffic. Admin and Cart
+**Latest recorded production authorization state (2026-10-17):** Admin revision
+`fairway-admin-00017-dvk` and receiver revision
+`fairway-button-receiver-00026-kg5` were recorded serving 100% of traffic.
+This is not a live check. Admin and Cart
 authorization use the shared Firestore user-access record; legacy
 `admin:true` claims and separate Operator/Inventory collections are not
 runtime authorization sources. The old Admin-claim and separate-assignment
@@ -767,8 +863,8 @@ reported the existing large-main-chunk advisory.
   reports 2026-10-12 01:56:20). Cart `/`, Inventory `/inventory`, and Admin
   `/admin` returned `200`. Unauthenticated operator bootstrap, Inventory
   bootstrap, and Admin fleet API returned `401`.
-- **Production after source validation:** still serves receiver revision
-  `fairway-button-receiver-00024-659` and Admin revision
+- **Production state last verified for this source snapshot (2026-10-12):**
+  served receiver revision `fairway-button-receiver-00024-659` and Admin revision
   `fairway-admin-00012-52t`, each at 100% traffic. No production source,
   Hosting, Firestore Rules, Cloud Run configuration, or traffic was changed.
   The production code correction remains pending separate deployment
@@ -1361,7 +1457,7 @@ Bay staff accounts (`monarch_fnb@fairwayrefresh.com`,
 integration remain separately open; see the first-release record
 immediately below for what has now shipped to production.
 
-**Current production public-menu state (verified 2026-10-12):** published
+**Production public-menu state (last verified 2026-10-12):** published
 version 2 is live at
 `https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course`.
 It contains 57 products in six categories, with "Seltzers" under Canned
@@ -1743,32 +1839,173 @@ python3 <workspace>/nfed/scripts/verify_device_artifact.py \
   --device-id "$DEVICE_ID" \
   --artifact "$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex" \
   --manifest "$OUTPUT_DIR/fairway-${DEVICE_ID}-manifest.json" \
-  --secrets-dir "$SECRETS_DIR"
+  --secrets-dir "$SECRETS_DIR" \
+  --ncs-install-dir "$NCS_INSTALL_DIR"
 ```
 
 The builder invokes West against the installed NCS v3.1.1 SDK and preserves the established board target, explicit `BOARD_ROOT`, `prj_a.conf`, debug-thread build options, and sysbuild/MCUboot board-root propagation. It requires an exact target-named input `FRB-XXXX-fairway_device_key.h`; it never silently falls back to a generic header. A retained legacy generic input may be selected only by explicitly adding `--input-file "$SECRETS_DIR/fairway_device_key.h"` to both commands; the tool validates its ID and rejects competing target-named input.
 
-The builder checks input identity, uniqueness, credential format, permissions, and symlink/path constraints before build; then verifies the credential and Device ID in the actual merged Intel HEX image. It writes a manifest containing the source revision/state, firmware-source SHA-256, build command, toolchain/configuration, and artifact hash/size, without recording the credential or its digest. The verifier rereads the selected protected input and independently checks artifact bytes and embedded identity/credential. This comparison does not establish a production backend-verifier match.
+The builder checks input identity, uniqueness, credential format, permissions, and symlink/path constraints before build; then verifies the credential and Device ID in the actual merged Intel HEX image and signed MCUboot OTA binary. It writes a manifest containing the source revision/state, firmware-source SHA-256, build command, toolchain/configuration, and each artifact's hash/size, without recording the credential or its digest. The verifier rereads the selected protected input and independently checks both artifact byte streams and embedded identity/credential. This comparison does not establish a production backend-verifier match.
 
-The output directory is created with mode `0700`, and its files are restricted to owner access. During the build it contains credential-bearing generated headers and intermediates; after successful artifact verification the builder removes that intermediate build tree and retains only the merged image, manifest, and checksum. Handle the complete retained output as secret material, keep it outside `nfed`, and do not commit or broadly distribute it. A failed build may leave a protected partial tree; use a new output path for a retry. Existing output directories are rejected, so a known-good image cannot be silently overwritten. Do not flash or activate a pending backend credential as part of this local build procedure.
+The output directory is created with mode `0700`, and its files are restricted to owner access. During the build it contains credential-bearing generated headers and intermediates; after successful artifact verification the builder removes that intermediate build tree and retains only the merged image, signed OTA image, manifest, and their checksums. Handle the complete retained output as secret material, keep it outside `nfed`, and do not commit or broadly distribute it. A failed build may leave a protected partial tree; use a new output path for a retry. Existing output directories are rejected, so a known-good image cannot be silently overwritten. Do not flash or activate a pending backend credential as part of this local build procedure.
 
 The firmware application includes the generated selected header ahead of other include paths. CMake also requires an explicit target Device ID and target-named or explicitly selected generic input, checks for duplicate/invalid definitions and rejects symlinks. Use the builder rather than invoking `west build` directly so permission, provenance, output-protection, and artifact checks are not bypassed.
 
 The device-specific builder uses a fresh, private build directory for each run and removes it only after artifact verification succeeds. Retain the final protected artifact and its provenance/hash in the existing Firmware Generation Registry only when required as canonical validation evidence; do not retain or reuse a build tree as an evidence record.
 
-The builder produces `$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex` and its manifest/checksum. Treat the manifest as the build provenance record and retain it with the exact artifact. Before any separately authorized flash, rerun the verifier command above against that exact output path; do not substitute an artifact from another build directory.
+The builder produces `$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex`,
+`$OUTPUT_DIR/fairway-${DEVICE_ID}-ota.signed.bin`, per-artifact checksums, and
+the manifest. Treat the manifest as the provenance record for both images and
+retain it with the exact artifacts. Before any separately authorized flash,
+rerun the verifier command above against that exact output path; do not
+substitute an artifact from another build directory.
 
 The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tracked Fairway board root to the MCUboot child image. This is required for the custom `circuitdojo_feather_nrf9151` board to resolve consistently during the sysbuild build.
 
+### OTA Increment 1 — FRB-0005 local validation (not flashed)
+
+The source-only OTA foundation was built from source checkpoint
+`29b8d8556e9ac7ab228967d74d79d1b994285cb6` on
+`review/frb0005-increment-1.0-source-checkpoint-20261105`. The worktree was
+dirty; the exact application/board source fingerprint is recorded in the
+protected manifest. No generated image was flashed or deployed.
+
+The protected output directory is
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-ota-increment-1-20261106-final3/`.
+The complete output contains per-device credentials and must remain owner-only:
+
+| Artifact | Size | SHA-256 |
+|---|---:|---|
+| `fairway-FRB-0005-merged.hex` | 550,732 bytes | `c6285f104b175ec909295371a007dcc38c4c6bde89d926e1eff0bf0783541747` |
+| `fairway-FRB-0005-ota.signed.bin` | 152,455 bytes | `d4e034102417d18a7c1f7e8ba03f7fc0e3ec5277623c1d286af3bc4a810541b9` |
+
+The OTA artifact is the signed MCUboot image produced from the TF-M-merged
+application, version `0.0.0+0`; it fits the generated 491,520-byte secondary
+slot. The generated Partition Manager map matches the board's static
+`circuitdojo_feather_nrf9151_pm_static.yml`. The DTS still records older
+fixed-partition slot addresses; current OTA staging and MCUboot flash-map
+selection use Partition Manager. The source-level discrepancy and its scope
+are described in `docs/FIRMWARE_SPECIFICATION.md`.
+
+The build used NCS 3.1.1, Nordic toolchain bundle `561dce9adf`, West 1.4.0,
+board `circuitdojo_feather_nrf9151@1/nrf9151/ns`, and `prj_a.conf`. MCUboot
+uses ECDSA-P256 and swap-using-move, signed with NCS's distributed
+`root-ec-p256.pem` development key. For this final rebuild, `imgtool verify`
+accepted the signed OTA image and rejected a payload-mutated copy. The build
+emitted Kconfig assignment warnings for `UART_CONSOLE`, `I2C`, and
+`DNS_RESOLVER`; no OTA-source compiler warning was observed. This is
+cryptographic validation against the development key only, not production
+trust or proof that FRB-0005's installed bootloader has the same key or
+partition map.
+
+The protected builder/verifier suite was rerun against the final source and
+passed **37/37** tests. The OTA policy test is declared as Zephyr `ztest`, but
+Twister statically filters `native_sim` on this macOS host because Zephyr's
+POSIX native architecture requires Linux; a direct native build reports the
+same platform restriction. A temporary host-only assertion run executed the
+seven policy test cases, but is not a Zephyr Twister pass. The complete OTA
+firmware build and both protected artifacts verified successfully.
+
+The build and image checks do not prove compatibility with FRB-0005's
+installed bootloader, physical staging, trial activation, confirmation,
+reversion, or power-loss recovery. Cellular download, release assignment,
+caller authorization, signed hardware-compatibility metadata, anti-rollback
+policy, production signer, and matching production trust anchor are not
+implemented or approved. No physical update test is authorized by this
+record. See `docs/FIRMWARE_SPECIFICATION.md` for the device-side ownership
+boundaries and remaining architecture limitations.
+
+### OTA Blocker 1 — boot health and service-mode protection (2026-11-07; not flashed)
+
+The approved Blocker 1 correction was implemented on
+`review/frb0005-increment-1.0-source-checkpoint-20261105`, based on rollback
+checkpoint `29b8d8556e9ac7ab228967d74d79d1b994285cb6`. The application now
+selects PV8 service mode before enabling a normal-mode trial deadline. Only a
+normal-mode trial gets the one-shot 300-second deadline. Service mode does not
+confirm the image, start modem/golfer runtime, or arm that deadline. If the
+service debugger rail fails to initialize during a trial, the application
+requests a reset before a programming session can begin.
+
+In normal operation, confirmation follows successful local button/indicator,
+power-policy, and UART initialization, then successful modem-library startup,
+PSM setup, CA-chain validation/provisioning, and acceptance of the asynchronous
+LTE connection-start request. The main thread waits for that result by sharing
+its existing wake semaphore; it continues processing golfer-button events
+while modem setup runs. Registration, DNS, backend transactions, and
+synthetic requests are not boot-health gates. A local bootstrap failure
+prevents confirmation; if health has not passed by the one-shot deadline, the
+application requests a reset while the trial remains unconfirmed. A failed
+MCUboot confirmation likewise leaves the trial unconfirmed for the bounded
+timeout path.
+
+The 300-second deadline is supported by NCS 3.1.1's
+`nrf_modem_lib_init()` API documentation, which states that initialization can
+take a few minutes when modem firmware update work is already scheduled.
+Registration is asynchronous and excluded. This is a conservative source-based
+bound, not an observed FRB-0005 boot-time measurement.
+
+The final protected output is
+`/Users/DuplexLoop/fairway-builds/fairway-FRB-0005-ota-blocker-1-20261107-final5/`.
+The builder completed for NCS 3.1.1, Nordic toolchain bundle `561dce9adf`,
+West 1.4.0, board `circuitdojo_feather_nrf9151@1/nrf9151/ns`, and
+`prj_a.conf`. The signed OTA image passed NCS `imgtool verify` with the
+distributed development key; that key is not production-qualified.
+
+| Artifact | Size | SHA-256 |
+|---|---:|---|
+| `fairway-FRB-0005-merged.hex` | 552,436 bytes | `603c1b6334722ae31b7b453e0751434757fbb5cf76ce285ce551315cfaf3d315` |
+| `fairway-FRB-0005-ota.signed.bin` | 153,075 bytes | `af150455c86c440d15e6907b838da0c182a92d4a115c1ed26a52dc991fdac446` |
+
+Validation: the protected builder/verifier suite passed **37/37** tests, and
+seven direct host assertions passed for service-mode deadline exclusion and
+the confirmation gates. The Zephyr OTA ztest suite was selected by Twister but
+statically filtered on macOS because `native_sim` requires Linux; zero Zephyr
+test cases ran. The final firmware build succeeded. It emitted the existing
+`UART_CONSOLE`, `I2C`, and `DNS_RESOLVER` Kconfig assignment warnings and
+MCUboot's warning that the default signing key is for debug use. No OTA source
+compiler warning was observed.
+
+No firmware was flashed, and no physical startup, confirmation, MCUboot revert,
+debugger programming, or service-session continuity was tested. Before field
+OTA use, physically verify test-image activation and confirmation timing,
+rollback after injected mandatory-init failure and timeout, service mode held
+for longer than the deadline without interruption or confirmation, and the
+authorized wired erase/program/read-back recovery procedure. These checks must
+use the installed bootloader and the established debugger/security controls;
+this build's source and host assertions do not prove physical recovery.
+
 ### Flash Procedure
 
-The current Fairway programming and recovery path is erase-all followed by
-complete-image programming and read-back verification with probe-rs. The
-separate Circuit Dojo recovery utility is not the current procedure. In
-USB/debug/service mode, disconnect V25/V50/V75 field power and PPK2 before
-connecting Feather USB. Prototype 3.3 field and USB development/service
-configurations are mutually exclusive, as specified by
+The documented Circuit Dojo nRF9151 Feather development/service programming
+procedure is to select PV8 service mode, then program the complete
+device-specific merged image with `probe-rs` and read it back for
+verification. This procedure is subject to separate CPO authorization for the
+target device and operation; it is not an OTA procedure or authorization to
+flash. Historical recovery experiments later in this section are evidence,
+not replacements for this documented workflow.
+
+The documented command uses erase-all. Erase-all clears device flash; do not
+assume it preserves persistent credentials or other device-local state. The
+complete image is not a backup of backend records, device identity, or an
+active backend credential. The current credential is provided through the
+device-specific firmware input; any persistent credential behavior must be
+established separately, not inferred from a successful flash. In USB/debug/
+service mode, disconnect V25/V50/V75 field power and PPK2 before connecting
+Feather USB. Prototype 3.3 field and USB development/service configurations
+are mutually exclusive, as specified by
 `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+**Destructive-operation gate:** the command below erases all target flash. It
+may remove the installed firmware and any device-local credential
+material. The FRB-0003 cutover procedure in
+`docs/DEVICE_PROVISIONING_GUIDE.md` requires an approved target-specific flash
+procedure and prohibits erase-all without separate CPO approval. The
+documented FRB-0005 erase-all method is not blanket approval for FRB-0003.
+For any separately authorized flash, confirm the permanent Device ID,
+credential lifecycle state, approved full image, and recovery plan before
+connecting the probe. For a production/field image, confirm the approved
+production signing key and matching bootloader trust anchor; the
+NCS-distributed debug signing key is not production-qualified.
 
 The current low-power firmware disables BUCK2 during normal operation, which
 removes power from the Feather's RP2040 debugger. To enter its explicit
@@ -1793,11 +2030,11 @@ probe-rs download --chip nRF9151_xxAA \
 
 Erase-all clears target flash, so always use the complete, independently
 verified, device-specific merged image; an application-only image is not
-restoration. This is the established development programming workflow, not a
-reason to abandon an authorized firmware update. It does not update or rotate
-backend credentials. On the validated FRB-0005 probe, probe-rs reported that
-Core 0 was locked and initiated its erase/unlock procedure when this complete
-image command was run; programming and read-back verification then succeeded.
+restoration. This is the recorded development programming workflow, not a
+general authorization for a field update. It does not update or rotate backend
+credentials. On the validated FRB-0005 probe, probe-rs reported that Core 0
+was locked and initiated its erase/unlock procedure when this complete image
+command was run; programming and read-back verification then succeeded.
 Successful programming is indicated by probe-rs completing and reporting
 success. Reset the target after programming:
 
@@ -1814,11 +2051,11 @@ that startup delay. The separate Circuit Dojo early-erase instruction is not
 the current Fairway procedure and the Circuit Dojo recovery utility is not
 used.
 
-The recovery procedure above is the single Fairway programming/recovery
-procedure. After an erase-all, verify the boot and device-specific behavior
-using the manual validation procedure below. The historical physical-RESET
-service-entry evidence is retained below as supporting context; it is not a
-prerequisite to normal authorized erase-all/reflash.
+After a separately authorized erase-all, verify boot and device-specific
+behavior using the manual validation procedure below. The historical
+physical-RESET service-entry evidence is retained below as supporting
+context; it does not resolve the FRB-0003 procedure conflict or authorize an
+erase-all/reflash.
 
 ### Manual Validation
 
@@ -2344,6 +2581,42 @@ Current Backend Deployment Facts:
   - POST /api/v1/operator/service/suspend
   - POST /api/v1/operator/service/resume
 
+### Backend release procedure
+
+Before deploying, obtain approval for the specific service and source
+revision. Confirm the production project, region, service name, currently
+serving revision/image digest, runtime identity, environment configuration,
+and traffic allocation. Do not print secret environment values. Run the
+backend tests against the reviewed source:
+
+```sh
+npm --prefix fairway_backend/cloudrun_receiver test
+```
+
+The repository package defines tests but no deployment script. The established
+Cloud Run deployment commands below explicitly name each service, project,
+region, source directory, and function target; run them from the repository
+root only after independent review and separate authorization:
+
+```sh
+gcloud run deploy fairway-button-receiver --project=savvy-kit-496703-r5 \
+  --region=us-central1 --source=fairway_backend/cloudrun_receiver \
+  --function=fairwayButtonReceiver --quiet
+gcloud run deploy fairway-admin --project=savvy-kit-496703-r5 \
+  --region=us-central1 --source=fairway_backend/cloudrun_receiver \
+  --function=fairwayAdmin --quiet
+```
+
+Deploy only the service in the approved scope. Admin-only changes must not
+redeploy the receiver; receiver-only changes must not redeploy Admin. After
+deployment, verify the new revision is Ready, the intended revision receives
+the approved traffic share, the image digest and non-secret configuration
+match the release record, and service-specific health/authentication checks
+pass. Use designated test identities and avoid creating production requests,
+credentials, or device traffic as smoke tests. Stop if a service target,
+runtime identity, traffic allocation, or behavior differs from the approved
+plan.
+
 The Option C production rollout on 2026-10-01 deployed receiver revision
 `fairway-button-receiver-00019-c8h` and Admin revision
 `fairway-admin-00008-sjt`, each ready with 100% traffic and its prior runtime
@@ -2423,8 +2696,8 @@ WP5 admin routes (implemented, test-verified, and deployed to the isolated sandb
 - `GET /api/v1/admin/devices/{deviceId}/health-history`
 - `GET /api/v1/admin/export/device-sim`
 - `POST|PATCH /api/v1/admin/customers...` for Customer/Course creation and configuration
-- `POST /api/v1/admin/devices` for permanent-ID allocation and one-time credential issuance
-- `POST /api/v1/admin/devices/{deviceId}/credential-recovery` only when a partial provisioning event left that exact Device without a credential
+- `POST /api/v1/admin/devices` for permanent-ID allocation and one-time credential issuance; this retains the established request contract and has no automatic provisioning-request idempotency or duplicate prevention. If the outcome is uncertain, inspect the authoritative Device registry before another provisioning request.
+- `POST /api/v1/admin/devices/{deviceId}/credential-recovery` to issue or replace the credential on that exact in-inventory Device record without changing its permanent ID, assignment, or history
 - `PATCH /api/v1/admin/devices/{deviceId}/{assignment|state|metadata}`; metadata permits only SIM association and comments after provisioning
 - `POST /api/v1/admin/devices/{deviceId}/{service|commission}`
 
@@ -2524,12 +2797,45 @@ Repository-Derived and Historical Web Deployment Facts:
   deploy the Firestore rules/indexes also declared in `firebase.json`, Functions,
   or other Firebase resources.
 
+### Hosting release procedure
+
+Obtain approval for the exact Hosting site, source revision, and release
+contents. From the repository root, run the focused frontend tests and
+production build:
+
+```sh
+npm --prefix fairway_webapp/cart_operator_dashboard test
+npm --prefix fairway_webapp/cart_operator_dashboard run build:production
+```
+
+The build script runs `validate:production` before Vite builds `dist`. Review
+the build output and confirm the production configuration before deployment.
+Then run the production Hosting command from
+`fairway_webapp/cart_operator_dashboard/`:
+
+```sh
+npx firebase-tools deploy --config firebase.json --only hosting \
+  --project savvy-kit-496703-r5 --non-interactive
+```
+
+For sandbox, substitute `firebase.sandbox.json` and
+`fairway-refresh-sandbox-260930`; never omit explicit config, project, or
+resource selector. Do not deploy Firestore rules/indexes or backend services
+with a Hosting-only release. After release, verify the live site/release ID,
+SPA routes, loaded assets against the approved build, unauthenticated entry
+behavior, CORS/API target, and relevant authenticated workflows with
+designated test users. A successful build or HTTP 200 response does not prove
+authenticated workflow acceptance or physical-phone usability. The latest
+mobile release evidence and its unperformed authenticated phone/Safari checks
+are recorded at the top and in the Alignment Register.
+
 Deployment process status:
 
 Repository-controlled artifacts define web build behavior and the production
-Hosting deployment commands above were validated on 2026-10-13. The final
-production release and verification evidence are recorded in the Pilot 1.1
-alignment entry above; sandbox Hosting remains separately targeted.
+Hosting config/targeting was validated on 2026-10-13. A production
+Hosting-only release was subsequently recorded on 2026-10-15, with deployed
+assets matching the validated build. The exact Firebase CLI version used is
+not recorded. Sandbox Hosting remains separately targeted.
 
 Deployment Verification:
 
@@ -2630,6 +2936,35 @@ Indexes:
 
 - `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` defines the deployed `requests` composite index required by demand-window-aware duplicate suppression (`device_id`, `status`, and `demand_window_expires_at`).
 
+Firestore rules and indexes are separate production resources. The production
+`firebase.json` declares both, but a Hosting-only deploy does not publish
+them. Only when a separately reviewed change explicitly includes rules or
+indexes, deploy the approved selector from
+`fairway_webapp/cart_operator_dashboard/` with an explicit project:
+
+```sh
+npx firebase-tools deploy --config firebase.json --only firestore:rules \
+  --project savvy-kit-496703-r5 --non-interactive
+npx firebase-tools deploy --config firebase.json --only firestore:indexes \
+  --project savvy-kit-496703-r5 --non-interactive
+```
+
+The sandbox config `firebase.sandbox.json` declares Hosting only; it does not
+declare Firestore rules or indexes. For a separately authorized sandbox
+rules/index deployment, use `firebase.json` with the explicit sandbox project
+and only the approved Firestore selector. Review the exact rules/index diff,
+validate against the intended code and data contract, and verify the deployed
+resource after change. Do not bundle these selectors into an unrelated
+Hosting release. Rules/index deployment does not back up, restore, migrate,
+or roll back Firestore documents.
+
+```sh
+npx firebase-tools deploy --config firebase.json --only firestore:rules \
+  --project fairway-refresh-sandbox-260930 --non-interactive
+npx firebase-tools deploy --config firebase.json --only firestore:indexes \
+  --project fairway-refresh-sandbox-260930 --non-interactive
+```
+
 ---
 
 ## Device Provisioning Dependencies
@@ -2644,24 +2979,55 @@ Related planning reference:
 
 - docs/feature_backlog.md
 
+### Existing-Device Credential Recovery
+
+Device identity is the permanent `FRB-XXXX` ID and its existing
+`devices/{FRB-XXXX}` record. When a provisioning response leaves the outcome
+uncertain, inspect the authoritative Device registry before retrying creation.
+If the Device exists, recover that Device; do not delete and recreate it.
+Credential recovery retains the same FRB ID and its associations; the
+established lifecycle invalidates the superseded credential when replacement
+activation commits.
+
+The recovery implementation is scoped to the existing Device and credential
+lifecycle records. It does not update historical requests, inventory or
+service records, Customer/Course records, or user access. Recovery is distinct
+from creating a new Device and from firmware build/deployment. The detailed
+eligibility, authorization, response-loss behavior, and operator procedure
+are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+For active-credential recovery, the backend prepares and activates in
+separate Firestore transactions. While a rotation is pending, the
+device-level rotation route can return the pending operation ID, which can
+then be checked or cancelled through the authorized API. The combined Admin
+UI does not expose that operation ID or pending-operation controls. If
+activation committed but its response was lost, and the operation ID was not
+retained, the device-level pending query cannot establish the completed
+operation's result or recover its one-time plaintext credential. Do not retry
+Device creation; keep the device offline and follow the provisioning owner's
+recovery guidance.
+
 ---
 
 ## Operational Verification
 
-Full-system or pilot operational validation is broader than backend deployment
-validation. When that scope is authorized, the sequence is:
+Current Cart Operator acceptance has no separate CONFIRM interaction. When
+full-system or pilot operational validation is authorized, establish each
+step:
 
 1. Firmware boots and reaches network-ready state.
-2. Device sends request to Cloud Run endpoint.
-3. Backend stores request document in Firestore.
-4. Operator dashboard receives live request update.
-5. Confirm action succeeds and updates status.
-6. Complete action succeeds and updates status/removes active item.
+2. Device request reaches the Cloud Run endpoint.
+3. Backend persists the request in Firestore.
+4. The authorized Cart UI receives the request.
+5. An authorized operator can access the actionable request.
+6. The operator completes the request, and the backend records the completed
+   outcome.
 
-A full-system or pilot operational validation is complete only after all six
-steps succeed. A bounded backend deployment can be validated against its own
-approved backend acceptance criteria without claiming unperformed operator UI
-validation.
+Full-system or pilot operational validation is complete only after all six
+steps succeed. A bounded backend deployment may be validated against its own
+approved backend criteria without claiming unperformed Cart UI acceptance.
+The six-step sequence above is the current workflow. Historical acceptance
+entries below remain dated evidence and do not add steps to this procedure.
 
 The first production Cart Operator Web Push workflow was physically accepted on
 2026-10-01 with FRB-0002 at Hole 2. One authoritative request
@@ -2676,11 +3042,26 @@ request or visible notification. The original request remained actionable.
 
 ## Rollback Procedure
 
+Hosting rollback restores web content only, and Cloud Run traffic restoration
+selects a backend revision only. Neither operation restores device firmware or
+changes MCUboot's installed, trial, or confirmed image state. Device-side OTA
+trial activation, confirmation, and reversion contracts are owned by
+`docs/FIRMWARE_SPECIFICATION.md`; this guide's local image verification is not
+evidence of physical OTA rollback readiness. Any physical recovery remains
+subject to the approved, target-specific procedure and authorization.
+
 ### Pilot 1.1 controlled recovery
 
 **Status: reviewed procedure; not exercised.** No production rollback was
 performed to prepare this procedure. It is not evidence that the Pilot 1.1
 release or any rollback target has been operationally validated.
+
+The targets below are historical to the 2026-10-13 Pilot 1.1 readiness
+investigation. Later records show a Hosting release on 2026-10-15 and Admin
+revision `fairway-admin-00017-dvk` on 2026-10-17. Do not treat this table as a
+current rollback plan; establish the actual release-specific pre-change state
+and revalidate every target, digest, retained Hosting version, and data/rules
+compatibility before any recovery.
 
 The recorded production pre-release state for the Pilot 1.1 readiness
 investigation was:

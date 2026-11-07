@@ -8,7 +8,7 @@ const {
 const {
   DEVICES_COLLECTION,
 } = require('./devices');
-const { isDeviceCommunicationAllowed } = require('./schema');
+const { DEVICE_STATES, isDeviceCommunicationAllowed } = require('./schema');
 
 const ROTATIONS_COLLECTION = 'device_credential_rotations';
 const ROTATION_SECRETS_COLLECTION = 'device_credential_rotation_secrets';
@@ -128,6 +128,7 @@ async function prepareCredentialRotation(db, {
   deviceId,
   adminUid,
   reason,
+  requireInInventory = false,
 }) {
   requireDeviceId(deviceId);
   requireAdminUid(adminUid);
@@ -160,6 +161,13 @@ async function prepareCredentialRotation(db, {
       transaction.get(secretRef),
     ]);
     const device = requireEligibleDevice(deviceSnap);
+    if (requireInInventory && device.state !== DEVICE_STATES.IN_INVENTORY) {
+      throw new CredentialLifecycleError(
+        'device_not_eligible',
+        'Credential recovery is only permitted for in-inventory Devices.',
+        409
+      );
+    }
     if (lockSnap.exists) {
       throw new CredentialLifecycleError(
         'rotation_in_progress',
@@ -247,6 +255,7 @@ async function activateCredentialRotation(db, {
   operationId,
   adminUid,
   confirmed,
+  requireInInventory = false,
 }) {
   requireDeviceId(deviceId);
   requireOperationId(operationId);
@@ -295,6 +304,13 @@ async function activateCredentialRotation(db, {
     }
 
     const device = requireEligibleDevice(deviceSnap);
+    if (requireInInventory && device.state !== DEVICE_STATES.IN_INVENTORY) {
+      throw new CredentialLifecycleError(
+        'device_not_eligible',
+        'Credential recovery is only permitted for in-inventory Devices.',
+        409
+      );
+    }
     if (
       lockSnap.data()?.operation_id !== operationId
       || credentialGeneration(device) !== rotation.expected_credential_generation

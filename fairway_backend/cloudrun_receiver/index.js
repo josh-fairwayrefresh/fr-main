@@ -880,11 +880,12 @@ function createFairwayHandlers(db, {
       if (error.cause?.message === 'Device already has a credential') {
         return res.status(409).json({ error: error.cause.message });
       }
-      return res.status(error.deviceId ? 409 : 400).json({
-        error: 'Device provisioning failed',
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
         stage: error.stage,
-        device_id: error.deviceId,
-        recovery_required: Boolean(error.deviceId),
+        ...(error.deviceId ? { device_id: error.deviceId } : {}),
+        recovery_required: error.stage === 'issue_credential',
       });
     }
 
@@ -1049,8 +1050,8 @@ function createFairwayHandlers(db, {
     });
   }
 
-  async function recoverAdminDeviceCredential(res, deviceId) {
-    const result = await issueCredentialForExistingDevice(db, deviceId);
+  async function recoverAdminDeviceCredential(res, deviceId, adminUid) {
+    const result = await issueCredentialForExistingDevice(db, deviceId, adminUid);
     res.set('Cache-Control', 'no-store');
     return res.status(200).json({
       device_id: result.deviceId,
@@ -1190,7 +1191,7 @@ function createFairwayHandlers(db, {
 
       const credentialRecoveryMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/credential-recovery$/);
       if (req.method === 'POST' && credentialRecoveryMatch) {
-        return await recoverAdminDeviceCredential(res, credentialRecoveryMatch[1]);
+        return await recoverAdminDeviceCredential(res, credentialRecoveryMatch[1], admin.uid);
       }
 
       const credentialRotationsMatch = path.match(

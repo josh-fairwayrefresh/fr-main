@@ -6,6 +6,7 @@ const userManagementSource = await readFile(
   new URL('../src/admin/AdminUserManagement.jsx', import.meta.url),
   'utf8'
 );
+const adminAppSource = await readFile(new URL('../src/admin/AdminApp.jsx', import.meta.url), 'utf8');
 
 test('User Management loads the complete backend directory whenever the section opens', () => {
   assert.match(userManagementSource, /useEffect\(\(\) => \{ void loadUsers\(\); \}, \[user, apiBaseUrl\]\)/);
@@ -40,4 +41,13 @@ test('successful explicit access save refreshes the unified directory', () => {
   assert.match(userManagementSource, /method: 'PUT'/);
   assert.match(userManagementSource, /if \(await loadUsers\(\)\)/);
   assert.match(userManagementSource, /Authorization settings saved and directory refreshed/);
+});
+
+test('Device detail supports locating an inventory record and recovering its credential', () => {
+  assert.match(adminAppSource, /device\.comments\]\.join\(' '\)/);
+  assert.match(adminAppSource, /device\.state === 'in_inventory'.*Credential recovery/s);
+  assert.match(adminAppSource, /\/credential-recovery/);
+  assert.match(adminAppSource, /Replace \/ recover credential/);
+  assert.match(adminAppSource, /<CredentialModal value=\{credential\}/);
+  assert.doesNotMatch(adminAppSource, /Idempotency-Key|PROVISIONING_ATTEMPT_STORAGE_KEY|crypto\.randomUUID/);
 });

@@ -39,6 +39,9 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 | `transaction_scheduler.c` | Sole transaction worker shared by golfer and COMPLETE traffic |
 | `modem_service.c` | Modem/certificate/LTE initialization and registration handling |
 | `power_policy.c` | BUCK2 service-rail and bounded interaction-awake policy |
+| `ota_update.c` | MCUboot image staging, update status, test activation, and trial confirmation |
+| `ota_update_policy.c` | Transport-independent OTA descriptor validation and state transitions |
+| `ota_update_staging.c` | Clean DFU-target initialization and offset-zero verification |
 
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
@@ -47,7 +50,7 @@ The board device tree and current source define the pins consumed by the impleme
 - The current application does not include Health or battery-health reporting.
 - The golfer demand window is fixed at five minutes.
 - Repeat-press transport and persistence are not implemented.
-- No MQTT, LwM2M, firmware-over-the-air, persistent socket, or background Health network path is part of the accepted runtime.
+- No MQTT, LwM2M, cellular OTA downloader or release-assignment service, persistent socket, or background Health network path is part of the accepted runtime. The device-side OTA foundation below is not an end-to-end update service.
 - LTE registration or one successful transaction is not evidence of pack autonomy, endurance, PPK2 consumption, or a statistical request-reliability guarantee.
 
 ## Low-power Increment 1.0 — FRB-0005 development candidate
@@ -159,6 +162,114 @@ completed successfully. CPU sleep residency, modem PSM residency, and
 service-mode target programming were not independently verified for this
 increment. Further implementation or investigation is not implied by this
 acceptance record.
+
+## OTA Increment 1 — FRB-0005 local development foundation
+
+This source-only increment starts from the accepted FRB-0005 Increment 2.0
+checkpoint `29b8d8556e9ac7ab228967d74d79d1b994285cb6`. It does not change the
+accepted Pilot 1.1 fleet firmware baseline, and it has not been flashed or
+physically tested on FRB-0005.
+
+`ota_update` owns a transport-independent MCUboot update lifecycle. A caller
+supplies a descriptor containing a hardware identifier, image size, version,
+and SHA-256. The module checks the descriptor against the configured board ID
+and generated secondary-slot capacity, stages sequential image data through
+NCS DFU Target's MCUboot backend, checks the MCUboot header magic, hashes the
+received bytes, and matches the descriptor version to the staged image header.
+It can schedule a test update, report in-memory status, cancel a transfer, and
+confirm a trial image only after the normal-mode application and mandatory
+local modem bootstrap are ready. The modem service reports success after modem
+library initialization, PSM configuration, CA-chain validation/provisioning,
+and successful start of the asynchronous LTE connection. LTE registration,
+DNS, and backend availability are not confirmation requirements; the main
+application remains responsive to golfer button events while modem bootstrap
+runs.
+
+The application reads PV8 and selects service mode before starting the normal
+trial-health deadline. A normal-mode trial has a bounded 300-second deadline
+by default. A mandatory startup failure prevents confirmation; if health has
+not passed before the one-shot deadline expires, the application requests a
+reset while the image remains unconfirmed. The value accommodates the NCS
+3.1.1 modem library's documented possibility that initialization can take a
+few minutes when modem firmware update work is already scheduled. It does not
+wait for network registration. The deadline is not extended by retries or
+golfer activity. Service mode never confirms a trial and does not arm the
+health deadline; after BUCK2 debugger-rail initialization succeeds, the application
+remains in service mode without modem or golfer runtime. If service-rail
+initialization fails during a trial, the application requests a reset so
+MCUboot can return to the previously confirmed image.
+
+MCUboot's configured test-image behavior owns rollback after reset. The
+application deadline and service-mode handling are source/build validated;
+physical trial rollback, active debugger-session continuity, and wired
+recovery have not been demonstrated on FRB-0005.
+SHA-256 uses the PSA Crypto API; PSA initialization occurs when an OTA transfer
+begins, not during ordinary application startup.
+
+MCUboot's configured signature trust is enforced during boot; descriptor
+SHA-256 is an integrity check, not authorization or authentication. The
+hardware identifier is supplied by the caller and is not independently
+authenticated from signed image metadata. The update module does not own or
+start LTE, networking, persistent release assignment, download, or external
+authorization. A trusted transport and release-policy integration, signed
+hardware compatibility metadata, and an anti-rollback policy remain future
+work before fleet OTA. Existing button-request, COMPLETE, modem, and power
+ownership remain unchanged.
+
+Each OTA transfer starts from a clean NCS DFU Target staging state. The OTA
+module initializes the MCUboot target, resets it to discard retained progress,
+initializes it again, and verifies the target offset is zero before accepting
+bytes or entering `DOWNLOADING`. Failure to initialize, reset, or verify zero
+offset fails the attempt closed. A failed active transfer calls
+`dfu_target_done(false)` and then resets the target; a later attempt repeats the
+clean-start sequence. Application byte counters and SHA-256 tracking are
+initialized only after the clean staging check succeeds. Only a complete
+transfer whose descriptor digest and MCUboot header/version checks pass can
+enter `STAGED`; incomplete or invalid data cannot be scheduled for activation.
+Downloads are not resumable, and a new attempt starts at byte zero. This
+production-manager lifecycle is covered by the focused host suite at
+`tests/ota_update/host/run_tests.py`, which compiles `ota_update.c` and the
+production policy/staging modules with deterministic fakes at the Zephyr,
+PSA, DFU Target, and MCUboot boundaries. It exercises successful multi-chunk
+staging and activation scheduling; incomplete, invalid, and failed transfers;
+clean retry; fail-closed staging errors; readiness-gated confirmation; trial
+deadline reset; and service-mode deadline/confirmation exclusion. The PSA
+hash fake validates manager data flow and integrity-gate behavior, not the
+PSA implementation or cryptographic SHA-256. The Zephyr `ztest` policy and
+staging suite remains separate; `native_sim` requires a supported Linux
+environment and was not run on macOS.
+
+The application currently has no production caller for the OTA begin/write/
+finish/activation API, and it has no OTA downloader or release-assignment
+service. These tests establish OTA-manager behavior, not operational remote
+update capability. The application/modem startup integration is source
+reviewed; it is not simulated by the host manager suite. Physical flash
+recovery and full OTA integration qualification remain outstanding.
+
+The generated NCS 3.1.1 Partition Manager report matches the board's
+`circuitdojo_feather_nrf9151_pm_static.yml`: MCUboot occupies `0x00000–0x0C000`,
+the primary slot is `0x10000` with size `0x78000`, and the secondary slot is
+`0x88000` with size `0x78000` (491,520 bytes each). TF-M and the non-secure
+application share the primary slot. The generated signed image is a combined
+TF-M/application MCUboot image. The board DTS still contains the older split
+`slot0`/`slot1` fixed-partition addresses; the current DFU Target and MCUboot
+flash-map paths use Partition Manager (`PM_MCUBOOT_SECONDARY_ID` /
+`USE_PARTITION_MANAGER`), so the generated PM map is the effective OTA slot
+map for this build. The DTS/PM source descriptions remain inconsistent and
+must not be treated as interchangeable by future code using fixed-partition
+DTS labels.
+
+The build uses NCS's distributed ECDSA-P256 `root-ec-p256.pem` development
+signing key and swap-using-move mode. The local signed image passed
+`imgtool verify`; a payload-mutated copy was rejected. This key is widely
+distributed and is not suitable for production. The generated build map and
+signature do not establish that FRB-0005's installed bootloader has the same
+partition layout or trust anchor; both installed-device compatibility points
+must be established before physical OTA activation. No bootloader upgrade,
+image activation, rollback, power-loss recovery, installed-device key match,
+or physical behavior has been demonstrated. See
+`docs/DEPLOYMENT_GUIDE.md` for exact artifact provenance, local validation,
+and deployment gates.
 
 ## Pilot 1.1 validation status
 

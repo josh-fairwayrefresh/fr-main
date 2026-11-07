@@ -434,7 +434,7 @@ async function replaceDeviceCredential(db, deviceId) {
   return { device_id: deviceId, secret };
 }
 
-async function issueDeviceCredentialIfMissing(db, deviceId) {
+async function issueDeviceCredentialIfMissing(db, deviceId, { requireInInventory = false } = {}) {
   const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
   const { secret, verifier } = generateDeviceCredential();
 
@@ -443,13 +443,17 @@ async function issueDeviceCredentialIfMissing(db, deviceId) {
     if (!deviceSnap.exists) {
       throw new Error(`Unknown device_id: ${deviceId}`);
     }
-    if (deviceSnap.data().credential) {
+    const device = deviceSnap.data();
+    if (requireInInventory && device.state !== DEVICE_STATES.IN_INVENTORY) {
+      throw new Error('Credential recovery is only permitted for in-inventory devices');
+    }
+    if (device.credential) {
       throw new Error('Device already has a credential');
     }
 
     transaction.update(deviceRef, {
       credential: verifier,
-      credential_generation: nextCredentialGeneration(deviceSnap.data()),
+      credential_generation: nextCredentialGeneration(device),
       updated_at: new Date(),
     });
   });

@@ -1,0 +1,32 @@
+source "Kconfig.zephyr"
+
+menu "Fairway firmware"
+
+config FAIRWAY_OTA
+	bool "Enable MCUboot OTA staging and trial lifecycle"
+	depends on DFU_TARGET_MCUBOOT
+	default y
+	help
+	  Enables the transport-independent update staging API and MCUboot
+	  test-boot confirmation lifecycle. It does not start network activity.
+
+if FAIRWAY_OTA
+
+config FAIRWAY_OTA_HARDWARE_ID
+	string "Signed update target hardware identifier"
+	default "circuitdojo_feather_nrf9151@1/nrf9151/ns"
+
+config FAIRWAY_OTA_TRIAL_TIMEOUT_SECONDS
+	int "Maximum time to confirm a trial image"
+	range 30 600
+	default 300
+	help
+	  Bounds normal-mode trial health evaluation. The Nordic modem library
+	  documents that initialization can take a few minutes when modem
+	  firmware update work is already scheduled. LTE registration and
+	  backend availability are not part of this deadline. Service mode
+	  does not arm the deadline.
+
+endif
+
+endmenu

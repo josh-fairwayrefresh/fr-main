@@ -52,6 +52,9 @@
 #include "sync_primitives.h"
 #include "thread_priorities.h"
 #include "transaction_scheduler.h"
+#if defined(CONFIG_FAIRWAY_OTA)
+#include "ota_update.h"
+#endif
 
 LOG_MODULE_REGISTER(main);
 
@@ -130,23 +133,23 @@ static void set_state(app_state_t new_state)
 int main(void)
 {
 	int ret;
-
-	demand_window_init();
-	complete_poll_init(&txn_wake_sem);
-
-	if (!device_is_ready(uart0_dev)) {
-		return 0;
-	}
-
-	ret = pm_device_runtime_enable(uart0_dev);
-	if (ret < 0) {
-		LOG_ERR("UART runtime PM initialization failed: %d", ret);
-		return 0;
-	}
+#if defined(CONFIG_FAIRWAY_OTA)
+	bool boot_health_evaluated = false;
+	bool ota_init_ready = true;
+#endif
 
 	ret = button_ux_init(&button_wake_sem);
 	if (ret < 0) {
 		LOG_ERR("Button/indicator initialization failed: %d", ret);
+#if defined(CONFIG_FAIRWAY_OTA)
+		/* Service mode cannot be identified; keep a trial bounded so
+		 * MCUboot can return to the previously confirmed image.
+		 */
+		ret = ota_update_init(false);
+		if (ret < 0) {
+			LOG_ERR("OTA lifecycle initialization failed: %d", ret);
+		}
+#endif
 		return 0;
 	}
 
@@ -154,21 +157,33 @@ int main(void)
 	ret = button_ux_is_pressed(&service_mode);
 	if (ret < 0) {
 		LOG_ERR("Boot button state read failed: %d", ret);
+#if defined(CONFIG_FAIRWAY_OTA)
+		ret = ota_update_init(false);
+		if (ret < 0) {
+			LOG_ERR("OTA lifecycle initialization failed: %d", ret);
+		}
+#endif
 		return 0;
 	}
+
+#if defined(CONFIG_FAIRWAY_OTA)
+	ret = ota_update_init(service_mode);
+	if (ret < 0) {
+		ota_init_ready = false;
+		LOG_ERR("OTA lifecycle initialization failed: %d", ret);
+	}
+#endif
 
 	ret = power_policy_init(service_mode);
 	if (ret < 0) {
 		LOG_ERR("Power policy initialization failed: %d", ret);
+#if defined(CONFIG_FAIRWAY_OTA)
+		if (service_mode) {
+			ota_update_request_trial_revert(ret);
+		}
+#endif
 		return 0;
 	}
-
-	/* Local hardware first: button/LED GPIO, callback, and interrupt are
-	 * configured and armed, and this thread reaches its event loop,
-	 * before any modem/network call is made -- the golfer button is live
-	 * regardless of what modem_service does next or how long it takes.
-	 */
-	LOG_INF("Fairway Refresh state-machine feedback test starting");
 
 	if (service_mode) {
 		button_ux_set_interrupt_enabled(false);
@@ -179,19 +194,69 @@ int main(void)
 		}
 	}
 
+	demand_window_init();
+	complete_poll_init(&txn_wake_sem);
+
+	if (!device_is_ready(uart0_dev)) {
+		LOG_ERR("UART console device is not ready");
+		return 0;
+	}
+
+	ret = pm_device_runtime_enable(uart0_dev);
+	if (ret < 0) {
+		LOG_ERR("UART runtime PM initialization failed: %d", ret);
+		return 0;
+	}
+
+	/* Local hardware first: button/LED GPIO, callback, and interrupt are
+	 * configured and armed, and this thread reaches its event loop,
+	 * before any modem/network call is made -- the golfer button is live
+	 * regardless of what modem_service does next or how long it takes.
+	 */
+	LOG_INF("Fairway Refresh state-machine feedback test starting");
+
 	button_ux_startup_flash();
 
 	set_state(STATE_IDLE);
 
-	/* Releases modem_service to begin modem/PSM/cert/LTE work. This is
-	 * the only interaction with modem_service at boot; this thread
-	 * never waits on anything from it.
+	/* Releases modem_service to begin local modem bootstrap and the
+	 * asynchronous LTE connection. Its terminal local result wakes this
+	 * loop; this thread never blocks on modem initialization or registration.
 	 */
-	modem_service_notify_local_hw_ready();
+	modem_service_notify_local_hw_ready(&button_wake_sem);
 
 	LOG_INF("Ready. Waiting in low-power idle for button wake.");
 
 	while (1) {
+#if defined(CONFIG_FAIRWAY_OTA)
+		if (!boot_health_evaluated) {
+			int modem_bootstrap_result;
+			int bootstrap_ret =
+				modem_service_local_bootstrap_result(&modem_bootstrap_result);
+
+			if (bootstrap_ret == 0) {
+				boot_health_evaluated = true;
+				if (modem_bootstrap_result != 0) {
+					LOG_ERR("Mandatory modem bootstrap failed: %d; "
+						"trial remains unconfirmed",
+						modem_bootstrap_result);
+				} else {
+					ret = ota_update_confirm_healthy(ota_init_ready, true);
+					if (ret < 0) {
+						LOG_ERR("Boot-health confirmation failed: %d; "
+							"trial remains unconfirmed",
+							ret);
+					}
+				}
+			} else if (bootstrap_ret != -EAGAIN) {
+				boot_health_evaluated = true;
+				LOG_ERR("Modem bootstrap result unavailable: %d; "
+					"trial remains unconfirmed",
+					bootstrap_ret);
+			}
+		}
+#endif
+
 		k_sem_take(&button_wake_sem, K_FOREVER);
 
 		if (!button_ux_take_press_pending()) {

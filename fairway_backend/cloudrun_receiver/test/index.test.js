@@ -225,6 +225,40 @@ test('valid button_press creates a golfer request and returns its authoritative 
   assert.strictEqual(requests.docs[0].id, res.body.request_id);
 });
 
+test('device-supplied Customer and Course claims cannot override registry attribution', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Authoritative Course',
+    timezone: 'America/Los_Angeles',
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    course_name: 'Authoritative Course',
+    location: { type: 'hole', hole: 4 },
+  });
+  const { handleDeviceEvent } = createFairwayHandlers(db);
+  const res = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: {
+      device_id: 'FRB-0001',
+      event_type: 'button_press',
+      customer_id: 'CUST-9999',
+      course_id: 'COURSE-9999',
+      course_name: 'Untrusted Course',
+    },
+    headers: { 'x-fairway-device-key': secret },
+  }), res);
+
+  assert.strictEqual(res.statusCode, 200);
+  const requests = await db.collection('requests').get();
+  assert.strictEqual(requests.size, 1);
+  assert.strictEqual(requests.docs[0].data().device_id, 'FRB-0001');
+  assert.strictEqual(requests.docs[0].data().customer_id, 'CUST-0001');
+  assert.strictEqual(requests.docs[0].data().course_id, 'COURSE-0001');
+  assert.strictEqual(requests.docs[0].data().course_name, 'Authoritative Course');
+});
+
 test('a new golfer request durably records Stage A event-time facts (customer, demand window, deployed state, Course-local date/hour)', async () => {
   const db = new FakeFirestore();
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {

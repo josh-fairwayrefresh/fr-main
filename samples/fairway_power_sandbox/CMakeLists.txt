@@ -18,7 +18,7 @@ endif()
 if(CONFIG_BOARD_CIRCUITDOJO_FEATHER_NRF9151)
     if(NOT FAIRWAY_DEVICE_ID MATCHES "^FRB-[0-9][0-9][0-9][0-9]$")
         message(FATAL_ERROR "Set FAIRWAY_DEVICE_ID to the explicit target Device ID")
-    endif()
+        endif()
     if(NOT IS_ABSOLUTE "${FAIRWAY_DEVICE_SECRETS_DIR}" OR
        NOT IS_DIRECTORY "${FAIRWAY_DEVICE_SECRETS_DIR}" OR
        IS_SYMLINK "${FAIRWAY_DEVICE_SECRETS_DIR}")
@@ -82,16 +82,20 @@ if(CONFIG_BOARD_CIRCUITDOJO_FEATHER_NRF9151)
 
     set(_generated_device_include "${CMAKE_CURRENT_BINARY_DIR}/generated_device_identity")
     file(MAKE_DIRECTORY "${_generated_device_include}")
-    configure_file("${_device_header}"
-                   "${_generated_device_include}/fairway_device_key.h"
-                   COPYONLY)
-    target_include_directories(app BEFORE PRIVATE "${_generated_device_include}")
+configure_file("${_device_header}"
+               "${_generated_device_include}/fairway_device_key.h"
+               COPYONLY)
+target_include_directories(app BEFORE PRIVATE "${_generated_device_include}")
 
-    target_sources(app PRIVATE src/main.c
-        src/command_protocol.c src/demand_window.c src/complete_poll.c
-        src/golfer_txn.c src/power_policy.c src/http_transport.c
-        src/golfer_protocol.c src/button_ux.c src/modem_service.c
-        src/transaction_scheduler.c)
+target_sources(app PRIVATE src/main.c
+    src/command_protocol.c src/demand_window.c src/complete_poll.c
+    src/golfer_txn.c src/power_policy.c src/http_transport.c
+    src/golfer_protocol.c src/button_ux.c src/modem_service.c
+    src/transaction_scheduler.c)
+    if(CONFIG_FAIRWAY_OTA)
+        target_sources(app PRIVATE src/ota_update.c src/ota_update_policy.c
+            src/ota_update_staging.c)
+    endif()
 else()
     message(FATAL_ERROR "Fairway requires circuitdojo_feather_nrf9151")
 endif()

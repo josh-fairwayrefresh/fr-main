@@ -70,7 +70,7 @@ function FleetView({ fleet, loading, error, refresh, openDevice }) {
   const [filter, setFilter] = useState('all');
   const devices = useMemo(() => fleet.devices.filter((device) => {
     const matchState = filter === 'all' || device.state === filter;
-    const text = [device.device_id, device.customer_name, device.course_name, locationText(device.location), device.sim_iccid].join(' ').toLowerCase();
+    const text = [device.device_id, device.customer_name, device.course_name, locationText(device.location), device.sim_iccid, device.comments].join(' ').toLowerCase();
     return matchState && text.includes(search.trim().toLowerCase());
   }), [fleet.devices, filter, search]);
   return <section className="a-view" aria-labelledby="fleet-title">
@@ -92,6 +92,7 @@ function DeviceDetail({ user, apiBaseUrl, device, customers, close, refresh }) {
   const [assignment, setAssignment] = useState(assignmentFromDevice);
   const [metadata, setMetadata] = useState({ comments: device.comments || '', sim_iccid: device.sim_iccid || '' });
   const [pending, setPending] = useState(''); const [error, setError] = useState('');
+  const [credential, setCredential] = useState(null);
   const customer = customers.find((item) => item.customer_id === assignment.customer_id);
   const identitySource = device.system_identity?.source === 'verified_provenance'
       ? 'Verified build / flash provenance'
@@ -102,13 +103,28 @@ function DeviceDetail({ user, apiBaseUrl, device, customers, close, refresh }) {
   function saveMetadata(event) { event.preventDefault(); mutate('metadata', `/api/v1/admin/devices/${device.device_id}/metadata`, { method: 'PATCH', body: metadata }); }
   function changeState(event) { const state = event.target.value; if (state === device.state) return; if (state === 'deployed' && (!assignment.customer_id || !assignment.course_id || !assignment.location || (assignment.location.type === 'hole' ? !Number.isInteger(assignment.location.hole) || assignment.location.hole < 1 || assignment.location.hole > 18 : !assignment.location.name?.trim()))) { setError('Select a valid Customer, Course, and location before deploying.'); return; } const detail = state === 'retired' ? ' Retired devices cannot communicate.' : state === 'in_inventory' ? ' The current Customer, Course, and location assignment will be cleared.' : ''; if (!window.confirm(`Change ${device.device_id} to ${STATE_LABEL[state]}?${detail}`)) return; const body = state === 'deployed' ? { state, customer_id: assignment.customer_id, course_id: assignment.course_id, location: assignment.location } : { state }; mutate('state', `/api/v1/admin/devices/${device.device_id}/state`, { method: 'PATCH', body }); }
   function record(action) { if (!window.confirm(`Record ${action} for ${device.device_id}? This writes your administrator identity and server time.`)) return; mutate(action, `/api/v1/admin/devices/${device.device_id}/${action}`, { method: 'POST' }); }
-  return <div className="a-overlay a-drawer-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><aside className="a-drawer" role="dialog" aria-modal="true" aria-labelledby="device-title"><header><div><p>DEVICE RECORD</p><h2 id="device-title">{device.device_id}</h2></div><button className="a-icon" type="button" onClick={close} aria-label="Close device detail"><X size={20} /></button></header><div className="a-drawer-body">
+  async function recoverCredential() {
+    if (!window.confirm(`Replace the credential for ${device.device_id}? The old credential will stop working. This keeps the same Device identity and does not change its assignment or operational history.`)) return;
+    setPending('credential');
+    setError('');
+    try {
+      const result = await adminRequest(user, apiBaseUrl, `/api/v1/admin/devices/${encodeURIComponent(device.device_id)}/credential-recovery`, { method: 'POST' });
+      setCredential(result);
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPending('');
+    }
+  }
+  return <><div className="a-overlay a-drawer-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><aside className="a-drawer" role="dialog" aria-modal="true" aria-labelledby="device-title"><header><div><p>DEVICE RECORD</p><h2 id="device-title">{device.device_id}</h2></div><button className="a-icon" type="button" onClick={close} aria-label="Close device detail"><X size={20} /></button></header><div className="a-drawer-body">
     <div className="a-device-head"><div><StateBadge state={device.state} /><span>{device.state === 'in_inventory' ? 'Completely unassigned' : `${device.customer_name || 'Unassigned'} · ${device.course_name || 'No course'} · ${locationText(device.location)}`}</span></div><label>Lifecycle state<select value={device.state} onChange={changeState} disabled={Boolean(pending)}>{STATES.map((state) => <option key={state} value={state}>{STATE_LABEL[state]}</option>)}</select><FieldStatus status={device.field_status?.state} /></label></div><Notice error={error} />
     <section className="a-panel"><div className="a-section-heading"><div><p>IDENTITY & CONFIG</p><h3>Registry record</h3></div></div><dl className="a-definition"><div><dt>Hardware revision</dt><dd>{valueOrStatus(device.hardware_revision, device.field_status?.hardware_revision)}<FieldStatus status={device.field_status?.hardware_revision} /></dd></div><div><dt>Firmware generation</dt><dd>{valueOrStatus(device.firmware_generation, device.field_status?.firmware_generation)}<FieldStatus status={device.field_status?.firmware_generation} /></dd></div><div><dt>Identity source</dt><dd>{identitySource}</dd></div><div><dt>Credential</dt><dd>{device.credential_status ? `${device.credential_status.algorithm} · updated ${formatDate(device.credential_status.updated_at)}` : 'Not issued'}<FieldStatus status={device.field_status?.credential_status} /></dd></div><div><dt>Created</dt><dd>{formatDate(device.created_at)}<FieldStatus status={device.field_status?.created_at} /></dd></div><div><dt>Updated</dt><dd>{formatDate(device.updated_at)}<FieldStatus status={device.field_status?.updated_at} /></dd></div><div><dt>Commissioned</dt><dd>{formatDate(device.commissioning?.commissioned_at)}<FieldStatus status={device.field_status?.commissioning} /></dd></div><div><dt>Last service</dt><dd>{formatDate(device.service?.last_service_at)}<FieldStatus status={device.field_status?.service} /></dd></div></dl></section>
     <form className="a-panel a-form" onSubmit={saveAssignment}><SectionTitle eyebrow="PLACEMENT" title={device.state === 'in_inventory' ? 'Deployment assignment' : 'Assignment'} /><div className="a-form-grid"><label>Customer<select value={assignment.customer_id} onChange={(event) => setAssignment({ ...assignment, customer_id: event.target.value, course_id: '', location: null })} disabled={device.state !== 'in_inventory' && Boolean(device.customer_id)}><option value="">Unassigned</option>{customers.map((item) => <option key={item.customer_id} value={item.customer_id}>{item.customer_name}</option>)}</select><FieldStatus status={device.field_status?.customer_id} /></label><label>Course<select value={assignment.course_id} onChange={(event) => setAssignment({ ...assignment, course_id: event.target.value, location: event.target.value ? (assignment.location || { type: 'hole', hole: 1 }) : null })} disabled={!assignment.customer_id}><option value="">No course</option>{(customer?.courses || []).map((course) => <option key={course.course_id} value={course.course_id}>{course.course_name}</option>)}</select><FieldStatus status={device.field_status?.course_id} /></label></div><LocationFields value={assignment.location} onChange={(location) => setAssignment({ ...assignment, location })} disabled={!assignment.course_id} /><FieldStatus status={device.field_status?.location} />{device.state !== 'in_inventory' && <PrimaryButton pending={pending === 'assignment'} text="Save assignment" />}</form>
     <form className="a-panel a-form" onSubmit={saveMetadata}><SectionTitle eyebrow="ADMIN METADATA" title="SIM & comments" /><div className="a-form-grid"><label>SIM ICCID<input value={metadata.sim_iccid} placeholder="Not recorded" onChange={(event) => setMetadata({ ...metadata, sim_iccid: event.target.value })} /><FieldStatus status={device.field_status?.sim_iccid} /></label><label className="wide">Comments<textarea rows="3" value={metadata.comments} placeholder="Not recorded" onChange={(event) => setMetadata({ ...metadata, comments: event.target.value })} /><FieldStatus status={device.field_status?.comments} /></label></div><PrimaryButton pending={pending === 'metadata'} text="Save metadata" /></form>
     <section className="a-panel"><SectionTitle eyebrow="LIFECYCLE" title="Operational events" /><div className="a-actions"><button type="button" onClick={() => record('service')} disabled={Boolean(pending)}><Wrench size={16} />Record service</button><button type="button" onClick={() => record('commission')} disabled={Boolean(pending)}><Check size={16} />Record commissioning</button></div></section>
-  </div></aside></div>;
+    {device.state === 'in_inventory' && <section className="a-panel"><SectionTitle eyebrow="CREDENTIAL LIFECYCLE" title="Credential recovery" /><p>Use this when the initial credential was not received or is no longer available. Recovery replaces the credential for this permanent Device ID.</p><button type="button" onClick={recoverCredential} disabled={Boolean(pending)}>{pending === 'credential' ? 'Recovering…' : 'Replace / recover credential'}</button></section>}
+  </div></aside></div>{credential && <CredentialModal value={credential} close={() => setCredential(null)} />}</>;
 }
 function SectionTitle({ eyebrow, title }) { return <div className="a-section-heading"><div><p>{eyebrow}</p><h3>{title}</h3></div></div>; }
 function PrimaryButton({ pending, text }) { return <button className="a-primary" disabled={pending}><Save size={16} />{pending ? 'Saving…' : text}</button>; }
@@ -141,9 +157,26 @@ function CredentialModal({ value, close }) {
 }
 function ProvisionView({ user, apiBaseUrl, refresh }) {
   const initial = { sim_iccid: '', comments: '' };
-  const [form, setForm] = useState(initial); const [pending, setPending] = useState(false); const [error, setError] = useState(''); const [credential, setCredential] = useState(null); const [recoveryDeviceId, setRecoveryDeviceId] = useState(null);
-  async function submit(event) { event.preventDefault(); setPending(true); setError(''); try { const result = recoveryDeviceId ? await adminRequest(user, apiBaseUrl, `/api/v1/admin/devices/${encodeURIComponent(recoveryDeviceId)}/credential-recovery`, { method: 'POST' }) : await adminRequest(user, apiBaseUrl, '/api/v1/admin/devices', { method: 'POST', body: form }); setCredential(result); setRecoveryDeviceId(null); await refresh(); } catch (err) { if (err.details?.recovery_required && err.details.device_id) { setRecoveryDeviceId(err.details.device_id); setError(`Device ${err.details.device_id} was created without a credential. Select Provision device again to retry credential issuance for this exact Device; no new Device will be allocated.`); } else { setError(err.message); } } finally { setPending(false); } }
-  return <section className="a-view"><PageHeading eyebrow="READY FOR DEPLOYMENT" title="Provision Device" id="provision-title" /><div className="a-provision"><div className="a-provision-note"><HardDrive size={30} /><h3>Allocate a permanent identity</h3><p>The backend assigns the next FRB ID and returns its credential once. Inventory Devices remain completely unassigned until deployment.</p></div><form className="a-form a-provision-form" onSubmit={submit}><Notice error={error} /><div className="a-form-grid"><label className="wide">SIM ICCID<input value={form.sim_iccid} onChange={(event) => setForm({ ...form, sim_iccid: event.target.value })} /></label><label className="wide">Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label></div><button className="a-primary provision-submit" disabled={pending}><Plus size={17} />{pending ? 'Provisioning…' : 'Provision device'}</button></form></div>{credential && <CredentialModal value={credential} close={() => { setCredential(null); setForm(initial); }} />}</section>;
+  const [form, setForm] = useState(initial); const [pending, setPending] = useState(false); const [error, setError] = useState(''); const [credential, setCredential] = useState(null);
+  async function submit(event) {
+    event.preventDefault();
+    setPending(true);
+    setError('');
+    try {
+      const result = await adminRequest(user, apiBaseUrl, '/api/v1/admin/devices', {
+        method: 'POST',
+        body: form,
+      });
+      setCredential(result);
+      setForm(initial);
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPending(false);
+    }
+  }
+  return <section className="a-view"><PageHeading eyebrow="READY FOR DEPLOYMENT" title="Provision Device" id="provision-title" /><div className="a-provision"><div className="a-provision-note"><HardDrive size={30} /><h3>Allocate a permanent identity</h3><p>The backend assigns the next FRB ID and returns its credential once. Inventory Devices remain completely unassigned until deployment. If a provisioning result is uncertain, inspect the fleet registry before starting another request; there is no automatic retry or duplicate prevention.</p></div><form className="a-form a-provision-form" onSubmit={submit}><Notice error={error} /><div className="a-form-grid"><label className="wide">SIM ICCID<input value={form.sim_iccid} disabled={pending} onChange={(event) => setForm({ ...form, sim_iccid: event.target.value })} /></label><label className="wide">Comments<textarea rows="4" value={form.comments} disabled={pending} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label></div><button className="a-primary provision-submit" disabled={pending}><Plus size={17} />{pending ? 'Provisioning…' : 'Provision device'}</button></form></div>{credential && <CredentialModal value={credential} close={() => setCredential(null)} />}</section>;
 }
 function ExportView({ user, apiBaseUrl }) {
   const [pending, setPending] = useState(false); const [error, setError] = useState(''); const [done, setDone] = useState(false);
