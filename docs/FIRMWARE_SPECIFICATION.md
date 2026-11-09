@@ -9,7 +9,7 @@ This document describes the accepted firmware implementation. Pilot 1.1 is an in
 - Board: `circuitdojo_feather_nrf9151@1/nrf9151/ns`.
 - Configuration: `prj_a.conf`.
 - Image architecture: MCUboot + TF-M + non-secure application.
-- Device identity and unique credential are supplied through a local, gitignored per-device provisioning header. Never commit or document plaintext credentials.
+- Current OTA images are common signed images and contain no device identity or credential. Device identity and credential are provisioned separately into TF-M PSA Protected Storage; never commit or document plaintext credentials.
 
 The firmware build, flashing, and deployment procedure is owned by `docs/DEPLOYMENT_GUIDE.md`. Device provisioning and commissioning evidence is owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
 
@@ -22,7 +22,7 @@ The firmware build, flashing, and deployment procedure is owned by `docs/DEPLOYM
 - The accepted request starts a fixed five-minute local demand window. Ordinary repeat presses during that window produce local green feedback and do not create a second service request. Transporting/persisting repeat-press counts is deferred.
 - The backend may return the existing request identity when duplicate demand is suppressed. A fresh accepted request is possible after the demand window expires.
 - Operator COMPLETE is correlated to the exact originating `request_id`. The firmware polls and acknowledges through the shared transaction worker; a matching acknowledged COMPLETE can end the active window early. Golfer transactions take priority and COMPLETE work yields at bounded transport checkpoints.
-- Modem startup is asynchronous. The modem service owns LTE setup, certificate provisioning, PSM policy, and registration-triggered DNS prewarm. No scheduled/background application networking runs outside an active golfer lifecycle.
+- Modem startup is asynchronous. The modem service owns LTE setup, certificate provisioning, PSM policy, and registration-triggered DNS prewarm. No persistent or always-on application networking runs; OTA uses bounded, event/schedule-driven requests outside the golfer/COMPLETE transaction worker.
 
 ## Runtime ownership in source
 
@@ -39,18 +39,141 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 | `transaction_scheduler.c` | Sole transaction worker shared by golfer and COMPLETE traffic |
 | `modem_service.c` | Modem/certificate/LTE initialization and registration handling |
 | `power_policy.c` | BUCK2 service-rail and bounded interaction-awake policy |
+| `device_identity.c` | PSA-backed Device ID and credential load, one-time provisioning, and protected replacement interface |
 | `ota_update.c` | MCUboot image staging, update status, test activation, and trial confirmation |
 | `ota_update_policy.c` | Transport-independent OTA descriptor validation and state transitions |
 | `ota_update_staging.c` | Clean DFU-target initialization and offset-zero verification |
+| `ota_update_scheduler.c` | PSA-persisted one-time/nightly schedule and deployment intent |
+| `ota_update_discovery.c` | Authenticated assignment discovery and release descriptor validation |
+| `ota_update_download.c` | Bounded HTTPS image download through the NCS downloader |
+| `ota_update_reporting.c` | Authenticated update lifecycle and firmware-version reporting |
+| `ota_delivery.c` | Scheduling, download/stage/activation orchestration, reboot, and boot outcome reporting |
 
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
+
+## OTA delivery implementation — local, not physically qualified
+
+The current branch implements the production OTA path for the Circuit Dojo
+nRF9151 Feather using the existing MCUboot manager. This local work does not
+change the accepted Pilot 1.1 fleet image, establish what is installed on
+FRB-0005, or prove physical update/rollback behavior.
+
+The common-image commissioning releases are fixed:
+
+| Release | MCUboot/application version | Schedule |
+|---|---|---|
+| OTA 0.1 | `0.1.0+1` | One check 900 seconds after first normal boot; deadline is stored in PSA and survives reboot; no retry or later scheduled check |
+| OTA 0.1alt | `0.1.0+2` | Nightly at 00:30 in the assigned Course's IANA timezone |
+| OTA 1.0 | `1.0.0+1` | Nightly at 00:30 in the assigned Course's IANA timezone |
+
+The one-time deadline is derived from the captured first-boot uptime and the
+first trusted UTC time, then persisted; a later reboot does not restart the
+15-minute interval. The one-time check is marked complete before discovery,
+including when no release is assigned. Nightly schedule timestamps are
+computed by the backend from the Device's authoritative Course timezone and
+persisted by the application. A failed nightly check uses a bounded
+24-hour retry deadline; there is no continuous socket or background polling.
+
+Permanent identity and credentials are stored as distinct PSA objects in
+TF-M Protected Storage. The Device ID is write-once; provisioning refuses a
+different existing ID, and the credential is not accepted from any firmware
+build input. The first-install service-mode UART provisioning packet is
+created from the operator-supplied existing backend credential and is not
+logged. Updates and MCUboot rollback leave the protected-storage partitions
+outside both image slots. A blank object after an interrupted initial
+provisioning can be completed by retrying the same Device ID; malformed or
+corrupted protected storage fails closed and requires separately authorized
+physical recovery. No field recovery from corrupted PSA storage has been
+demonstrated.
+
+The generated NCS 3.1.1 configuration enables TF-M Protected Storage rollback
+protection, the hardware-unique-key provider, and random on-device key
+generation. NCS TF-M startup writes random keys to the nRF91 KMU when the
+required slots are blank; PSA storage derives its protection keys from this
+device-specific material. The release manifest records the generated HUK,
+Protected Storage, NV-counter, and rollback-protection configuration. This
+establishes build configuration only: initial KMU provisioning, survival
+across physical power loss, and corrupted-storage recovery still require
+device-level validation.
+
+The generated NCS 3.1.1 map for the current source is:
+
+| Region | Address | Size |
+|---|---:|---:|
+| MCUboot | `0x00000` | `0x0C000` |
+| Alignment gap | `0x0C000` | `0x04000` |
+| MCUboot primary (TF-M + application) | `0x10000` | `0x6C000` (432 KiB) |
+| MCUboot secondary | `0x7C000` | `0x6C000` (432 KiB) |
+| TF-M ITS | `0xE8000` | `0x08000` |
+| TF-M NV counters | `0xF0000` | `0x08000` |
+| TF-M Protected Storage | `0xF8000` | `0x08000` |
+
+The non-secure application occupies `0x30000–0x7C000`; TF-M occupies the
+remaining primary-slot range. The fixed-partition DTS, static Partition
+Manager map, and generated map are aligned for this layout. The secondary
+slot constrains a signed OTA image to 442,368 bytes. The external-flash
+LittleFS region remains separate from the on-chip protected-storage and
+MCUboot regions.
+
+The current release builder requires an explicitly supplied Fairway
+ECDSA-P256 signing key and configures the same key for the application image
+signer and MCUboot bootloader. MCUboot compiles only the corresponding public
+verification key; the private key stays outside the checkout and release
+artifacts. The manifest records the SHA-256 fingerprint of MCUboot's
+DER-encoded ECDSA-P256 SubjectPublicKeyInfo public key, and the build verifies
+that the generated bootloader key
+matches. OTA 0.1, OTA 0.1alt, and OTA 1.0 must be built and verified using
+the same CPO-controlled key. The encrypted production key has been generated
+locally and its fingerprint recorded in `docs/DEPLOYMENT_GUIDE.md`; CPO
+confirmation of the offline backup and separate passphrase custody was
+recorded on 2026-11-07. The CPO accepted all three local production-signed
+releases on 2026-11-09; their immutable inventory and corrected source-only
+checkpoint provenance are owned by `docs/DEPLOYMENT_GUIDE.md`.
+Existing development-key and disposable-test-key artifacts are not
+commissioning candidates. Key generation, custody, and release commands are
+owned by `docs/DEPLOYMENT_GUIDE.md`.
+
+The device API contract is authenticated by the existing per-Device
+credential and uses the exact permanent Device ID:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/v1/device-ota/schedule` | Return the next course-local check deadline |
+| `POST /api/v1/device-ota/check` | Discover an exact-device assigned release and short-lived artifact grant |
+| `GET /api/v1/device-ota/artifacts/{token}` | Download the signed image, including HTTP byte ranges |
+| `POST /api/v1/device-ota/deployments/{deploymentId}/events` | Report downloading, verification, staging, activation, trial, confirmation, rollback, and failure |
+
+The backend release/assignment routes are
+`GET/POST /api/v1/admin/ota/releases`,
+`GET /api/v1/admin/ota/deployments`, and
+`POST /api/v1/admin/ota/devices/{deviceId}/assignment`. Release publication
+validates MCUboot header magic/version, exact firmware metadata, hardware
+target, slot size, and SHA-256. MCUboot verifies the actual image signature
+on the Device during boot. Assignments are restricted to FRB-0005 during this
+commissioning implementation. Download authorization is a 30-minute
+random-token grant stored by hash; it is not a permanent public artifact URL.
+`fairway_backend/cloudrun_receiver/lib/ota/` owns release, assignment,
+authorization, storage, and lifecycle rules. The Admin OTA surface is in
+`fairway_webapp/cart_operator_dashboard/src/admin/OtaManagement.jsx`.
+
+Local source or development-key validation does not establish commercial
+trust, production deployment readiness, installed-device bootloader
+compatibility, physical trial confirmation, or rollback. The CPO-controlled
+production key and corresponding trust anchor have been used to build and
+verify all three accepted local releases. Physical installation through a
+separately authorized OTA 0.1 USB commissioning step remains outstanding.
+Backend bucket/IAM configuration,
+Admin/backend deployment, and CPO-authorized physical commissioning remain
+separate gates. See `docs/DEPLOYMENT_GUIDE.md` for key custody and artifact
+building and `docs/DEVICE_PROVISIONING_GUIDE.md` for identity provisioning
+and recovery boundaries.
 
 ## Explicit non-features and limits
 
 - The current application does not include Health or battery-health reporting.
 - The golfer demand window is fixed at five minutes.
 - Repeat-press transport and persistence are not implemented.
-- No MQTT, LwM2M, cellular OTA downloader or release-assignment service, persistent socket, or background Health network path is part of the accepted runtime. The device-side OTA foundation below is not an end-to-end update service.
+- No MQTT, LwM2M, persistent socket, or background Health network path is part of the runtime. Scheduled OTA delivery is separate from golfer and COMPLETE behavior and does not alter their transaction deadlines.
 - LTE registration or one successful transaction is not evidence of pack autonomy, endurance, PPK2 consumption, or a statistical request-reliability guarantee.
 
 ## Low-power Increment 1.0 — FRB-0005 development candidate
@@ -163,7 +286,15 @@ service-mode target programming were not independently verified for this
 increment. Further implementation or investigation is not implied by this
 acceptance record.
 
-## OTA Increment 1 — FRB-0005 local development foundation
+## Historical OTA foundation — superseded by the current OTA delivery implementation
+
+The following Increment 1 record documents the earlier OTA manager-only
+checkpoint. Its statements that no downloader, caller, or assignment service
+exists are historical and are superseded by the current implementation above.
+Its old partition sizes and DTS discrepancy are also superseded by the
+generated 432 KiB layout recorded above.
+
+### OTA Increment 1 — FRB-0005 local development foundation
 
 This source-only increment starts from the accepted FRB-0005 Increment 2.0
 checkpoint `29b8d8556e9ac7ab228967d74d79d1b994285cb6`. It does not change the

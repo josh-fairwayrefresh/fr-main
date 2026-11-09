@@ -21,11 +21,14 @@ def main() -> int:
     sources = [
         test_dir / "src/main.c",
         host_dir / "manager_test.c",
+        host_dir / "scheduler_test.c",
         host_dir / "fakes.c",
         host_dir / "ztest.c",
         source_dir / "ota_update.c",
         source_dir / "ota_update_policy.c",
         source_dir / "ota_update_staging.c",
+        source_dir / "ota_update_scheduler.c",
+        source_dir / "ota_delivery_reporting.c",
     ]
     with tempfile.TemporaryDirectory(prefix="fairway-ota-host-") as temp_dir:
         executable = Path(temp_dir) / "ota_manager_tests"
@@ -38,6 +41,9 @@ def main() -> int:
             "-DFAIRWAY_OTA_TEST=1",
             '-DCONFIG_FAIRWAY_OTA_HARDWARE_ID="test-board"',
             "-DCONFIG_FAIRWAY_OTA_TRIAL_TIMEOUT_SECONDS=17",
+            "-DCONFIG_FAIRWAY_OTA_INITIAL_CHECK_DELAY_SECONDS=900",
+            "-DCONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY=0",
+            '-DCONFIG_FAIRWAY_OTA_FIRMWARE_VERSION="0.1.0+1"',
             "-I",
             str(host_dir / "include"),
             "-I",

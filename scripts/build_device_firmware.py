@@ -147,19 +147,73 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _build_source_sha256(repo_dir: Path, app_dir: Path) -> str:
-    digest = hashlib.sha256()
-    source_files = sorted(
-        path
-        for root in (app_dir, repo_dir / "boards")
-        if root.is_dir()
-        for path in root.rglob("*")
-        if path.is_file()
-        and not path.is_symlink()
-        and "secrets" not in path.relative_to(repo_dir).parts
-        and not any(part.startswith("build") for part in path.relative_to(repo_dir).parts)
+OTA_DEVELOPMENT_SOURCE_FILES = frozenset(
+    f"samples/fairway_power_sandbox/src/{name}"
+    for name in (
+        "device_identity.c", "device_identity.h",
+        "ota_delivery.c", "ota_delivery.h", "ota_delivery_reporting.c",
+        "ota_update_discovery.c", "ota_update_discovery.h",
+        "ota_update_download.c", "ota_update_download.h",
+        "ota_update_reporting.c", "ota_update_reporting.h",
+        "ota_update_scheduler.c", "ota_update_scheduler.h",
     )
-    for path in source_files:
+)
+
+
+def _is_build_source_path(path: Path) -> bool:
+    return (
+        not any(part in ("secrets", "artifacts", "__pycache__")
+                or part.startswith("build") for part in path.parts)
+        and path.suffix.lower() not in (
+            ".hex", ".bin", ".elf", ".o", ".a", ".map", ".pyc", ".log",
+        )
+    )
+
+
+def _build_source_files(repo_dir: Path, app_dir: Path) -> list[Path]:
+    repo_dir = repo_dir.resolve(strict=True)
+    roots = (app_dir.resolve(strict=True).relative_to(repo_dir).as_posix(), "boards")
+
+    def git_files(*options: str) -> set[str]:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo_dir), "ls-files", "-z", *options, "--", *roots],
+                capture_output=True, check=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError("could not inventory firmware source with Git") from exc
+        return {os.fsdecode(name) for name in result.stdout.split(b"\0") if name}
+
+    tracked = git_files("--cached")
+    untracked = git_files("--others", "--exclude-standard")
+    unexpected = sorted(
+        name for name in untracked
+        if _is_build_source_path(Path(name)) and name not in OTA_DEVELOPMENT_SOURCE_FILES
+    )
+    if unexpected:
+        raise ValueError("unregistered firmware development inputs: " + ", ".join(unexpected))
+    selected = tracked | (untracked & OTA_DEVELOPMENT_SOURCE_FILES)
+    files = []
+    for relative in sorted(Path(name) for name in selected):
+        name = relative.as_posix()
+        if not _is_build_source_path(relative):
+            continue
+        path = repo_dir / relative
+        if path.is_symlink() or any(parent.is_symlink() for parent in path.parents
+                                    if parent != repo_dir and repo_dir in parent.parents):
+            raise ValueError(f"firmware source must not be a symlink: {name}")
+        if not path.is_file():
+            raise ValueError(f"required firmware source is missing: {name}")
+        files.append(path)
+    if not files:
+        raise ValueError("firmware source inventory is empty")
+    return files
+
+
+def _build_source_sha256(repo_dir: Path, app_dir: Path) -> str:
+    repo_dir = repo_dir.resolve(strict=True)
+    digest = hashlib.sha256()
+    for path in _build_source_files(repo_dir, app_dir):
         relative = path.relative_to(repo_dir).as_posix().encode("utf-8")
         digest.update(len(relative).to_bytes(4, "big"))
         digest.update(relative)

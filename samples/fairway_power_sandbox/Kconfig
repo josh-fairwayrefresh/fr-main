@@ -27,6 +27,27 @@ config FAIRWAY_OTA_TRIAL_TIMEOUT_SECONDS
 	  backend availability are not part of this deadline. Service mode
 	  does not arm the deadline.
 
+config FAIRWAY_OTA_FIRMWARE_VERSION
+	string "Firmware semantic version reported by this image"
+	default "0.1.0+1"
+
+config FAIRWAY_OTA_INITIAL_CHECK_DELAY_SECONDS
+	int "Delay before the first one-time firmware check"
+	range 60 86400
+	default 900
+
+choice FAIRWAY_OTA_SCHEDULE
+	prompt "Firmware check schedule"
+	default FAIRWAY_OTA_SCHEDULE_ONE_TIME
+
+config FAIRWAY_OTA_SCHEDULE_ONE_TIME
+	bool "One-time initial check"
+
+config FAIRWAY_OTA_SCHEDULE_NIGHTLY
+	bool "Nightly course-local check"
+
+endchoice
+
 endif
 
 endmenu

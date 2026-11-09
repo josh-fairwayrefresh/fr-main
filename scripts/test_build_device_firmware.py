@@ -14,6 +14,8 @@ from build_device_firmware import (  # noqa: E402
     BOARD,
     APPLICATION_CONFIGURATION,
     ACCEPTED_FIRMWARE_SOURCE,
+    _build_source_files,
+    _build_source_sha256,
     _protect_tree,
     _generated_boot_configuration,
     _generated_partition_device_tree,
@@ -231,6 +233,98 @@ class DeviceInputTests(unittest.TestCase):
         if os.name != "nt":
             self.assertEqual(stat.S_IMODE(protected.stat().st_mode), 0o700)
             self.assertEqual(stat.S_IMODE(child.stat().st_mode) & 0o077, 0)
+
+
+class SourceDigestTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name).resolve()
+        self.app = self.root / "samples/fairway_power_sandbox"
+        self.app.mkdir(parents=True)
+        self.git("init", "-q")
+        self.write(".gitignore", "*.hex\n*.bin\n*.elf\n*.log\nbuild*/\nartifacts/\nsecrets/\n")
+        self.write("samples/fairway_power_sandbox/src/main.c", "int main(void) {}\n")
+        self.write("boards/fairway/board.dts", "/dts-v1/;\n")
+        self.git("add", ".")
+
+    def git(self, *args):
+        return subprocess.check_output(["git", "-C", str(self.root), *args])
+
+    def write(self, name, contents):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+        return path
+
+    def digest(self):
+        return _build_source_sha256(self.root, self.app)
+
+    def test_digest_matches_sorted_path_and_content_records(self):
+        self.write("samples/fairway_power_sandbox/sysbuild.cmake", "cmake\n")
+        self.write("samples/fairway_power_sandbox/sysbuild/mcuboot.conf", "CONFIG_TEST=y\n")
+        self.git("add", ".")
+        expected = hashlib.sha256()
+        files = _build_source_files(self.root, self.app)
+        self.assertEqual(files, sorted(files))
+        for path in files:
+            name = path.relative_to(self.root).as_posix().encode()
+            expected.update(len(name).to_bytes(4, "big") + name + path.read_bytes())
+        self.assertEqual(self.digest(), expected.hexdigest())
+        self.write("samples/fairway_power_sandbox/src/main.c", "changed\n")
+        self.assertNotEqual(self.digest(), expected.hexdigest())
+
+    def test_ignored_outputs_and_credentials_do_not_affect_digest(self):
+        before = self.digest()
+        for name in ("artifacts/old.hex", "build/zephyr/generated.c",
+                     "output.bin", "debug.elf", "trace.log", "src/secrets/key.h"):
+            self.write(f"samples/fairway_power_sandbox/{name}", "ignored\n")
+        self.assertEqual(self.digest(), before)
+
+    def test_generated_files_excluded_even_if_force_tracked(self):
+        before = self.digest()
+        for name in ("artifacts/old.hex", "build/zephyr/generated.c", "old.hex"):
+            self.write(f"samples/fairway_power_sandbox/{name}", "generated\n")
+        self.git("add", "-f", ".")
+        self.assertEqual(self.digest(), before)
+
+    def test_explicit_development_source_survives_staging(self):
+        before = self.digest()
+        self.write("samples/fairway_power_sandbox/src/ota_delivery.c", "source\n")
+        development_digest = self.digest()
+        self.assertNotEqual(development_digest, before)
+        self.git("add", ".")
+        self.assertEqual(self.digest(), development_digest)
+
+    def test_ignored_explicit_development_source_is_not_included(self):
+        before = self.digest()
+        self.write(".gitignore", "samples/fairway_power_sandbox/src/ota_delivery.c\n")
+        self.write("samples/fairway_power_sandbox/src/ota_delivery.c", "ignored\n")
+        self.assertEqual(self.digest(), before)
+
+    def test_unregistered_source_requires_explicit_inventory(self):
+        self.write("samples/fairway_power_sandbox/src/new_input.c", "source\n")
+        with self.assertRaisesRegex(ValueError, "unregistered firmware development inputs"):
+            self.digest()
+
+    def test_missing_tracked_source_fails_explicitly(self):
+        (self.app / "src/main.c").unlink()
+        with self.assertRaisesRegex(ValueError, "required firmware source is missing"):
+            self.digest()
+
+    def test_symlink_source_fails_explicitly(self):
+        source = self.app / "src/main.c"
+        source.unlink()
+        source.symlink_to(self.root / ".gitignore")
+        with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+            self.digest()
+
+    def test_non_git_directory_fails_explicitly(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            (root / "app").mkdir()
+            with self.assertRaisesRegex(ValueError, "could not inventory"):
+                _build_source_sha256(root, root / "app")
 
 
 class BuildEvidenceTests(unittest.TestCase):

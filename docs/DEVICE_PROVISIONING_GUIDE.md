@@ -32,17 +32,70 @@ Customer/Course names are synchronized display copies from authoritative records
 
 ## Provisioning workflow
 
-Assembled → hardware inspected → approved firmware built for the device identity → firmware installed → identity/credential and SIM associated → backend registry verified → functional commissioning → deployment assignment when authorized.
+Assembled → hardware inspected → permanent Device and backend credential
+created through the established workflow → common credential-free firmware
+installed → identity/credential written to TF-M PSA Protected Storage →
+SIM and registry verified → functional commissioning → deployment assignment
+when authorized.
 
 Use the established Admin provisioning workflow or the existing backend utility `fairway_backend/cloudrun_receiver/scripts/provision_device.js` (`npm run provision-device`). The shared provisioning implementation is `lib/fleet/provisioning.js`; do not create a parallel allocator or credential path.
 
 1. Confirm the physical unit has reached the approved Ready-for-Deployment point and obtain its allocated permanent Device ID through the canonical workflow.
 2. Issue one unique device credential. The backend stores only `{ algorithm: 'sha256', digest, updated_at }`; the plaintext is delivered once and must not be logged, committed, or written into canonical documentation.
-3. Place the Device ID and credential together in the local ignored header named `samples/fairway_power_sandbox/src/secrets/FRB-XXXX-fairway_device_key.h`. The tracked example header contains placeholders only. Do not reuse another device's credentials. Keep the file readable only by its owner.
+3. Do not put the Device ID or credential in a firmware header, build command, common image, or release artifact. For a new PSA-backed device, use the protected serial provisioning procedure below with the existing backend credential. Do not reuse another Device's credential.
 4. Record the SIM ICCID against the correct Device in the registry. Verify SIM/carrier activation through the approved carrier account; do not infer SIM readiness from firmware build success.
-5. Build and verify the device-specific firmware using the workflow in `docs/DEPLOYMENT_GUIDE.md`. Flash only after separate authorization and successful artifact verification.
-6. Verify registration, normal boot/idle, modem initialization, LTE registration, one authorized physical button transaction, correct device attribution, and operator delivery/acknowledgement as required by the commissioning plan.
+5. Build and verify the common signed firmware image using `docs/DEPLOYMENT_GUIDE.md`. The image is independent of per-device credentials. Flash only after separate authorization and successful artifact verification.
+6. Verify protected identity load, normal boot/idle, modem initialization, LTE registration, one authorized physical button transaction, correct Device attribution, and operator delivery/acknowledgement as required by the commissioning plan.
 7. Record commissioning evidence in the operational record. Assign Customer/Course/location only through the authorized registry workflow; this document intentionally contains no per-device assignments.
+
+## Common-image identity and credential provisioning
+
+The current nRF9151 application reads the permanent Device ID and the
+backend-issued 32-byte credential from separate TF-M PSA Protected Storage
+objects. The application image and signed OTA artifact contain neither value.
+The Device ID is write-once: an attempt to provision a different ID fails
+closed. Protected Storage is outside the MCUboot primary and secondary image
+slots, so normal updates and MCUboot rollback do not replace the identity or
+credential. Hardware-unique-key and TF-M Protected Storage rollback-
+protection configuration are enabled. NCS 3.1.1 TF-M startup generates
+random hardware-unique keys on the device and writes them to the nRF91 Key
+Management Unit when its required slots are blank; these keys are not
+embedded in firmware. The generated nRF9151 configuration and partition map
+are recorded in `docs/FIRMWARE_SPECIFICATION.md`.
+
+For initial USB commissioning, first install the approved common OTA 0.1
+merged image under the separately authorized physical procedure. With the
+device unprovisioned, enter service mode by holding PV8 through boot and
+connect the service-mode UART. From the protected workstation, run
+`python3 scripts/provision_device_identity.py --port <UART-device>`. The
+operator enters the exact permanent Device ID and existing backend-issued
+credential at hidden prompts. The tool sends a fixed-length provisioning
+packet; it does not read or modify Firestore, write a header, print the
+credential, or create a credential. The firmware validates the ID/key format,
+stores them with PSA Protected Storage, reports only success/failure, and
+reboots. Allow the initial secure boot to finish without interruption so
+TF-M can initialize the per-device hardware keys before provisioning
+identity. Release the service button and verify the identity through an
+authenticated normal request.
+
+If power is interrupted after the write-once Device ID is stored but before
+the credential write completes, retrying provisioning with the same ID and
+credential completes the operation. A different ID is refused. Malformed or
+corrupted Protected Storage fails closed; automatic destructive repair is
+intentionally not provided. Recovery from corrupted identity storage, HUK
+loss, or a wrong write-once ID requires a separately approved physical
+recovery procedure and new credential association; that recovery has not
+been demonstrated. Because PSA storage keys derive from the hardware key
+material held in the KMU, losing that material makes the existing objects
+unreadable; do not assume that restoring only the firmware can recover them.
+
+The existing Admin/backend credential recovery and rotation lifecycle is
+separate from initial PSA provisioning. The current service-mode tool only
+provisions an unprovisioned identity; it does not rotate a field Device's
+credential. Do not recover/activate a credential or change a production
+verifier as part of OTA delivery without a separately authorized cutover.
+OTA replacement/rollback preserves whichever PSA credential was active
+before the update.
 
 The current repository Admin UI exposes credential recovery from the exact
 Device row in the fleet list for an eligible `in_inventory` Device. Confirm
@@ -159,8 +212,9 @@ not the history already recorded against it.
   migrating credential storage must not require rewriting historical requests.
   Future credential-storage generations must preserve the stable Device ID
   and explicitly retain compatible legacy authentication or use an
-  authorized, recoverable cutover. No persistent device credential storage
-  or common-image migration is implemented by this contract.
+  authorized, recoverable cutover. The current common signed image uses
+  TF-M PSA Protected Storage for Device ID, credential, and OTA schedule state;
+  no value is embedded per device in the image.
 - The Admin device-provisioning POST retains the established request contract;
   it does not require an `Idempotency-Key` and does not provide automatic
   duplicate prevention, replay tracking, or credential retrieval on retry.
@@ -173,10 +227,10 @@ not the history already recorded against it.
   Provisioning failure messages must distinguish confirmed partial creation
   from an uncertain create outcome and must not claim certainty the backend
   cannot establish.
-- There is no production OTA status or firmware-update endpoint today. Any
-  future update/status contract must authenticate and correlate to the
-  existing permanent Device ID, be idempotent, and update only explicitly
-  owned update metadata. It must not accept device-supplied reassignment,
+- The OTA device endpoints and Admin release/assignment APIs exist in the
+  current local source but have not been deployed to production. They
+  authenticate and correlate to the existing permanent Device ID, and only
+  update OTA-owned metadata. They do not accept device-supplied reassignment,
   create a new Device, or mutate historical operational records.
 - No destructive customer/course/device/user migration is authorized as part
   of firmware or credential transitions.
@@ -208,7 +262,8 @@ deployment. Physical build/flash procedures remain owned by
 - The secrets directory must be absolute and not group/world-writable. The input header must be a regular non-symlink file with no group/other permissions (normally mode `0600`). The repository `.gitignore` excludes the generic local key and every `*-fairway_device_key.h`; the tracked `fairway_device_key.example.h` remains a placeholder template.
 - The builder uses the installed NCS 3.1.1 and matching Nordic toolchain, the canonical board target, `BOARD_ROOT`, `prj_a.conf`, existing MCUboot/TF-M sysbuild, and the deployment guide's established build options. It refuses an existing output directory and writes outside the source checkout and secrets directory.
 - Development devices may use the established Nordic development signing configuration for firmware development, recovery, and validation. Development signing does not constitute production security qualification, and development-signed images must not be treated as commercial production releases.
-- Commercial production releases require an approved production signing key and its corresponding bootloader trust anchor to be configured and verified. The NCS-distributed `root-ec-p256.pem` debug key is documented by MCUboot as insecure and is not acceptable for commercial production. Artifact verification alone does not establish a trusted production signature.
+- The OTA release builder requires an explicit, owner-only signing key and verifies its fingerprint against the generated MCUboot public trust anchor. Commissioning requires the CPO-controlled Fairway production key; disposable test keys validate the build path only. The private key must remain outside the checkout and artifacts; the manifest contains only the public-key fingerprint and redacted key paths. CPO-owned key generation, encrypted offline backup, signing, and loss recovery are documented in `docs/DEPLOYMENT_GUIDE.md`.
+- The NCS-distributed `root-ec-p256.pem` debug key is documented by MCUboot as insecure and is not acceptable for commercial production. Existing images signed by it are not commissioning candidates. Artifact verification does not establish physical bootloader compatibility; the matching public trust anchor must be installed and verified during the authorized USB baseline flash.
 - Flashing any physical device requires explicit CPO authorization for the target device and operation, in addition to successful device-specific artifact verification. Development signing does not waive this authorization requirement.
 - The protected output directory is mode `0700`; output files are restricted to owner access. During the build it temporarily contains generated provisioning headers, ELF files, and intermediates; after successful verification, the workflow removes the intermediate build tree and retains only the merged firmware image, manifest, and checksum. Treat all retained output as credential-bearing and do not commit or broadly distribute it. A failed build can leave a protected partial build directory; do not distribute it.
 - `scripts/verify_device_artifact.py` verifies the manifest, artifact size and SHA-256, expected build metadata, Intel HEX checksums, and the presence of both the target Device ID and selected credential in the actual merged HEX image. When the manifest includes an OTA image, pass the installed NCS 3.1.1 directory with `--ncs-install-dir`; verification also requires NCS `imgtool` and explicitly verifies the exact OTA file with the signing key derived from the generated application and MCUboot configurations. Those configurations must resolve to the same key. The manifest distinguishes the CPO-accepted firmware source baseline from the actual current repository commit/branch/dirty state, and records a firmware-source fingerprint, toolchain, command, artifact hash and size, and selected input filename. It never records the credential or its digest.

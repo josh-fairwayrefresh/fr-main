@@ -27,6 +27,7 @@ static const char fairway_ca_cert[] = {
 
 static K_SEM_DEFINE(local_hw_ready_sem, 0, 1);
 static K_SEM_DEFINE(network_wake_sem, 0, 1);
+static K_SEM_DEFINE(registration_ready_sem, 0, 1);
 
 static volatile bool lte_registered_pending;
 static struct k_sem *application_wake_sem;
@@ -71,6 +72,13 @@ bool modem_service_lte_is_registered(void)
 		snapshot.registration_state == LTE_LC_NW_REG_REGISTERED_ROAMING);
 }
 
+void modem_service_wait_for_lte_registration(void)
+{
+	while (!modem_service_lte_is_registered()) {
+		k_sem_take(&registration_ready_sem, K_FOREVER);
+	}
+}
+
 /* Single globally-registered LTE event handler (lte_lc_connect_async() and
  * lte_lc_register_handler() both only support one handler at a time).
  * Runs on the LTE link-control library's own notification context, never
@@ -89,11 +97,13 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 		if (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
 		    evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
 			LOG_INF("LTE registered: status=%d", evt->nw_reg_status);
+			k_sem_give(&registration_ready_sem);
 			lte_registered_pending = true;
 			k_sem_give(&network_wake_sem);
 		} else {
 			LOG_INF("LTE registration status update: %d", evt->nw_reg_status);
 		}
+
 		break;
 #if defined(CONFIG_LTE_LC_PSM_MODULE)
 	case LTE_LC_EVT_PSM_UPDATE:

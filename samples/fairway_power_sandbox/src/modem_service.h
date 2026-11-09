@@ -24,5 +24,6 @@ void modem_service_notify_local_hw_ready(struct k_sem *application_wake_sem);
 int modem_service_local_bootstrap_result(int *result);
 
 bool modem_service_lte_is_registered(void);
+void modem_service_wait_for_lte_registration(void);
 
 #endif /* MODEM_SERVICE_H */

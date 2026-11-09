@@ -42,9 +42,13 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
 
+#include <errno.h>
+#include <string.h>
+
 #include "button_ux.h"
 #include "command_protocol.h"
 #include "complete_poll.h"
+#include "device_identity.h"
 #include "demand_window.h"
 #include "golfer_txn.h"
 #include "modem_service.h"
@@ -54,6 +58,7 @@
 #include "transaction_scheduler.h"
 #if defined(CONFIG_FAIRWAY_OTA)
 #include "ota_update.h"
+#include "ota_delivery.h"
 #endif
 
 LOG_MODULE_REGISTER(main);
@@ -136,6 +141,7 @@ int main(void)
 #if defined(CONFIG_FAIRWAY_OTA)
 	bool boot_health_evaluated = false;
 	bool ota_init_ready = true;
+	int64_t boot_started_uptime_ms = k_uptime_get();
 #endif
 
 	ret = button_ux_init(&button_wake_sem);
@@ -188,11 +194,39 @@ int main(void)
 	if (service_mode) {
 		button_ux_set_interrupt_enabled(false);
 		button_ux_all_off();
+		struct fairway_device_identity identity;
+		ret = fairway_device_identity_load(&identity);
+		if (ret == -ENOENT) {
+			LOG_WRN("Device identity is not provisioned; entering protected serial provisioning");
+			(void)fairway_device_identity_provision_from_uart(uart0_dev);
+			LOG_ERR("Identity provisioning did not complete");
+			return 0;
+		}
+		if (ret != 0) {
+			LOG_ERR("Protected device identity could not be loaded: %d", ret);
+			return 0;
+		}
+		memset(&identity, 0, sizeof(identity));
 		LOG_INF("Debugger service mode: boot button held; LTE and golfer runtime are disabled");
 		while (1) {
 			k_sleep(K_FOREVER);
 		}
 	}
+
+	struct fairway_device_identity identity;
+	ret = fairway_device_identity_load(&identity);
+	if (ret != 0) {
+		LOG_ERR("Protected device identity is unavailable: %d", ret);
+		return 0;
+	}
+	memset(&identity, 0, sizeof(identity));
+
+#if defined(CONFIG_FAIRWAY_OTA)
+	ret = fairway_ota_delivery_init(boot_started_uptime_ms);
+	if (ret != 0) {
+		LOG_ERR("OTA delivery worker initialization failed: %d", ret);
+	}
+#endif
 
 	demand_window_init();
 	complete_poll_init(&txn_wake_sem);
@@ -224,6 +258,9 @@ int main(void)
 	 * loop; this thread never blocks on modem initialization or registration.
 	 */
 	modem_service_notify_local_hw_ready(&button_wake_sem);
+#if defined(CONFIG_FAIRWAY_OTA)
+	fairway_ota_delivery_report_boot();
+#endif
 
 	LOG_INF("Ready. Waiting in low-power idle for button wake.");
 
@@ -246,6 +283,8 @@ int main(void)
 						LOG_ERR("Boot-health confirmation failed: %d; "
 							"trial remains unconfirmed",
 							ret);
+					} else {
+						fairway_ota_delivery_report_healthy();
 					}
 				}
 			} else if (bootstrap_ret != -EAGAIN) {

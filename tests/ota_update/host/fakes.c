@@ -6,10 +6,124 @@
 #include "dfu/dfu_target.h"
 #include "dfu/dfu_target_mcuboot.h"
 #include "psa/crypto.h"
+#include "psa/protected_storage.h"
+#include "ota_update_reporting.h"
 #include "zephyr/sys/reboot.h"
 
 struct ota_test_fakes ota_test;
 struct k_work_delayable *ota_test_scheduled_work;
+
+#define OTA_TEST_STORAGE_OBJECTS 8
+#define OTA_TEST_STORAGE_CAPACITY 256
+
+struct ota_test_storage_object {
+	psa_storage_uid_t uid;
+	uint8_t data[OTA_TEST_STORAGE_CAPACITY];
+	size_t length;
+	bool exists;
+};
+
+static struct ota_test_storage_object storage_objects[OTA_TEST_STORAGE_OBJECTS];
+static int ps_set_fail_count;
+
+static struct ota_test_storage_object *storage_find(psa_storage_uid_t uid,
+						    bool create)
+{
+	struct ota_test_storage_object *available = NULL;
+
+	for (size_t i = 0; i < OTA_TEST_STORAGE_OBJECTS; i++) {
+		if (storage_objects[i].exists && storage_objects[i].uid == uid) {
+			return &storage_objects[i];
+		}
+		if (!storage_objects[i].exists && available == NULL) {
+			available = &storage_objects[i];
+		}
+	}
+	if (create && available != NULL) {
+		available->uid = uid;
+		available->exists = true;
+		return available;
+	}
+	return NULL;
+}
+
+void ota_test_ps_reset(void)
+{
+	memset(storage_objects, 0, sizeof(storage_objects));
+	ps_set_fail_count = 0;
+}
+
+void ota_test_ps_fail_next_set(void)
+{
+	ps_set_fail_count++;
+}
+
+void ota_test_ps_put(psa_storage_uid_t uid, const void *data, size_t length)
+{
+	struct ota_test_storage_object *object = storage_find(uid, true);
+
+	if (object == NULL || data == NULL || length > sizeof(object->data)) {
+		return;
+	}
+	memcpy(object->data, data, length);
+	object->length = length;
+}
+
+psa_status_t psa_ps_get(psa_storage_uid_t uid, uint32_t data_offset,
+			size_t data_size, void *p_data, size_t *p_data_length)
+{
+	struct ota_test_storage_object *object = storage_find(uid, false);
+	size_t copied;
+
+	if (object == NULL) {
+		return PSA_ERROR_DOES_NOT_EXIST;
+	}
+	if (data_offset > object->length || p_data == NULL ||
+	    p_data_length == NULL) {
+		return PSA_ERROR_GENERIC_ERROR;
+	}
+	copied = object->length - data_offset;
+	if (copied > data_size) {
+		copied = data_size;
+	}
+	memcpy(p_data, object->data + data_offset, copied);
+	*p_data_length = copied;
+	return PSA_SUCCESS;
+}
+
+psa_status_t psa_ps_set(psa_storage_uid_t uid, size_t data_length,
+			const void *p_data, uint32_t create_flags)
+{
+	struct ota_test_storage_object *object = storage_find(uid, true);
+
+	(void)create_flags;
+	if (ps_set_fail_count > 0) {
+		ps_set_fail_count--;
+		return PSA_ERROR_GENERIC_ERROR;
+	}
+	if (object == NULL || p_data == NULL ||
+	    data_length > sizeof(object->data)) {
+		return PSA_ERROR_GENERIC_ERROR;
+	}
+	memcpy(object->data, p_data, data_length);
+	object->length = data_length;
+	return PSA_SUCCESS;
+}
+
+int fairway_ota_report(const char *deployment_id, const char *state,
+		       int error_code)
+{
+	if (deployment_id == NULL || state == NULL ||
+	    strlen(deployment_id) >= sizeof(ota_test.last_report_deployment_id) ||
+	    strlen(state) >= sizeof(ota_test.last_report_state)) {
+		return -EINVAL;
+	}
+	strcpy(ota_test.last_report_deployment_id, deployment_id);
+	strcpy(ota_test.last_report_state, state);
+	ota_test.last_report_error_code = error_code;
+	ota_test.report_calls++;
+	return 0;
+}
 
 void ota_test_digest(const uint8_t *bytes, size_t length, uint8_t digest[32])
 {
@@ -27,6 +141,7 @@ void ota_test_digest(const uint8_t *bytes, size_t length, uint8_t digest[32])
 void ota_test_reset_fakes(void)
 {
 	memset(&ota_test, 0, sizeof(ota_test));
+	ota_test_ps_reset();
 	ota_test_scheduled_work = NULL;
 	ota_test.image_confirmed = true;
 	ota_test.image_header.mcuboot_version = 1;

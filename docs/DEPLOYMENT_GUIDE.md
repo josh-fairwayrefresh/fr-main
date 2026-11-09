@@ -13,10 +13,10 @@ changes.
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; responsive release version `995c6b063a9af3c5` | Last recorded 2026-10-15. Authenticated physical-phone/Safari acceptance was not performed. Verify the live version before change. |
 | Production Admin / receiver | Admin `fairway-admin-00017-dvk`; receiver `fairway-button-receiver-roll-26b6201` | Admin last recorded Ready/100% traffic on 2026-10-17. Read-only Cloud Run metadata on 2026-11-07 showed receiver `roll-26b6201` Ready at 100%, image `sha256:cf29d45e7f3abe1dc5aa7b8ea69f48473a65e83a9605e466209cb7fe9ef45d56`, created `2026-11-02T21:14:05.229847Z`. Build/source annotations are recorded below; exact Git commit correspondence was not established. No authenticated production credential-lifecycle request was made. |
-| OTA implementation | Device-side MCUboot staging, descriptor validation, test activation, status, and trial confirmation are present in the local OTA source; no production caller, downloader, or release-assignment service exists | This is a development foundation, not end-to-end remote update capability. See `docs/FIRMWARE_SPECIFICATION.md`. |
-| Local OTA validation | OTA Increment 1 and the 2026-11-07 boot-health/service-mode correction have recorded local build and image-verification evidence in this guide | They were not physically OTA-qualified. No physical OTA activation, confirmation, reversion, power-loss recovery, or installed-device bootloader/trust-anchor match has been demonstrated. |
+| OTA implementation | Common-image firmware delivery, PSA-backed identity/schedule state, authenticated backend release/assignment/reporting, GCS artifact streaming, and Admin OTA management are implemented in the local branch | Not deployed. The source branch remains dirty at the checkpoint commit; local work does not change the accepted Pilot 1.1 baseline. |
+| Local OTA validation | CPO accepted the three local production-signed releases on 2026-11-09; immutable artifact inventory and corrected source provenance are recorded below | All three passed separate release verification again after provenance cleanup. Development-key and disposable-test-key artifacts are not commissioning candidates. No physical activation, confirmation, rollback, recovery, or installed-device trust-anchor match has been demonstrated. |
 | Field OTA authorization | Not authorized or qualified | Local build and verification evidence do not authorize deployment. No OTA image was flashed. |
-| Production OTA blockers | Approved production signing key and matching bootloader trust anchor; installed-device image/partition compatibility; physical activation, confirmation, reversion, and recovery evidence; trusted download/release assignment, caller authorization, signed hardware-compatibility metadata, and anti-rollback policy | No production OTA release or field update is authorized until the firmware owner’s gates are met. |
+| Production OTA blockers | Installed-device trust-anchor compatibility and physical OTA evidence; production bucket/IAM, log redaction, backend/Admin deployment, and separately authorized FRB-0005 commissioning | The local production-signed package is accepted; artifact validation does not authorize flashing, deployment, assignment, or credential changes. |
 | Production data | 2026-10-17 release evidence says that deployment did not change production records | No repository-controlled backup, restore, point-in-time recovery, or recovery-point verification procedure was found. Do not assume one exists or that code rollback restores data. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
@@ -26,6 +26,145 @@ the production Hosting release. The Admin credential-lifecycle backend was
 deployed on 2026-10-17; no production credential operation or authenticated
 Admin lifecycle request was performed. See
 `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+### OTA commissioning implementation — local only
+
+The current branch adds an end-to-end source path for the approved OTA 0.1 →
+OTA 0.1alt → OTA 1.0 sequence. It is not deployed to production and no
+physical device or production record was changed.
+
+The release builder `scripts/build_ota_release.py` produces a common,
+credential-free merged HEX image for the initial USB installation, a signed
+MCUboot OTA image, a release configuration, and a provenance manifest.
+`scripts/verify_ota_release.py` independently checks release/version/schedule
+identity, artifact hashes and sizes, the generated 432 KiB secondary slot,
+the actual MCUboot image-header version, and the MCUboot signature. The
+builder requires an explicit Fairway-controlled signing key; historical
+artifacts signed by the NCS development key and disposable test-key artifacts
+are not commissioning candidates. The provenance manifest also records generated HUK,
+Protected Storage, NV-counter, and release-schedule configuration.
+
+| Release | Firmware / MCUboot version | Schedule |
+|---|---|---|
+| OTA 0.1 | `0.1.0+1` | One persisted check 15 minutes after the first normal boot |
+| OTA 0.1alt | `0.1.0+2` | Nightly 00:30 assigned-Course local time |
+| OTA 1.0 | `1.0.0+1` | Nightly 00:30 assigned-Course local time |
+
+#### Accepted local production package and source checkpoint (2026-11-09)
+
+The CPO accepted these three local releases. All use production fingerprint
+`sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`,
+NCS 3.1.1, Nordic toolchain bundle `561dce9adf`, West 1.4.0, and the same
+partition layout. This is local acceptance, not field OTA qualification.
+Directories below are under `/Users/DuplexLoop/fairway-builds/`; each contains
+`<release-id>-ota.signed.bin`, `<release-id>-merged.hex`,
+`<release-id>-manifest.json`, and `release.conf`.
+
+| Release | Accepted directory | Signed OTA image SHA-256 |
+|---|---|---|
+| OTA-0.1 | `ota-OTA-0.1-production-20261109-r2` | `98687914b7ff0b7ab9116a7fff34d525b67c96955f84d06a24bd349538240f40` |
+| OTA-0.1alt | `ota-OTA-0.1alt-production-20261109-r1` | `0ba9922abd81af93c721a37ac3d4c7ba2739cef24eaa7e56966c812865089cd4` |
+| OTA-1.0 | `ota-OTA-1.0-production-20261109-r1` | `eab949f43a87949708e2764299464521e01688afe3307a1fe2444d92aa8d06b0` |
+
+| Release | Merged HEX SHA-256 | Original manifest SHA-256 |
+|---|---|---|
+| OTA-0.1 | `1e87d6628fbdc5f034e7224440f23691542d3a61c03528f59b16400d5f7e48d7` | `bc6a1a731d38c036efae28f9ef323870f3a5f254ae581aa052af78b373d05b20` |
+| OTA-0.1alt | `c9aa9cbcaabf6b7b746273da9871dae0e9bf959b42bfbb4592b8efbdec33085d` | `0b301c4fd10e7febfd809d209a4b279d9cb5c32bc13c22d2ed3044512fb1c3f3` |
+| OTA-1.0 | `080050a560eab1dc1292c78610ee5e9d45e6f4c90d43fefba550584cd05dfd89` | `51a8ac5be84f215c6ed5c906d906dd24ed22dabd0ab07b43e9cf5b5111d39980` |
+
+The original manifests retain source commit
+`2d72b5de401b3faecb09a5e86a5410156692d18e`, dirty-worktree provenance, and
+historical build-time digest
+`6c786dd3257d5c05c4b792fa3d33f90d6473a790036dbc1377f886395433040c`.
+That recursive measurement included two ignored historical FRB-0002 HEX
+outputs, not build dependencies. They were copied, hash-verified, and removed
+from the active tree under CPO authorization. The owner-only archive is
+`/Users/DuplexLoop/fairway-builds/historical-frb0002-archive-20261109/`
+(directory 0700, files 0600):
+
+- `frb0002_runtime_reliability_candidate_merged.hex`:
+  `b0b13741fd0ac78678c6b58a91714e8db2ba56928b68385708eb16becc641a32`.
+- `fairway_system_identity_candidate_merged.hex`:
+  `779caf8f2b3c469594fdb029b0b33770c86a14af0c063d6eb21563ad5b513f77`.
+
+The corrected source-only inventory has 77 files and SHA-256
+`32b121829f00adf9b4fe2b703c74fd66acd6cc9c6696568d660176879f4245b0`.
+It is the original input set minus those two outputs, with all remaining
+path/content records unchanged; it is **not** the original build-time digest.
+No accepted image, manifest, or release configuration was rewritten.
+
+`scripts/build_device_firmware.py::_build_source_files` now selects Git-tracked
+files under the application and `boards/`, plus only the explicitly enumerated,
+non-ignored OTA development source files while they await staging. It excludes
+secrets, build/artifact/cache directories, and generated binary/log extensions
+even if force-tracked. Unknown non-ignored development inputs and missing or
+symlinked tracked source fail explicitly. Git ignore rules are applied to
+untracked inputs; they do not remove legitimate tracked source. Hash records
+retain sorted relative Path ordering, four-byte big-endian UTF-8 path length,
+path bytes, and file bytes. New OTA manifests label the inventory
+`git-tracked+explicit-development-v1` and include the exact path list.
+
+A clean, tracked-only snapshot reproduces the corrected digest. That digest
+covers application/board bytes, not release scripts, tests, documentation, SDK,
+or toolchain; those source/tooling files must also be included in the checkpoint.
+External NCS/toolchain installation, key custody, and release-specific
+`release.conf` remain separate reproduction inputs. ECDSA signatures need not
+be byte-identical across new builds. The original dirty source commit must not
+be relabelled as a future checkpoint commit.
+
+Historical verification remains explicit: `verify_ota_release.py` validates
+the original artifacts against their original manifests and signing identity;
+it does not compare the manifest source digest to the current checkout.
+Post-cleanup verification passed for all three releases using the established
+interactive unlock mechanism, with temporary-key removal confirmed. This is
+a separate verifier run sharing builder helpers, not an independent verifier
+implementation or a new firmware build.
+
+Checkpoint preparation includes only the application/board changes, release
+and provisioning tooling, related tests, ignore rule, and canonical owner
+documentation. The separately deployable backend/Admin OTA changes remain
+local and excluded; generated caches, images, credentials, signing keys,
+passphrases, and the historical archive are not Git checkpoint inputs.
+Validation after cleanup: nine source-inventory regressions pass; the combined
+device/release tooling suite reports 71 passed and one optional
+`NCS_INSTALL_DIR`-gated synthetic signing integration test skipped; all 27 OTA
+host tests pass. A candidate-tree scan checked 265 files for private-key PEM
+blocks, service-account JSON, forbidden artifact/secret filenames, and matches
+to the five known local device credentials, with no findings. This bounded scan
+does not prove absence of every possible secret format.
+
+The generated flash layout is MCUboot `0x00000–0x0C000`, primary slot
+`0x10000–0x7C000`, secondary slot `0x7C000–0xE8000`, TF-M ITS
+`0xE8000–0xF0000`, TF-M NV counters `0xF0000–0xF8000`, and TF-M PSA
+Protected Storage `0xF8000–0x100000`. Primary and secondary slots are each
+432 KiB. The fixed-partition DTS, static Partition Manager file, and generated
+map now agree. The generated images have not been compared with FRB-0005's
+installed MCUboot; the CPO's one-time USB baseline installation and separate
+physical validation remain outstanding.
+
+Device/API ownership is split between `samples/fairway_power_sandbox/src/ota_*`,
+`fairway_backend/cloudrun_receiver/lib/ota/`, `index.js`, and the Admin
+`OtaManagement.jsx` view. Backend endpoints include Admin release
+registration/listing and exact-device assignment; device endpoints provide
+schedule, authenticated discovery, artifact download, and lifecycle reporting.
+The deployment environment must set `FAIRWAY_OTA_BUCKET` and grant the
+receiver's runtime identity only the required bucket object creation/read
+permissions. The short-lived download token currently appears in the artifact
+request path; before production deployment, configure and verify Cloud Run
+request-log redaction for that path so bearer tokens cannot be retained in
+request logs. This task did not configure a bucket, IAM, log policy, service,
+or production assignment.
+
+Before any physical commissioning, separately authorize the target and
+operation, confirm FRB-0005's registry identity/credential/customer
+association, install the OTA 0.1 merged image by the established USB
+procedure, provision the existing backend credential into PSA Protected
+Storage through service-mode UART, and verify normal request/COMPLETE
+behavior. Assign OTA 0.1alt only to FRB-0005 through the Admin UI; confirm
+download, signature acceptance, trial-health confirmation, post-reboot
+stability, identity retention, customer CUST-0002 request attribution,
+low-power behavior, and backend reporting. Do not describe the sequence as
+physically validated before those observations are recorded.
 
 The Engineering Guide identifies `00022-wxk` as the CPO-designated Stable
 Pilot Baseline 1.0 receiver, not as the current live revision. The dated
@@ -1779,13 +1918,92 @@ Flash authorization does not authorize runtime or manual testing.
 
 The technical procedure below describes how an already-approved operation is performed; it does not grant authorization to perform that operation.
 
-Development devices may use the established Nordic development signing
-configuration for development, recovery, and validation. This signing
-configuration does not provide production security qualification. Commercial
-production releases require an approved production signing key and its
-corresponding bootloader trust anchor to be configured and verified. Flashing
-a physical device requires explicit CPO authorization for the identified
-target and operation.
+### Production MCUboot signing-key custody
+
+The current OTA release builder does not accept an implicit signing-key
+default. Every release build must be given a Fairway-controlled ECDSA-P256
+private key outside the source checkout and output directory. Do not use
+NCS's distributed `root-ec-p256.pem` key for production. Existing images
+signed by that development key are not valid commissioning candidates.
+
+The CPO owns and authorizes creation and custody of the actual production
+key. The CPO may explicitly authorize a trusted local engineering assistant
+to generate and store it on the CPO-controlled workstation when the private
+key and passphrase remain local and are never displayed, logged, uploaded, or
+transmitted. This delegation does not authorize release generation or signing.
+Use a dedicated local directory outside the source checkout and all
+automatically synchronized folders, with directory mode `0700`. Generate the
+key using the installed NCS 3.1.1 MCUboot `imgtool`:
+
+```sh
+KEY_DIR=/Volumes/FairwaySigning/production
+KEY="$KEY_DIR/fairway-mcuboot-production.pem"
+
+mkdir -p "$KEY_DIR"
+chmod 700 "$KEY_DIR"
+test ! -e "$KEY"
+umask 077
+python3 "$NCS_INSTALL_DIR/bootloader/mcuboot/scripts/imgtool.py" keygen \
+  --type ecdsa-p256 --key "$KEY" --password
+chmod 600 "$KEY"
+```
+
+Use a unique, strong passphrase entered only at the hidden prompts; never put
+it in a command, environment variable, chat, source file, or build log. Store
+the password-protected key on encrypted offline media and keep at least one
+separately stored encrypted offline backup. Retain the passphrase separately
+under the CPO's approved secret-custody process. Verify the backup by
+deriving the public-key fingerprint without disclosing or exporting the
+private key. Do not put either copy in Git, a cloud drive, email, CI, an OTA
+artifact bucket, or the release output directory.
+
+The builder enforces an owner-only private-key file (`0600`), rejects a key
+inside the checkout or release output, passes the configured key explicitly
+to NCS sysbuild, checks the generated MCUboot public-key bytes against the
+key fingerprint, verifies the image signature, and requires rejection by
+NCS's distributed development key. MCUboot's NCS 3.1.1 build generates
+`autogen-pubkey.c` from the supplied key and compiles the public verification
+key into the bootloader; the private key is used only by local build/signing
+tools. The builder does not copy it into the release artifacts or manifest,
+and redacts the local key path from manifest configuration and command
+metadata. The public-key fingerprint is SHA-256 over MCUboot's
+DER-encoded ECDSA-P256 SubjectPublicKeyInfo bytes, matching NCS imgtool's
+generated MCUboot public-key hash.
+
+NCS 3.1.1 MCUboot imgtool prompts for an encrypted-key passphrase with
+`getpass` and has no noninteractive password option. The Fairway release
+builder therefore requests the passphrase once in the interactive terminal
+before invoking West, unlocks the existing encrypted key in memory, and
+writes a temporary unencrypted PEM in a system temporary directory with
+directory mode `0700` and file mode `0600`. That temporary key is supplied to
+sysbuild/imgtool, checked against the compiled MCUboot public-key fingerprint,
+and checked for leakage into both release artifacts. The temporary directory
+is removed on normal completion, handled build errors, and SIGINT/SIGTERM/
+SIGHUP/SIGTSTP/SIGTTIN/SIGTTOU. This is best-effort cleanup, not guaranteed
+secure erasure: SIGKILL, power loss, OS failure, filesystem snapshots, swap,
+or crash dumps may leave recoverable plaintext on disk or in memory. Keep the
+workstation access restricted during signing and do not treat the temporary
+file as safely erased after cleanup.
+
+Loss of every private-key copy prevents future OTA images from authenticating
+to devices using that trust anchor. The current bootloader configuration has
+no remote key-rotation path; recovery would require a separately authorized
+physical USB recovery that installs a replacement MCUboot trust anchor and
+firmware. Treat total key loss as a fleet-recovery event. Do not assume that
+reflashing preserves TF-M identity data without separately verifying the
+recovery procedure.
+
+On 2026-11-07, following explicit CPO authorization and the local-agent
+delegation above, the encrypted production ECDSA-P256 key and separate
+passphrase file were created on the CPO-controlled workstation. Their
+fingerprint is
+`sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`.
+The key was validated with NCS 3.1.1 imgtool and independently checked as
+ECDSA-P256. The private key and passphrase were not copied into the checkout
+or displayed. The CPO confirmed the encrypted offline backup and separate passphrase
+custody on 2026-11-07. Local production release generation and signing are
+authorized by the current task; this does not authorize OTA publication,
+device assignment, deployment, or physical commissioning.
 
 ### Build Procedure
 
@@ -1822,47 +2040,79 @@ The verification must show that `west` resolves from the Nordic-installed enviro
 
 The current local evidence above used NCS v3.1.1 with Nordic toolchain bundle `561dce9adf` and West 1.4.0. A future SDK Manager installation or update may use a different bundle identifier; that does not change the requirement to use the matching Nordic-installed toolchain environment.
 
-With the environment verified, build from the canonical checkout using the device-specific provisioning workflow. Select a fresh output directory outside both the checkout and local secrets directory; the command refuses to reuse an existing path. Replace `FRB-XXXX` with the intended permanent Device ID and choose a unique output-directory name:
+#### Current common OTA release build
+
+Use the common-image builder for OTA 0.1, OTA 0.1alt, and OTA 1.0. The image
+does not contain a Device ID or credential. Select one supported release ID,
+the CPO-provided local key path, and a fresh output directory outside the
+checkout. The CPO should build all three
+commissioning releases using the same key and verify the fingerprint matches
+across all manifests:
 
 ```sh
-DEVICE_ID=FRB-XXXX
-SECRETS_DIR=<workspace>/nfed/samples/fairway_power_sandbox/src/secrets
-OUTPUT_DIR="$HOME/fairway-builds/fairway-${DEVICE_ID}-validation-01"
+RELEASE_ID=OTA-0.1
+OUTPUT_DIR="$HOME/fairway-builds/ota-${RELEASE_ID}-validation-01"
+MCUBOOT_SIGNING_KEY="$KEY"
 
-python3 <workspace>/nfed/scripts/build_device_firmware.py \
-  --device-id "$DEVICE_ID" \
-  --secrets-dir "$SECRETS_DIR" \
+python3 <workspace>/nfed/scripts/build_ota_release.py \
+  --release-id "$RELEASE_ID" \
   --output-dir "$OUTPUT_DIR" \
-  --ncs-install-dir "$NCS_INSTALL_DIR"
+  --ncs-install-dir "$NCS_INSTALL_DIR" \
+  --signing-key "$MCUBOOT_SIGNING_KEY"
 
-python3 <workspace>/nfed/scripts/verify_device_artifact.py \
-  --device-id "$DEVICE_ID" \
-  --artifact "$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex" \
-  --manifest "$OUTPUT_DIR/fairway-${DEVICE_ID}-manifest.json" \
-  --secrets-dir "$SECRETS_DIR" \
-  --ncs-install-dir "$NCS_INSTALL_DIR"
+python3 <workspace>/nfed/scripts/verify_ota_release.py \
+  --manifest "$OUTPUT_DIR/${RELEASE_ID}-manifest.json" \
+  --ncs-install-dir "$NCS_INSTALL_DIR" \
+  --signing-key "$MCUBOOT_SIGNING_KEY"
 ```
 
-The builder invokes West against the installed NCS v3.1.1 SDK and preserves the established board target, explicit `BOARD_ROOT`, `prj_a.conf`, debug-thread build options, and sysbuild/MCUboot board-root propagation. It requires an exact target-named input `FRB-XXXX-fairway_device_key.h`; it never silently falls back to a generic header. A retained legacy generic input may be selected only by explicitly adding `--input-file "$SECRETS_DIR/fairway_device_key.h"` to both commands; the tool validates its ID and rejects competing target-named input.
+Choose `OTA-0.1`, `OTA-0.1alt`, or `OTA-1.0`; the builder binds each release
+ID to its exact semantic version and schedule, writes a release Kconfig overlay and explicitly configures the same supplied key and
+ECDSA-P256 algorithm for the application signer and MCUboot trust anchor. It
+verifies that both generated configurations use that key and version,
+validates the generated bootloader public key fingerprint, checks the signed
+MCUboot header and slot size, and rejects an image that verifies with the
+NCS development key. The manifest records the SHA-256 public-key fingerprint
+and generated Partition Manager map, fixed partition device tree, signer
+configuration, redacted build command, source state, artifact sizes, and
+hashes. The independent verifier requires the matching local private key,
+checks its fingerprint and signature, confirms the development key rejects
+the image, and checks that the private key is absent from both artifacts.
+OTA 0.1's merged HEX contains the bootloader with the CPO key's public trust
+anchor and is the initial USB commissioning image; OTA 0.1alt and OTA 1.0 are
+signed common OTA artifacts using the same key.
 
-The builder checks input identity, uniqueness, credential format, permissions, and symlink/path constraints before build; then verifies the credential and Device ID in the actual merged Intel HEX image and signed MCUboot OTA binary. It writes a manifest containing the source revision/state, firmware-source SHA-256, build command, toolchain/configuration, and each artifact's hash/size, without recording the credential or its digest. The verifier rereads the selected protected input and independently checks both artifact byte streams and embedded identity/credential. This comparison does not establish a production backend-verifier match.
+The output directory is owner-only and outside the source checkout. It contains no
+credential-bearing build header or private signing key. Keep private-key
+access on the authorized local signing workstation. Successful signature
+verification proves image integrity under the identified public key; it does
+not authorize physical flashing or production service deployment. Never flash
+or deploy these images without the separate approvals and prerequisites above.
 
-The output directory is created with mode `0700`, and its files are restricted to owner access. During the build it contains credential-bearing generated headers and intermediates; after successful artifact verification the builder removes that intermediate build tree and retains only the merged image, signed OTA image, manifest, and their checksums. Handle the complete retained output as secret material, keep it outside `nfed`, and do not commit or broadly distribute it. A failed build may leave a protected partial tree; use a new output path for a retry. Existing output directories are rejected, so a known-good image cannot be silently overwritten. Do not flash or activate a pending backend credential as part of this local build procedure.
+#### Legacy device-specific artifact verification
 
-The firmware application includes the generated selected header ahead of other include paths. CMake also requires an explicit target Device ID and target-named or explicitly selected generic input, checks for duplicate/invalid definitions and rejects symlinks. Use the builder rather than invoking `west build` directly so permission, provenance, output-protection, and artifact checks are not bypassed.
+`scripts/build_device_firmware.py` and
+`scripts/verify_device_artifact.py` describe the retired per-device-image
+workflow. Do not use that workflow for the current source or any OTA release:
+the application now reads identity/credentials from PSA Protected Storage,
+and per-device values must not be compiled into a common image. The verifier
+remains available to inspect older, retained per-device artifacts where
+required by their historical provenance.
 
-The device-specific builder uses a fresh, private build directory for each run and removes it only after artifact verification succeeds. Retain the final protected artifact and its provenance/hash in the existing Firmware Generation Registry only when required as canonical validation evidence; do not retain or reuse a build tree as an evidence record.
-
-The builder produces `$OUTPUT_DIR/fairway-${DEVICE_ID}-merged.hex`,
-`$OUTPUT_DIR/fairway-${DEVICE_ID}-ota.signed.bin`, per-artifact checksums, and
-the manifest. Treat the manifest as the provenance record for both images and
-retain it with the exact artifacts. Before any separately authorized flash,
-rerun the verifier command above against that exact output path; do not
-substitute an artifact from another build directory.
+The old builder's embedded-header checks and secrets-directory contract apply
+only to images built from the corresponding historical source. Do not treat
+its acceptance of a historical image as a check of the current OTA release
+builder or current common image.
 
 The application `samples/fairway_power_sandbox/sysbuild.cmake` propagates the tracked Fairway board root to the MCUboot child image. This is required for the custom `circuitdojo_feather_nrf9151` board to resolve consistently during the sysbuild build.
 
-### OTA Increment 1 — FRB-0005 local validation (not flashed)
+### Historical OTA Increment 1 foundation — superseded by current delivery implementation
+
+This dated record documents the earlier OTA-manager-only checkpoint. Its
+statements that no downloader, caller, or assignment service existed and its
+491,520-byte partition map are historical. The current source, 432 KiB layout,
+and common release artifacts are described in the OTA commissioning section
+above and in `docs/FIRMWARE_SPECIFICATION.md`.
 
 The source-only OTA foundation was built from source checkpoint
 `29b8d8556e9ac7ab228967d74d79d1b994285cb6` on

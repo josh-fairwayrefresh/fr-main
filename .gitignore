@@ -81,6 +81,9 @@ log-*.txt
 /samples/fairway_power_sandbox/src/secrets/fairway_device_key.h
 /samples/fairway_power_sandbox/src/secrets/*-fairway_device_key.h
 
+# Local MCUboot production signing private key
+fairway-mcuboot-production.pem
+
 # Node.js generated dependencies (backend)
 node_modules/
 dist/

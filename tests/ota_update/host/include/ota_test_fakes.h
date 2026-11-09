@@ -7,6 +7,7 @@
 
 #include "zephyr/dfu/mcuboot.h"
 #include "zephyr/kernel.h"
+#include "psa/protected_storage.h"
 
 struct ota_test_fakes {
 	bool image_confirmed;
@@ -39,6 +40,10 @@ struct ota_test_fakes {
 	bool hash_setup_error;
 	bool hash_update_error;
 	bool hash_finish_error;
+	char last_report_deployment_id[64];
+	char last_report_state[32];
+	int last_report_error_code;
+	int report_calls;
 };
 
 extern struct ota_test_fakes ota_test;
@@ -47,5 +52,8 @@ extern struct k_work_delayable *ota_test_scheduled_work;
 void ota_test_reset_fakes(void);
 void ota_test_fire_trial_deadline(void);
 void ota_test_digest(const uint8_t *bytes, size_t length, uint8_t digest[32]);
+void ota_test_ps_reset(void);
+void ota_test_ps_put(psa_storage_uid_t uid, const void *data, size_t length);
+void ota_test_ps_fail_next_set(void);
 
 #endif
