@@ -1118,7 +1118,7 @@ summarized above. New entries are placed at the TOP of this register.
   historical release identities are unchanged.
 - Corrected source, tests and owner documentation are backed up on
   `review/frb0005-increment-1.0-source-checkpoint-20261105` at source commit
-  `685cf64f2eddb6f90e50ca552718950b920d947b`. This source backup satisfies
+  `685cf648fed4e366be37cb8f9861490ec9a31e39`. This source backup satisfies
   neither release-specific CPO acceptance nor publication authorization. The
   OTA catalog and assignment collections were last verified empty on
   2026-11-09. FRB-0005 physical OTA commissioning remains unperformed and

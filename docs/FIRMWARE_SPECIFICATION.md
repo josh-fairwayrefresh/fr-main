@@ -250,7 +250,7 @@ contains the manifests, per-file inventory, verification results and a
 `b1c91255499d9f843dadfce80447ded91321b490a33d93a0c3c1759a6a27cbf6`).
 These support reproduction using the separately held key and installed SDK.
 The corrected source, tests and canonical documentation are now backed up at
-`685cf64f2eddb6f90e50ca552718950b920d947b` on the canonical review branch;
+`685cf648fed4e366be37cb8f9861490ec9a31e39` on the canonical review branch;
 the archive remains supplemental local evidence, not the source backup. No
 claim of byte-for-byte independent rebuild is made; ECDSA signatures can vary.
 
