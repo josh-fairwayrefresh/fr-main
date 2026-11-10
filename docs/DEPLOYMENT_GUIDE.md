@@ -16,10 +16,10 @@ the accepted firmware artifacts remain unchanged.
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `87d3105f0676a782` | Released `2026-11-10T01:16:04.645Z` (November 9 Pacific). All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; 52 QR destinations and cache policies pass. Previous version `c6a6de50274e48b5` retained. |
 | Production Admin / receiver | Admin `fairway-admin-00062-zuv`; receiver `fairway-button-receiver-00051-dad`, both 100% | 2026-11-10 delivery-gate configuration revisions; same qualified image digests and runtime identities as `ota-delivery-43b4da0`; only `FAIRWAY_OTA_DELIVERY_ENABLED` changed from false to true. Prior revisions remain rollback anchors. |
-| OTA implementation | Corrected successors remain immutable local candidates; source changes are backed up on the review branch; candidates are not published or CPO-accepted | Firmware qualification and hashes are owned by the Firmware Specification. No firmware published, assigned, delivered or flashed. Original accepted artifacts/Pilot 1.1 unchanged. |
+| OTA implementation | Corrected successors are CPO-accepted and publication-authorized for FRB-0005 only; publication is pending | Firmware qualification and hashes are owned by the Firmware Specification. No assignment, download, delivery or flash is authorized by publication. Original accepted artifacts/Pilot 1.1 unchanged. |
 | Local OTA validation | Three original accepted packages preserved; corrected `OTA-0.1alt-r2` / `OTA-1.0-r2` are built/signed/verified and source-backed | Source/host/build evidence covers scheduler corrections and effective image limit, not physical recurrence. FRB-0005 retains the exact accepted USB-only OTA 0.1. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | OTA 0.1 installed using authorized erase-all; existing identity/credential provisioned successfully through the single USB CDC-ACM connection | Provisioning success response observed. CPO confirmed authenticated, correctly attributed requests, COMPLETE, and a fresh transaction. This is USB baseline commissioning, not a successful OTA update. |
-| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled on both services | Organization and project sink APIs, live service revisions/env, and private bucket controls verified 2026-11-10. Invalid-token artifact request is rejected; all six OTA collections remain empty. No release published or assignment created. Release acceptance/publication authorization and physical commissioning remain separately gated. HQ remains `America/Los_Angeles`. |
+| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled on both services | Organization and project sink APIs, live service revisions/env, and private bucket controls verified 2026-11-10. Invalid-token artifact request is rejected; release publication is pending the reviewed source-catalog update. No assignment or device download is authorized. Physical commissioning remains separately gated. HQ remains `America/Los_Angeles`. |
 | Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
@@ -222,10 +222,11 @@ Git object integrity passed. `main` and unrelated firmware work were unchanged.
   Release-specific approval records must distinguish `build_base_commit`
   (manifest's pre-build HEAD) and `build_source_sha256` from the subsequently
   remote-backed `source_commit` containing the corrected source. Recognizing
-  successor IDs/provenance does not accept their bytes: accepted-byte additions,
-  CPO acceptance, all five publication prerequisites and explicit publication
-  authorization remain outstanding. Corrected source is backed up on the
-  review branch as recorded in the current Alignment Register entry.
+  successor IDs/provenance does not by itself accept their bytes. The release-
+  specific CPO acceptance and publication authorization granted on 2026-11-10
+  are recorded below; publication awaits the reviewed production catalog update.
+  Corrected source is backed up on the review branch as recorded in the current
+  Alignment Register entry.
 
 Bounded cloud/source evidence is retained in the deployment session's
 `files/ota-delivery-qualification/`. No real bearer was generated for logging
@@ -290,6 +291,36 @@ FRB-0005 physical authorization remains separate.
   acceptance, complete publication-governance records and explicit publication
   authorization. FRB-0005 physical commissioning requires its separate
   authorization after a published, assigned candidate is confirmed ready.
+
+### Prototype 4.0 corrected successors — CPO acceptance and publication authorization (2026-11-10)
+
+- The CPO explicitly accepted the exact signed bytes and authorized publication
+  of both successors for FRB-0005 only:
+  - `OTA-0.1alt-r2`, version `0.1.0+3`, SHA-256
+    `2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844`.
+  - `OTA-1.0-r2`, version `1.0.0+2`, SHA-256
+    `21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c`.
+- Each signed image is 280,387 bytes against the 434,176-byte effective
+  limit (64.579% utilization; 153,789 bytes / 150.185 KiB remaining). The
+  immutable build manifests are source-controlled at
+  [OTA-0.1alt-r2-manifest.json](./releases/OTA-0.1alt-r2-manifest.json) and
+  [OTA-1.0-r2-manifest.json](./releases/OTA-1.0-r2-manifest.json). No signed
+  firmware binary or private signing key is committed.
+- Both manifests identify pre-build base commit
+  `11213b4ad0607486df12f28d764f6d6abd90cdb6` and the corrected 77-file
+  firmware source SHA-256
+  `47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3`.
+  The original qualification build records `source_worktree_dirty=true`;
+  the exact source digest is preserved in the remotely backed source commit
+  `685cf648fed4e366be37cb8f9861490ec9a31e39`. Both signatures were verified
+  against the installed production trust anchor recorded in the Firmware
+  Specification.
+- This authorization permits publication and exact-device eligibility for
+  FRB-0005; it does not create an assignment, download grant, or physical
+  commissioning authorization. The OTA 0.1 bootstrap and original historical
+  release identities remain unchanged. Production catalog publication is
+  pending the reviewed, source-controlled release approval records and
+  deployment of the corresponding backend.
 
 #### Next commissioning increment — proposed authorization scope
 

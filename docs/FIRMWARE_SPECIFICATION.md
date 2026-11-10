@@ -210,8 +210,8 @@ No partition or original accepted artifact was changed.
 
 ### Corrected successor qualification — 2026-11-09
 
-These are new immutable local candidates, **not CPO-accepted, published, assigned,
-installed or physically OTA-qualified**:
+At qualification time on 2026-11-09 these were immutable local candidates,
+not yet CPO-accepted, published, assigned, installed or physically OTA-qualified:
 
 | Release identity | Firmware / MCUboot version | Signed bytes / KiB | Capacity / utilization | Remaining bytes / KiB | Signed image SHA-256 |
 |---|---|---:|---|---:|---|
@@ -275,9 +275,12 @@ synthetic and build results, not LTE, download/install, power-loss, trial-health
 or physical rollback evidence. Organization and project logging sinks,
 production delivery activation, and negative authorization checks are recorded
 in the [Deployment Guide](./DEPLOYMENT_GUIDE.md#ota-artifact-delivery-enablement-2026-11-10).
-The enablement does not publish or accept firmware. Publication still requires
-release-specific CPO acceptance, completed governance records and explicit
-publication authorization. Physical commissioning remains separately gated.
+At the 2026-11-10 qualification checkpoint, delivery enablement itself did not
+publish or accept firmware. The CPO has since accepted the exact successor
+bytes and authorized publication for FRB-0005 only; the current publication
+state is recorded in the [Deployment Guide](./DEPLOYMENT_GUIDE.md#prototype-40-corrected-successors--cpo-acceptance-and-publication-authorization-2026-11-10).
+Neither assignment nor physical commissioning is authorized by that release
+decision.
 
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image
