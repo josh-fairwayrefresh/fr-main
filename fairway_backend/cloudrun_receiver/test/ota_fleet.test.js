@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict');
 const { FakeFirestore } = require('./fake_firestore');
 const { createOtaService, nextCourseCheckTime, HARDWARE_ID } = require('../lib/ota/ota_service');
-const { PRODUCTION_FINGERPRINT } = require('../lib/ota/accepted_releases');
-const { publicationEligible } = require('../lib/ota/publication_policy');
+const { ACCEPTED_RELEASES, PRODUCTION_FINGERPRINT } = require('../lib/ota/accepted_releases');
+const { PUBLICATION_APPROVALS, publicationEligible } = require('../lib/ota/publication_policy');
 const { capability, approval } = require('./ota_fixtures');
 const { updateDeviceState, updateDeviceAssignment } = require('../lib/fleet/devices');
 
@@ -119,6 +119,22 @@ async function run() {
       assert.equal(publicationEligible(RELEASE, DIGEST, { [RELEASE]: missing }), false, field);
     }
     assert.equal(publicationEligible('OTA-0.1', DIGEST, { 'OTA-0.1': record }), false);
+  });
+  await test('production publication approvals pin only the accepted successor bytes and FRB-0005', () => {
+    const accepted = {
+      'OTA-0.1alt-r2': '2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844',
+      'OTA-1.0-r2': '21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c',
+    };
+    assert.deepEqual(Object.keys(PUBLICATION_APPROVALS).sort(), Object.keys(accepted).sort());
+    for (const [releaseId, digest] of Object.entries(accepted)) {
+      assert.equal(ACCEPTED_RELEASES[releaseId], digest);
+      assert.equal(publicationEligible(releaseId, digest), true);
+      assert.equal(publicationEligible(releaseId, '0'.repeat(64)), false);
+      assert.deepEqual(PUBLICATION_APPROVALS[releaseId].device_ids, ['FRB-0005']);
+      assert.equal(PUBLICATION_APPROVALS[releaseId].build_base_commit, '11213b4ad0607486df12f28d764f6d6abd90cdb6');
+      assert.equal(PUBLICATION_APPROVALS[releaseId].build_source_sha256,
+        '47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3');
+    }
   });
   await test('fleet projects canonical categories once, hides retired devices and never exposes credential verifiers', async () => {
     const { ota } = await setup();
