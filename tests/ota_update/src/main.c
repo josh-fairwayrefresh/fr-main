@@ -67,6 +67,21 @@ ZTEST(fairway_ota_update_policy, test_mcuboot_image_header_magic)
 	zassert_false(fairway_ota_has_mcuboot_magic(valid_prefix, 3));
 }
 
+ZTEST(fairway_ota_update_policy, test_effective_move_swap_image_limit)
+{
+	struct fairway_ota_descriptor descriptor = valid_descriptor();
+
+	descriptor.image_size = FAIRWAY_OTA_MAX_IMAGE_SIZE;
+	zassert_equal(fairway_ota_validate_descriptor(&descriptor, TEST_HARDWARE_ID,
+						     442368), 0);
+	descriptor.image_size++;
+	zassert_equal(fairway_ota_validate_descriptor(&descriptor, TEST_HARDWARE_ID,
+						     442368), -EFBIG);
+	descriptor.image_size = 442368;
+	zassert_equal(fairway_ota_validate_descriptor(&descriptor, TEST_HARDWARE_ID,
+						     442368), -EFBIG);
+}
+
 ZTEST(fairway_ota_update_policy, test_complete_test_boot_lifecycle)
 {
 	enum fairway_ota_state state = FAIRWAY_OTA_IDLE;

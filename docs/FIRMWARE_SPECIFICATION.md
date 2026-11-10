@@ -109,11 +109,11 @@ manager/reporting implementation in both modes. Regression coverage includes
 one-time-complete migration, repeated no-update checks, initial schedule and
 discovery network failures, reboot recurrence, image-processing failure,
 unchanged 900-second/no-rearm semantics, and corrupt protected state.
-The source correction has not been built into any release image. Corrected
-OTA 0.1alt-line and OTA 1.0-line successors need new approved identities,
-release builds, testing/signing verification and CPO acceptance; original
-accepted artifacts/hashes remain intact. Release lineage and governance are
-owned by `docs/DEPLOYMENT_GUIDE.md`.
+The correction is now compiled and locally qualified in the distinct successors
+below, not retroactively included in original accepted artifacts. CPO release
+acceptance, publication and physical OTA qualification remain outstanding.
+Original accepted artifacts/hashes remain intact. Release governance and
+production configuration are owned by `docs/DEPLOYMENT_GUIDE.md`.
 
 Permanent identity and credentials are stored as distinct PSA objects in
 TF-M Protected Storage. The Device ID is write-once; provisioning refuses a
@@ -201,13 +201,77 @@ respectively, not OTA payloads or flash occupancy measurements. They include
 bootloader plus address-record encoding and are not compared to the update
 slot size. OTA 0.1's signed-image measurement does not make it distributable.
 
-Current release tooling/backend/device staging guards check the 442,368-byte
-raw secondary-slot bound. Accepted byte allowlists keep current production
-publication closed and all accepted images are safely below the stricter limit.
-Before qualifying any new successor, align release verification/admission
-guards and boundary tests with the effective 434,176-byte move-swap maximum.
-No deployed code, partition, accepted artifact or admission guard is changed
-by this read-only capacity assessment.
+The original read-only assessment did not change admission guards. The subsequent
+authorized qualification now enforces 434,176 bytes in release build/verification,
+backend upload and stored-release eligibility, firmware discovery and manager
+descriptor admission. The raw slot constant remains 442,368 for partition checks.
+Boundary tests accept 434,176 and reject 434,177 and the raw slot ceiling.
+No partition or original accepted artifact was changed.
+
+### Corrected successor qualification — 2026-11-09
+
+These are new immutable local candidates, **not CPO-accepted, published, assigned,
+installed or physically OTA-qualified**:
+
+| Release identity | Firmware / MCUboot version | Signed bytes / KiB | Capacity / utilization | Remaining bytes / KiB | Signed image SHA-256 |
+|---|---|---:|---|---:|---|
+| `OTA-0.1alt-r2` | `0.1.0+3` | 280,387 / 273.815 | 434,176 / 64.579% | 153,789 / 150.185 | `2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844` |
+| `OTA-1.0-r2` | `1.0.0+2` | 280,387 / 273.815 | 434,176 / 64.579% | 153,789 / 150.185 | `21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c` |
+
+Packages are under `/Users/DuplexLoop/fairway-builds/` in
+`ota-OTA-0.1alt-r2-production-20261109-r1/` and
+`ota-OTA-1.0-r2-production-20261109-r1/`, each with the standard signed
+BIN, merged USB HEX, release configuration and immutable provenance manifest.
+Keep installed OTA 0.1 and the original 0.1alt/1.0 packages unchanged; do not
+flash the successor HEX files as part of autonomous commissioning.
+
+Both pristine builds used NCS 3.1.1, Nordic bundle `561dce9adf`, West 1.4.0,
+the existing ECDSA-P256 production key, and the canonical release builder.
+The CPO entered the unlock secret only at hidden terminal prompts. Each manifest
+records the exact command, generated configurations/layout and compiled public
+key fingerprint. Both bootloader/image fingerprints match the existing installed
+trust anchor `sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`.
+The builder verifies the NCS signature and development-key rejection, protects
+temporary key material and checks it is absent from both exported artifacts.
+Independent ECDSA verification against the installed bootstrap's public key
+also passed, including image-hash and key-hash TLVs. The standalone NCS verifier
+rejects a public-only P-256 key because its hash-algorithm table omits that
+public-key class; this upstream tooling limitation does not invalidate the
+builder's private-key verification or independent cryptographic verification.
+No vendor source was patched.
+
+Base HEAD was `11213b4ad0607486df12f28d764f6d6abd90cdb6` with documented
+uncommitted corrections. Both builds' 77-file firmware source digest is
+`47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3`.
+The persistent local recovery/evidence directory
+`/Users/DuplexLoop/fairway-builds/ota-successors-qualification-20261109/`
+contains the manifests, per-file inventory, verification results and a
+106-file source/tooling/test archive (`source.tar.gz`, SHA-256
+`b1c91255499d9f843dadfce80447ded91321b490a33d93a0c3c1759a6a27cbf6`).
+These support reproduction using the separately held key and installed SDK;
+they are not an authorized Git checkpoint or remote backup. No claim of
+byte-for-byte independent rebuild is made; ECDSA signatures can vary.
+
+Generated evidence in both new builds confirms unchanged primary/secondary
+addresses and 432 KiB slot sizes, MOVE mode, 256 maximum sectors, 4,096-byte
+erase/4-byte write geometry, 3,120-byte trailer, 4,096-byte reserved trailer
+and 4,096-byte move workspace. The builder checks actual MCUboot `.config`
+and internal-flash DTS, rejects changed geometry/mode/image encryption, and
+records effective capacity plus DTS hash
+`c2ca30886e86ed38aadb7f27bb2d89a988f328f87dafbdc4da0417a0b5beec7c`.
+Generated HUK/TF-M protected storage and nightly version/schedule checks pass.
+Build directories are removed by the established builder; generated evidence
+is retained in manifests, not claimed as separately retained raw build trees.
+
+Focused validation: 19 release-tool tests, 56 shared tooling tests (including
+the separately run NCS imgtool integration), and 34 real-worker/manager host
+tests in each ONE_TIME and NIGHTLY mode pass. Backend OTA API and fleet tests
+pass 21 each, including corrected-successor eligibility, fixed Course/HQ local
+00:30/DST policy, reviewed exact-device authorization, governance, capacity
+boundaries, expiring grants and disabled-delivery behavior. These are local/
+synthetic and build results, not LTE, download/install, power-loss, trial-health
+or physical rollback evidence. Publication remains blocked by unverified
+organization logging, CPO acceptance and the remaining governance gates.
 
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image

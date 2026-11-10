@@ -7,9 +7,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/sys/util.h>
 
-#include "device_identity.h"
-#include "http_transport.h"
 #include "modem_service.h"
 #include "ota_update.h"
 #include "ota_update_discovery.h"
@@ -75,12 +74,19 @@ static int prepare_next_schedule(void)
 	if (ret != 0) {
 		return ret;
 	}
-	if (state.next_check_utc_ms > 0 || state.one_time_complete) {
+	if (state.next_check_utc_ms > 0 ||
+	    (state.mode == FAIRWAY_OTA_SCHEDULE_MODE_ONE_TIME &&
+	     state.one_time_complete)) {
 		return 0;
 	}
 
 	int64_t next_check_utc_ms;
 	ret = fairway_ota_discovery_get_next_check(&next_check_utc_ms);
+	while (ret != 0 && IS_ENABLED(CONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY)) {
+		LOG_ERR("OTA schedule discovery failed: %d", ret);
+		k_sleep(K_SECONDS(24 * 60 * 60));
+		ret = fairway_ota_discovery_get_next_check(&next_check_utc_ms);
+	}
 	if (ret != 0) {
 		return ret;
 	}
@@ -190,7 +196,7 @@ static void ota_delivery_thread_entry(void *arg1, void *arg2, void *arg3)
 	}
 	ret = prepare_next_schedule();
 	if (ret != 0) {
-		LOG_ERR("OTA schedule discovery failed: %d", ret);
+		LOG_ERR("OTA schedule could not be prepared: %d", ret);
 		return;
 	}
 
@@ -202,7 +208,9 @@ static void ota_delivery_thread_entry(void *arg1, void *arg2, void *arg3)
 			LOG_ERR("OTA schedule state could not be loaded: %d", ret);
 			return;
 		}
-		if (!schedule.check_due || schedule.one_time_complete) {
+		if (!schedule.check_due ||
+		    (schedule.mode == FAIRWAY_OTA_SCHEDULE_MODE_ONE_TIME &&
+		     schedule.one_time_complete)) {
 			return;
 		}
 		while (date_time_now(&now_utc_ms) != 0) {
@@ -227,43 +235,55 @@ static void ota_delivery_thread_entry(void *arg1, void *arg2, void *arg3)
 			}
 		}
 
-		struct fairway_ota_release release;
+		struct fairway_ota_release release = {0};
 		ret = fairway_ota_discovery_check(&release);
-		if (ret == -ENOENT) {
-			if (IS_ENABLED(CONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY) &&
-			    release.next_check_utc_ms > 0) {
-				ret = fairway_ota_scheduler_set_next_check(
-					release.next_check_utc_ms);
-				if (ret != 0) {
-					LOG_ERR("Next OTA check could not be persisted: %d", ret);
-				}
-			}
-			return;
-		}
-		if (ret != 0) {
+		if (ret != 0 && ret != -ENOENT) {
 			LOG_ERR("OTA assignment discovery failed: %d", ret);
-			if (IS_ENABLED(CONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY) &&
-			    date_time_now(&now_utc_ms) == 0) {
-				int schedule_ret = fairway_ota_scheduler_set_next_check(
-					now_utc_ms + 24LL * 60 * 60 * 1000);
-				if (schedule_ret != 0) {
-					LOG_ERR("OTA failure backoff could not be persisted: %d",
-						schedule_ret);
-				}
-			}
-			return;
 		}
 		if (IS_ENABLED(CONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY)) {
-			ret = fairway_ota_scheduler_set_next_check(release.next_check_utc_ms);
-			if (ret != 0) {
-				LOG_ERR("Next OTA check could not be persisted: %d", ret);
+			int64_t next_check = release.next_check_utc_ms;
+			int schedule_ret = 0;
+
+			/* The server owns local-time/DST conversion. Offline recovery
+			 * backs off without replacing that policy with a UTC cadence.
+			 */
+			while (date_time_now(&now_utc_ms) != 0 ||
+			       next_check <= now_utc_ms) {
+				schedule_ret = fairway_ota_discovery_get_next_check(&next_check);
+				if (schedule_ret == 0 &&
+				    date_time_now(&now_utc_ms) == 0 &&
+				    next_check > now_utc_ms) {
+					break;
+				}
+				LOG_ERR("OTA next-window discovery unavailable: %d", schedule_ret);
+				k_sleep(K_SECONDS(24 * 60 * 60));
+			}
+			schedule_ret = fairway_ota_scheduler_set_next_check(next_check);
+			if (schedule_ret != 0) {
+				LOG_ERR("Next OTA check could not be persisted: %d", schedule_ret);
 				return;
 			}
 		}
-		(void)process_available_release(&release);
-		return;
+		if (ret == 0) {
+			ret = process_available_release(&release);
+			if (ret != 0) {
+				LOG_ERR("OTA release processing failed: %d", ret);
+			}
+		}
+		if (!IS_ENABLED(CONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY)) {
+			return;
+		}
 	}
+
 }
+
+#if defined(FAIRWAY_OTA_TEST)
+void fairway_ota_delivery_test_run(int64_t boot_uptime_ms)
+{
+	first_boot_uptime_ms = boot_uptime_ms;
+	ota_delivery_thread_entry(NULL, NULL, NULL);
+}
+#endif
 
 int fairway_ota_delivery_init(int64_t boot_started_uptime_ms)
 {

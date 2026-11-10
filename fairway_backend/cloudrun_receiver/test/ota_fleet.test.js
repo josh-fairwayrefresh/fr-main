@@ -16,6 +16,7 @@ async function setup({ hq = 'America/Los_Angeles', approvals } = {}) {
   const db = new FakeFirestore();
   let time = new Date('2026-03-08T07:00:00Z');
   const options = {
+    artifactDeliveryEnabled: true,
     now: () => new Date(time), headquartersTimeZone: hq,
     artifactStore: {
       async upload() { assert.fail('Fleet fixtures are preseeded; publication is not expected.'); },
@@ -81,6 +82,7 @@ async function run() {
     for (const mutation of [
       { sha256: 'c'.repeat(64) }, { hardware_ids: ['other-board'] },
       { provenance: { signing_fingerprint: 'wrong' } }, { state: 'publish_failed' },
+      { size_bytes: 434177 }, { size_bytes: 442368 },
     ]) {
       const { db, ota } = await setup();
       await db.collection('ota_releases').doc(RELEASE).update(mutation);
@@ -289,6 +291,7 @@ async function run() {
     const digest = 'b'.repeat(64);
     await db.collection('ota_releases').doc('OTA-1.0').set({
       state: 'published', sha256: digest, hardware_ids: [HARDWARE_ID],
+      size_bytes: 512,
       version_string: '1.0.0+1', provenance: { signing_fingerprint: PRODUCTION_FINGERPRINT },
     });
     const nextOta = createOtaService(db, {
@@ -299,6 +302,40 @@ async function run() {
     assert.equal(next.devices[0].schedule, 'nightly_0030');
     assert.equal(next.devices[0].next_window, '2026-03-08T08:30:00.000Z');
     assert.equal((await db.collection('devices').doc('FRB-0005').get()).data().ota_capability.schedule_mode, 'one_time');
+  });
+  await test('corrected successor bootstrap stays exact-device and the next successor stays nightly', async () => {
+    const { db, options } = await setup();
+    const digest = 'b'.repeat(64);
+    for (const [id, version] of [['OTA-0.1alt-r2', '0.1.0+3'], ['OTA-1.0-r2', '1.0.0+2']]) {
+      await db.collection('ota_releases').doc(id).set({
+        state: 'published', release_id: id, sha256: digest, version_string: version,
+        size_bytes: 512,
+        hardware_ids: [HARDWARE_ID], provenance: { signing_fingerprint: PRODUCTION_FINGERPRINT },
+      });
+    }
+    const ota = createOtaService(db, {
+      ...options,
+      acceptedReleases: { 'OTA-0.1alt-r2': digest, 'OTA-1.0-r2': digest },
+      publicationApprovals: {
+        'OTA-0.1alt-r2': { ...approval(digest, ['FRB-0005']),
+          build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
+        'OTA-1.0-r2': { ...approval(digest, ['FRB-0005']),
+          build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
+      },
+    });
+    const first = await ota.prepareAssignment({
+      release_id: 'OTA-0.1alt-r2', device_ids: ['FRB-0005'],
+    }, 'admin');
+    assert.equal(first.devices[0].schedule, 'bootstrap_900_seconds');
+    await assert.rejects(ota.prepareAssignment({
+      release_id: 'OTA-1.0-r2', device_ids: ['FRB-0005'],
+    }, 'admin'), (error) => error.code === 'device_not_eligible');
+    await db.collection('ota_device_status').doc('FRB-0005').set({ confirmed_schedule_mode: 'nightly' });
+    const second = await ota.prepareAssignment({
+      release_id: 'OTA-1.0-r2', device_ids: ['FRB-0005'],
+    }, 'admin');
+    assert.equal(second.devices[0].schedule, 'nightly_0030');
+    assert.equal(second.devices[0].next_window, '2026-03-08T08:30:00.000Z');
   });
   console.log(`${count} fleet/governance tests passed`);
 }

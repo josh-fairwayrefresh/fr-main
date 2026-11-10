@@ -7,12 +7,15 @@ const { createFleetAuthorization, HEADQUARTERS_TIME_ZONE } = require('./fleet_au
 
 const HARDWARE_ID = 'circuitdojo_feather_nrf9151@1/nrf9151/ns';
 const MCUBOOT_SECONDARY_SLOT_BYTES = 0x6c000;
-const RELEASE_ID_PATTERN = /^OTA-(?:0\.1(?:alt)?|1\.0)$/;
+const MAX_SIGNED_IMAGE_BYTES = 0x6a000;
+const RELEASE_ID_PATTERN = /^OTA-(?:0\.1|(?:0\.1alt|1\.0)(?:-r2)?)$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+\+\d+$/;
 const RELEASE_VERSIONS = Object.freeze({
   'OTA-0.1': '0.1.0+1',
   'OTA-0.1alt': '0.1.0+2',
   'OTA-1.0': '1.0.0+1',
+  'OTA-0.1alt-r2': '0.1.0+3',
+  'OTA-1.0-r2': '1.0.0+2',
 });
 const TERMINAL_STATES = new Set(['confirmed', 'failed', 'rolled_back']);
 const UPDATE_STATES = new Set([
@@ -105,7 +108,8 @@ function nextCourseCheckTime(timeZone, now) {
   throw new OtaError('course_timezone_unavailable', 'Could not calculate the next Course-local OTA check.', 422);
 }
 
-function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES) {
+function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES,
+  publicationApprovals = PUBLICATION_APPROVALS) {
   const { release_id: releaseId, version, hardware_ids: hardwareIds } = body || {};
   const encoded = body?.artifact_base64;
   const expectedDigest = body?.sha256;
@@ -115,7 +119,7 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES) {
   }
 
   if (typeof releaseId !== 'string' || !RELEASE_ID_PATTERN.test(releaseId)) {
-    throw new OtaError('invalid_release_id', 'Release ID must be OTA-0.1, OTA-0.1alt, or OTA-1.0.');
+    throw new OtaError('invalid_release_id', 'Release ID must identify a supported immutable OTA release.');
   }
   const expectedVersion = isSafeVersion(version)
     ? `${version.major}.${version.minor}.${version.revision}+${version.build}`
@@ -135,7 +139,7 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES) {
   }
   const artifact = Buffer.from(encoded, 'base64');
   if (artifact.toString('base64') !== encoded || artifact.length < 32
-      || artifact.length > MCUBOOT_SECONDARY_SLOT_BYTES
+      || artifact.length > MAX_SIGNED_IMAGE_BYTES
       || artifact.subarray(0, 4).compare(Buffer.from([0x3d, 0xb8, 0xf3, 0x96])) !== 0) {
     throw new OtaError('invalid_artifact', 'Artifact is not a valid-sized MCUboot image for this slot.');
   }
@@ -158,6 +162,11 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES) {
     throw new OtaError('invalid_notes', 'Release notes must be 1000 characters or fewer.');
   }
   const manifest = body.manifest;
+  const successor = releaseId.endsWith('-r2');
+  const sourceCommit = successor ? publicationApprovals[releaseId]?.build_base_commit
+    : '2d72b5de401b3faecb09a5e86a5410156692d18e';
+  const sourceDigest = successor ? publicationApprovals[releaseId]?.build_source_sha256
+    : '6c786dd3257d5c05c4b792fa3d33f90d6473a790036dbc1377f886395433040c';
   if (acceptedReleases[releaseId] !== digest) {
     throw new OtaError('release_not_accepted', 'Image bytes do not match the CPO-accepted production release.');
   }
@@ -166,8 +175,11 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES) {
       || manifest.board !== HARDWARE_ID || manifest.device_credentials_embedded !== false
       || manifest.signing?.fingerprint !== PRODUCTION_FINGERPRINT
       || manifest.generated_mcuboot_public_key_fingerprint !== PRODUCTION_FINGERPRINT
-      || manifest.build_source_sha256 !== '6c786dd3257d5c05c4b792fa3d33f90d6473a790036dbc1377f886395433040c'
-      || manifest.source_commit !== '2d72b5de401b3faecb09a5e86a5410156692d18e'
+      || !/^[a-f0-9]{64}$/.test(sourceDigest || '')
+      || !/^[a-f0-9]{40}$/.test(sourceCommit || '')
+      || manifest.build_source_sha256 !== sourceDigest
+      || manifest.source_commit !== sourceCommit
+      || (successor && manifest.generated_image_capacity?.max_signed_image_bytes !== MAX_SIGNED_IMAGE_BYTES)
       || manifest.signing.algorithm !== 'ECDSA-P256'
       || manifest.signing.private_key_in_artifacts !== false
       || manifest.ncs_version !== '3.1.1') {
@@ -202,12 +214,14 @@ function createOtaService(db, {
   artifactStore, now = () => new Date(), acceptedReleases = ACCEPTED_RELEASES,
   publicationApprovals = PUBLICATION_APPROVALS,
   headquartersTimeZone = HEADQUARTERS_TIME_ZONE,
+  artifactDeliveryEnabled = false,
 } = {}) {
   const releases = db.collection('ota_releases');
   const deployments = db.collection('ota_deployments');
   const assignments = db.collection('ota_assignments');
   const fleet = createFleetAuthorization(db, {
     now, nextWindow: nextCourseCheckTime, OtaError, hardwareId: HARDWARE_ID,
+    maxImageBytes: MAX_SIGNED_IMAGE_BYTES,
     fingerprint: PRODUCTION_FINGERPRINT, acceptedReleases,
     approvals: publicationApprovals, headquartersTimeZone,
   });
@@ -215,6 +229,13 @@ function createOtaService(db, {
   function requireArtifactStore() {
     if (!artifactStore) {
       throw new OtaError('artifact_storage_unavailable', 'OTA artifact storage is not configured.', 503);
+    }
+  }
+
+  function requireArtifactDelivery() {
+    if (artifactDeliveryEnabled !== true) {
+      throw new OtaError('artifact_delivery_disabled',
+        'Artifact delivery is disabled pending verified credential logging protections.', 503);
     }
   }
 
@@ -243,7 +264,7 @@ function createOtaService(db, {
 
   async function registerRelease(body, adminUid) {
     requireArtifactStore();
-    const release = validateArtifact(body, acceptedReleases);
+    const release = validateArtifact(body, acceptedReleases, publicationApprovals);
     if (!publicationEligible(release.releaseId, release.digest, publicationApprovals)) {
       release.artifact.fill(0);
       throw new OtaError('publication_not_authorized', RELEASE_BLOCKERS.join(' '), 409);
@@ -330,6 +351,7 @@ function createOtaService(db, {
   }
 
   async function issueDownloadToken(deploymentId, deviceId, release) {
+    requireArtifactDelivery();
     const token = crypto.randomBytes(32).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(now().getTime() + DOWNLOAD_TOKEN_LIFETIME_MS);
@@ -471,6 +493,7 @@ function createOtaService(db, {
   }
 
   async function getAuthorizedArtifact(token) {
+    requireArtifactDelivery();
     requireArtifactStore();
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
       throw new OtaError('download_not_authorized', 'Artifact authorization is invalid.', 403);
@@ -512,6 +535,7 @@ function createOtaService(db, {
   }
 
   async function streamArtifact(objectPath, options) {
+    requireArtifactDelivery();
     requireArtifactStore();
     return artifactStore.createReadStream(objectPath, options);
   }
@@ -539,6 +563,7 @@ function createOtaService(db, {
 module.exports = {
   HARDWARE_ID,
   MCUBOOT_SECONDARY_SLOT_BYTES,
+  MAX_SIGNED_IMAGE_BYTES,
   OtaError,
   createOtaService,
   nextCourseCheckTime,

@@ -210,6 +210,7 @@ int fairway_ota_discovery_check(struct fairway_ota_release *release)
 	if (result.deployment_id == NULL || result.release_id == NULL ||
 	    result.artifact_path == NULL || result.hardware_id == NULL ||
 	    result.image_size == 0 || result.image_size > PM_MCUBOOT_SECONDARY_SIZE ||
+	    result.image_size > FAIRWAY_OTA_MAX_IMAGE_SIZE ||
 	    strlen(result.deployment_id) >= sizeof(release->deployment_id) ||
 	    strlen(result.release_id) >= sizeof(release->release_id) ||
 	    strlen(result.artifact_path) >= sizeof(release->artifact_path) ||

@@ -8,7 +8,8 @@ process.env.FAIRWAY_GCP_PROJECT = 'fairway-refresh-sandbox-test';
 process.env.GOOGLE_CLOUD_PROJECT = 'fairway-refresh-sandbox-test';
 const { createFairwayHandlers } = require('../index');
 const { generateDeviceCredential } = require('../lib/fleet/credentials');
-const { createOtaService, HARDWARE_ID, OtaError, nextCourseCheckTime } = require('../lib/ota/ota_service');
+const { createOtaService, HARDWARE_ID, OtaError, nextCourseCheckTime,
+  MAX_SIGNED_IMAGE_BYTES, validateArtifact } = require('../lib/ota/ota_service');
 const { Writable, Readable } = require('stream');
 const { PRODUCTION_FINGERPRINT } = require('../lib/ota/accepted_releases');
 const { approval, capability } = require('./ota_fixtures');
@@ -120,6 +121,7 @@ async function setUp() {
   const artifactStore = createArtifactStore();
   let currentTime = new Date('2026-03-08T07:00:00.000Z');
   const ota = createOtaService(db, {
+    artifactDeliveryEnabled: true,
     artifactStore, now: () => new Date(currentTime), acceptedReleases: testAcceptedReleases,
     publicationApprovals: { [RELEASE_ID]: approval(testAcceptedReleases[RELEASE_ID]) },
   });
@@ -167,6 +169,7 @@ test('production routes authorize Admin/device operations and stream ranged arti
     course_ids: [],
   });
   const handlers = createFairwayHandlers(db, {
+    artifactDeliveryEnabled: true,
     artifactStore,
     acceptedOtaReleases: testAcceptedReleases,
     otaPublicationApprovals: { [RELEASE_ID]: approval(testAcceptedReleases[RELEASE_ID]) },
@@ -605,6 +608,80 @@ test('OTA inventory, assignment and publication routes require global Admin acce
     }), res);
     assert.strictEqual(res.statusCode, 403, path);
   }
+});
+
+test('effective image-size boundary includes header and TLVs, not raw slot space', () => {
+  for (const size of [MAX_SIGNED_IMAGE_BYTES - 1, MAX_SIGNED_IMAGE_BYTES,
+    MAX_SIGNED_IMAGE_BYTES + 1, 442368]) {
+    const image = Buffer.alloc(size);
+    createArtifact().copy(image);
+    const body = createReleaseBody(image);
+    const accepted = { [RELEASE_ID]: body.sha256 };
+    if (size <= MAX_SIGNED_IMAGE_BYTES) {
+      assert.strictEqual(validateArtifact(body, accepted).artifact.length, size);
+    } else {
+      assert.throws(() => validateArtifact(body, accepted),
+        (error) => error.code === 'invalid_artifact');
+    }
+  }
+});
+
+test('delivery defaults closed even with published fixture and valid assignment', async () => {
+  const { db, ota, artifactStore } = await setUp();
+  await ota.registerRelease(createReleaseBody(), 'admin-1');
+  await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  const device = (await db.collection('devices').doc(DEVICE_ID).get()).data();
+  const disabled = createOtaService(db, {
+    artifactStore, acceptedReleases: testAcceptedReleases,
+    publicationApprovals: { [RELEASE_ID]: approval(testAcceptedReleases[RELEASE_ID]) },
+    now: () => new Date('2026-03-08T07:00:00.000Z'),
+  });
+  await assert.rejects(disabled.checkForUpdate(DEVICE_ID, device, HARDWARE_ID),
+    (error) => error.code === 'artifact_delivery_disabled');
+  await assert.rejects(disabled.getAuthorizedArtifact('unissued-test-marker'),
+    (error) => error.code === 'artifact_delivery_disabled');
+  assert.strictEqual((await db.collection('ota_download_tokens').get()).size, 0);
+});
+
+test('operator authentication errors never log raw verifier credential details', async () => {
+  const marker = 'SECRET-TEST-CREDENTIAL-DO-NOT-LOG';
+  const handlers = createFairwayHandlers(new FakeFirestore(), {
+    verifyOperatorToken: async () => { throw new Error(marker); },
+  });
+  const logged = [];
+  const originalWarn = console.warn;
+  try {
+    console.warn = (...args) => logged.push(args.join(' '));
+    const res = createJsonResponse();
+    await handlers.fairwayAdmin(createRequest({
+      method: 'GET', path: '/api/v1/admin/ota/releases',
+      headers: { authorization: 'Bearer test-token' },
+    }), res);
+    assert.strictEqual(res.statusCode, 401);
+  } finally { console.warn = originalWarn; }
+  assert.ok(logged.some((line) => line.includes('invalid_token')));
+  assert.ok(logged.every((line) => !line.includes(marker)));
+});
+
+test('qualified successor version is distinct and still needs accepted bytes and reviewed provenance', () => {
+  const artifact = createArtifact();
+  artifact.writeUInt32LE(3, 24);
+  const body = createReleaseBody(artifact);
+  body.release_id = 'OTA-0.1alt-r2';
+  body.version = { ...VERSION, build: 3 };
+  body.version_string = '0.1.0+3';
+  Object.assign(body.manifest, {
+    release_id: body.release_id, version_string: body.version_string,
+    source_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
+    generated_image_capacity: { max_signed_image_bytes: MAX_SIGNED_IMAGE_BYTES },
+  });
+  assert.throws(() => validateArtifact(body), (e) => e.code === 'release_not_accepted');
+  const accepted = { [body.release_id]: body.sha256 };
+  assert.throws(() => validateArtifact(body, accepted), (e) => e.code === 'invalid_provenance');
+  assert.strictEqual(validateArtifact(body, accepted, {
+    [body.release_id]: { build_base_commit: body.manifest.source_commit,
+      build_source_sha256: body.manifest.build_source_sha256 },
+  }).versionString, '0.1.0+3');
 });
 
 run();

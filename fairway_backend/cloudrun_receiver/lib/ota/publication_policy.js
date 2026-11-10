@@ -11,6 +11,10 @@ const RELEASE_BLOCKERS = Object.freeze([
 function publicationEligible(releaseId, digest, approvals = PUBLICATION_APPROVALS) {
   const approval = approvals[releaseId];
   return releaseId !== 'OTA-0.1' && !!approval && approval.sha256 === digest
+    && (!releaseId.endsWith('-r2') || (
+      /^[a-f0-9]{40}$/.test(approval.build_base_commit || '')
+      && /^[a-f0-9]{64}$/.test(approval.build_source_sha256 || '')
+    ))
     && ['verification_record', 'cpo_approval_record', 'alignment_record',
       'source_commit', 'release_record_commit', 'remote_backup_record',
       'publication_authorization_record'].every((field) => (

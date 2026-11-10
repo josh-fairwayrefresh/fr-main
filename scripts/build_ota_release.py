@@ -39,6 +39,7 @@ REPOSITORY_DIR = Path(__file__).resolve().parents[1]
 APPLICATION_DIR = REPOSITORY_DIR / "samples" / "fairway_power_sandbox"
 NCS_VERSION = "3.1.1"
 SECONDARY_SLOT_BYTES = 0x6C000
+MAX_SIGNED_IMAGE_BYTES = 0x6A000
 HARDWARE_ID = "circuitdojo_feather_nrf9151@1/nrf9151/ns"
 RELEASES = {
     "OTA-0.1": {
@@ -56,7 +57,69 @@ RELEASES = {
         "version_string": "1.0.0+1",
         "schedule": "nightly",
     },
+    "OTA-0.1alt-r2": {
+        "version": {"major": 0, "minor": 1, "revision": 0, "build": 3},
+        "version_string": "0.1.0+3",
+        "schedule": "nightly",
+    },
+    "OTA-1.0-r2": {
+        "version": {"major": 1, "minor": 0, "revision": 0, "build": 2},
+        "version_string": "1.0.0+2",
+        "schedule": "nightly",
+    },
 }
+
+
+def _validate_image_size(size: int) -> None:
+    if size < 32 or size > MAX_SIGNED_IMAGE_BYTES:
+        raise ValueError("signed MCUboot image exceeds the effective 424 KiB move-swap limit")
+
+
+def _generated_image_capacity(build_dir: Path, layout: dict, boot_config: dict) -> dict:
+    if any(any(layout.get(name, {}).get(key) != value for key, value in expected.items())
+           for name, expected in {
+        "mcuboot_primary": {"address": 0x10000, "size": SECONDARY_SLOT_BYTES},
+        "mcuboot_secondary": {"address": 0x7C000, "size": SECONDARY_SLOT_BYTES},
+    }.items()):
+        raise ValueError("generated image slots differ from the approved move-swap layout")
+    boot = boot_config.get("mcuboot/zephyr", {})
+    if boot.get("CONFIG_BOOT_SWAP_USING_MOVE") != "y" \
+            or boot.get("CONFIG_BOOT_MAX_IMG_SECTORS") != "256":
+        raise ValueError("generated MCUboot move-swap configuration differs from the approved layout")
+    config = (build_dir / "mcuboot" / "zephyr" / ".config").read_text(encoding="utf-8")
+    if re.search(r"^CONFIG_BOOT_ENCRYPT_(RSA|EC256|X25519)=y$", config, re.MULTILINE):
+        raise ValueError("generated MCUboot image encryption changes the approved trailer layout")
+    dts = build_dir / "mcuboot" / "zephyr" / "zephyr.dts"
+    text = dts.read_text(encoding="utf-8")
+    # Bind geometry to internal flash, not the unrelated external LittleFS device.
+    flash = re.search(r"(?m)^\s*flash0:\s*flash@0\s*\{(.*?)^\s*\};", text, re.DOTALL)
+    if flash is None:
+        raise ValueError("generated MCUboot internal flash geometry is missing")
+    geometry = {}
+    for prop in ("erase-block-size", "write-block-size"):
+        match = re.search(rf"{prop}\s*=\s*<\s*(0x[0-9a-fA-F]+|\d+)\s*>", flash.group(1))
+        if match is None:
+            raise ValueError(f"generated MCUboot {prop} is missing")
+        geometry[prop] = int(match.group(1), 0)
+    if geometry != {"erase-block-size": 4096, "write-block-size": 4}:
+        raise ValueError("generated MCUboot flash geometry differs from the approved layout")
+    trailer = 256 * 3 * geometry["write-block-size"] + 4 * 8 + 16
+    erase = geometry["erase-block-size"]
+    reserved_trailer = ((trailer + erase - 1) // erase) * erase
+    maximum = SECONDARY_SLOT_BYTES - reserved_trailer - erase
+    if maximum != MAX_SIGNED_IMAGE_BYTES:
+        raise ValueError("generated MCUboot capacity differs from the approved 424 KiB limit")
+    return {
+        "raw_slot_bytes": SECONDARY_SLOT_BYTES,
+        "erase_block_bytes": erase,
+        "write_block_bytes": geometry["write-block-size"],
+        "max_image_sectors": 256,
+        "trailer_bytes": trailer,
+        "reserved_trailer_bytes": reserved_trailer,
+        "move_workspace_bytes": erase,
+        "max_signed_image_bytes": maximum,
+        "mcuboot_dts_sha256": _sha256_file(dts),
+    }
 
 
 def _validate_output_dir(output_dir: Path) -> Path:
@@ -312,7 +375,7 @@ def _generated_protected_storage_configuration(build_dir: Path) -> dict[str, dic
 def build_release(args: argparse.Namespace) -> Path:
     release = RELEASES.get(args.release_id)
     if release is None:
-        raise ValueError("release ID must be OTA-0.1, OTA-0.1alt, or OTA-1.0")
+        raise ValueError("release ID must identify a supported immutable OTA release")
     ncs_dir = args.ncs_install_dir.resolve(strict=True)
     _require_ncs(ncs_dir)
 
@@ -445,8 +508,9 @@ def _build_release(
         secondary = partition_layout["mcuboot_secondary"]
         if secondary["size"] != SECONDARY_SLOT_BYTES:
             raise ValueError("generated secondary slot does not match the configured 432 KiB OTA limit")
-        if ota_image.stat().st_size < 32 or ota_image.stat().st_size > secondary["size"]:
-            raise ValueError("signed MCUboot image does not fit the generated secondary slot")
+        _validate_image_size(ota_image.stat().st_size)
+        boot_config = _generated_boot_configuration(build_dir)
+        image_capacity = _generated_image_capacity(build_dir, partition_layout, boot_config)
         image_header = ota_image.read_bytes()
         if image_header[:4] != bytes((0x3D, 0xB8, 0xF3, 0x96)):
             raise ValueError("signed artifact does not contain a valid MCUboot image header")
@@ -467,7 +531,6 @@ def _build_release(
         shutil.copyfile(ota_image, ota_artifact)
         _protect_tree(output_dir)
 
-        boot_config = _generated_boot_configuration(build_dir)
         configured_key = _configured_ota_signing_key(
             boot_config, APPLICATION_DIR, west_topdir, ncs_dir
         )
@@ -524,6 +587,7 @@ def _build_release(
                 for part in command
             ],
             "generated_partition_layout": partition_layout,
+            "generated_image_capacity": image_capacity,
             "generated_boot_configuration": _redact_signing_paths(boot_config),
             "signing": {
                 "algorithm": "ECDSA-P256",

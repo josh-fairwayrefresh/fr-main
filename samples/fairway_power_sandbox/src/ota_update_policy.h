@@ -7,6 +7,8 @@
 
 #define FAIRWAY_OTA_HARDWARE_ID_MAX 64
 #define FAIRWAY_OTA_SHA256_SIZE 32
+/* Equal 432 KiB slots minus one trailer sector and one move-swap sector. */
+#define FAIRWAY_OTA_MAX_IMAGE_SIZE 434176U
 
 struct fairway_ota_version {
 	uint8_t major;

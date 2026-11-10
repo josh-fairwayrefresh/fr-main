@@ -387,6 +387,45 @@ class OtaReleaseVerificationTests(unittest.TestCase):
                 self.manifest_path, self.ncs_dir, self.signing_key
             )
 
+    def test_effective_signed_size_boundary(self):
+        for size in (434175, 434176):
+            build_ota_release._validate_image_size(size)
+        for size in (31, 434177, 442368):
+            with self.subTest(size=size), self.assertRaisesRegex(ValueError, "424 KiB"):
+                build_ota_release._validate_image_size(size)
+
+    def test_generated_capacity_checks_actual_move_swap_geometry(self):
+        build = self.work_dir / "build"
+        boot = build / "mcuboot" / "zephyr"
+        boot.mkdir(parents=True)
+        (boot / ".config").write_text("CONFIG_BOOT_SWAP_USING_MOVE=y\n")
+        dts = boot / "zephyr.dts"
+        dts.write_text("flash0: flash@0 {\n erase-block-size = <0x1000>;\n"
+                       " write-block-size = <0x4>;\n};\n")
+        layout = {
+            "mcuboot_primary": {"address": 0x10000, "size": 0x6C000, "end_address": 0x7C000},
+            "mcuboot_secondary": {"address": 0x7C000, "size": 0x6C000},
+        }
+        config = {"mcuboot/zephyr": {
+            "CONFIG_BOOT_SWAP_USING_MOVE": "y", "CONFIG_BOOT_MAX_IMG_SECTORS": "256",
+        }}
+        capacity = build_ota_release._generated_image_capacity(build, layout, config)
+        self.assertEqual(capacity["max_signed_image_bytes"], 434176)
+        self.assertEqual(capacity["trailer_bytes"], 3120)
+        dts.write_text(dts.read_text().replace("0x1000", "0x2000"))
+        with self.assertRaisesRegex(ValueError, "geometry differs"):
+            build_ota_release._generated_image_capacity(build, layout, config)
+        config["mcuboot/zephyr"]["CONFIG_BOOT_SWAP_USING_MOVE"] = "n"
+        with self.assertRaisesRegex(ValueError, "configuration differs"):
+            build_ota_release._generated_image_capacity(build, layout, config)
+
+    def test_successors_do_not_relabel_original_release_identities(self):
+        self.assertEqual(RELEASES["OTA-0.1alt"]["version_string"], "0.1.0+2")
+        self.assertEqual(RELEASES["OTA-1.0"]["version_string"], "1.0.0+1")
+        self.assertEqual(RELEASES["OTA-0.1alt-r2"]["version_string"], "0.1.0+3")
+        self.assertEqual(RELEASES["OTA-1.0-r2"]["version_string"], "1.0.0+2")
+        self.assertEqual(RELEASES["OTA-0.1alt-r2"]["schedule"], "nightly")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,7 +14,8 @@ int fairway_ota_validate_descriptor(const struct fairway_ota_descriptor *descrip
 	if (strcmp(descriptor->hardware_id, hardware_id) != 0) {
 		return -EXDEV;
 	}
-	if (descriptor->image_size < 32 || descriptor->image_size > slot_capacity) {
+	if (descriptor->image_size < 32 || descriptor->image_size > slot_capacity ||
+	    descriptor->image_size > FAIRWAY_OTA_MAX_IMAGE_SIZE) {
 		return -EFBIG;
 	}
 	return 0;

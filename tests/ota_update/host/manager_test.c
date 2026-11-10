@@ -223,7 +223,7 @@ ZTEST(fairway_ota_update_policy, test_manager_confirmation_requires_both_readine
 	reset_environment();
 	init_manager(true, false);
 	zassert_equal(ota_test_scheduled_work->delay,
-		      CONFIG_FAIRWAY_OTA_TRIAL_TIMEOUT_SECONDS);
+		      K_SECONDS(CONFIG_FAIRWAY_OTA_TRIAL_TIMEOUT_SECONDS));
 	zassert_equal(ota_update_confirm_healthy(false, true), -EAGAIN);
 	zassert_equal(ota_update_confirm_healthy(true, false), -EAGAIN);
 	zassert_equal(ota_test.confirm_calls, 0);

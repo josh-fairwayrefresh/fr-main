@@ -10,7 +10,7 @@ const MAX_SELECTION = 50;
 const HEADQUARTERS_TIME_ZONE = 'America/Los_Angeles';
 
 function createFleetAuthorization(db, {
-  now, nextWindow, OtaError, hardwareId, fingerprint,
+  now, nextWindow, OtaError, hardwareId, fingerprint, maxImageBytes,
   acceptedReleases, approvals = PUBLICATION_APPROVALS,
   headquartersTimeZone = HEADQUARTERS_TIME_ZONE,
 }) {
@@ -26,6 +26,8 @@ function createFleetAuthorization(db, {
     }
     if (!publicationEligible(releaseId, release.sha256, approvals)
         || release.sha256 !== acceptedReleases[releaseId]
+        || !Number.isSafeInteger(release.size_bytes)
+        || release.size_bytes < 32 || release.size_bytes > maxImageBytes
         || release.provenance?.signing_fingerprint !== fingerprint
         || !release.hardware_ids?.includes(hardwareId)) {
       throw new OtaError('release_not_eligible', 'Release publication prerequisites are incomplete.', 409);
@@ -45,7 +47,8 @@ function createFleetAuthorization(db, {
       return 'This device is outside the release commissioning authorization.';
     }
     if (capability.schedule_mode === 'one_time'
-        && (device.device_id !== 'FRB-0005' || releaseId && releaseId !== 'OTA-0.1alt')) {
+        && (device.device_id !== 'FRB-0005' || releaseId
+          && !['OTA-0.1alt', 'OTA-0.1alt-r2'].includes(releaseId))) {
       return 'The bootstrap exception is restricted to FRB-0005 receiving OTA 0.1alt.';
     }
     return null;

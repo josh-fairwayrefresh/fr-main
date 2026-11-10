@@ -196,13 +196,14 @@ function createFairwayHandlers(db, {
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
   ),
   artifactStore = null,
+  artifactDeliveryEnabled = false,
   acceptedOtaReleases,
   otaPublicationApprovals,
   headquartersTimeZone,
 } = {}) {
   const otaService = createOtaService(db, {
     artifactStore, now, acceptedReleases: acceptedOtaReleases,
-    publicationApprovals: otaPublicationApprovals, headquartersTimeZone,
+    publicationApprovals: otaPublicationApprovals, headquartersTimeZone, artifactDeliveryEnabled,
   });
   /* Persists a golfer request using the validated demand-window suppression. */
   async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now, rejection = null) {
@@ -400,8 +401,8 @@ function createFairwayHandlers(db, {
       }
 
       return identity;
-    } catch (error) {
-      console.warn('Rejected operator request with invalid Firebase ID token:', error.message || error);
+    } catch {
+      console.warn('Rejected operator request with invalid Firebase ID token; invalid_token');
       res.status(401).send('Unauthorized\n');
       return null;
     }
@@ -1459,6 +1460,10 @@ function createFairwayHandlers(db, {
       if (error instanceof RequestReportingError) {
         return res.status(error.status).json({ error: error.message, code: error.code });
       }
+      if (path.startsWith('/api/v1/admin/ota/') && !(error instanceof OtaError)) {
+        console.error('Failed to handle OTA Admin request; internal_error');
+        return res.status(500).json({ error: 'internal_error' });
+      }
       if (error.code === 'last_admin') {
         return res.status(409).json({ error: 'last_admin_required' });
       }
@@ -2035,6 +2040,7 @@ const handlers = createFairwayHandlers(new Firestore({
 }), {
   allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins,
   artifactStore: createGcsArtifactStore(process.env.FAIRWAY_OTA_BUCKET),
+  artifactDeliveryEnabled: process.env.FAIRWAY_OTA_DELIVERY_ENABLED === 'true',
 });
 
 if (runtimeEnvironment.serviceMode === 'admin') {

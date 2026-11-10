@@ -18,6 +18,8 @@ from build_ota_release import (
     HARDWARE_ID,
     RELEASES,
     SECONDARY_SLOT_BYTES,
+    MAX_SIGNED_IMAGE_BYTES,
+    _validate_image_size,
     _assert_private_key_not_embedded,
     _public_key_fingerprint,
     _reject_nordic_development_key,
@@ -96,6 +98,18 @@ def verify_release(manifest_path: Path, ncs_install_dir: Path, signing_key: Path
     secondary = partitions.get("mcuboot_secondary") if isinstance(partitions, dict) else None
     if not isinstance(secondary, dict) or secondary.get("size") != SECONDARY_SLOT_BYTES:
         raise ValueError("manifest MCUboot secondary slot size is invalid")
+    capacity = manifest.get("generated_image_capacity")
+    if manifest["release_id"].endswith("-r2") or capacity is not None:
+        expected = {
+            "raw_slot_bytes": SECONDARY_SLOT_BYTES, "erase_block_bytes": 4096,
+            "write_block_bytes": 4, "max_image_sectors": 256, "trailer_bytes": 3120,
+            "reserved_trailer_bytes": 4096, "move_workspace_bytes": 4096,
+            "max_signed_image_bytes": MAX_SIGNED_IMAGE_BYTES,
+        }
+        if not isinstance(capacity, dict) or any(
+            capacity.get(key) != value for key, value in expected.items()
+        ) or re.fullmatch(r"[a-f0-9]{64}", str(capacity.get("mcuboot_dts_sha256", ""))) is None:
+            raise ValueError("manifest effective MCUboot image capacity is invalid")
     storage_configs = manifest.get("generated_protected_storage_configuration")
     if not isinstance(storage_configs, dict):
         raise ValueError("manifest protected-storage configuration is missing")
@@ -162,8 +176,7 @@ def verify_release(manifest_path: Path, ncs_install_dir: Path, signing_key: Path
                 or _sha256_file(artifact) != digest:
             raise ValueError(f"{name_key} SHA-256 does not match the manifest")
         if name_key == "artifact_file":
-            if artifact.stat().st_size < 32 or artifact.stat().st_size > SECONDARY_SLOT_BYTES:
-                raise ValueError("signed MCUboot image exceeds its declared secondary slot")
+            _validate_image_size(artifact.stat().st_size)
             image = artifact.read_bytes()
             if image[:4] != bytes((0x3D, 0xB8, 0xF3, 0x96)):
                 raise ValueError("signed artifact does not contain a valid MCUboot image header")

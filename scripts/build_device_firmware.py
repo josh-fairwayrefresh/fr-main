@@ -266,6 +266,7 @@ def _generated_boot_configuration(build_dir: Path) -> dict[str, dict[str, str]]:
         "CONFIG_BOOT_SIGNATURE_TYPE_RSA",
         "CONFIG_BOOT_SIGNATURE_KEY_FILE",
         "CONFIG_BOOT_SWAP_USING_MOVE",
+        "CONFIG_BOOT_MAX_IMG_SECTORS",
         "CONFIG_BOOT_SWAP_USING_OFFSET",
         "CONFIG_MCUBOOT",
         "CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION",
