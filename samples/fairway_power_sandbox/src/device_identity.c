@@ -4,17 +4,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include <zephyr/drivers/uart.h>
-#include <zephyr/kernel.h>
-#include <zephyr/sys/reboot.h>
-
 #include <psa/protected_storage.h>
 #include <psa/storage_common.h>
 
 #define FAIRWAY_DEVICE_ID_UID       ((psa_storage_uid_t)0x46520001)
 #define FAIRWAY_DEVICE_KEY_UID      ((psa_storage_uid_t)0x46520002)
-#define PROVISION_PACKET_PREFIX     "FRBP"
-#define PROVISION_TIMEOUT_MS        60000
 
 static bool valid_device_id(const char *device_id)
 {
@@ -168,67 +162,4 @@ int fairway_device_identity_replace_key(const char *device_id, const char *devic
 		       PSA_SUCCESS
 		       ? 0
 		       : -EIO;
-}
-
-static void uart_write(const struct device *uart, const char *text)
-{
-	for (const char *cursor = text; *cursor != '\0'; cursor++) {
-		uart_poll_out(uart, *cursor);
-	}
-}
-
-int fairway_device_identity_provision_from_uart(const struct device *uart)
-{
-	char packet[sizeof(PROVISION_PACKET_PREFIX) - 1 + FAIRWAY_DEVICE_ID_MAX - 1 +
-		    FAIRWAY_DEVICE_KEY_MAX - 1];
-	char device_id[FAIRWAY_DEVICE_ID_MAX] = {0};
-	char device_key[FAIRWAY_DEVICE_KEY_MAX] = {0};
-	size_t received = 0;
-	int64_t deadline;
-	int ret = -ETIMEDOUT;
-
-	if (uart == NULL || !device_is_ready(uart)) {
-		return -ENODEV;
-	}
-
-	uart_write(uart, "\r\nFairway identity provisioning is ready.\r\n");
-	uart_write(uart, "Send the fixed-length FRBP provisioning packet within 60 seconds.\r\n");
-	deadline = k_uptime_get() + PROVISION_TIMEOUT_MS;
-
-	while (received < sizeof(packet) && k_uptime_get() < deadline) {
-		unsigned char byte;
-
-		if (uart_poll_in(uart, &byte) == 0) {
-			packet[received++] = (char)byte;
-		} else {
-			k_sleep(K_MSEC(10));
-		}
-	}
-
-	ret = -EBADMSG;
-	if (received != sizeof(packet) ||
-	    memcmp(packet, PROVISION_PACKET_PREFIX, sizeof(PROVISION_PACKET_PREFIX) - 1) != 0) {
-		goto done;
-	}
-
-	memcpy(device_id, packet + sizeof(PROVISION_PACKET_PREFIX) - 1,
-	       FAIRWAY_DEVICE_ID_MAX - 1);
-	memcpy(device_key, packet + sizeof(PROVISION_PACKET_PREFIX) - 1 +
-	       FAIRWAY_DEVICE_ID_MAX - 1, FAIRWAY_DEVICE_KEY_MAX - 1);
-
-	ret = fairway_device_identity_provision(device_id, device_key);
-	if (ret == 0 || ret == -EALREADY) {
-		uart_write(uart, "\r\nIdentity provisioning completed. Rebooting.\r\n");
-		memset(packet, 0, sizeof(packet));
-		memset(device_id, 0, sizeof(device_id));
-		memset(device_key, 0, sizeof(device_key));
-		k_sleep(K_MSEC(100));
-		sys_reboot(SYS_REBOOT_COLD);
-	}
-
-done:
-	memset(packet, 0, sizeof(packet));
-	memset(device_id, 0, sizeof(device_id));
-	memset(device_key, 0, sizeof(device_key));
-	return ret;
 }

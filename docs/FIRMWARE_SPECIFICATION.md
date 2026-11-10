@@ -118,9 +118,16 @@ production configuration are owned by `docs/DEPLOYMENT_GUIDE.md`.
 Permanent identity and credentials are stored as distinct PSA objects in
 TF-M Protected Storage. The Device ID is write-once; provisioning refuses a
 different existing ID, and the credential is not accepted from any firmware
-build input. The first-install service-mode UART provisioning packet is
-created from the operator-supplied existing backend credential and is not
-logged. Updates and MCUboot rollback leave the protected-storage partitions
+build input. USB commissioning uses the dedicated
+`CONFIG_FAIRWAY_USB_COMMISSIONING` application (`src/usb_commissioning.c`),
+not boot-button entry in the operational runtime. It keeps the debugger
+powered, receives interrupt-buffered CRC-protected requests, and verifies
+the existing credential through the shared PSA writer/loader. It does not
+run LTE, golfer transactions, or OTA scheduling. The former timed `FRBP`
+provisioning implementation is removed from current source; accepted
+operational binaries remain unchanged. Protocol, lifecycle, completion gates,
+and physical-evidence limits are owned by the Device Provisioning Guide.
+Updates and MCUboot rollback leave the protected-storage partitions
 outside both image slots. A blank object after an interrupted initial
 provisioning can be completed by retrying the same Device ID; malformed or
 corrupted protected storage fails closed and requires separately authorized

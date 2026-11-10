@@ -119,6 +119,18 @@ class OtaReleaseVerificationTests(unittest.TestCase):
     def write_manifest(self):
         self.manifest_path.write_text(json.dumps(self.manifest), encoding="utf-8")
 
+    def test_commissioning_role_is_rejected_by_operational_release_verifier(self):
+        self.manifest["image_role"] = "usb_commissioning"
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, "not operational OTA releases"):
+            verify_ota_release.verify_release(self.manifest_path, self.ncs_dir, self.signing_key)
+
+    def test_operational_artifact_is_not_accepted_as_commissioning_firmware(self):
+        with self.assertRaisesRegex(ValueError, "expected a USB commissioning image"):
+            verify_ota_release.verify_release(
+                self.manifest_path, self.ncs_dir, self.signing_key, commissioning=True
+            )
+
     def test_fingerprints_generated_mcu_boot_spki_as_raw_p256_key(self):
         build_dir = self.work_dir / "build"
         mcuboot_dir = build_dir / "mcuboot" / "zephyr"

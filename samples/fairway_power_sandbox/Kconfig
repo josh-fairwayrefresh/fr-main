@@ -2,6 +2,15 @@ source "Kconfig.zephyr"
 
 menu "Fairway firmware"
 
+config FAIRWAY_USB_COMMISSIONING
+	bool "Build the USB-only commissioning application instead of the operational runtime"
+	depends on UART_INTERRUPT_DRIVEN
+	default n
+	help
+	  Keeps the onboard debugger powered, receives buffered commissioning
+	  transactions, and writes identity only through TF-M Protected Storage.
+	  Never starts LTE, golfer transactions, or OTA scheduling.
+
 config FAIRWAY_OTA
 	bool "Enable MCUboot OTA staging and trial lifecycle"
 	depends on DFU_TARGET_MCUBOOT

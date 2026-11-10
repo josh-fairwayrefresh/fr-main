@@ -197,9 +197,7 @@ int main(void)
 		struct fairway_device_identity identity;
 		ret = fairway_device_identity_load(&identity);
 		if (ret == -ENOENT) {
-			LOG_WRN("Device identity is not provisioned; entering protected serial provisioning");
-			(void)fairway_device_identity_provision_from_uart(uart0_dev);
-			LOG_ERR("Identity provisioning did not complete");
+			LOG_ERR("Device identity is not provisioned; install the USB commissioning image");
 			return 0;
 		}
 		if (ret != 0) {

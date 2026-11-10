@@ -150,7 +150,7 @@ def _sha256_file(path: Path) -> str:
 OTA_DEVELOPMENT_SOURCE_FILES = frozenset(
     f"samples/fairway_power_sandbox/src/{name}"
     for name in (
-        "device_identity.c", "device_identity.h",
+        "device_identity.c", "device_identity.h", "usb_commissioning.c",
         "ota_delivery.c", "ota_delivery.h", "ota_delivery_reporting.c",
         "ota_update_discovery.c", "ota_update_discovery.h",
         "ota_update_download.c", "ota_update_download.h",

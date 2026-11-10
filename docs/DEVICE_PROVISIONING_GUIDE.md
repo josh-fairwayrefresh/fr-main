@@ -99,28 +99,108 @@ Management Unit when its required slots are blank; these keys are not
 embedded in firmware. The generated nRF9151 configuration and partition map
 are recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
-For initial USB commissioning, first install the approved common OTA 0.1
-merged image under the separately authorized physical procedure. With the
-device unprovisioned, enter service mode by holding PV8 through boot. Use the
-Feather's existing single USB development connection for debugging, runtime
-UART console access, and identity provisioning: the provisioning UART is
-exposed through the CMSIS-DAP probe's USB CDC-ACM serial interface. No separate
-UART cable, adapter, or second physical connection is required. Identify the
-existing USB serial port using
-[USB Runtime UART Console — Verified Development Connection](./DEPLOYMENT_GUIDE.md#usb-runtime-uart-console--verified-development-connection);
-do not assume a previously observed numeric port suffix is unchanged.
-From the protected workstation, run
-`python3 scripts/provision_device_identity.py --port /dev/cu.usbmodem<SUFFIX>`
-using that identified USB CDC-ACM port. The
-operator enters the exact permanent Device ID and existing backend-issued
-credential at hidden prompts. The tool sends a fixed-length provisioning
-packet; it does not read or modify Firestore, write a header, print the
-credential, or create a credential. The firmware validates the ID/key format,
-stores them with PSA Protected Storage, reports only success/failure, and
-reboots. Allow the initial secure boot to finish without interruption so
-TF-M can initialize the per-device hardware keys before provisioning
-identity. Release the service button and verify the identity through an
-authenticated normal request.
+### USB-only commissioning
+
+The replacement commissioning workflow uses the existing single USB cable:
+CMSIS-DAP for flashing and its CDC-ACM interface for serial provisioning.
+The commissioning application requires no PV8 operation, one-time readiness
+message, 60-second operator window, inter-byte pacing, or additional hardware.
+Previously installed field firmware can still disable the debugger; automatic
+button-free recovery is not established. On 2026-11-10, a separately authorized
+single PV8-assisted recovery established stable access for FRB-0005, after
+which protected provisioning, reboot persistence, unchanged OTA 0.1
+installation, and matching backend activation succeeded. The CPO confirmed
+physical request delivery and normal device indication following COMPLETE.
+See the [physical evidence](./DEPLOYMENT_GUIDE.md#frb-0005-physical-commissioning-evidence--2026-11-10).
+Disconnect field power before attaching USB, as required by the Assembly Guide.
+
+The dedicated `CONFIG_FAIRWAY_USB_COMMISSIONING` build keeps BUCK2/debugger
+power on and never starts LTE, golfer transactions, or OTA scheduling.
+It reuses the same `device_identity.c` PSA writer and loader as the operational
+firmware. Build/signature and recovery details are owned by the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#usb-only-commissioning-build-and-flash).
+The approved operational OTA 0.1 artifact is not rebuilt or changed.
+
+For FRB-0005 recovery, use its existing mode-0600, current-user-owned
+credential JSON containing `device_id`, `operation_id`, and
+`one_time_credential` in an owner-only, git-ignored directory. Never generate
+another credential to retry this operation. The host checks both identity and
+operation association before connecting.
+
+```sh
+python3 scripts/provision_device_identity.py \
+  --probe-serial <exact-CMSIS-DAP-serial> \
+  --device-id FRB-XXXX --operation-id <existing-prepared-rotation-UUID> \
+  --credential-file <owner-only-credential.json> \
+  --commissioning-manifest <USB-commissioning-manifest.json> \
+  --operational-manifest <approved-OTA-0.1-manifest.json> \
+  --ncs-install-dir <installed-NCS-3.1.1> \
+  --signing-key <existing-encrypted-production-key.pem> \
+  --admin-session-port 0
+```
+
+Use the established Nordic Python environment for commissioning as well as
+building: put `$NCS_TOOLCHAIN_DIR/bin` on `PATH` and invoke that bundle's
+Python. Selecting Nordic Python alone does not put its `west` executable on
+`PATH`; independent release verification requires West to be discoverable.
+Do not reinstall NCS or rebuild verified artifacts to correct this host
+environment. The existing encrypted signing
+key is unlocked at a hidden prompt only for independent signature verification.
+Admin authorization is supplied either through `--admin-token-file` (current
+user, regular file, mode 0600) or the one-time loopback handoff above. The
+handoff accepts only the signed-in production Admin origin, a random URL, and
+a bounded bearer body; it stores the bearer in process memory, logs no request
+contents, expires after three minutes, and closes after receipt. Do not paste
+bearers or device credentials into chat or command arguments.
+
+The host verifies artifact hashes/signatures, identical storage configuration
+and partition maps, production signing trust, and byte-identical secure TF-M
+payloads before programming. Normal installation/resumption writes only the
+commissioning primary image. After acknowledged PSA installation, verification,
+and a commissioning reboot followed by a second credential verification, it
+writes the approved signed OTA 0.1 image only at primary-slot address `0x10000`,
+with read-back verification and no chip erase. It then activates the exact
+prepared rotation through the existing Admin API and resets into normal operation.
+It does not allocate Devices or alter assignment/history.
+
+For firmware already disabling the onboard debugger, add `--recover-usb` only
+with explicit erase authorization. Wait for `RECOVERY ARMED`, then reconnect
+USB without pressing a button. The recovery listener remains armed until the probe arrives or the operator
+cancels; there is no operator countdown. The host performs
+the vendor-described early erase, followed by complete commissioning-image
+installation. This is a destructive **pre-provisioning recovery**, not the
+credential protocol or a manually timed command. Its availability depends on
+physical USB enumeration; failure to capture the probe is a real recovery
+failure, not successful commissioning. Erase is refused for an activated
+rotation. Never use this flag to resume after successful installation/activation.
+
+The serial protocol is `FRC1`, operation (`?` status, `P` install, `V` verify),
+16-byte random request nonce, an eight-byte ID and 43-byte credential for
+`P`/`V`, then little-endian CRC32 of all preceding bytes. The firmware receives
+bursts into an interrupt-driven 1024-byte ring, discards incomplete frames after
+an inactivity timeout, validates CRC before any PSA write, and acknowledges
+the nonce, status, and ID only. It remains available indefinitely and does not
+reboot after installation. Same-ID/same-key installation is idempotent;
+conflicting values are refused. Ring/frame credential buffers are cleared
+after consumption. CRC detects transport corruption; it is not authentication.
+Physical access to an authorized commissioning device/workstation remains the
+trust boundary. No field credential replacement command is exposed.
+
+**Completion requires physical evidence:** OTA 0.1 boots, FRB-0005 sends a
+production-authenticated request with correct attribution, and Cart Operator
+COMPLETE produces the normal device response. A host test or successful
+flash is not this evidence. The utility explicitly reports this remaining
+verification; do not mark the device commissioned until it is observed.
+Retain the protected credential until then and remove it under the local
+secret-custody procedure afterward.
+
+Validation: `python3 -m unittest scripts.test_provision_device_identity
+scripts.test_build_ota_release -v` covers real pseudo-terminal burst transport,
+nonce/CRC framing, credential privacy, exact-probe discovery, signature-role
+separation, and failure gates preventing activation after failed installation,
+post-reboot verification, or final flashing. Firmware build and physical
+validation evidence are distinct; the latest implementation does not by itself
+establish that FRB-0005 has been commissioned.
 
 If power is interrupted after the write-once Device ID is stored but before
 the credential write completes, retrying provisioning with the same ID and

@@ -442,7 +442,11 @@ def _build_release(
     config_path.write_text(
         f'CONFIG_FAIRWAY_OTA_FIRMWARE_VERSION="{release["version_string"]}"\n'
         f'CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION="{release["version_string"]}"\n'
-        f"{schedule_option}=y\n",
+        f"{schedule_option}=y\n"
+        + (
+            "CONFIG_UART_INTERRUPT_DRIVEN=y\nCONFIG_CRC=y\nCONFIG_FAIRWAY_USB_COMMISSIONING=y\n"
+            if getattr(args, "usb_commissioning", False) else ""
+        ),
         encoding="ascii",
     )
     config_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
@@ -523,8 +527,16 @@ def _build_release(
         ):
             raise ValueError("signed MCUboot image version does not match the selected release")
 
-        merged_name = f"{args.release_id}-merged.hex"
-        ota_name = f"{args.release_id}-ota.signed.bin"
+        artifact_id = (
+            "USB-commissioning" if getattr(args, "usb_commissioning", False) else args.release_id
+        )
+        if getattr(args, "usb_commissioning", False) and (
+            _generated_config_value(build_dir, "CONFIG_FAIRWAY_USB_COMMISSIONING") != "y"
+            or _generated_config_value(build_dir, "CONFIG_UART_INTERRUPT_DRIVEN") != "y"
+        ):
+            raise ValueError("USB commissioning firmware was not selected in the generated build")
+        merged_name = f"{artifact_id}-merged.hex"
+        ota_name = f"{artifact_id}-ota.signed.bin"
         merged_artifact = output_dir / merged_name
         ota_artifact = output_dir / ota_name
         shutil.copyfile(merged_hex, merged_artifact)
@@ -608,13 +620,15 @@ def _build_release(
             "size_bytes": ota_artifact.stat().st_size,
             "sha256": _sha256_file(ota_artifact),
         }
-        manifest_path = output_dir / f"{args.release_id}-manifest.json"
+        if getattr(args, "usb_commissioning", False):
+            manifest["image_role"] = "usb_commissioning"
+        manifest_path = output_dir / f"{artifact_id}-manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         _protect_tree(output_dir)
 
         shutil.rmtree(build_dir)
         _protect_tree(output_dir)
-        print(f"Built and verified credential-free {args.release_id}: {ota_artifact}")
+        print(f"Built and verified credential-free {artifact_id}: {ota_artifact}")
         print(f"USB commissioning image: {merged_artifact}")
         print(f"Manifest: {manifest_path}")
         print(f"MCUboot image SHA-256: {manifest['sha256']}")
@@ -630,7 +644,11 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--ncs-install-dir", required=True, type=Path)
     parser.add_argument("--signing-key", required=True, type=Path)
+    parser.add_argument("--usb-commissioning", action="store_true",
+                        help="build the persistent USB commissioning application, not an OTA release")
     args = parser.parse_args()
+    if args.usb_commissioning and args.release_id != "OTA-0.1":
+        parser.error("--usb-commissioning requires --release-id OTA-0.1")
     try:
         with _cleanup_on_termination_signals():
             build_release(args)

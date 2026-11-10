@@ -16,10 +16,10 @@ the original accepted firmware artifacts remain unchanged.
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `87d3105f0676a782` | Released `2026-11-10T01:16:04.645Z` (November 9 Pacific). All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; 52 QR destinations and cache policies pass. Previous version `c6a6de50274e48b5` retained. |
 | Production Admin / receiver | Admin `fairway-admin-ota-r2-cb02`; receiver `fairway-button-receiver-ota-r2-cb02`, both 100% | Release-catalog source commit `cb02beb08b8ab5f1876194e753d0deef1bfe6a6e`; images `sha256:3477ee58d759e3a5b9c7c0df120ef0af7c80b9f0caa47163e515c6480571de87` and `sha256:4f79f35740e5db66fa407c9fc6fd3555f0c3550c10395c6495a131fd09b70cb9`; existing runtime identities and delivery-enabled settings retained. Prior delivery-enabled revisions `fairway-admin-00062-zuv` and `fairway-button-receiver-00051-dad` remain rollback anchors. |
-| OTA implementation | Corrected successors are published and authorized for FRB-0005 only; no assignment exists | Firmware qualification and hashes are owned by the Firmware Specification. FRB-0005 is currently ineligible in Admin until verified physical OTA initialization/trust evidence is present. No assignment, device download or flash was performed. Original artifacts/Pilot 1.1 unchanged. |
+| OTA implementation | Corrected successors are published and authorized for FRB-0005 only; CPO assigned OTA-0.1alt-r2 through Admin | Firmware qualification and hashes are owned by the Firmware Specification. On 2026-11-10, after successful physical commissioning, the CPO authorized recording verified initialization and matching production trust on FRB-0005. At approximately 14:23 Pacific, refreshed Admin showed pending OTA-0.1alt-r2, result `assigned`, and no reported OTA check-in or confirmed version. Installation remains unverified. Original artifacts/Pilot 1.1 unchanged. |
 | Local OTA validation | Three original accepted packages preserved; corrected `OTA-0.1alt-r2` / `OTA-1.0-r2` are built/signed/verified and source-backed | Source/host/build evidence covers scheduler corrections and effective image limit, not physical recurrence. FRB-0005 retains the exact accepted USB-only OTA 0.1. Autonomous physical transitions remain unvalidated. |
-| FRB-0005 commissioning | OTA 0.1 installed using authorized erase-all; existing identity/credential provisioned successfully through the single USB CDC-ACM connection | Provisioning success response observed. CPO confirmed authenticated, correctly attributed requests, COMPLETE, and a fresh transaction. This is USB baseline commissioning, not a successful OTA update. |
-| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled; both corrected releases published | Admin and Receiver revisions, private object metadata, and the published release catalog were verified 2026-11-10. The OTA deployment list is empty. FRB-0005 is not yet eligible for assignment because production lacks sufficient verified physical OTA initialization/trust evidence. No assignment, device download, flash or physical commissioning occurred. HQ remains `America/Los_Angeles`. |
+| FRB-0005 commissioning | Recommissioned on 2026-11-10 with unchanged OTA 0.1; protected credential verified after reboot and matching backend rotation activated | One explicitly authorized PV8-assisted recovery established stable access. Full erase, verified commissioning-image flash, protected provisioning, and storage-preserving verified OTA 0.1 flash succeeded. CPO confirmed device-originated Cart delivery and normal device indication after COMPLETE. See physical evidence below; routine button-free recovery is not established. |
+| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled; both corrected releases published; FRB-0005 physical capability recorded | Admin and Receiver revisions, private object metadata, and the published release catalog were verified 2026-11-10. Following physical commissioning, FRB-0005's capability was recorded and read back at `2026-11-10T22:19:59.099414Z`; the CPO subsequently assigned OTA-0.1alt-r2 in Admin. No device download or installation is yet verified. HQ remains `America/Los_Angeles`. |
 | Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
@@ -3142,6 +3142,11 @@ this build's source and host assertions do not prove physical recovery.
 
 ### Flash Procedure
 
+The USB-only commissioning replacement below supersedes PV8/timed credential
+provisioning for the newly authorized workflow. The following PV8/erase-all
+instructions describe the pre-existing service programming path and are not
+the storage-preserving final step after USB commissioning.
+
 The documented Circuit Dojo nRF9151 Feather development/service programming
 procedure is to select PV8 service mode, then program the complete
 device-specific merged image with `probe-rs` and read it back for
@@ -3222,6 +3227,128 @@ behavior using the manual validation procedure below. The historical
 physical-RESET service-entry evidence is retained below as supporting
 context; it does not resolve the FRB-0003 procedure conflict or authorize an
 erase-all/reflash.
+
+### USB-only commissioning build and flash
+
+The replacement uses the existing CMSIS-DAP and CDC-ACM interfaces on one USB
+cable. The commissioning application itself does not require PV8; access to
+previously installed field firmware is a separate recovery prerequisite.
+Provisioning lifecycle and protocol are owned
+by the [Device Provisioning Guide](./DEVICE_PROVISIONING_GUIDE.md#usb-only-commissioning).
+Keep field power disconnected during USB service.
+
+#### FRB-0005 physical commissioning evidence — 2026-11-10
+
+The CPO authorized one PV8-assisted recovery, destructive erase, installation,
+provisioning, and production credential activation. All previous processes
+were confirmed stopped. With PV8 held through USB connection, exact probe
+`E66550A147969135` remained visible across checks five seconds apart. No
+early-erase listener was used. PV8 was released before normal-operation reset.
+
+The already production-signature-verified artifacts were reused without
+rebuilding; their signed and merged hashes were rechecked, along with matching
+TF-M payloads, protected-storage layout, and production trust:
+
+- Commissioner: external build `usb-commissioning-20261110-r2`, signed SHA-256
+  `8e01f246360cc5709eededf5630988d1c30121a9542550a02c9dd058644ca475`.
+- Operational OTA 0.1 (`0.1.0+1`): external build
+  `ota-OTA-0.1-production-20261109-r2`, signed SHA-256
+  `98687914b7ff0b7ab9116a7fff34d525b67c96955f84d06a24bd349538240f40`.
+
+The exact-probe `probe-rs erase --allow-erase-all` completed with exit zero.
+Complete commissioner HEX download with `--verify` completed successfully
+(20.94 seconds). The existing assigned identity and retained replacement
+credential were installed through the commissioner; both installation and
+verification succeeded, followed by another successful verification after
+reset. No plaintext credential was displayed.
+
+OTA 0.1 signed binary was then downloaded at `0x10000` with
+`--verify --restore-unwritten`, without another full erase (20.32 seconds).
+Only after device-side persistence verification and successful final flashing,
+the existing authenticated Admin rotation lifecycle activated the matching
+prepared rotation (HTTP 200, state `activated`). The device was reset normally.
+Permanent registry identity, assignment, and history were preserved.
+
+The CPO pressed the physical request button and confirmed normal device
+behavior and delivery to the Cart UI. The CPO then selected COMPLETE and
+confirmed the normal device completion indication. This supplies physical
+end-to-end authentication/operation evidence, not merely build or flash
+evidence. It does not establish automatic USB detection, repeatable
+button-free recovery, OTA scheduling, or OTA capability registry initialization.
+No commit, push, OTA assignment, or power-policy redesign was performed.
+
+At the CPO's subsequent explicit request, a conditional, field-only update
+recorded `devices/FRB-0005.ota_capability` in production: `verified: true`,
+hardware `circuitdojo_feather_nrf9151@1/nrf9151/ns`, production fingerprint
+`sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`,
+and `schedule_mode: one_time`, with the physical evidence above referenced.
+Read-back verified the complete capability and unchanged lifecycle/assignment.
+Admin Firmware OTA then showed FRB-0005 selectable, no missing-trust warning,
+and no pending release. No assignment was created; subsequent update
+authorization remains with the CPO through Admin.
+
+At approximately 14:23 Pacific, after the CPO reported authorizing the next
+update, refreshed production Admin showed pending `OTA-0.1alt-r2` with last
+reported result `assigned`. No OTA check-in or confirmed version was reported
+at that checkpoint. Assignment is not proof of download or installation; the
+one-time 900-second interval is measured by the device, not from the time of
+the commissioning report.
+
+Build the credential-free commissioning application through the established
+NCS 3.1.1 toolchain and production-signing environment:
+
+```sh
+python3 scripts/build_ota_release.py \
+  --release-id OTA-0.1 --usb-commissioning \
+  --output-dir <fresh-external-output-directory> \
+  --ncs-install-dir "$NCS_INSTALL_DIR" \
+  --signing-key "$MCUBOOT_SIGNING_KEY"
+```
+
+The hidden passphrase and key-cleanup controls above remain unchanged.
+`USB-commissioning-manifest.json` records `image_role: usb_commissioning`;
+these images are commissioning tools, not OTA releases. The independent
+verifier rejects this role unless explicitly called with `commissioning=True`.
+The common build selects `CONFIG_UART_INTERRUPT_DRIVEN`, `CONFIG_CRC`, and
+`CONFIG_FAIRWAY_USB_COMMISSIONING`; CMake replaces the operational entry point
+with the commissioner, retaining the shared power policy and identity storage.
+
+Before any physical operation, the host verifies signatures/hashes and
+commissioning/operational role separation, matching partition/storage maps,
+production trust, and byte-identical TF-M payloads. Normal helper/final
+programming writes signed primary-slot images at `0x10000` with
+`--verify --restore-unwritten`, without `--chip-erase` or `--allow-erase-all`.
+The bootloader, secondary slot, TF-M ITS, NV counters, Protected Storage, and
+KMU are not selected for final-image programming. Never substitute a full
+erase after provisioning.
+
+If existing firmware has disabled BUCK2 and powered off the onboard probe,
+the explicitly authorized `--recover-usb` stage arms host probe discovery
+before requesting a USB reconnect. It performs early erase using the exact
+probe and then installs the complete verified commissioning image, before
+credentials are written. Circuit Dojo documents this physical behavior and
+USB-only recovery in
+[Device Recovery](https://docs.circuitdojo.com/nrf9151-feather/device-recovery.html).
+Recovery capture still depends on the board/probe actually enumerating in
+time; neither vendor guidance nor software tests prove a successful capture
+on this unit. No PV8 fallback or automatic repeated erase is part of the tool.
+
+The approved OTA 0.1 signed artifact and trust anchor remain unchanged.
+After acknowledged provisioning and successful verification following a
+commissioner reboot, the utility flashes/read-back-verifies that artifact,
+activates only its matching backend rotation, and resets. The operational
+image retains its accepted low-power behavior; subsequent USB access to this
+old operational image can again require USB recovery. Do not claim that a
+commissioning image makes unchanged field firmware permanently USB-accessible.
+Do not erase a commissioned unit without a separately authorized credential
+recovery plan.
+
+Current build evidence: an initial production-signed commissioning build
+succeeded on the established toolchain. Its secure TF-M payload, complete
+partition layout, protected-storage configuration, and trust fingerprint
+matched the accepted OTA 0.1 package. Subsequent source changes require their
+own build verification. Physical commissioning, authentication, and COMPLETE
+response remain unverified until explicitly recorded.
 
 ### Manual Validation
 

@@ -27,10 +27,19 @@ from build_ota_release import (
 )
 
 
-def verify_release(manifest_path: Path, ncs_install_dir: Path, signing_key: Path) -> dict:
+def verify_release(
+    manifest_path: Path, ncs_install_dir: Path, signing_key: Path, *,
+    commissioning: bool = False,
+) -> dict:
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise ValueError("release manifest must be a regular, non-symlink file")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if commissioning:
+        if manifest.get("image_role") != "usb_commissioning" \
+                or manifest.get("release_id") != "OTA-0.1":
+            raise ValueError("expected a USB commissioning image, not an operational release")
+    elif manifest.get("image_role") is not None:
+        raise ValueError("commissioning images are not operational OTA releases")
     release = RELEASES.get(manifest.get("release_id"))
     if release is None or manifest.get("version") != release["version"] \
             or manifest.get("version_string") != release["version_string"] \
@@ -152,6 +161,12 @@ def verify_release(manifest_path: Path, ncs_install_dir: Path, signing_key: Path
         if release["schedule"] == "one_time"
         else "CONFIG_FAIRWAY_OTA_SCHEDULE_NIGHTLY=y",
     )
+    if commissioning:
+        expected_config += (
+            "CONFIG_UART_INTERRUPT_DRIVEN=y",
+            "CONFIG_CRC=y",
+            "CONFIG_FAIRWAY_USB_COMMISSIONING=y",
+        )
     config_lines = config_path.read_text(encoding="ascii").splitlines()
     if not all(line in config_lines for line in expected_config):
         raise ValueError("release build configuration does not match the manifest")
