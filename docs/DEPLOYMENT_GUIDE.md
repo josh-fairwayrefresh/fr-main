@@ -9,17 +9,17 @@ not continuous production monitoring. Confirm actual
 serving state and obtain release-specific authorization before production
 changes. OTA rows and the readiness subsection below include subsequent
 FRB-0005 commissioning evidence and the local Prototype 4.0 readiness increment;
-the accepted firmware artifacts remain unchanged.
+the original accepted firmware artifacts remain unchanged.
 
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `87d3105f0676a782` | Released `2026-11-10T01:16:04.645Z` (November 9 Pacific). All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; 52 QR destinations and cache policies pass. Previous version `c6a6de50274e48b5` retained. |
-| Production Admin / receiver | Admin `fairway-admin-00062-zuv`; receiver `fairway-button-receiver-00051-dad`, both 100% | 2026-11-10 delivery-gate configuration revisions; same qualified image digests and runtime identities as `ota-delivery-43b4da0`; only `FAIRWAY_OTA_DELIVERY_ENABLED` changed from false to true. Prior revisions remain rollback anchors. |
-| OTA implementation | Corrected successors are CPO-accepted and publication-authorized for FRB-0005 only; publication is pending | Firmware qualification and hashes are owned by the Firmware Specification. No assignment, download, delivery or flash is authorized by publication. Original accepted artifacts/Pilot 1.1 unchanged. |
+| Production Admin / receiver | Admin `fairway-admin-ota-r2-cb02`; receiver `fairway-button-receiver-ota-r2-cb02`, both 100% | Release-catalog source commit `cb02beb08b8ab5f1876194e753d0deef1bfe6a6e`; images `sha256:3477ee58d759e3a5b9c7c0df120ef0af7c80b9f0caa47163e515c6480571de87` and `sha256:4f79f35740e5db66fa407c9fc6fd3555f0c3550c10395c6495a131fd09b70cb9`; existing runtime identities and delivery-enabled settings retained. Prior delivery-enabled revisions `fairway-admin-00062-zuv` and `fairway-button-receiver-00051-dad` remain rollback anchors. |
+| OTA implementation | Corrected successors are published and authorized for FRB-0005 only; no assignment exists | Firmware qualification and hashes are owned by the Firmware Specification. FRB-0005 is currently ineligible in Admin until verified physical OTA initialization/trust evidence is present. No assignment, device download or flash was performed. Original artifacts/Pilot 1.1 unchanged. |
 | Local OTA validation | Three original accepted packages preserved; corrected `OTA-0.1alt-r2` / `OTA-1.0-r2` are built/signed/verified and source-backed | Source/host/build evidence covers scheduler corrections and effective image limit, not physical recurrence. FRB-0005 retains the exact accepted USB-only OTA 0.1. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | OTA 0.1 installed using authorized erase-all; existing identity/credential provisioned successfully through the single USB CDC-ACM connection | Provisioning success response observed. CPO confirmed authenticated, correctly attributed requests, COMPLETE, and a fresh transaction. This is USB baseline commissioning, not a successful OTA update. |
-| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled on both services | Organization and project sink APIs, live service revisions/env, and private bucket controls verified 2026-11-10. Invalid-token artifact request is rejected; release publication is pending the reviewed source-catalog update. No assignment or device download is authorized. Physical commissioning remains separately gated. HQ remains `America/Los_Angeles`. |
+| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled; both corrected releases published | Admin and Receiver revisions, private object metadata, and the published release catalog were verified 2026-11-10. The OTA deployment list is empty. FRB-0005 is not yet eligible for assignment because production lacks sufficient verified physical OTA initialization/trust evidence. No assignment, device download, flash or physical commissioning occurred. HQ remains `America/Los_Angeles`. |
 | Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
@@ -318,9 +318,53 @@ FRB-0005 physical authorization remains separate.
 - This authorization permits publication and exact-device eligibility for
   FRB-0005; it does not create an assignment, download grant, or physical
   commissioning authorization. The OTA 0.1 bootstrap and original historical
-  release identities remain unchanged. Production catalog publication is
-  pending the reviewed, source-controlled release approval records and
-  deployment of the corresponding backend.
+  release identities remain unchanged. Source-controlled evidence commits
+  `f06cde9e441a3824a9acc6c63cffacf6f2dee5db` (release records/manifests) and
+  `cb02beb08b8ab5f1876194e753d0deef1bfe6a6e` (accepted hashes and reviewed
+  publication approvals) are on the canonical review branch.
+- Both releases were registered through the existing Admin publication API.
+  Production release inventory and the Firmware OTA page report them as
+  `published` and assignable only for the allowlisted FRB-0005:
+  `OTA-0.1alt-r2` SHA-256
+  `2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844`, and
+  `OTA-1.0-r2` SHA-256
+  `21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c`.
+  Their exact signed images are private create-only objects in
+  `savvy-kit-496703-r5-ota-artifacts`, each 280,387 bytes with
+  `private, no-store` cache control and matching release/digest custom metadata.
+  No public object URL or direct device download was used.
+- Catalog source was staged and promoted to Receiver
+  `fairway-button-receiver-ota-r2-cb02` (image
+  `sha256:4f79f35740e5db66fa407c9fc6fd3555f0c3550c10395c6495a131fd09b70cb9`)
+  and Admin `fairway-admin-ota-r2-cb02` (image
+  `sha256:3477ee58d759e3a5b9c7c0df120ef0af7c80b9f0caa47163e515c6480571de87`).
+  Both are Ready at 100%, retain their previous runtime identities and
+  `FAIRWAY_OTA_BUCKET` / delivery-enabled configuration. Unauthenticated Admin
+  still returns 401; an invalid artifact token still returns 403.
+- Read-only production Admin checks returned both exact published hashes,
+  `assignable=true`, and `authorized_device_ids=["FRB-0005"]`; the deployment
+  inventory is empty. No assignment, review, device download grant, valid
+  device token, firmware download, flash, or physical commissioning was
+  created or performed.
+- **Assignment gate discrepancy:** the production Fleet/Admin view currently
+  marks FRB-0005 ineligible with “Verified physical OTA initialization and
+  compatible trust anchor are required.” The Firmware Specification and
+  Device Provisioning Guide record the accepted USB OTA 0.1 installation, but
+  production does not currently present sufficient matching
+  `ota_capability` evidence to the authorization path. The current eligibility
+  rejection is authoritative for assignment; do not infer or backfill
+  capability. The fleet view also has no recorded OTA check time, which does
+  not prove the PSA-persisted one-time timer's physical state. Resolve through
+  the separately authorized canonical physical-commissioning/evidence process
+  before attempting the FRB-0005 assignment. If using OTA 0.1's one-shot
+  900-second check, arrange the separately authorized evidence-recording
+  operation in advance and ensure verified capability evidence plus the
+  exact-device assignment are in place before that check occurs.
+- Code rollback anchors are the immediately prior delivery-enabled revisions
+  `fairway-button-receiver-00051-dad` and `fairway-admin-00062-zuv`.
+  Restoring those revisions does not delete the two published Firestore
+  records or private GCS objects; it would make the corrected releases
+  unavailable to the older backend catalog. Do not delete or overwrite them.
 
 #### Next commissioning increment — proposed authorization scope
 
@@ -1167,6 +1211,27 @@ The Alignment Register preserves historical release evidence and provenance;
 its entries describe the state at their recorded dates. It does not supersede
 the current subsystem owner Sources of Truth or newer accepted evidence
 summarized above. New entries are placed at the TOP of this register.
+
+### Prototype 4.0 corrected successor publication (2026-11-10)
+
+- Published the CPO-accepted, production-signed `OTA-0.1alt-r2` and
+  `OTA-1.0-r2` exact hashes to the private bucket and Admin catalog. Source
+  approval records/manifests are backed up at
+  `f06cde9e441a3824a9acc6c63cffacf6f2dee5db`; the reviewed release-catalog
+  code is backed up at `cb02beb08b8ab5f1876194e753d0deef1bfe6a6e`.
+- Receiver `fairway-button-receiver-ota-r2-cb02` and Admin
+  `fairway-admin-ota-r2-cb02` are Ready at 100%; the previous delivery-enabled
+  revisions remain rollback anchors. Private GCS object size and release/hash
+  metadata match both accepted manifests. Admin shows both releases
+  published/assignable for FRB-0005 only; deployment inventory is empty.
+- No assignment, review, valid device authorization token, download, flash or
+  physical commissioning occurred. Current Fleet eligibility still rejects
+  FRB-0005 because sufficient verified physical OTA initialization/trust
+  evidence is not present in the production authorization record, despite the
+  documented USB OTA 0.1 installation. Resolve through the separately
+  authorized canonical evidence operation before assignment; do not infer
+  capability or rearm the persisted one-time timer. See the current readiness
+  section above.
 
 ### Prototype 4.0 artifact delivery enablement (2026-11-10)
 

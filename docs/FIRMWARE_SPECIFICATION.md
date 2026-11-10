@@ -282,6 +282,25 @@ state is recorded in the [Deployment Guide](./DEPLOYMENT_GUIDE.md#prototype-40-c
 Neither assignment nor physical commissioning is authorized by that release
 decision.
 
+### Current release state — published, not device-qualified (2026-11-10)
+
+The exact CPO-accepted `OTA-0.1alt-r2` and `OTA-1.0-r2` signed images are
+published and visible in the production Admin Firmware OTA page, with only
+FRB-0005 allowlisted for assignment. Their hashes, manifests, publication
+evidence, production revisions, and GCS object checks are owned by the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#prototype-40-corrected-successors--cpo-acceptance-and-publication-2026-11-10).
+No assignment or device download has occurred; publication does not establish
+physical installation or OTA success.
+
+The current production Fleet view rejects FRB-0005 because verified physical
+OTA initialization and matching trust-anchor evidence is not present in the
+authorization record, although this specification records the earlier USB
+OTA 0.1 installation. The existing physical-install note is not a substitute
+for the required Device `ota_capability` evidence. Resolve this discrepancy
+through the separately authorized canonical commissioning operation before
+assigning either release. Do not infer the persisted one-time timer state from
+the absent backend check-in.
+
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image
 signer and MCUboot bootloader. MCUboot compiles only the corresponding public
