@@ -14,7 +14,7 @@ The hierarchy is Customer → Course → Device:
 - A Course belongs to one Customer and is stored at `customers/{customerId}/courses/{courseId}`.
 - A Device has a permanent identity as the Firestore document ID `devices/{FRB-XXXX}`.
 - IDs use `CUST-XXXX`, `COURSE-XXXX`, and `FRB-XXXX` formats. Backend allocation is centralized and transaction-backed; clients do not guess IDs.
-- Active assignment is represented by `customer_id`/`customer_name`, `course_id`/`course_name`, and one `location`. A device in `in_inventory` has all assignment fields null. Do not duplicate device identity, hole, label, or active status in separate fields.
+- Active assignment is represented by `customer_id`/`customer_name`, `course_id`/`course_name`, and one `location`. Headquarters-held `in_inventory` and `maintenance` devices have no active assignment. The local Prototype 4.0 implementation clears all assignment fields for either state; existing production records are not migrated here. Do not duplicate device identity, hole, label, or active status in separate fields.
 
 The deployed backend implementation is in `fairway_backend/cloudrun_receiver/lib/fleet/`.
 
@@ -24,11 +24,47 @@ The canonical persisted Device `state` values are `in_inventory`, `deployed`, `m
 
 - New provisioned devices begin in `in_inventory` with no Customer/Course/location assignment.
 - Transitioning to `deployed` requires a valid Customer, a Course belonging to that Customer, and a valid location; state and assignment are written atomically.
-- Returning to `in_inventory` clears the complete assignment. A cross-Customer transfer must pass through inventory.
+- Returning to `in_inventory` or entering `maintenance` clears the complete active assignment. A cross-Customer transfer follows the existing inventory workflow; Maintenance is a headquarters-held service/testing category, not an active Customer/Course placement.
 - Retired records are retained for provenance; there is no normal delete workflow.
 - Backend communication is permitted for `in_inventory`, `deployed`, and `maintenance`; `retired`, missing, malformed, and unknown states fail closed.
 
 Customer/Course names are synchronized display copies from authoritative records. SIM identifiers, commissioning/service metadata, and administrative notes belong in the operational registry, not in canonical engineering documents.
+
+### OTA initialization evidence (local Prototype 4.0 extension)
+
+OTA-capable firmware must first be installed physically. OTA 0.1 is the
+USB-only bootstrap already commissioned on FRB-0005; it is never an assignable
+OTA image. An OTA-capability label alone is not proof of physical initialization
+or bootloader trust. Before authorizing updates, engineering commissioning
+must record verified, non-secret evidence on the existing Device:
+
+```
+ota_capability: {
+  verified: true,
+  hardware_id: "circuitdojo_feather_nrf9151@1/nrf9151/ns",
+  signing_fingerprint: "<verified public signing fingerprint>",
+  schedule_mode: "one_time" | "nightly",
+  evidence_record: "<physical initialization and trust verification reference>"
+}
+```
+
+This is not a credential, device inventory or firmware-version substitute.
+Only a separately authorized registry commissioning operation may establish
+it; the OTA dashboard cannot edit it. Missing/mismatched evidence fails closed.
+The release-specific publication catalog separately limits exact authorized
+device IDs. An authenticated successful confirmation of a matching nightly
+release is recorded in OTA status and permits subsequent nightly scheduling
+without mutating the original physical-initialization record. Reported version
+is device-reported evidence, not independent boot attestation.
+
+Maintenance devices remain active and can communicate/test/update when capable.
+Their OTA schedule uses the headquarters IANA timezone, as does Inventory;
+deployed devices use their canonical Course's timezone. The CPO-approved
+headquarters timezone is `America/Los_Angeles` (including DST), superseding the
+earlier unconfirmed Pacific assumption. The backend applies it by default.
+Legacy placement display copies on Maintenance do not create an OTA deployment
+or select its old Course timezone. No production capability, placement or
+headquarters configuration was changed in this local increment.
 
 ## Provisioning workflow
 
@@ -65,9 +101,17 @@ are recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
 For initial USB commissioning, first install the approved common OTA 0.1
 merged image under the separately authorized physical procedure. With the
-device unprovisioned, enter service mode by holding PV8 through boot and
-connect the service-mode UART. From the protected workstation, run
-`python3 scripts/provision_device_identity.py --port <UART-device>`. The
+device unprovisioned, enter service mode by holding PV8 through boot. Use the
+Feather's existing single USB development connection for debugging, runtime
+UART console access, and identity provisioning: the provisioning UART is
+exposed through the CMSIS-DAP probe's USB CDC-ACM serial interface. No separate
+UART cable, adapter, or second physical connection is required. Identify the
+existing USB serial port using
+[USB Runtime UART Console — Verified Development Connection](./DEPLOYMENT_GUIDE.md#usb-runtime-uart-console--verified-development-connection);
+do not assume a previously observed numeric port suffix is unchanged.
+From the protected workstation, run
+`python3 scripts/provision_device_identity.py --port /dev/cu.usbmodem<SUFFIX>`
+using that identified USB CDC-ACM port. The
 operator enters the exact permanent Device ID and existing backend-issued
 credential at hidden prompts. The tool sends a fixed-length provisioning
 packet; it does not read or modify Firestore, write a header, print the
@@ -227,8 +271,9 @@ not the history already recorded against it.
   Provisioning failure messages must distinguish confirmed partial creation
   from an uncertain create outcome and must not claim certainty the backend
   cannot establish.
-- The OTA device endpoints and Admin release/assignment APIs exist in the
-  current local source but have not been deployed to production. They
+- The OTA device endpoints and Admin release/assignment APIs were deployed
+  on 2026-11-09 with an empty governed release catalog. No production
+  publication, device assignment or capability-record write occurred. They
   authenticate and correlate to the existing permanent Device ID, and only
   update OTA-owned metadata. They do not accept device-supplied reassignment,
   create a new Device, or mutate historical operational records.
@@ -298,7 +343,11 @@ record was changed. The current repository Admin UI includes an
 in-inventory, exact-Device credential-recovery action, but it does not expose
 the complete prepare/flash/activate rotation lifecycle or pending-operation
 status and cancellation controls. The 2026-10-17 production release record is
-for the Admin backend; it does not establish that this UI is deployed.
+for the Admin backend; it did not establish that this UI was deployed.
+The 2026-11-09 OTA Administration Hosting release includes this exact-Device
+recovery UI with its existing protections; no recovery or rotation was
+performed during deployment. Exact release identities and evidence are
+owned by `docs/DEPLOYMENT_GUIDE.md`.
 There is no expiry/automatic cleanup policy, general revocation operation,
 second-person approval, or production cutover authorization in this
 increment. The immediate recovery action and the prepared two-phase rotation

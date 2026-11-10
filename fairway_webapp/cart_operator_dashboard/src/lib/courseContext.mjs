@@ -5,12 +5,20 @@ export function courseKey(course) {
 export function selectedCourseFromLocation(courses, search = '') {
   const params = new URLSearchParams(search);
   const customerId = params.get('customer_id');
-  const courseId = params.get('course_id');
+  const courseId = params.get('course_id') || params.get('course');
   if (customerId && courseId) {
     const requested = courses.find((course) => (
       course.customer_id === customerId && course.course_id === courseId
     ));
     if (requested) return requested;
+  }
+  if (customerId) {
+    const customerCourse = courses.find((course) => course.customer_id === customerId);
+    if (customerCourse) return customerCourse;
+  }
+  if (!customerId && courseId) {
+    const matches = courses.filter((course) => course.course_id === courseId);
+    if (matches.length === 1) return matches[0];
   }
   return courses[0] || null;
 }
@@ -19,6 +27,13 @@ function usableDisplayName(value) {
   if (typeof value !== 'string') return null;
   const name = value.trim();
   return name && !['undefined', 'null'].includes(name.toLowerCase()) ? name : null;
+}
+
+export function authorizedCustomers(courses) {
+  return [...new Map(courses.map((course) => [course.customer_id, {
+    customer_id: course.customer_id,
+    customer_name: usableDisplayName(course.customer_name) || 'Customer name unavailable',
+  }])).values()];
 }
 
 export function mergeDashboardCourse(authorizedCourse, dashboardCourses) {
@@ -43,9 +58,17 @@ export function mergeDashboardCourse(authorizedCourse, dashboardCourses) {
   };
 }
 
+export function courseDisplayNames(course) {
+  return {
+    customer: usableDisplayName(course?.customer_name) || 'Customer name unavailable',
+    course: usableDisplayName(course?.course_name) || 'Course name unavailable',
+  };
+}
+
 export function courseDisplayLabel(course) {
   if (!course) return 'No authorized Course';
-  return `${usableDisplayName(course.customer_name) || 'Customer name unavailable'} · ${usableDisplayName(course.course_name) || 'Course name unavailable'}`;
+  const names = courseDisplayNames(course);
+  return `${names.customer} · ${names.course}`;
 }
 
 export function courseContextUrl(pathname, course) {

@@ -1,18 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3, Check, CheckCircle2, ChevronRight, Clock3, Coffee,
   History, LogOut, MapPin, Package, Pause, Play, ShieldCheck,
 } from 'lucide-react';
 import NotificationSetup from './NotificationSetup';
+import AppRefresh from './AppRefresh';
+import { useInventorySession } from './InventorySession';
+import { adminRequest } from './admin/adminApi';
 import { operatorRequest } from './lib/operator';
 import {
+  authorizedCustomers,
   courseContextUrl,
   courseDisplayLabel,
+  courseDisplayNames,
   courseKey,
   mergeDashboardCourse,
   replaceCourseContext,
   selectedCourseFromLocation,
 } from './lib/courseContext.mjs';
+import { requestLocationLabel } from './lib/requestLocation.mjs';
+import { serviceCategories, serviceCategory } from './lib/serviceCategories.mjs';
+import { courseOperation } from './lib/courseOperation.mjs';
 import './operator.css';
 
 function asDate(value) {
@@ -37,6 +45,13 @@ function clockTime(value) {
   return date ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Unknown time';
 }
 
+function dateTime(value) {
+  const date = asDate(value);
+  if (!date) return 'Unknown time';
+  const day = date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return `${day}, ${clockTime(date)}`;
+}
+
 function duration(request) {
   const start = asDate(request.received_at);
   const end = asDate(request.completed_at || request.cancelled_at);
@@ -50,158 +65,540 @@ function Brand() {
 
 function ServiceStatus({ course }) {
   const state = course?.service_state;
-  const label = state?.suspended ? 'Service Suspended' : state?.active ? 'Service Active' : 'Outside Service Hours';
+  const label = state?.active ? 'Service ON' : 'Service OFF';
   return <div className={`op-status ${state?.active ? 'active' : ''}`}><i />{label}</div>;
 }
 
-function EmptyQueue({ serviceActive }) {
-  return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New golfer requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
+function GroupServiceControls({ group, state, pending, onToggle }) {
+  const label = serviceCategory(group).display_name;
+  const action = state?.active ? 'Suspend' : 'Resume';
+  return <div className="op-service-group" role="group" aria-label={`${label} service`}>
+    <h2>{label}</h2>
+    <ServiceStatus course={{ service_state: state }} />
+    <button className="op-suspend" type="button" disabled={pending} onClick={() => onToggle(group)}
+      aria-label={`${action} ${label} service`}>
+      {state?.active ? <Pause size={17} /> : <Play size={17} />}
+      <span>{action}</span>
+    </button>
+  </div>;
 }
 
-function RequestFocus({ request, queueLength, onAction, pending }) {
-  const [error, setError] = useState('');
+function EmptyQueue({ serviceActive }) {
+  return <section className="op-empty"><span><Coffee size={30} /></span><h2>No active requests</h2><p>{serviceActive ? 'You are all caught up. New requests will appear here.' : 'Existing requests remain available when service resumes.'}</p></section>;
+}
+
+function RequestFocus({ request, queueLength, onAction, pending, actionBlocked, actioned }) {
+  const [error, setError] = useState(null);
+  const rejected = request.status === 'rejected' && request.rejection_reason === 'service_suspended';
   async function act(action) {
-    if (action === 'cancel' && !window.confirm(`Cancel the request for Hole ${request.hole ?? 'Unknown'}?`)) return;
-    setError('');
+    if (action === 'cancel' && !window.confirm(`Cancel the request for ${requestLocationLabel(request)}?`)) return;
+    setError(null);
     try {
       await onAction(request, action);
     } catch (reason) {
-      setError(reason.message);
+      setError({ requestId: request.id, message: reason?.message || `Unable to ${action} request.` });
     }
   }
-  return <article id={`request-${request.id}`} className="op-priority">
-    <div className="op-time"><Clock3 size={20} /><span>Waiting</span><strong>{requestAge(request.received_at)}</strong></div>
-    <div className="op-place"><span>OLDEST ACTIVE REQUEST</span><h2>Hole {request.hole ?? 'Unknown'}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
-    <div className="op-actions"><button className="op-complete" type="button" disabled={pending} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={pending} onClick={() => act('cancel')}>Cancel request</button></div>
-    <footer><CheckCircle2 size={18} /><span>{queueLength > 1 ? 'On completion, the next oldest request moves into focus.' : 'Completing this request clears the active queue.'}</span>{error && <strong role="alert">{error}</strong>}</footer>
+  return <article id={`request-${request.id}`} className={`op-priority${rejected ? ' rejected' : ''}`}>
+    <div className="op-time"><Clock3 size={20} /><span>{rejected ? 'Request rejected' : 'Waiting'}</span><strong>{requestAge(request.received_at)}</strong>{rejected && <small>Received {clockTime(request.received_at)}</small>}</div>
+    <div className="op-place" aria-live="polite"><span className={rejected ? 'op-rejection-label' : ''}>{rejected ? 'Request Rejected — Service Suspended' : 'Selected request'}</span><h2>{requestLocationLabel(request)}</h2><p><MapPin size={17} />{request.course_name || 'Course unavailable'}</p></div>
+    <div className="op-actions">{rejected
+      ? <button className="op-clear-rejected" type="button" disabled={actionBlocked || actioned} onClick={() => act('clear-rejected')}>{pending ? 'Clearing...' : 'Clear Rejected Request'}</button>
+      : <><button className="op-complete" type="button" disabled={actionBlocked || actioned} onClick={() => act('complete')}><Check size={22} />{pending ? 'Updating...' : actioned ? 'Submitted' : 'Complete service'}</button><button className="op-cancel" type="button" disabled={actionBlocked || actioned} onClick={() => act('cancel')}>Cancel request</button></>}</div>
+    <footer><CheckCircle2 size={18} /><span>{rejected ? 'This rejected attempt is not an actionable service request.' : queueLength > 1 ? 'On completion, the oldest remaining request becomes selected.' : 'Completing this request clears the active queue.'}</span>{error?.requestId === request.id && <strong role="alert">{error.message}</strong>}</footer>
   </article>;
 }
 
+function formatHours(value) {
+  return Number(value || 0).toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatAverageCompletion(value) {
+  return value == null ? '-' : `${value} min`;
+}
+
 function Performance({ summary }) {
-  return <section className="op-performance"><span>CURRENT PERFORMANCE</span><div><strong>{summary?.completed_transactions ?? 0}</strong><small>Transactions</small></div><div><strong>{summary?.transactions_per_cart_hour ?? 0}</strong><small>Transactions per hour</small></div><div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests / cart hour</small></div></section>;
+  return <section className="op-performance"><span>CURRENT PERFORMANCE - DAY</span>
+    <div><strong>{summary?.completed_requests ?? 0}</strong><small>Completed Requests</small></div>
+    <div><strong>{formatHours(summary?.active_cart_hours)}</strong><small>Active Cart Hours</small></div>
+    <div><strong>{formatAverageCompletion(summary?.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong><small>Average Completion Time</small></div>
+    <div><strong>{summary?.requests_per_hour ?? 0}</strong><small>Requests per Hour</small></div>
+  </section>;
 }
 
 function RecentHistory({ history, onOpen }) {
   const completed = history.filter((item) => item.status === 'completed').slice(0, 2);
-  return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>Hole {item.hole ?? 'Unknown'}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
+  return <section className="op-recent"><div><span>RECENTLY COMPLETED</span><strong>{completed.length}</strong></div>{completed.map((item) => <p key={item.request_id}><Check size={15} /><b>{requestLocationLabel(item)}</b><span>{clockTime(item.completed_at)}</span></p>)}{completed.length === 0 && <p className="op-muted">No completed requests yet.</p>}<button type="button" onClick={onOpen}>View full history <ChevronRight size={16} /></button></section>;
 }
 
-function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, summary, history, onOpenHistory, serviceActive }) {
+function RequestsView({ requests, loadState, loadError, focusedRequestId, onAction, pending, actionPending, requestActionInFlight, actionedRequestIds, summary, history, onOpenHistory, serviceActive, hidden, cartMetrics = true }) {
+  const [selectedRequestId, setSelectedRequestId] = useState('');
+  const selectedRequestIdRef = useRef('');
+  const manualSelectionVersion = useRef(0);
+  const lastFocusedRequestId = useRef('');
+  const pendingNotificationSelection = useRef(null);
+  const selectedRequest = requests.find((request) => request.id === selectedRequestId) || requests[0] || null;
+  const otherRequests = requests.filter((request) => request.id !== selectedRequest?.id);
+
   useEffect(() => {
-    if (focusedRequestId) document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
-  }, [focusedRequestId, requests]);
-  const next = requests[0];
-  return <div className="op-layout"><section className="op-focus"><div className="op-queue-summary"><strong className="op-queue-total"><b>{requests.length}</b><small>{requests.length === 1 ? 'request' : 'requests'} in queue</small></strong></div>
+    if (focusedRequestId && focusedRequestId !== lastFocusedRequestId.current) {
+      lastFocusedRequestId.current = focusedRequestId;
+      pendingNotificationSelection.current = {
+        requestId: focusedRequestId,
+        selectionVersion: manualSelectionVersion.current,
+      };
+    }
+
+    const notificationSelection = pendingNotificationSelection.current;
+    if (notificationSelection) {
+      if (notificationSelection.selectionVersion !== manualSelectionVersion.current) {
+        pendingNotificationSelection.current = null;
+      } else if (!actionPending && requests.some((request) => request.id === notificationSelection.requestId)) {
+        selectedRequestIdRef.current = notificationSelection.requestId;
+        setSelectedRequestId(notificationSelection.requestId);
+        pendingNotificationSelection.current = null;
+        return;
+      } else if (!actionPending && loadState === 'ready') {
+        pendingNotificationSelection.current = null;
+      }
+    }
+
+    if (!requests.some((request) => request.id === selectedRequestIdRef.current)) {
+      const oldestRequestId = requests[0]?.id || '';
+      selectedRequestIdRef.current = oldestRequestId;
+      setSelectedRequestId(oldestRequestId);
+    }
+  }, [actionPending, focusedRequestId, loadState, requests]);
+
+  function selectRequest(requestId) {
+    if (actionPending || requestActionInFlight.current) return;
+    manualSelectionVersion.current += 1;
+    pendingNotificationSelection.current = null;
+    selectedRequestIdRef.current = requestId;
+    setSelectedRequestId(requestId);
+  }
+
+  useEffect(() => {
+    if (focusedRequestId && selectedRequest?.id === focusedRequestId) {
+      document.getElementById(`request-${focusedRequestId}`)?.scrollIntoView({ block: 'center' });
+    }
+  }, [focusedRequestId, requests, selectedRequest?.id]);
+  return <div className="op-layout" hidden={hidden}><section className="op-focus"><div className="op-queue-summary"><strong className="op-queue-total"><b>{requests.length}</b><small>{requests.length === 1 ? 'request' : 'requests'} in queue</small></strong></div>
     {loadState === 'loading' && <div className="op-message">Loading requests...</div>}
     {loadState === 'error' && <div className="op-message error" role="alert">Unable to load requests ({loadError || 'unknown'}).</div>}
-    {loadState === 'ready' && !next && <EmptyQueue serviceActive={serviceActive} />}
-    {next && <RequestFocus request={next} queueLength={requests.length} onAction={onAction} pending={pending === next.id} />}
-    {requests.length > 1 && <section className="op-up-next"><div><span>UP NEXT</span><strong>{requests.length - 1} more {requests.length === 2 ? 'request' : 'requests'}</strong></div>{requests.slice(1).map((request, index) => <article key={request.id}><span>{index + 2}</span><div><strong>Hole {request.hole ?? 'Unknown'}</strong><small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} /></article>)}</section>}
-  </section><aside className="op-summary"><Performance summary={summary} /><RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
+    {loadState === 'ready' && !selectedRequest && <EmptyQueue serviceActive={serviceActive} />}
+    {selectedRequest && <RequestFocus request={selectedRequest} queueLength={requests.length} onAction={onAction} pending={pending === selectedRequest.id} actionBlocked={Boolean(pending)} actioned={actionedRequestIds.has(selectedRequest.id)} />}
+    {otherRequests.length > 0 && <section className="op-up-next" aria-labelledby="other-active-requests-heading"><div><span id="other-active-requests-heading">Other active requests</span><strong>{otherRequests.length} more {otherRequests.length === 1 ? 'request' : 'requests'}</strong></div>{otherRequests.map((request, index) => {
+      const rejected = request.status === 'rejected' && request.rejection_reason === 'service_suspended';
+      return <button className={`op-queue-row${rejected ? ' rejected' : ''}`} type="button" key={request.id} disabled={actionPending} aria-label={`Select ${rejected ? 'rejected ' : ''}request ${requestLocationLabel(request)}`} onClick={() => selectRequest(request.id)}><span>{index + 1}</span><div><strong>{requestLocationLabel(request)}</strong>{rejected && <small className="op-rejected-row-label">Request Rejected — Service Suspended</small>}<small>{request.course_name || 'Course unavailable'}</small></div><b>{requestAge(request.received_at)}</b><ChevronRight size={18} aria-hidden="true" /></button>;
+    })}</section>}
+  </section><aside className="op-summary">{cartMetrics && <Performance summary={summary} />}<RecentHistory history={history} onOpen={onOpenHistory} /></aside></div>;
 }
 
-function HistoryView({ dashboard }) {
+function HistoryView({
+  dashboard, cartMetrics = true, isAdmin = false, user, adminApiBaseUrl, course,
+  onReportingStateChanged,
+}) {
   const [period, setPeriod] = useState('daily');
-  const summary = dashboard?.summaries?.[period] || {};
-  const history = dashboard?.history || [];
-  return <section className="op-history-view"><header><div><span>SERVICE HISTORY</span><h1>Performance & outcomes</h1></div><div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) => <button type="button" className={period === id ? 'active' : ''} onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div></header><div className="op-metrics"><div><BarChart3 size={18} /><span>Transactions</span><strong>{summary.completed_transactions ?? 0}</strong></div><div><Clock3 size={18} /><span>Active cart hours</span><strong>{summary.active_cart_hours ?? 0}</strong></div><div><CheckCircle2 size={18} /><span>Transactions per hour</span><strong>{summary.transactions_per_cart_hour ?? 0}</strong></div><div><History size={18} /><span>Average completion</span><strong>{summary.average_completion_minutes == null ? '-' : `${summary.average_completion_minutes} min`}</strong></div></div><section className="op-history-list"><div className="op-history-row heading"><span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span></div>{history.map((item) => <div className="op-history-row" key={item.request_id}><span className={`op-outcome ${item.status}`}>{item.status === 'completed' ? 'Completed' : 'Cancelled'}</span><strong>Hole {item.hole ?? 'Unknown'}</strong><span>{clockTime(item.received_at)}</span><span>{duration(item) || '-'}</span></div>)}{history.length === 0 && <div className="op-message">No completed or cancelled requests yet.</div>}</section></section>;
+  const [showExcluded, setShowExcluded] = useState(false);
+  const [excludedRequests, setExcludedRequests] = useState([]);
+  const [excludedLoadState, setExcludedLoadState] = useState('idle');
+  const [reportingPendingId, setReportingPendingId] = useState('');
+  const [reportingError, setReportingError] = useState('');
+  const [reportingNotice, setReportingNotice] = useState('');
+  const [hiddenRequestIds, setHiddenRequestIds] = useState(() => new Set());
+  const report = dashboard?.reports?.[period] || {};
+  const summary = report.summary || {};
+  const history = (report.history || []).filter((item) => !hiddenRequestIds.has(item.request_id));
+
+  useEffect(() => {
+    if (!isAdmin || !showExcluded || !course || !adminApiBaseUrl) return undefined;
+    let active = true;
+    setExcludedLoadState('loading');
+    setReportingError('');
+    adminRequest(user, adminApiBaseUrl,
+      `/api/v1/admin/requests/excluded?customer_id=${encodeURIComponent(course.customer_id)}&course_id=${encodeURIComponent(course.course_id)}`)
+      .then((requests) => {
+        if (active) {
+          setExcludedRequests(requests);
+          setExcludedLoadState('ready');
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setReportingError(error.message);
+          setExcludedLoadState('error');
+        }
+      });
+    return () => { active = false; };
+  }, [adminApiBaseUrl, course?.course_id, course?.customer_id, isAdmin, showExcluded, user]);
+
+  async function changeReportingState(request, reportingState) {
+    const requestId = request.request_id || request.id;
+    const label = requestLocationLabel(request);
+    const action = reportingState === 'excluded' ? 'Exclude' : 'Restore';
+    const detail = reportingState === 'excluded'
+      ? 'This request will be omitted from Service History and request-based reports.'
+      : 'This request will be included in Service History and request-based reports again.';
+    if (!window.confirm(`${action} ${label} from reporting? ${detail}`)) return;
+    setReportingPendingId(requestId);
+    setReportingError('');
+    setReportingNotice('');
+    try {
+      await adminRequest(user, adminApiBaseUrl,
+        `/api/v1/admin/requests/${encodeURIComponent(requestId)}/reporting-state`, {
+          method: 'PATCH',
+          body: {
+            customer_id: course.customer_id,
+            course_id: course.course_id,
+            reporting_state: reportingState,
+          },
+        });
+      if (reportingState === 'excluded') {
+        setHiddenRequestIds((current) => new Set([...current, requestId]));
+        setExcludedRequests((current) => [
+          { ...request, id: requestId, request_id: requestId, reporting_state: 'excluded' },
+          ...current.filter((item) => (item.request_id || item.id) !== requestId),
+        ]);
+      } else {
+        setExcludedRequests((current) => current.filter((item) => (item.request_id || item.id) !== requestId));
+        setHiddenRequestIds((current) => {
+          const next = new Set(current);
+          next.delete(requestId);
+          return next;
+        });
+      }
+      setReportingNotice(`${label} ${reportingState === 'excluded' ? 'excluded from' : 'restored to'} reporting.`);
+      onReportingStateChanged?.();
+    } catch (error) {
+      setReportingError(error.message);
+    } finally {
+      setReportingPendingId('');
+    }
+  }
+
+  function outcomeLabel(item) {
+    return item.status === 'completed' ? 'Completed' :
+      item.status === 'cancelled' ? 'Cancelled' : 'Service Suspended';
+  }
+
+  return <section className="op-history-view">
+    <header><div><span>SERVICE HISTORY</span><h1>{cartMetrics ? 'Performance & outcomes' : 'Request outcomes'}</h1></div>
+      <div className="op-periods">{[['daily', 'Day'], ['weekly', 'Week'], ['monthly', 'Month']].map(([id, label]) =>
+        <button type="button" className={period === id ? 'active' : ''} aria-pressed={period === id}
+          onClick={() => setPeriod(id)} key={id}>{label}</button>)}</div>
+    </header>
+    {cartMetrics && <div className="op-metrics">
+      <div><BarChart3 size={18} aria-hidden="true" /><span>Completed Requests</span><strong>{summary.completed_requests ?? 0}</strong></div>
+      <div><Clock3 size={18} aria-hidden="true" /><span>Active Cart Hours</span><strong>{formatHours(summary.active_cart_hours)}</strong></div>
+      <div><History size={18} aria-hidden="true" /><span>Average Completion Time</span><strong>{formatAverageCompletion(summary.average_completion_minutes === undefined ? 0 : summary.average_completion_minutes)}</strong></div>
+      <div><CheckCircle2 size={18} aria-hidden="true" /><span>Requests per Hour</span><strong>{summary.requests_per_hour ?? 0}</strong></div>
+    </div>}
+    <section className="op-history-list">
+      <div className={`op-history-row heading${isAdmin ? ' admin' : ''}`}>
+        <span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span>{isAdmin && <span>Reporting</span>}
+      </div>
+      {history.map((item) => <div className={`op-history-row${isAdmin ? ' admin' : ''}`} key={item.request_id}>
+        <span className={`op-outcome ${item.status}`}>{outcomeLabel(item)}</span>
+        <strong>{requestLocationLabel(item)}</strong><span className="op-history-received">{dateTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
+        {isAdmin && <button className="op-reporting-action" type="button" disabled={Boolean(reportingPendingId)}
+          onClick={() => changeReportingState(item, 'excluded')}>Exclude</button>}
+      </div>)}
+      {history.length === 0 && <div className="op-message">No completed, cancelled, or rejected requests yet.</div>}
+    </section>
+    {isAdmin && <section className="op-excluded-panel">
+      <button className="op-reporting-toggle" type="button" aria-expanded={showExcluded} onClick={() => {
+        setShowExcluded((current) => !current);
+        setReportingError('');
+        setReportingNotice('');
+      }}>{showExcluded ? 'Hide excluded requests' : 'View excluded requests'}</button>
+      {showExcluded && <div className="op-excluded-content">
+        <h2>Excluded Requests</h2>
+        {excludedLoadState === 'loading' && <p>Loading excluded requests...</p>}
+        {excludedLoadState === 'error' && <p role="alert">{reportingError}</p>}
+        {excludedLoadState === 'ready' && <section className="op-history-list">
+          <div className="op-history-row heading admin">
+            <span>Outcome</span><span>Request</span><span>Received</span><span>Duration</span><span>Reporting</span>
+          </div>
+          {excludedRequests.map((item) => <div className="op-history-row admin" key={item.request_id || item.id}>
+            <span className={`op-outcome ${item.status}`}>{outcomeLabel(item)}</span>
+            <strong>{requestLocationLabel(item)}</strong><span className="op-history-received">{dateTime(item.received_at)}</span><span>{duration(item) || '-'}</span>
+            <button className="op-reporting-action" type="button" disabled={Boolean(reportingPendingId)}
+              onClick={() => changeReportingState(item, 'active')}>Restore to Reporting</button>
+          </div>)}
+          {excludedRequests.length === 0 && <div className="op-message">No excluded requests for this Course.</div>}
+        </section>}
+      </div>}
+    </section>}
+    {reportingError && excludedLoadState !== 'error' && <p className="op-reporting-error" role="alert">{reportingError}</p>}
+    {reportingNotice && <p className="op-reporting-notice" role="status">{reportingNotice}</p>}
+  </section>;
 }
 
 export default function OperatorApp({
-  user, apiBaseUrl, operatorConfig, requests, loadState, loadError,
+  user, apiBaseUrl, adminApiBaseUrl, inventoryApiBaseUrl, operatorConfig, requests, loadState, loadError,
   focusedRequestId, isAdmin, onOpenAdmin, onOpenInventory, onSignOut, onRequestAction,
 }) {
   const [tab, setTab] = useState('requests');
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState('');
+  const [serviceError, setServiceError] = useState('');
+  const [notificationPending, setNotificationPending] = useState(false);
+  const notificationActionsInFlight = useRef(0);
+  const notificationRefreshRecovery = useRef(null);
+  const serviceActionInFlight = useRef(false);
   const [selectedCourseKey, setSelectedCourseKey] = useState(() => {
     const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
     return selected ? courseKey(selected) : '';
   });
   const [pending, setPending] = useState('');
+  const [actionedRequestIds, setActionedRequestIds] = useState(() => new Set());
   const [celebration, setCelebration] = useState('');
-
-  async function refreshDashboard(selectedCourse = course) {
-    setDashboard(null);
-    const query = selectedCourse
-      ? `?customer_id=${encodeURIComponent(selectedCourse.customer_id)}&course_id=${encodeURIComponent(selectedCourse.course_id)}`
-      : '';
-    try {
-      setDashboard(await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`));
-      setDashboardError('');
-    } catch (reason) {
-      setDashboardError(reason.message);
-    }
-  }
+  const requestActionInFlight = useRef(false);
+  const actionedRequestIdsRef = useRef(new Set());
+  const refreshSequence = useRef(0);
+  const refreshTimer = useRef(null);
+  const refreshInFlight = useRef(false);
+  const refreshQueued = useRef(false);
+  const mounted = useRef(true);
+  const selectedCourseRef = useRef(null);
+  const selectedCourseKeyRef = useRef('');
 
   const selectedCourse = operatorConfig.courses.find((item) => courseKey(item) === selectedCourseKey)
     || selectedCourseFromLocation(operatorConfig.courses, window.location.search);
-  const course = mergeDashboardCourse(selectedCourse, dashboard?.courses);
-  useEffect(() => { refreshDashboard(course); }, [user, apiBaseUrl, course?.customer_id, course?.course_id]);
-  const selectedRequests = requests.filter((request) => (
-    !course || (request.customer_id === course.customer_id && request.course_id === course.course_id)
-  ));
+  const selectedCourseKeyValue = selectedCourse ? courseKey(selectedCourse) : '';
+  selectedCourseRef.current = selectedCourse;
+  selectedCourseKeyRef.current = selectedCourseKeyValue;
+  const currentDashboard = dashboard?.key === selectedCourseKeyValue ? dashboard.data : null;
+  const course = mergeDashboardCourse(selectedCourse, currentDashboard?.courses);
+  const customers = authorizedCustomers(operatorConfig.courses);
+  const customerCourses = operatorConfig.courses.filter((item) => item.customer_id === selectedCourse?.customer_id);
+  const operation = courseOperation(course);
+  const inventorySession = useInventorySession(operation.inventory && inventoryApiBaseUrl ? user : null, inventoryApiBaseUrl, course, { readOnly: true });
+  const selectedRequests = useMemo(() => requests.filter((request) => (
+    course && request.customer_id === course.customer_id && request.course_id === course.course_id
+  )), [requests, course?.customer_id, course?.course_id]);
+  useEffect(() => {
+    const activeRequestIds = new Set(selectedRequests.map((request) => request.id));
+    for (const requestId of actionedRequestIdsRef.current) {
+      if (!activeRequestIds.has(requestId)) actionedRequestIdsRef.current.delete(requestId);
+    }
+    setActionedRequestIds(new Set(actionedRequestIdsRef.current));
+  }, [selectedRequests]);
+  const outcomeSignature = useMemo(() => selectedRequests
+    .filter((request) => ['completed', 'cancelled'].includes(request.status))
+    .map((request) => [
+      request.id,
+      request.status,
+      request.completed_at?.toMillis?.() ?? request.completed_at ?? '',
+      request.cancelled_at?.toMillis?.() ?? request.cancelled_at ?? '',
+    ].join(':'))
+    .sort()
+    .join('|'), [selectedRequests]);
+
+  const scheduleDashboardRefresh = useCallback(() => {
+    if (!mounted.current) return;
+    const sequence = ++refreshSequence.current;
+    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(async () => {
+      refreshTimer.current = null;
+      if (!user || sequence !== refreshSequence.current) return;
+      if (refreshInFlight.current) {
+        refreshQueued.current = true;
+        return;
+      }
+      const targetCourse = selectedCourseRef.current;
+      const targetKey = selectedCourseKeyRef.current;
+      const query = targetCourse
+        ? `?customer_id=${encodeURIComponent(targetCourse.customer_id)}&course_id=${encodeURIComponent(targetCourse.course_id)}`
+        : '';
+      refreshInFlight.current = true;
+      try {
+        const result = await operatorRequest(user, apiBaseUrl, `/api/v1/operator/dashboard${query}`);
+        if (sequence === refreshSequence.current && targetKey === selectedCourseKeyRef.current) {
+          setDashboard({ key: targetKey, data: result });
+          setDashboardError('');
+        }
+      } catch (reason) {
+        if (sequence === refreshSequence.current && targetKey === selectedCourseKeyRef.current) {
+          setDashboardError(reason.message);
+        }
+      } finally {
+        refreshInFlight.current = false;
+        if (refreshQueued.current && mounted.current) {
+          refreshQueued.current = false;
+          scheduleDashboardRefresh();
+        }
+      }
+    }, 120);
+  }, [user, apiBaseUrl]);
+
+  useEffect(() => {
+    refreshSequence.current += 1;
+    setDashboard(null);
+    scheduleDashboardRefresh();
+    return () => {
+      refreshSequence.current += 1;
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+      refreshTimer.current = null;
+    };
+  }, [user, apiBaseUrl, selectedCourseKeyValue, scheduleDashboardRefresh]);
+
+  useEffect(() => {
+    scheduleDashboardRefresh();
+  }, [outcomeSignature, scheduleDashboardRefresh]);
+
+  useEffect(() => {
+    let timer;
+    function refreshOnMinute() {
+      scheduleDashboardRefresh();
+      timer = window.setTimeout(refreshOnMinute, 60000 - (Date.now() % 60000));
+    }
+    timer = window.setTimeout(refreshOnMinute, 60000 - (Date.now() % 60000));
+    return () => window.clearTimeout(timer);
+  }, [user, apiBaseUrl, selectedCourseKeyValue, scheduleDashboardRefresh]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      refreshSequence.current += 1;
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+    };
+  }, []);
+
+  const contextPending = Boolean(pending || inventorySession.submitting || notificationPending);
+
+  function changeCourse(selected, pathname = '/') {
+    if (requestActionInFlight.current || serviceActionInFlight.current ||
+        inventorySession.isSubmitting() || notificationActionsInFlight.current > 0) return false;
+    if (!selected || !operatorConfig.courses.some((item) => courseKey(item) === courseKey(selected))) return false;
+    refreshSequence.current += 1;
+    setDashboard(null);
+    setDashboardError('');
+    setServiceError('');
+    setCelebration('');
+    setSelectedCourseKey(courseKey(selected));
+    replaceCourseContext(pathname, selected);
+    return true;
+  }
+
+  useEffect(() => {
+    function navigateHistory() {
+      const selected = selectedCourseFromLocation(operatorConfig.courses, window.location.search);
+      if (!changeCourse(selected, window.location.pathname)) replaceCourseContext('/', selectedCourseRef.current);
+    }
+    window.addEventListener('popstate', navigateHistory);
+    return () => window.removeEventListener('popstate', navigateHistory);
+  });
 
   async function actOnRequest(request, action) {
+    if (pending || requestActionInFlight.current || actionedRequestIdsRef.current.has(request.id)) return;
+    requestActionInFlight.current = true;
     setPending(request.id);
     try {
       await onRequestAction(request, action);
+      actionedRequestIdsRef.current.add(request.id);
+      setActionedRequestIds(new Set(actionedRequestIdsRef.current));
       if (action === 'complete') {
-        setCelebration(`Hole ${request.hole ?? 'Unknown'} complete`);
+        setCelebration(`${requestLocationLabel(request)} complete`);
         window.setTimeout(() => setCelebration(''), 1800);
       }
-      await refreshDashboard();
+      scheduleDashboardRefresh();
     } finally {
+      requestActionInFlight.current = false;
       setPending('');
     }
   }
 
-  async function toggleService() {
-    if (!course) return;
-    const action = course.service_state?.suspended ? 'resume' : 'suspend';
+  async function toggleService(group = 'on_course') {
+    if (!course || requestActionInFlight.current || serviceActionInFlight.current || pending) return;
+    const state = group === 'on_premise' ? course.on_premise_service_state : course.service_state;
+    const action = state?.suspended ? 'resume' : 'suspend';
+    const groupLabel = operation.physical_devices && course.has_on_premise_devices ? `${serviceCategory(group).display_name} service` : 'service';
     const prompt = action === 'suspend'
-      ? `Suspend new beverage requests for ${course.course_name} until the next scheduled service start? Existing requests remain actionable.`
-      : `Resume beverage requests for ${course.course_name}?`;
+      ? `Turn ${groupLabel} OFF for ${course.course_name} until an operator resumes it? Existing requests remain actionable.`
+      : `Turn ${groupLabel} ON for ${course.course_name} until an operator suspends it?`;
     if (!window.confirm(prompt)) return;
     setPending('service');
+    serviceActionInFlight.current = true;
+    setServiceError('');
     try {
       await operatorRequest(user, apiBaseUrl, `/api/v1/operator/service/${action}`, {
-        method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id },
+        method: 'POST', body: { customer_id: course.customer_id, course_id: course.course_id, service_group: group },
       });
-      await refreshDashboard();
+      scheduleDashboardRefresh();
+    } catch (error) {
+      setServiceError(error.message);
     } finally {
+      serviceActionInFlight.current = false;
       setPending('');
     }
   }
 
   const serviceAction = course?.service_state?.suspended ? 'resume' : 'suspend';
   const serviceActionLabel = serviceAction === 'resume' ? 'Resume Service' : 'Suspend Service';
+  const requestServiceActive = course?.service_state?.active ||
+    (course?.has_on_premise_devices && course?.on_premise_service_state?.active);
+  const displayNames = courseDisplayNames(course);
 
   return <main className="operator-app"><header className="op-header">
     <div className="op-header-main">
       <Brand />
-      <nav aria-label="Cart Operator navigation">
+      <nav aria-label="Course Operator navigation">
         <button className={tab === 'requests' ? 'active' : ''} type="button" aria-pressed={tab === 'requests'} onClick={() => setTab('requests')}>Requests</button>
         <button className={tab === 'history' ? 'active' : ''} type="button" aria-pressed={tab === 'history'} onClick={() => setTab('history')}>History</button>
       </nav>
-      <div className="op-header-account">
-        {isAdmin && <button className="op-icon" type="button" onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
-        <button className="op-icon" type="button" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+      <div className="op-header-utilities">
+        {operation.inventory && <a className="op-inventory" href={contextPending ? undefined : courseContextUrl('/inventory', course)} aria-disabled={contextPending || undefined} title="Inventory management"><Package size={17} />Inventory</a>}
+        <div className="op-header-account">
+          <AppRefresh className="op-icon" user={user} onRefresh={() => notificationRefreshRecovery.current?.()} getBlockReason={() => (
+            requestActionInFlight.current || serviceActionInFlight.current ||
+            inventorySession.isSubmitting() || notificationActionsInFlight.current > 0
+              ? 'Wait for the request, service or notification update to finish before refreshing.'
+              : ''
+          )} />
+          {isAdmin && <button className="op-icon" type="button" disabled={contextPending} onClick={onOpenAdmin} title="Open Admin" aria-label="Open Admin"><ShieldCheck size={18} /></button>}
+          <button className="op-icon" type="button" disabled={contextPending} onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
+        </div>
       </div>
     </div>
     <div className="op-header-context">
       <div className="op-course-context">
-        <span className="op-current-course">{courseDisplayLabel(course)}</span>
-        {operatorConfig.courses.length > 1 && <label className="op-course-select"><span>Course</span><select value={course ? courseKey(course) : ''} onChange={(event) => { const selected = operatorConfig.courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedCourseKey(courseKey(selected)); setDashboard(null); replaceCourseContext('/', selected); }} aria-label="Select course">{operatorConfig.courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
+        <div className="op-course-identity">
+          <div className="op-current-course" aria-label={courseDisplayLabel(course)}>
+            <span>{displayNames.customer}</span>
+            <strong>{course ? displayNames.course : 'No authorized Course'}</strong>
+          </div>
+          {operation.inventory && inventoryApiBaseUrl && <div className="inventory-session" aria-live="polite">
+            <span>Operator: <strong>{inventorySession.shift?.staff_name || (inventorySession.ready ? 'Not selected' : 'Unavailable')}</strong></span>
+            {inventorySession.error && <span role="alert">Unable to verify operator: {inventorySession.error} Open Inventory to retry.</span>}
+          </div>}
+        </div>
+        <div className="op-context-selectors">
+          {isAdmin && customers.length > 0 && <label className="op-course-select"><span>Customer</span><select
+            value={selectedCourse?.customer_id || ''} disabled={contextPending}
+            onChange={(event) => changeCourse(operatorConfig.courses.find((item) => item.customer_id === event.target.value))}
+            aria-label="Select customer">{customers.map((item) => <option key={item.customer_id} value={item.customer_id}>{item.customer_name}</option>)}</select></label>}
+          {customerCourses.length > 0 && <label className="op-course-select"><span>Service</span><select
+            value={selectedCourseKeyValue} disabled={contextPending}
+            onChange={(event) => changeCourse(customerCourses.find((item) => courseKey(item) === event.target.value))}
+            aria-label="Select course">{customerCourses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{courseOperation(item).kind === 'driving_range' ? 'Driving range service' : 'Cart service'}</option>)}</select></label>}
+        </div>
       </div>
       <div className="op-service-controls">
-        <ServiceStatus course={course} />
-        <button className="op-suspend" type="button" onClick={toggleService} disabled={pending === 'service' || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
+        {operation.physical_devices && course?.has_on_premise_devices ? <div className="op-service-groups">{serviceCategories.map(({ id }) => <GroupServiceControls key={id} group={id} state={id === 'on_course' ? course.service_state : course.on_premise_service_state} pending={Boolean(pending)} onToggle={toggleService} />)}</div> : <><ServiceStatus course={course} />
+        <button className="op-suspend" type="button" onClick={() => toggleService()} disabled={Boolean(pending) || !course} aria-label={`${serviceActionLabel} for ${course?.course_name || 'selected course'}`} title={serviceActionLabel}>
           {serviceAction === 'resume' ? <Play size={17} /> : <Pause size={17} />}
           <span>{serviceActionLabel}</span>
-        </button>
-        <a className="op-inventory" href={courseContextUrl('/inventory', course)} title="Inventory management"><Package size={17} />Inventory</a>
+        </button></>}
+        {serviceError && <p role="alert">{serviceError}</p>}
       </div>
     </div>
-  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} />{dashboardError && <p role="alert">Metrics unavailable: {dashboardError}</p>}</div>{tab === 'requests' ? <RequestsView requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} summary={dashboard?.summaries?.daily} history={dashboard?.history || []} onOpenHistory={() => setTab('history')} serviceActive={course?.service_state?.active} /> : <HistoryView dashboard={dashboard} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
+  </header><div className="op-notifications"><NotificationSetup user={user} apiBaseUrl={apiBaseUrl} operatorConfig={operatorConfig} refreshRecoveryRef={notificationRefreshRecovery}
+    onMutationPending={(value) => {
+      notificationActionsInFlight.current += value ? 1 : -1;
+      setNotificationPending(notificationActionsInFlight.current > 0);
+    }}
+  />{dashboardError && <p role="alert">Course history unavailable: {dashboardError}</p>}</div><RequestsView key={`requests:${selectedCourseKeyValue}`} requests={selectedRequests} loadState={loadState} loadError={loadError} focusedRequestId={focusedRequestId} onAction={actOnRequest} pending={pending} actionPending={Boolean(pending && pending !== 'service')} requestActionInFlight={requestActionInFlight} actionedRequestIds={actionedRequestIds} summary={currentDashboard?.reports?.daily?.summary} history={currentDashboard?.reports?.daily?.history || []} onOpenHistory={() => setTab('history')} serviceActive={requestServiceActive} hidden={tab !== 'requests'} cartMetrics={operation.cart_metrics} />{tab === 'history' && <HistoryView key={`history:${selectedCourseKeyValue}`} dashboard={currentDashboard} cartMetrics={operation.cart_metrics} isAdmin={isAdmin} user={user} adminApiBaseUrl={adminApiBaseUrl} course={course} onReportingStateChanged={scheduleDashboardRefresh} />}{celebration && <div className="op-celebration" role="status"><CheckCircle2 size={22} />{celebration}</div>}</main>;
 }

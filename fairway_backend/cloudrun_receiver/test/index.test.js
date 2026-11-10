@@ -564,6 +564,109 @@ test('authenticated CONFIRM records the verified Firebase uid', async () => {
   assert.strictEqual(request.data().operator_id, 'firebase-uid');
 });
 
+test('service-suspended button attempts persist separately and remain non-actionable after service resumes', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    service_suspension: { suspended_at: new Date('2026-10-01T18:00:00.000Z') },
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    course_name: 'Tony Lema Course',
+    service_group: 'on_course',
+    location: { hole: 7 },
+  });
+  const { handleDeviceEvent, updateRequestStatus } = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-01T19:00:00.000Z'),
+    verifyOperatorToken: async () => ({ uid: 'operator-123' }),
+  });
+
+  const rejectedIds = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = createResponse();
+    await handleDeviceEvent(createRequest({
+      body: { device_id: 'FRB-0001', event_type: 'button_press' },
+      headers: { 'x-fairway-device-key': secret },
+    }), response);
+    assert.strictEqual(response.statusCode, 503);
+    assert.strictEqual(response.body.status, 'service_unavailable');
+    assert.strictEqual(response.body.rejection_reason, 'service_suspended');
+    rejectedIds.push(response.body.request_id);
+  }
+  assert.notStrictEqual(rejectedIds[0], rejectedIds[1]);
+
+  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
+  assert.strictEqual(requests.size, 2);
+  for (const snapshot of requests.docs) {
+    assert.strictEqual(snapshot.data().status, 'rejected');
+    assert.strictEqual(snapshot.data().rejection_reason, 'service_suspended');
+    assert.deepStrictEqual(snapshot.data().service_state_at_receipt, {
+      active: false,
+      suspended: true,
+      service_group: 'on_course',
+    });
+    assert.strictEqual(snapshot.data().demand_window_expires_at, null);
+  }
+
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .update({ service_suspension: null });
+  const complete = createResponse();
+  await updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer test-operator-token' },
+  }), complete, rejectedIds[0], 'complete');
+  assert.strictEqual(complete.statusCode, 409);
+  const unchanged = await db.collection('requests').doc(rejectedIds[0]).get();
+  assert.strictEqual(unchanged.data().status, 'rejected');
+  assert.strictEqual(unchanged.data().completed_at, null);
+});
+
+test('authorized clear persists on a rejected request, is idempotent, and cannot cross Course scope', async () => {
+  const db = new FakeFirestore();
+  await setUpOperatorAssignment(db);
+  await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Other Customer' });
+  await db.collection('customers').doc('CUST-0002').collection('courses').doc('COURSE-0002')
+    .set({ course_name: 'Other Course' });
+  await db.collection('user_access').doc('foreign-operator').set({
+    schema_version: 2,
+    admin: false,
+    customer_id: 'CUST-0002',
+    course_ids: ['COURSE-0002'],
+  });
+  await db.collection('requests').doc('rejected-a').set({
+    customer_id: 'CUST-0001',
+    course_id: 'COURSE-0001',
+    status: 'rejected',
+    rejection_reason: 'service_suspended',
+    received_at: new Date('2026-10-01T19:00:00.000Z'),
+  });
+  const { fairwayButtonReceiver } = createFairwayHandlers(db, {
+    verifyOperatorToken: async (token) => ({ uid: token }),
+  });
+
+  const clear = async (operator) => {
+    const response = createResponse();
+    await fairwayButtonReceiver(createRequest({
+      method: 'POST',
+      path: '/api/v1/requests/rejected-a/clear-rejected',
+      headers: { authorization: `Bearer ${operator}` },
+    }), response);
+    return response;
+  };
+  assert.strictEqual((await clear('operator-123')).statusCode, 200);
+  assert.strictEqual((await clear('operator-123')).statusCode, 200);
+  assert.strictEqual((await clear('foreign-operator')).statusCode, 403);
+
+  const request = await db.collection('requests').doc('rejected-a').get();
+  assert.strictEqual(request.data().status, 'rejected');
+  assert.ok(request.data().rejected_cleared_at);
+  assert.strictEqual(request.data().rejected_cleared_by, 'operator-123');
+  assert.strictEqual(request.data().completed_at, undefined);
+  assert.strictEqual(request.data().cancelled_at, undefined);
+});
+
 test('authenticated COMPLETE atomically creates one deterministic correlated command', async () => {
   const db = new FakeFirestore();
   await setUpOperatorAssignment(db);
@@ -603,6 +706,8 @@ test('authenticated COMPLETE atomically creates one deterministic correlated com
 test('authenticated CANCEL closes an assigned request without creating a Device command', async () => {
   const db = new FakeFirestore();
   await setUpOperatorAssignment(db);
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .update({ service_suspension: { suspended_at: new Date('2026-10-01T18:00:00.000Z') } });
   await db.collection('requests').doc('request-a').set({
     customer_id: 'CUST-0001',
     course_id: 'COURSE-0001',
@@ -625,7 +730,7 @@ test('authenticated CANCEL closes an assigned request without creating a Device 
   assert.strictEqual(commands.empty, true);
 });
 
-test('Course suspension blocks new button requests but preserves active-request actions', async () => {
+test('Course suspension remains OFF after its legacy expiry and preserves active-request actions', async () => {
   const db = new FakeFirestore();
   const requestTime = new Date('2026-10-01T19:00:00.000Z');
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
@@ -654,8 +759,20 @@ test('Course suspension blocks new button requests but preserves active-request 
   }), button);
   assert.strictEqual(button.statusCode, 503);
   assert.strictEqual(button.body.status, 'service_unavailable');
+  const afterLegacyExpiry = createResponse();
+  const laterHandlers = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-03T19:00:00.000Z'),
+    verifyOperatorToken: operatorVerifier(),
+  });
+  await laterHandlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), afterLegacyExpiry);
+  assert.strictEqual(afterLegacyExpiry.statusCode, 503);
   const newRequests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
-  assert.strictEqual(newRequests.size, 1);
+  assert.strictEqual(newRequests.size, 3);
+  assert.notStrictEqual(button.body.request_id, afterLegacyExpiry.body.request_id);
+  assert.strictEqual(newRequests.docs.filter((request) => request.data().status === 'rejected').length, 2);
 
   const complete = createResponse();
   await handlers.updateRequestStatus(createRequest({
@@ -664,7 +781,32 @@ test('Course suspension blocks new button requests but preserves active-request 
   assert.strictEqual(complete.statusCode, 200);
 });
 
-test('assigned operators can suspend until the next scheduled start and resume service', async () => {
+test('service ON accepts button requests outside the retained legacy schedule', async () => {
+  const db = new FakeFirestore();
+  await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
+    course_name: 'Tony Lema Course',
+    timezone: 'America/Los_Angeles',
+    service_schedule: { days: [1], start: '09:00', end: '10:00' },
+    service_suspension: null,
+  });
+  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', course_name: 'Tony Lema Course',
+  });
+  const handlers = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-03T19:00:00.000Z'),
+    verifyOperatorToken: operatorVerifier(),
+  });
+  const response = createResponse();
+  await handlers.handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), response);
+
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.status, 'accepted');
+});
+
+test('assigned operators can keep service OFF until Resume regardless of schedule or elapsed time', async () => {
   const db = new FakeFirestore();
   const requestTime = new Date('2026-10-01T19:00:00.000Z');
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
@@ -685,7 +827,10 @@ test('assigned operators can suspend until the next scheduled start and resume s
   }), suspend);
   assert.strictEqual(suspend.statusCode, 200);
   assert.strictEqual(suspend.body.service_state.suspended, true);
-  assert.strictEqual(suspend.body.service_state.suspension_until.toISOString(), '2026-10-02T16:00:00.000Z');
+  assert.strictEqual(suspend.body.service_state.active, false);
+  const storedSuspension = await db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001').get();
+  assert.strictEqual(storedSuspension.data().service_suspension.until, undefined);
 
   const resume = createResponse();
   await fairwayButtonReceiver(createRequest({
@@ -713,10 +858,34 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
     received_at: new Date('2026-10-01T18:00:00.000Z'),
     completed_at: new Date('2026-10-01T18:10:00.000Z'),
   });
+  await db.collection('requests').doc('cancelled-assigned').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', hole: 8, status: 'cancelled',
+    received_at: new Date('2026-10-01T18:20:00.000Z'),
+    cancelled_at: new Date('2026-10-01T18:26:00.000Z'),
+    completed_at: new Date('2026-10-01T18:25:00.000Z'),
+  });
+  await db.collection('requests').doc('rejected-cleared-assigned').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', hole: 10, status: 'rejected',
+    rejection_reason: 'service_suspended', rejected_cleared_at: new Date('2026-10-01T18:16:00.000Z'),
+    received_at: new Date('2026-10-01T18:15:00.000Z'),
+  });
+  await db.collection('requests').doc('completed-prior-day').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001', hole: 9, status: 'completed',
+    received_at: new Date('2026-09-30T06:20:00.000Z'),
+    completed_at: new Date('2026-09-30T06:30:00.000Z'),
+  });
   await db.collection('requests').doc('completed-other').set({
     course_id: 'COURSE-9999', hole: 18, status: 'completed',
     received_at: new Date('2026-10-01T18:00:00.000Z'),
     completed_at: new Date('2026-10-01T18:05:00.000Z'),
+  });
+  const serviceEvents = db.collection('customers').doc('CUST-0001')
+    .collection('courses').doc('COURSE-0001').collection('service_events');
+  await serviceEvents.doc('resume').set({
+    type: 'resumed', recorded_at: new Date('2026-10-01T18:00:00.000Z'),
+  });
+  await serviceEvents.doc('suspend').set({
+    type: 'suspended', recorded_at: new Date('2026-10-01T18:30:00.000Z'),
   });
   const { fairwayButtonReceiver } = createFairwayHandlers(db, {
     now: () => requestTime,
@@ -730,9 +899,20 @@ test('operator dashboard returns only assigned-Course service state, summaries, 
 
   assert.strictEqual(response.statusCode, 200);
   assert.deepStrictEqual(response.body.courses.map((course) => course.course_id), ['COURSE-0001']);
-  assert.strictEqual(response.body.summaries.daily.completed_transactions, 1);
-  assert.strictEqual(response.body.summaries.daily.average_completion_minutes, 10);
-  assert.deepStrictEqual(response.body.history.map((request) => request.request_id), ['completed-assigned']);
+  assert.strictEqual(response.body.reports.daily.summary.completed_requests, 1);
+  assert.strictEqual(response.body.reports.daily.summary.active_cart_hours, 0.5);
+  assert.strictEqual(response.body.reports.daily.summary.requests_per_hour, 2);
+  assert.strictEqual(response.body.reports.daily.summary.completed_transactions, 1);
+  assert.strictEqual(response.body.reports.daily.summary.transactions_per_cart_hour, 2);
+  assert.strictEqual(response.body.reports.daily.summary.average_completion_minutes, 10);
+  assert.deepStrictEqual(response.body.reports.daily.history.map((request) => request.request_id), [
+    'cancelled-assigned', 'rejected-cleared-assigned', 'completed-assigned',
+  ]);
+  assert.deepStrictEqual(response.body.reports.weekly.history.map((request) => request.request_id), [
+    'cancelled-assigned', 'rejected-cleared-assigned', 'completed-assigned', 'completed-prior-day',
+  ]);
+  assert.strictEqual(response.body.reports.weekly.summary.completed_requests, 2);
+  assert.strictEqual(response.body.reports.monthly.summary.completed_requests, 2, 'Month is the last 30 days, not since the 1st');
   assert.strictEqual(response.body.courses[0].customer_id, 'CUST-0001');
   assert.strictEqual(response.body.courses[0].course_id, 'COURSE-0001');
 });
@@ -804,10 +984,10 @@ test('Fairway Refresh Staff receive Cart access to courses across customers', as
   });
   await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Monarch Bay GC' });
   await db.collection('customers').doc('CUST-0001').collection('courses')
-    .doc('COURSE-0001').set({ course_name: 'Tony Lema Course' });
+    .doc('COURSE-0001').set({ course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles' });
   await db.collection('customers').doc('CUST-0002').set({ customer_name: 'Other Customer' });
   await db.collection('customers').doc('CUST-0002').collection('courses')
-    .doc('COURSE-0002').set({ course_name: 'Other Course' });
+    .doc('COURSE-0002').set({ course_name: 'Other Course', timezone: 'America/Los_Angeles' });
   const { fairwayButtonReceiver } = createFairwayHandlers(db, {
     verifyOperatorToken: operatorVerifier('valid-token', globalAdminUid),
     vapidPublicKey: 'public-vapid-key',

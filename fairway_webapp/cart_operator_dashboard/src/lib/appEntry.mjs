@@ -3,9 +3,11 @@ export const APP_MODE = Object.freeze({
   INVENTORY: 'inventory',
   OPERATOR: 'operator',
   PUBLIC_MENU: 'public_menu',
+  PUBLIC_BAY: 'public_bay',
 });
 
 export function modeForPath(pathname) {
+  if (pathname === '/range' || pathname.startsWith('/range/')) return APP_MODE.PUBLIC_BAY;
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return APP_MODE.ADMIN;
   if (pathname === '/inventory' || pathname.startsWith('/inventory/')) return APP_MODE.INVENTORY;
   if (pathname === '/cartmenus' || pathname.startsWith('/cartmenus/')) return APP_MODE.PUBLIC_MENU;
@@ -26,6 +28,7 @@ export function destinationForLocation({ pathname, search = '', hash = '' }) {
 
 export function resolveEntry({ mode, authenticated, claimsReady, isAdmin, operatorState, inventoryState }) {
   if (mode === APP_MODE.PUBLIC_MENU) return 'public_menu';
+  if (mode === APP_MODE.PUBLIC_BAY) return 'public_bay';
   if (!authenticated) return 'login';
   if (mode === APP_MODE.ADMIN) {
     if (!claimsReady) return 'checking';

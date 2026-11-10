@@ -1,0 +1,11 @@
+.bay-page { max-width: 32rem; margin: 2rem auto; padding: 1.25rem; text-align: center; color: #163c2c; background: #fff; }
+.bay-page img { width: min(100%, 22rem); height: auto; }
+.bay-page h1 { font-size: 2.5rem; margin: 1rem 0; }
+.bay-page h2 { font-size: 1.4rem; line-height: 1.4; }
+.bay-page p { line-height: 1.5; overflow-wrap: anywhere; }
+.bay-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin: 2rem 0; }
+.bay-page button { min-width: 7rem; min-height: 48px; padding: .75rem 1.5rem; font: inherit; border: 2px solid #246447; border-radius: .6rem; background: white; color: #163c2c; cursor: pointer; }
+.bay-actions button:first-child { background: #246447; color: white; }
+.bay-page button:disabled { opacity: .6; cursor: wait; }
+.bay-page button:focus-visible { outline: 3px solid #d09a22; outline-offset: 3px; }
+.bay-test { border: 2px solid #a35700; padding: .6rem; font-weight: 700; color: #854200; }

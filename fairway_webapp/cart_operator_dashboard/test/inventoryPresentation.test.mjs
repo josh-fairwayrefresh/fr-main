@@ -15,8 +15,9 @@ test('Inventory dashboard uses the concise title and keeps readable course ident
 test('Inventory is a feature within Cart UI: no independent auth system and a clear return to Cart Operations', () => {
   assert.doesNotMatch(inventorySource, /firebase|getAuth|initializeApp|signIn/i);
   assert.match(inventorySource, /className="inv-brand" title="Return to Cart Operations"/);
-  assert.match(inventorySource, /fairway-refresh-stacked-transparent\.png/);
-  assert.match(inventorySource, /src=\{fairwayRefreshStackedLogo\} alt="Fairway Refresh"/);
+  assert.match(inventorySource, /src="\/icons\/logo-and-name-row-banner\.jpg" alt="Fairway Refresh"/);
+  assert.match(inventorySource, /aria-label="Inventory navigation"/);
+  assert.match(inventorySource, /aria-current="page">Inventory/);
   assert.match(inventorySource, /className="inv-cart-link" href=\{courseContextUrl\('\/', course\)\} title="Return to Cart Operations"/);
   assert.match(inventorySource, /replaceCourseContext\('\/inventory', selected\)/);
   assert.match(inventorySource, /onOpenAdmin/);
@@ -38,7 +39,7 @@ test('category filters open a management card with Delete Category, protected ag
   assert.match(inventorySource, /canDelete = productCount === 0/);
   assert.match(inventorySource, /disabled=\{!canDelete\}/);
   assert.match(inventorySource, /This category still has products\. Reassign or remove its products before deleting it\./);
-  assert.match(inventorySource, /method: 'DELETE'/);
+  assert.match(inventorySource, /session\.request\(`\/categories\/\$\{encodeURIComponent\(category\.category_id\)\}`, \{\}, 'DELETE'\)/);
   assert.doesNotMatch(inventorySource, /deleteProduct|cascadeDelete/i);
   assert.match(inventorySource, /onDeleted=\{async \(\) => \{/);
   assert.match(inventorySource, /await refreshInventory\(true\);\s*\}\}/);

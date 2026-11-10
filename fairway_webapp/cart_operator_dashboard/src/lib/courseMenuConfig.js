@@ -16,3 +16,8 @@ export const courseMenuConfig = Object.freeze({
 export function presentationForCourse(course) {
   return matchCoursePresentation(course, Object.values(courseMenuConfig));
 }
+
+export function publicMenuPath(apiSlug) {
+  const alias = Object.keys(courseMenuConfig).find(key => courseMenuConfig[key].apiSlug === apiSlug);
+  return `/cartmenus/${encodeURIComponent(alias || apiSlug)}`;
+}

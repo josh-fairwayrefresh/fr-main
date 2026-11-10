@@ -1,0 +1,306 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const { FakeFirestore } = require('./fake_firestore');
+const { createOtaService, nextCourseCheckTime, HARDWARE_ID } = require('../lib/ota/ota_service');
+const { PRODUCTION_FINGERPRINT } = require('../lib/ota/accepted_releases');
+const { publicationEligible } = require('../lib/ota/publication_policy');
+const { capability, approval } = require('./ota_fixtures');
+const { updateDeviceState, updateDeviceAssignment } = require('../lib/fleet/devices');
+
+const RELEASE = 'OTA-0.1alt';
+const DIGEST = 'a'.repeat(64);
+const IDS = ['FRB-0005', 'FRB-0011', 'FRB-0012', 'FRB-0013', 'FRB-0014'];
+
+async function setup({ hq = 'America/Los_Angeles', approvals } = {}) {
+  const db = new FakeFirestore();
+  let time = new Date('2026-03-08T07:00:00Z');
+  const options = {
+    now: () => new Date(time), headquartersTimeZone: hq,
+    artifactStore: {
+      async upload() { assert.fail('Fleet fixtures are preseeded; publication is not expected.'); },
+      createReadStream() { assert.fail('These tests authorize grants without streaming fixture bytes.'); },
+    },
+    acceptedReleases: { [RELEASE]: DIGEST },
+    publicationApprovals: approvals || { [RELEASE]: approval(DIGEST, IDS) },
+  };
+  const ota = createOtaService(db, options);
+  for (const [customer, zone] of [['CUST-0001', 'America/New_York'], ['CUST-0002', 'America/Los_Angeles']]) {
+    await db.collection('customers').doc(customer).set({ customer_name: customer });
+    await db.collection('customers').doc(customer).collection('courses').doc('COURSE-0001')
+      .set({ course_name: `Course ${zone}`, timezone: zone });
+  }
+  for (const [id, state, customer] of [
+    ['FRB-0005', 'deployed', 'CUST-0002'], ['FRB-0011', 'deployed', 'CUST-0001'],
+    ['FRB-0012', 'deployed', 'CUST-0002'], ['FRB-0013', 'in_inventory', null],
+    ['FRB-0014', 'maintenance', null], ['FRB-0015', 'retired', null],
+  ]) {
+    await db.collection('devices').doc(id).set({
+      state, customer_id: customer, course_id: customer ? 'COURSE-0001' : null,
+      ota_capability: capability(id === 'FRB-0005' ? 'one_time' : 'nightly'),
+      credential: { digest: 'DO-NOT-EXPOSE' },
+    });
+  }
+  await db.collection('ota_releases').doc(RELEASE).set({
+    state: 'published', release_id: RELEASE, sha256: DIGEST, version_string: '0.1.0+2',
+    version: { major: 0, minor: 1, revision: 0, build: 2 },
+    size_bytes: 512, object_path: 'LOCAL-TEST-ONLY/fixture.bin',
+    hardware_ids: [HARDWARE_ID], provenance: { signing_fingerprint: PRODUCTION_FINGERPRINT },
+    created_at: time,
+  });
+  return { db, ota, options, setTime(value) { time = new Date(value); } };
+}
+
+async function run() {
+  let count = 0;
+  async function test(name, fn) { await fn(); count++; console.log(`PASS: ${name}`); }
+
+  await test('fixed local 00:30 handles Pacific/Eastern DST and non-Pacific course zones', () => {
+    for (const [zone, now, expected] of [
+      ['America/Los_Angeles', '2026-03-08T09:00:00Z', '2026-03-09T07:30:00.000Z'],
+      ['America/Los_Angeles', '2026-11-01T08:00:00Z', '2026-11-02T08:30:00.000Z'],
+      ['America/New_York', '2026-03-08T04:00:00Z', '2026-03-08T05:30:00.000Z'],
+      ['Asia/Tokyo', '2026-03-08T07:00:00Z', '2026-03-08T15:30:00.000Z'],
+      ['America/Los_Angeles', '2026-07-10T07:30:00Z', '2026-07-11T07:30:00.000Z'],
+    ]) assert.equal(nextCourseCheckTime(zone, new Date(now)).toISOString(), expected);
+  });
+  await test('approved headquarters policy works by default without an environment override', async () => {
+    const { db, options } = await setup();
+    delete options.headquartersTimeZone;
+    const ota = createOtaService(db, options);
+    const fleet = await ota.listFleet();
+    assert.equal(fleet.headquarters_timezone, 'America/Los_Angeles');
+    assert.equal(fleet.headquarters_timezone_status, 'configured');
+    for (const id of ['FRB-0013', 'FRB-0014']) {
+      const device = fleet.devices.find((item) => item.device_id === id);
+      assert.equal(device.eligible, true);
+      assert.equal(device.next_window, '2026-03-08T08:30:00.000Z');
+    }
+  });
+  await test('dropdown eligibility uses the same accepted bytes, trust and hardware gate as assignment', async () => {
+    for (const mutation of [
+      { sha256: 'c'.repeat(64) }, { hardware_ids: ['other-board'] },
+      { provenance: { signing_fingerprint: 'wrong' } }, { state: 'publish_failed' },
+    ]) {
+      const { db, ota } = await setup();
+      await db.collection('ota_releases').doc(RELEASE).update(mutation);
+      assert.equal((await ota.listReleases())[0].assignable, false);
+      await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin'),
+        (error) => ['release_not_eligible', 'release_unavailable'].includes(error.code));
+    }
+  });
+  await test('withdrawn releases cannot be confirmed from a stale review', async () => {
+    const { db, ota } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0012'] }, 'admin');
+    await db.collection('ota_releases').doc(RELEASE).update({ state: 'publish_failed' });
+    await assert.rejects(ota.confirmAssignment(review.review_id, 'admin'),
+      (error) => error.code === 'release_unavailable');
+    assert.equal((await db.collection('ota_assignments').get()).size, 0);
+  });
+  await test('missing artifact storage never produces a success-shaped offer or download token', async () => {
+    const { db, ota, options } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin');
+    await ota.confirmAssignment(review.review_id, 'admin');
+    const unavailable = createOtaService(db, { ...options, artifactStore: null });
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    await assert.rejects(unavailable.checkForUpdate('FRB-0005', device, HARDWARE_ID),
+      (error) => error.code === 'artifact_storage_unavailable');
+    assert.equal((await db.collection('ota_download_tokens').get()).size, 0);
+    assert.equal((await ota.listDeployments())[0].offered_at, null);
+  });
+  await test('five publication prerequisites are independently mandatory and USB baseline is excluded', () => {
+    const record = approval(DIGEST);
+    assert.equal(publicationEligible(RELEASE, DIGEST, { [RELEASE]: record }), true);
+    for (const field of Object.keys(record)) {
+      const missing = { ...record };
+      delete missing[field];
+      assert.equal(publicationEligible(RELEASE, DIGEST, { [RELEASE]: missing }), false, field);
+    }
+    assert.equal(publicationEligible('OTA-0.1', DIGEST, { 'OTA-0.1': record }), false);
+  });
+  await test('fleet projects canonical categories once, hides retired devices and never exposes credential verifiers', async () => {
+    const { ota } = await setup();
+    const fleet = await ota.listFleet();
+    assert.equal(fleet.customers.length, 2);
+    assert.equal(fleet.devices.length, 5);
+    assert.equal(new Set(fleet.devices.map((item) => item.device_id)).size, 5);
+    assert.equal(fleet.devices.find((item) => item.device_id === 'FRB-0014').state, 'maintenance');
+    assert.equal(JSON.stringify(fleet).includes('DO-NOT-EXPOSE'), false);
+  });
+  await test('multi-device authorization is exact, audited, atomic and idempotent', async () => {
+    const { db, ota } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: IDS.slice(1) }, 'admin');
+    assert.equal((await db.collection('ota_assignments').get()).size, 0);
+    const result = await ota.confirmAssignment(review.review_id, 'admin');
+    assert.deepEqual(result.assignments.map((item) => item.device_id), IDS.slice(1));
+    assert.equal((await db.collection('ota_assignments').get()).size, 4);
+    const repeated = await ota.confirmAssignment(review.review_id, 'admin');
+    assert.deepEqual(repeated, result);
+    for (const item of result.assignments) {
+      const event = await db.collection('ota_deployments').doc(item.deployment_id).collection('events').doc('assigned').get();
+      assert.equal(event.data().authorization_id, review.review_id);
+    }
+  });
+  await test('membership additions never expand exact reviewed IDs', async () => {
+    const { db, ota } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0012'] }, 'admin');
+    await db.collection('devices').doc('FRB-0099').set({
+      state: 'deployed', customer_id: 'CUST-0002', course_id: 'COURSE-0001', ota_capability: capability(),
+    });
+    await ota.confirmAssignment(review.review_id, 'admin');
+    assert.deepEqual((await db.collection('ota_assignments').get()).docs.map((doc) => doc.id), ['FRB-0012']);
+  });
+  await test('changed device state, course timezone and review expiration require fresh review', async () => {
+    for (const mutation of ['state', 'timezone', 'expiry']) {
+      const { db, ota, setTime } = await setup();
+      const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0012'] }, 'admin');
+      if (mutation === 'state') await db.collection('devices').doc('FRB-0012').update({ state: 'maintenance' });
+      if (mutation === 'timezone') await db.collection('customers').doc('CUST-0002').collection('courses')
+        .doc('COURSE-0001').update({ timezone: 'Asia/Tokyo' });
+      if (mutation === 'expiry') setTime('2026-03-08T07:06:00Z');
+      await assert.rejects(ota.confirmAssignment(review.review_id, 'admin'),
+        (error) => ['review_changed', 'review_expired'].includes(error.code));
+      assert.equal((await db.collection('ota_assignments').get()).size, 0);
+    }
+  });
+  await test('duplicate/conflicting targets, forged review owner and direct assignments fail closed', async () => {
+    const { ota } = await setup();
+    await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0012', 'FRB-0012'] }, 'admin'),
+      (error) => error.code === 'invalid_selection');
+    await assert.rejects(ota.prepareAssignment({ release_id: 'untrusted/path', device_ids: ['FRB-0012'] }, 'admin'),
+      (error) => error.code === 'invalid_selection');
+    await assert.rejects(ota.assignRelease('FRB-0012', RELEASE, 'admin'),
+      (error) => error.code === 'assignment_review_required');
+    const body = { release_id: RELEASE, device_ids: ['FRB-0012'] };
+    const review = await ota.prepareAssignment(body, 'admin');
+    await assert.rejects(ota.confirmAssignment(review.review_id, 'different-admin'),
+      (error) => error.code === 'invalid_review');
+    await ota.confirmAssignment(review.review_id, 'admin');
+    await assert.rejects(ota.prepareAssignment(body, 'admin'), (error) => error.code === 'active_or_consumed');
+  });
+  await test('transaction failure creates no partial assignment for multiple devices', async () => {
+    const { db, ota } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: IDS.slice(1) }, 'admin');
+    db.failNextTransactionCommit = true;
+    await assert.rejects(ota.confirmAssignment(review.review_id, 'admin'), /Simulated/);
+    assert.equal((await db.collection('ota_assignments').get()).size, 0);
+    assert.equal((await db.collection('ota_deployments').get()).size, 0);
+  });
+  await test('competing reviewed authorizations cannot create conflicting assignments', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0012'] };
+    const reviews = await Promise.all([ota.prepareAssignment(body, 'admin'), ota.prepareAssignment(body, 'admin')]);
+    const results = await Promise.allSettled(reviews.map((review) => ota.confirmAssignment(review.review_id, 'admin')));
+    assert.equal(results.filter((item) => item.status === 'fulfilled').length, 1);
+    assert.equal(results.find((item) => item.status === 'rejected').reason.code, 'review_changed');
+    assert.equal((await db.collection('ota_deployments').get()).size, 1);
+  });
+  await test('post-authorization tenant or timezone changes block both discovery and existing artifact grants', async () => {
+    for (const change of ['customer', 'timezone']) {
+      const { db, ota } = await setup();
+      const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin');
+      await ota.confirmAssignment(review.review_id, 'admin');
+      const deviceRef = db.collection('devices').doc('FRB-0005');
+      const offered = await ota.checkForUpdate('FRB-0005', (await deviceRef.get()).data(), HARDWARE_ID);
+      if (change === 'customer') await deviceRef.update({ customer_id: 'CUST-0001' });
+      else await db.collection('customers').doc('CUST-0002').collection('courses').doc('COURSE-0001')
+        .update({ timezone: 'Asia/Tokyo' });
+      await assert.rejects(ota.checkForUpdate('FRB-0005', (await deviceRef.get()).data(), HARDWARE_ID),
+        (error) => error.code === 'assignment_changed');
+      await assert.rejects(ota.getAuthorizedArtifact(offered.artifact_path.split('/').pop()),
+        (error) => error.code === 'assignment_changed');
+      const projected = (await ota.listFleet()).devices.find((item) => item.device_id === 'FRB-0005');
+      assert.match(projected.reason, /delivery is blocked/);
+    }
+  });
+  await test('headquarters config absence blocks only Inventory/Maintenance, not deployed work', async () => {
+    const { ota } = await setup({ hq: null });
+    const fleet = await ota.listFleet();
+    assert.equal(fleet.devices.find((item) => item.device_id === 'FRB-0012').eligible, true);
+    assert.equal(fleet.devices.find((item) => item.device_id === 'FRB-0013').eligible, false);
+    assert.equal(fleet.devices.find((item) => item.device_id === 'FRB-0014').eligible, false);
+    await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0014'] }, 'admin'),
+      (error) => error.code === 'timezone_unresolved');
+  });
+  await test('Maintenance clears active deployment through the canonical asset lifecycle without retiring communication', async () => {
+    const { db, ota } = await setup();
+    await updateDeviceState(db, 'FRB-0012', 'maintenance');
+    const record = (await db.collection('devices').doc('FRB-0012').get()).data();
+    assert.equal(record.customer_id, null);
+    assert.equal(record.course_id, null);
+    assert.equal(record.location, null);
+    await assert.rejects(updateDeviceAssignment(db, 'FRB-0012', { customerId: 'CUST-0001' }),
+      /Maintenance devices cannot have an active assignment/);
+    const asset = (await ota.listFleet()).devices.find((item) => item.device_id === 'FRB-0012');
+    assert.equal(asset.state, 'maintenance');
+    assert.equal(asset.eligible, true);
+    assert.equal(asset.timezone, 'America/Los_Angeles');
+  });
+  await test('missing capability, retired state, and release target restrictions cannot be bypassed', async () => {
+    const { db, ota } = await setup();
+    await db.collection('devices').doc('FRB-0012').update({ ota_capability: null });
+    for (const id of ['FRB-0012', 'FRB-0015']) {
+      await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: [id] }, 'admin'),
+        (error) => error.code === 'device_not_eligible');
+    }
+    const restricted = await setup({ approvals: { [RELEASE]: approval(DIGEST, ['FRB-0005']) } });
+    await assert.rejects(restricted.ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0011'] }, 'admin'),
+      (error) => error.code === 'device_not_eligible');
+  });
+  await test('default governance blocks preexisting published records instead of trusting their existence', async () => {
+    const { db, options } = await setup();
+    const ota = createOtaService(db, { ...options, publicationApprovals: {} });
+    assert.equal((await ota.listReleases())[0].assignable, false);
+    await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin'),
+      (error) => error.code === 'release_not_eligible');
+  });
+  await test('Inventory and Maintenance use HQ eligibility and unchanged discovery/download contracts', async () => {
+    const { db, ota, setTime } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0013', 'FRB-0014'] }, 'admin');
+    await ota.confirmAssignment(review.review_id, 'admin');
+    for (const id of ['FRB-0013', 'FRB-0014']) {
+      const device = (await db.collection('devices').doc(id).get()).data();
+      assert.equal(await ota.getNextCheck(device), Date.parse('2026-03-08T08:30:00Z'));
+      assert.equal((await ota.checkForUpdate(id, device, HARDWARE_ID)).update_available, false);
+    }
+    setTime('2026-03-08T08:30:00Z');
+    for (const id of ['FRB-0013', 'FRB-0014']) {
+      const device = (await db.collection('devices').doc(id).get()).data();
+      const update = await ota.checkForUpdate(id, device, HARDWARE_ID);
+      assert.equal(update.update_available, true);
+      assert.equal(update.next_check_at_utc_ms, Date.parse('2026-03-09T07:30:00Z'));
+      const grant = await ota.getAuthorizedArtifact(update.artifact_path.split('/').pop());
+      assert.equal(grant.grant.device_id, id);
+    }
+    assert.deepEqual((await ota.listDeviceStatus()).map((item) => item.device_id).sort(), ['FRB-0013', 'FRB-0014']);
+  });
+  await test('only matching successful confirmation promotes a physically initialized bootstrap to nightly', async () => {
+    const { db, ota, options } = await setup();
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin');
+    const result = await ota.confirmAssignment(review.review_id, 'admin');
+    const deploymentId = result.assignments[0].deployment_id;
+    await assert.rejects(ota.reportUpdateEvent(deploymentId, 'FRB-0005',
+      { state: 'confirmed', firmware_version: '0.1.0+1', error_code: 0 }),
+    (error) => error.code === 'firmware_version_mismatch');
+    assert.equal((await ota.listFleet()).devices.find((item) => item.device_id === 'FRB-0005').confirmed_firmware_version, null);
+    for (const state of ['downloading', 'verifying', 'staged', 'activation_pending', 'trial_boot', 'confirmed']) {
+      await ota.reportUpdateEvent(deploymentId, 'FRB-0005', { state, firmware_version: '0.1.0+2', error_code: 0 });
+    }
+    const digest = 'b'.repeat(64);
+    await db.collection('ota_releases').doc('OTA-1.0').set({
+      state: 'published', sha256: digest, hardware_ids: [HARDWARE_ID],
+      version_string: '1.0.0+1', provenance: { signing_fingerprint: PRODUCTION_FINGERPRINT },
+    });
+    const nextOta = createOtaService(db, {
+      ...options, acceptedReleases: { ...options.acceptedReleases, 'OTA-1.0': digest },
+      publicationApprovals: { ...options.publicationApprovals, 'OTA-1.0': approval(digest, ['FRB-0005']) },
+    });
+    const next = await nextOta.prepareAssignment({ release_id: 'OTA-1.0', device_ids: ['FRB-0005'] }, 'admin');
+    assert.equal(next.devices[0].schedule, 'nightly_0030');
+    assert.equal(next.devices[0].next_window, '2026-03-08T08:30:00.000Z');
+    assert.equal((await db.collection('devices').doc('FRB-0005').get()).data().ota_capability.schedule_mode, 'one_time');
+  });
+  console.log(`${count} fleet/governance tests passed`);
+}
+
+run().catch((error) => { console.error(error); process.exitCode = 1; });

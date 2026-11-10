@@ -4,6 +4,7 @@ const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
 const webpush = require('web-push');
 const { dispatchRequestNotifications } = require('./lib/notification_dispatch');
+const { resolveRuntimeEnvironment } = require('./lib/environment');
 
 function required(name) {
   const value = process.env[name];
@@ -21,10 +22,7 @@ function requestIdFromEvent(event) {
 }
 
 functions.cloudEvent('fairwayRequestNotifier', async (event) => {
-  const projectId = required('FAIRWAY_GCP_PROJECT');
-  if (projectId !== 'savvy-kit-496703-r5' || process.env.GOOGLE_CLOUD_PROJECT !== projectId) {
-    throw new Error('Notification sender project configuration mismatch');
-  }
+  const { projectId } = resolveRuntimeEnvironment();
 
   webpush.setVapidDetails(
     required('FAIRWAY_VAPID_SUBJECT'),

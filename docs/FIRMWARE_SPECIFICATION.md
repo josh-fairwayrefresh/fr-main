@@ -56,23 +56,64 @@ The board device tree and current source define the pins consumed by the impleme
 The current branch implements the production OTA path for the Circuit Dojo
 nRF9151 Feather using the existing MCUboot manager. This local work does not
 change the accepted Pilot 1.1 fleet image, establish what is installed on
-FRB-0005, or prove physical update/rollback behavior.
+other devices, or prove physical update/rollback behavior. FRB-0005's separate
+accepted OTA 0.1 USB installation is recorded in the Deployment Guide.
 
-The common-image commissioning releases are fixed:
+The accepted immutable commissioning artifacts are:
 
 | Release | MCUboot/application version | Schedule |
 |---|---|---|
-| OTA 0.1 | `0.1.0+1` | One check 900 seconds after first normal boot; deadline is stored in PSA and survives reboot; no retry or later scheduled check |
-| OTA 0.1alt | `0.1.0+2` | Nightly at 00:30 in the assigned Course's IANA timezone |
-| OTA 1.0 | `1.0.0+1` | Nightly at 00:30 in the assigned Course's IANA timezone |
+| OTA 0.1 (USB only) | `0.1.0+1` | One check 900 seconds after first normal boot; deadline is stored in PSA and survives reboot; no retry or later scheduled check |
+| OTA 0.1alt | `0.1.0+2` | Configured nightly at local 00:30; accepted worker has recurrence defects described below |
+| OTA 1.0 | `1.0.0+1` | Configured nightly at local 00:30; accepted worker has the same recurrence defects |
+
+A physical USB/debug installation is required to initialize OTA capability.
+OTA 0.1 is already installed on FRB-0005 and must never be treated as an
+OTA-distributed release. OTA 0.1alt proves the first autonomous transition;
+OTA 1.0 proves a subsequent transition. This is the current validation sequence,
+not a mandatory three-release chain for every future device.
 
 The one-time deadline is derived from the captured first-boot uptime and the
 first trusted UTC time, then persisted; a later reboot does not restart the
 15-minute interval. The one-time check is marked complete before discovery,
 including when no release is assigned. Nightly schedule timestamps are
-computed by the backend from the Device's authoritative Course timezone and
-persisted by the application. A failed nightly check uses a bounded
-24-hour retry deadline; there is no continuous socket or background polling.
+computed by the backend from the deployed Device's authoritative Course IANA
+timezone, or configured headquarters timezone for Inventory/Maintenance,
+and persisted by the application. The fixed routine policy is 00:30 local;
+the browser cannot customize it. The CPO has approved `America/Los_Angeles`
+as headquarters time; the backend applies DST, without a firmware contract
+change or change to the installed one-time bootstrap.
+
+**Source-confirmed accepted-image discrepancy:** all three packages use the
+same original delivery worker source. OTA 0.1 uses ONE_TIME mode, so its
+commissioning behavior is not affected by the nightly defects. Both nightly
+packages stop when migrated `one_time_complete` is true in schedule preparation
+and worker entry, and exit after no-update/network or image-processing paths.
+Thus OTA 0.1 → OTA 0.1alt discovery/installation is not disabled by these
+recurrence defects, but OTA 0.1alt → OTA 1.0 and further nightly operation are
+at risk. No physical recurrence failure has been demonstrated.
+
+The local source correction in `ota_delivery.c` respects the active mode in
+both completion guards and keeps the nightly worker alive across no-update,
+retryable failure and image-processing outcomes. It persists server-provided
+next windows; when schedule discovery is unavailable it sleeps for a bounded
+24-hour offline recovery backoff and retries the canonical local policy.
+This is not a replacement UTC daily schedule. Reboots retain the persisted
+deadline and migration completion flag without disabling nightly operation.
+Protected-state corruption/write failures still stop explicitly, without
+repair. Storage format, rollback migration, lifecycle manager and power-policy
+ownership remain unchanged; there is no continuous socket/background polling.
+
+Host tests compile the actual delivery worker, persisted scheduler and existing
+manager/reporting implementation in both modes. Regression coverage includes
+one-time-complete migration, repeated no-update checks, initial schedule and
+discovery network failures, reboot recurrence, image-processing failure,
+unchanged 900-second/no-rearm semantics, and corrupt protected state.
+The source correction has not been built into any release image. Corrected
+OTA 0.1alt-line and OTA 1.0-line successors need new approved identities,
+release builds, testing/signing verification and CPO acceptance; original
+accepted artifacts/hashes remain intact. Release lineage and governance are
+owned by `docs/DEPLOYMENT_GUIDE.md`.
 
 Permanent identity and credentials are stored as distinct PSA objects in
 TF-M Protected Storage. The Device ID is write-once; provisioning refuses a
@@ -111,9 +152,62 @@ The generated NCS 3.1.1 map for the current source is:
 The non-secure application occupies `0x30000–0x7C000`; TF-M occupies the
 remaining primary-slot range. The fixed-partition DTS, static Partition
 Manager map, and generated map are aligned for this layout. The secondary
-slot constrains a signed OTA image to 442,368 bytes. The external-flash
+slot provides 442,368 raw bytes, not 442,368 usable signed-image bytes.
+The installed MCUboot move-swap layout reserves trailer and workspace as
+quantified below. The external-flash
 LittleFS region remains separate from the on-chip protected-storage and
 MCUboot regions.
+
+### OTA image capacity — existing accepted artifacts (2026-11-09)
+
+No new firmware build was used for this measurement. Accepted manifests record
+the effective generated PM/DTS layout, 512-byte header and
+`CONFIG_BOOT_SWAP_USING_MOVE=y`, not just board defaults. The retained
+`ota-OTA-0.1-production-20261109-r1/build/` contains `pm.config`, MCUboot
+`.config` and `zephyr.dts`: both slots are `0x6C000`, erase sectors are
+4,096 bytes, flash writes are 4 bytes and `CONFIG_BOOT_MAX_IMG_SECTORS=256`.
+Every one of its 47,824 bootloader HEX data bytes matches the boot region of
+accepted installed OTA 0.1 r2; r2 has no additional non-erased boot-region
+bytes. This binds the retained effective boot configuration to the installed
+bootstrap, despite the final accepted package directories not retaining builds.
+
+NCS 3.1.1 MCUboot `boot/bootutil/src/swap_move.c::app_max_size` subtracts a
+sector-aligned trailer from both slots and one additional move sector from
+primary. Swap status is `256 * 3 * 4 = 3,072` bytes; trailer metadata/magic adds
+48 bytes, so the 3,120-byte trailer occupies one 4,096-byte sector.
+With equal-sized slots, primary is limiting:
+`442,368 - 4,096 - 4,096 = 434,176 bytes (424 KiB)`.
+This maximum includes the image header, combined TF-M/non-secure payload and
+signature TLVs; do not subtract the 512-byte header a second time.
+The 16 MiB external LittleFS partition is not additional MCUboot image capacity.
+
+| Accepted artifact | Signed OTA bytes | KiB | Usable capacity consumed | Remaining bytes | Remaining KiB |
+|---|---:|---:|---:|---:|---:|
+| OTA 0.1 `0.1.0+1` (USB-only release) | 280,099 | 273.534 | 64.513% | 154,077 | 150.466 |
+| OTA 0.1alt `0.1.0+2` | 280,144 | 273.578 | 64.523% | 154,032 | 150.422 |
+| OTA 1.0 `1.0.0+1` | 280,144 | 273.578 | 64.523% | 154,032 | 150.422 |
+
+Artifact SHA-256 values match the accepted manifests. Nightly artifacts each
+contain a 512-byte header, 279,480-byte combined payload and 152-byte TLV area.
+The raw-slot utilization is 63.328%; use the stricter 64.523% above when
+planning releases. About 35.48% usable capacity remains: the present images
+are not close to the total OTA size ceiling. This is measured space, not a
+guarantee that future code fits individual linker/TF-M regions or RAM.
+Corrected successors must be measured again when separately authorized builds
+exist; current sizes do not describe an unbuilt scheduler correction.
+
+The merged USB Intel HEX files are 901,916 / 902,030 / 902,032 text bytes
+respectively, not OTA payloads or flash occupancy measurements. They include
+bootloader plus address-record encoding and are not compared to the update
+slot size. OTA 0.1's signed-image measurement does not make it distributable.
+
+Current release tooling/backend/device staging guards check the 442,368-byte
+raw secondary-slot bound. Accepted byte allowlists keep current production
+publication closed and all accepted images are safely below the stricter limit.
+Before qualifying any new successor, align release verification/admission
+guards and boundary tests with the effective 434,176-byte move-swap maximum.
+No deployed code, partition, accepted artifact or admission guard is changed
+by this read-only capacity assessment.
 
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image
@@ -138,19 +232,23 @@ credential and uses the exact permanent Device ID:
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/v1/device-ota/schedule` | Return the next course-local check deadline |
+| `POST /api/v1/device-ota/schedule` | Return the next authoritative local 00:30 check deadline |
 | `POST /api/v1/device-ota/check` | Discover an exact-device assigned release and short-lived artifact grant |
 | `GET /api/v1/device-ota/artifacts/{token}` | Download the signed image, including HTTP byte ranges |
 | `POST /api/v1/device-ota/deployments/{deploymentId}/events` | Report downloading, verification, staging, activation, trial, confirmation, rollback, and failure |
 
 The backend release/assignment routes are
 `GET/POST /api/v1/admin/ota/releases`,
-`GET /api/v1/admin/ota/deployments`, and
-`POST /api/v1/admin/ota/devices/{deviceId}/assignment`. Release publication
+`GET /api/v1/admin/ota/deployments`, fleet projection and the exact-device
+review/confirmation routes documented in `docs/DEPLOYMENT_GUIDE.md`.
+The old direct assignment route rejects bypass of review. Release publication
 validates MCUboot header magic/version, exact firmware metadata, hardware
-target, slot size, and SHA-256. MCUboot verifies the actual image signature
-on the Device during boot. Assignments are restricted to FRB-0005 during this
-commissioning implementation. Download authorization is a 30-minute
+target, slot size, SHA-256, the accepted-image digest catalog and original
+production provenance. MCUboot verifies the actual image signature
+on the Device during boot. The server requires reviewed publication evidence,
+release-specific exact-device authorization and verified canonical physical
+OTA capability/trust. FRB-0005 retains its narrow one-time bootstrap exception;
+fleet selection is not hardcoded to that device. Download authorization is a 30-minute
 random-token grant stored by hash; it is not a permanent public artifact URL.
 `fairway_backend/cloudrun_receiver/lib/ota/` owns release, assignment,
 authorization, storage, and lifecycle rules. The Admin OTA surface is in
@@ -160,11 +258,15 @@ Local source or development-key validation does not establish commercial
 trust, production deployment readiness, installed-device bootloader
 compatibility, physical trial confirmation, or rollback. The CPO-controlled
 production key and corresponding trust anchor have been used to build and
-verify all three accepted local releases. Physical installation through a
-separately authorized OTA 0.1 USB commissioning step remains outstanding.
-Backend bucket/IAM configuration,
-Admin/backend deployment, and CPO-authorized physical commissioning remain
-separate gates. See `docs/DEPLOYMENT_GUIDE.md` for key custody and artifact
+verify all three accepted local releases. The separately authorized OTA 0.1
+USB installation on FRB-0005 passed flash read-back verification; existing
+identity provisioning and CPO-observed request/COMPLETE/new-transaction behavior
+passed. Autonomous OTA activation, trial confirmation and rollback remain
+unvalidated. Backend not-before assignment timestamps gate eligibility only;
+they do not change the firmware schedules above or restart a consumed one-time
+check. Backend bucket/IAM/log controls, Admin/backend/Hosting deployment and
+CPO-authorized autonomous OTA commissioning remain separate gates.
+See `docs/DEPLOYMENT_GUIDE.md` for key custody and artifact
 building and `docs/DEVICE_PROVISIONING_GUIDE.md` for identity provisioning
 and recovery boundaries.
 

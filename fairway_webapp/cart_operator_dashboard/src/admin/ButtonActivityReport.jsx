@@ -1,0 +1,63 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { adminRequest, downloadBlob } from './adminApi';
+
+export default function ButtonActivityReport({ user, apiBaseUrl, customers, directoryError }) {
+  const [customerId, setCustomerId] = useState('');
+  const [courseId, setCourseId] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+  const version = useRef(0);
+  const customer = customers.find(item => item.customer_id === customerId);
+  const course = customer?.courses?.find(item => item.course_id === courseId);
+  useEffect(() => () => { version.current++; }, []);
+  function change(setter, value) {
+    version.current++;
+    setter(value); setResult(null); setError(''); setPending(false);
+  }
+  async function generate(event) {
+    event.preventDefault();
+    const sequence = ++version.current;
+    setPending(true); setError(''); setResult(null);
+    try {
+      const blob = await adminRequest(user, apiBaseUrl, '/api/v1/admin/reports/button-activity', {
+        method: 'POST', responseType: 'blob',
+        body: { customer_id: customerId, course_id: courseId, start_date: start, end_date: end },
+      });
+      if (sequence === version.current) {
+        setResult({ blob, filename: `cart-request-performance-${customerId}-${courseId}-${start}-${end}.pdf` });
+      }
+    } catch (reason) {
+      if (sequence === version.current) setError(reason.message);
+    } finally {
+      if (sequence === version.current) setPending(false);
+    }
+  }
+  return <section className="a-view" aria-labelledby="button-report-title">
+    <div className="a-heading"><div><p>REPORTS</p><h2 id="button-report-title">Cart Request Performance Report</h2></div></div>
+    <p>Each physical-button request is plotted at its receipt time from 6 AM to 9 PM: solid dots are completed, open circles were received while service was suspended, and X marks were cancelled. Colors show the Hole or custom location in use when the button was pressed. Green shading marks when service was on between each day's first and last service change, with that day's cart hours above its column and, when the Course location is set, the day's average temperature from 9:30 AM to 5:30 PM (a drop marks rain before 5:30 PM). A day's recorded total sales appear in bold on the 8 PM line. Requests excluded by an Admin and QR activity are not shown.</p>
+    <form className="a-form a-panel" onSubmit={generate}>
+      <div className="a-form-grid">
+        <label>Customer<select aria-label="Customer" required value={customerId} onChange={event => {
+          change(setCustomerId, event.target.value); setCourseId('');
+        }}><option value="">Select Customer</option>{customers.map(item =>
+          <option key={item.customer_id} value={item.customer_id}>{item.customer_name}</option>)}</select></label>
+        <label>Course<select aria-label="Course" required disabled={!customer} value={courseId} onChange={event => change(setCourseId, event.target.value)}>
+          <option value="">Select Course</option>{customer?.courses?.map(item =>
+            <option key={item.course_id} value={item.course_id}>{item.course_name}</option>)}</select></label>
+        <label>Start date<input type="date" required value={start} onChange={event => change(setStart, event.target.value)} /></label>
+        <label>End date<input type="date" required min={start || undefined} value={end} onChange={event => change(setEnd, event.target.value)} /></label>
+      </div>
+      <p>Dates use the Course timezone{course?.timezone ? `: ${course.timezone}` : ' (select a Course)'}. Maximum 31 calendar days; charts continue after 12 days per landscape Letter page.</p>
+      {(error || directoryError) && <div className="a-notice a-error" role="alert">{error || directoryError}</div>}
+      <button className="a-primary" type="submit" disabled={pending || !course || Boolean(directoryError)}>
+        {pending ? 'Generating...' : 'Generate'}
+      </button>
+    </form>
+    {result && <div className="a-panel" role="status"><p>Report generated. Download the landscape Letter PDF to review its daily counts and chart.</p>
+      <button className="a-primary" type="button" onClick={() => downloadBlob(result.blob, result.filename)}>Download PDF</button>
+    </div>}
+  </section>;
+}

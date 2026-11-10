@@ -36,6 +36,7 @@ export async function inventoryRequest(user, apiBaseUrl, path, options = {}) {
 export async function publicMenuRequest(apiBaseUrl, slug, { signal } = {}) {
   const path = `/api/v1/public/menus/${encodeURIComponent(slug)}`;
   return parseResponse(await fetch(`${apiBaseUrl}${path}`, {
+    cache: 'no-store',
     headers: { Accept: 'application/json' },
     ...(signal ? { signal } : {}),
   }));

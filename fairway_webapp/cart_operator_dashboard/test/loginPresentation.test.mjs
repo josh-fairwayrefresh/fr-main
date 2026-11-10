@@ -24,7 +24,7 @@ test('standard Cart login is the single customer-facing sign-in experience (no s
   assert.doesNotMatch(loginSource, /isInventoryEntry/);
   assert.doesNotMatch(loginSource, /Inventory staff|Inventory Staff Login|Set or reset password/);
   assert.doesNotMatch(mainSource, /sendPasswordResetEmail/);
-  assert.match(loginSource, /isAdminEntry \? 'Administration access' : 'Cart access'/);
+  assert.match(loginSource, /isAdminEntry \? 'Administration access' : 'Course access'/);
   assert.match(loginSource, /isAdminEntry\s*\n?\s*\?\s*<a className="mode-entry-link" href="\/">Cart Login<\/a>\s*\n?\s*:\s*<a className="mode-entry-link" href="\/admin">Admin Login<\/a>/);
   assert.match(loginSource, /CUSTOMER COURSE ACCESS/);
   assert.match(loginSource, /Authorized Fairway Refresh personnel only/);

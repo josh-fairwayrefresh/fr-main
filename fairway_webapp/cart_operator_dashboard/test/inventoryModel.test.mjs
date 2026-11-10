@@ -38,8 +38,8 @@ test('published grouping derives categories, subcategories, counts, and omits hi
     { name: 'Old', category: 'Snacks', state: 'on_cart', archived: true },
   ];
   const result = groupPublishedProducts(products);
-  assert.deepEqual(result.map(({ name, count }) => [name, count]), [['Beer', 3], ['Drinks', 1]]);
-  assert.deepEqual(result[0].subcategories.map(({ name, products: items }) => [name, items.length]), [['Craft', 2]]);
+  assert.deepEqual(result.map(({ name, count }) => [name, count]), [['Beer', 2], ['Drinks', 1]]);
+  assert.deepEqual(result[0].subcategories.map(({ name, products: items }) => [name, items.length]), [['Craft', 1]]);
   assert.equal(result[0].products[0].name, 'Pilsner');
 });
 

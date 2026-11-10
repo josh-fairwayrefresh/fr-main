@@ -1,14 +1,17 @@
 const functions = require('@google-cloud/functions-framework');
+const { publicReviewConfiguration, provisionPublicReviewer } = require('./lib/public_sandbox_review');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
+const { resolveCourseServiceState, resolveServiceGroup } = require('./lib/course_service');
 const {
-  activeServiceMinutes,
-  nextScheduledStart,
-  resolveCourseServiceState,
-} = require('./lib/course_service');
+  aggregateCourseReports,
+  historyRequestsInRange,
+  periodBounds,
+  reportCoursePeriods,
+} = require('./lib/service_reporting');
 const {
   authenticateDeviceCredential,
   updateDeviceAssignment,
@@ -39,7 +42,21 @@ const {
   DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
+const { createOtaService, OtaError, HARDWARE_ID } = require('./lib/ota/ota_service');
+const { createGcsArtifactStore } = require('./lib/ota/gcs_artifact_store');
 const inventory = require('./lib/inventory');
+const crypto = require('crypto');
+const { courseOperation } = require('./lib/course_operation');
+const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
+const { publicBay, acceptQrRequest } = require('./lib/qr_requests');
+const { generateButtonReport, ButtonReportError } = require('./lib/button_activity_report');
+const { CourseLocationError, geocodeCourseLocation } = require('./lib/course_weather');
+const {
+  RequestReportingError,
+  listExcludedRequests,
+  setRequestReportingState,
+} = require('./lib/request_reporting');
+const { renderButtonReport } = require('./lib/button_report_pdf');
 const {
   getOperatorAssignment,
   getNotificationPreferences,
@@ -133,10 +150,6 @@ async function verifyFirebaseIdToken(token) {
   return getAuth().verifyIdToken(token);
 }
 
-function completeCommandId(requestId) {
-  return `${COMPLETE_COMMAND_TYPE}__${requestId}`;
-}
-
 function toDate(value) {
   if (value instanceof Date) {
     return value;
@@ -171,36 +184,51 @@ function createFairwayHandlers(db, {
   verifyOperatorToken = verifyFirebaseIdToken,
   firebaseAuth = null,
   now = () => new Date(),
+  buttonReportSource,
+  fetchImpl = (...args) => fetch(...args),
   allowedAdminOrigins = [],
   vapidPublicKey = process.env.FAIRWAY_VAPID_PUBLIC_KEY || null,
   vapidKeyVersion = process.env.FAIRWAY_VAPID_KEY_VERSION || null,
+  qrEnabled = process.env.FAIRWAY_QR_ENABLED === 'true',
+  qrRateKey = process.env.FAIRWAY_QR_RATE_KEY,
+  publicReviewAccess = publicReviewConfiguration(),
   protectedSystemAdminUids = resolveProtectedSystemAdminUids(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
   ),
+  artifactStore = null,
+  acceptedOtaReleases,
+  otaPublicationApprovals,
+  headquartersTimeZone,
 } = {}) {
+  const otaService = createOtaService(db, {
+    artifactStore, now, acceptedReleases: acceptedOtaReleases,
+    publicationApprovals: otaPublicationApprovals, headquartersTimeZone,
+  });
   /* Persists a golfer request using the validated demand-window suppression. */
-  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now) {
-    const existingOpenRequests = await db.collection('requests')
-      .where('device_id', '==', deviceId)
-      .where('status', 'in', ['new', 'confirmed'])
-      .where('demand_window_expires_at', '>', now)
-      .limit(1)
-      .get();
+  async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now, rejection = null) {
+    if (!rejection) {
+      const existingOpenRequests = await db.collection('requests')
+        .where('device_id', '==', deviceId)
+        .where('status', 'in', ['new', 'confirmed'])
+        .where('demand_window_expires_at', '>', now)
+        .limit(1)
+        .get();
 
-    if (!existingOpenRequests.empty) {
-      const existingRequest = existingOpenRequests.docs[0];
+      if (!existingOpenRequests.empty) {
+        const existingRequest = existingOpenRequests.docs[0];
 
-      console.log('Suppressed duplicate button request because its demand window remains active:', {
-        device_id: deviceId,
-        existing_request_id: existingRequest.id,
-      });
+        console.log('Suppressed duplicate button request because its demand window remains active:', {
+          device_id: deviceId,
+          existing_request_id: existingRequest.id,
+        });
 
-      return res.status(200).json({
-        status: 'accepted',
-        event_type: EVENT_TYPES.BUTTON_PRESS,
-        request_id: existingRequest.id,
-        duplicate: true,
-      });
+        return res.status(200).json({
+          status: 'accepted',
+          event_type: EVENT_TYPES.BUTTON_PRESS,
+          request_id: existingRequest.id,
+          duplicate: true,
+        });
+      }
     }
 
     const courseLocalDateHour = course
@@ -213,9 +241,10 @@ function createFairwayHandlers(db, {
       course_name: device.course_name || null,
       device_id: deviceId,
       device_label: deriveDisplayLabelFromLocation(device.location),
+      service_group: resolveServiceGroup(device.service_group),
       hole: deriveHoleFromLocation(device.location),
       event_type: eventType,
-      status: 'new',
+      status: rejection ? 'rejected' : 'new',
       source: 'nrf9151',
       received_at: FieldValue.serverTimestamp(),
       confirmed_at: null,
@@ -223,11 +252,20 @@ function createFairwayHandlers(db, {
       operator_id: null,
       repeat_press_count: 0,
       last_repeat_press_at: null,
-      demand_window_expires_at: new Date(now.getTime() + DEMAND_WINDOW_MS),
+      demand_window_expires_at: rejection ? null : new Date(now.getTime() + DEMAND_WINDOW_MS),
       device_state_at_request: device.state,
       course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
       course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
-      raw_payload: body
+      raw_payload: body,
+      ...(rejection ? {
+        rejection_reason: 'service_suspended',
+        rejected_at: FieldValue.serverTimestamp(),
+        service_state_at_receipt: {
+          active: rejection.active,
+          suspended: rejection.suspended,
+          service_group: resolveServiceGroup(device.service_group),
+        },
+      } : {}),
     };
 
     const docRef = await db.collection('requests').add(requestDoc);
@@ -237,6 +275,15 @@ function createFairwayHandlers(db, {
       device_id: deviceId,
       event_type: eventType
     });
+
+    if (rejection) {
+      return res.status(503).json({
+        status: 'service_unavailable',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+        request_id: docRef.id,
+        rejection_reason: 'service_suspended',
+      });
+    }
 
     return res.status(200).json({
       status: 'accepted',
@@ -312,15 +359,24 @@ function createFairwayHandlers(db, {
       return res.status(400).send('Unknown event\n');
     }
 
-    if (hierarchy.course && !resolveCourseServiceState(hierarchy.course, requestTime).active) {
+    let serviceGroup;
+    try {
+      serviceGroup = resolveServiceGroup(device.service_group);
+    } catch (error) {
+      console.warn('Rejected device request with invalid stored service group:', { device_id: deviceId });
+      return res.status(422).send(`${error.message}\n`);
+    }
+    const serviceState = hierarchy.course
+      ? resolveCourseServiceState(hierarchy.course, serviceGroup)
+      : null;
+    if (serviceState && !serviceState.active) {
       console.log('Rejected golfer request because Course service is unavailable:', {
         device_id: deviceId,
         course_id: device.course_id,
       });
-      return res.status(503).json({
-        status: 'service_unavailable',
-        event_type: EVENT_TYPES.BUTTON_PRESS,
-      });
+      return persistButtonPressRequest(
+        res, deviceId, device, body, eventType, hierarchy.course, requestTime, serviceState
+      );
     }
 
     return persistButtonPressRequest(res, deviceId, device, body, eventType, hierarchy.course, requestTime);
@@ -630,7 +686,7 @@ function createFairwayHandlers(db, {
         error.code = 'last_admin';
         throw error;
       }
-      transaction.set(accessRef, record);
+      transaction.set(accessRef, record, { merge: true });
     });
 
     const saved = await getUserAccess(db, authUser.uid);
@@ -716,24 +772,70 @@ function createFairwayHandlers(db, {
     return getCourseForCustomer(db, assignment.customer_id, assignment.course_id);
   }
 
-  async function courseServiceReadModel(course, requestTime) {
-    const eventsSnap = await coursesCollection(db, course.customer_id).doc(course.course_id)
-      .collection('service_events').orderBy('recorded_at', 'desc').limit(500).get();
-    const events = eventsSnap.docs.map((event) => event.data());
+  async function courseServiceReadModel(course) {
+    const assignedDevices = await db.collection('devices')
+      .where('customer_id', '==', course.customer_id)
+      .where('course_id', '==', course.course_id).get();
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
-      service_schedule: course.service_schedule,
-      service_state: resolveCourseServiceState(course, requestTime),
-      service_events: events,
+      operation_kind: courseOperation(course).kind,
+      service_state: resolveCourseServiceState(course),
+      on_premise_service_state: resolveCourseServiceState(course, 'on_premise'),
+      has_on_premise_devices: assignedDevices.docs.some((document) => (
+        document.data().service_group === 'on_premise'
+      )),
     };
   }
 
   function operatorCourseServiceModel(course) {
     const { service_events: _serviceEvents, ...model } = course;
     return model;
+  }
+
+  async function courseReportingSummary(course, requestTime, historyRequests) {
+    const bounds = periodBounds(requestTime, course.timezone);
+    const summaryRangeStart = bounds.weekly.start < bounds.monthly.start
+      ? bounds.weekly.start
+      : bounds.monthly.start;
+    const serviceEvents = coursesCollection(db, course.customer_id).doc(course.course_id)
+      .collection('service_events');
+    const [priorEventSnapshot, periodEventSnapshot, completedRequestSnapshot] = await Promise.all([
+      serviceEvents.where('recorded_at', '<', summaryRangeStart)
+        .orderBy('recorded_at', 'desc').limit(1).get(),
+      serviceEvents.where('recorded_at', '>=', summaryRangeStart)
+        .where('recorded_at', '<=', requestTime)
+        .orderBy('recorded_at', 'asc').get(),
+      db.collection('requests')
+        .where('customer_id', '==', course.customer_id)
+        .where('course_id', '==', course.course_id)
+        .where('completed_at', '>=', summaryRangeStart)
+        .where('completed_at', '<=', requestTime)
+        .orderBy('completed_at', 'asc')
+        .get(),
+    ]);
+    const events = [
+      ...priorEventSnapshot.docs,
+      ...periodEventSnapshot.docs,
+    ].map((document) => document.data());
+    const requests = completedRequestSnapshot.docs.map((document) => document.data());
+    const completedHistory = completedRequestSnapshot.docs.map((document) => ({
+      request_id: document.id,
+      ...document.data(),
+    }));
+    const historyById = new Map([
+      ...historyRequests.map((request) => [request.request_id, request]),
+      ...completedHistory.map((request) => [request.request_id, request]),
+    ]);
+    return reportCoursePeriods(
+      course,
+      events,
+      requests,
+      [...historyById.values()],
+      requestTime,
+    );
   }
 
   async function getOperatorDashboard(req, res) {
@@ -757,91 +859,84 @@ function createFairwayHandlers(db, {
     const courses = (await Promise.all(assignedCourses.map((assignment) =>
       getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
       .filter(Boolean);
-    const serviceCourses = await Promise.all(courses.map((course) =>
-      courseServiceReadModel(course, requestTime)));
-    const requestSnapshots = await Promise.all(courses.map((course) => (
-      db.collection('requests')
+    const [serviceCourses, requestSnapshots] = await Promise.all([
+      Promise.all(courses.map((course) =>
+        courseServiceReadModel(course))),
+      Promise.all(courses.map((course) => db.collection('requests')
         .where('customer_id', '==', course.customer_id)
         .where('course_id', '==', course.course_id)
-        .limit(5000)
-        .get()
-    )));
-    const requests = requestSnapshots.flatMap((snapshot) => (
+        .get())),
+    ]);
+    const courseRequests = requestSnapshots.map((snapshot) => (
       snapshot.docs.map((document) => ({ request_id: document.id, ...document.data() }))
     ));
-    const periods = [
-      ['daily', 24 * 60],
-      ['weekly', 7 * 24 * 60],
-      ['monthly', 30 * 24 * 60],
-    ];
-    const summaries = Object.fromEntries(periods.map(([period, durationMinutes]) => {
-      const start = new Date(requestTime.getTime() - durationMinutes * 60000);
-      const periodRequests = requests.filter((request) => {
-        const receivedAt = toDate(request.received_at);
-        return receivedAt && receivedAt >= start && receivedAt <= requestTime;
-      });
-      const completed = periodRequests.filter((request) => request.status === 'completed');
-      const cancelled = periodRequests.filter((request) => request.status === 'cancelled');
-      const activeMinutes = courses.reduce((total, course) => {
-        const service = serviceCourses.find((item) => item.course_id === course.course_id);
-        return total + activeServiceMinutes(course, service.service_events, start, requestTime);
-      }, 0);
-      const activeHours = activeMinutes / 60;
-      const completionMinutes = completed.map((request) => {
-        const receivedAt = toDate(request.received_at);
-        const completedAt = toDate(request.completed_at);
-        return receivedAt && completedAt ? (completedAt - receivedAt) / 60000 : null;
-      }).filter((value) => value !== null);
-      return [period, {
-        requests: periodRequests.length,
-        completed_transactions: completed.length,
-        cancelled_requests: cancelled.length,
-        active_cart_hours: Number(activeHours.toFixed(2)),
-        transactions_per_cart_hour: activeHours > 0 ? Number((completed.length / activeHours).toFixed(1)) : 0,
-        requests_per_hour: activeHours > 0 ? Number((periodRequests.length / activeHours).toFixed(1)) : 0,
-        average_completion_minutes: completionMinutes.length > 0
-          ? Number((completionMinutes.reduce((sum, value) => sum + value, 0) / completionMinutes.length).toFixed(1))
-          : null,
-      }];
+    const courseReports = await Promise.all(courses.map((course, index) => {
+      if (courseOperation(course).cart_metrics) {
+        return courseReportingSummary(course, requestTime, courseRequests[index]);
+      }
+      const bounds = periodBounds(requestTime, course.timezone);
+      return Object.fromEntries(Object.entries(bounds).map(([period, range]) => [period, {
+        history: historyRequestsInRange(courseRequests[index], range),
+      }]));
     }));
-    const history = requests
-      .filter((request) => ['completed', 'cancelled'].includes(request.status))
-      .sort((left, right) => toDate(right.received_at) - toDate(left.received_at))
-      .slice(0, 100);
+    const cartReports = courseReports.filter((_, index) => courseOperation(courses[index]).cart_metrics);
+    const reports = aggregateCourseReports(cartReports.length ? cartReports : courseReports, {
+      includeSummaries: cartReports.length > 0,
+    });
+    const summaries = Object.fromEntries(Object.entries(reports)
+      .map(([period, report]) => [period, report.summary]));
     return res.status(200).json({
       courses: serviceCourses.map(operatorCourseServiceModel),
+      reports,
       summaries,
-      history,
+      history: reports.daily.history,
     });
   }
 
   async function updateCourseService(req, res, action) {
     const operator = await authorizeOperator(req, res);
     if (!operator) return res;
+    let group;
+    try {
+      group = resolveServiceGroup(req.body?.service_group);
+    } catch (error) {
+      return res.status(400).send(`${error.message}\n`);
+    }
     const courseId = req.body?.course_id;
     const course = await authorizedCourse(operator, courseId, req.body?.customer_id);
     if (!course) return res.status(403).send('Operator is not authorized for this Course\n');
+    if (!courseOperation(course).physical_devices && group !== 'on_course') {
+      return res.status(400).send('This Course has one service control\n');
+    }
     const requestTime = now();
     const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
-    if (action === 'suspend') {
-      const until = nextScheduledStart(course, requestTime);
-      if (!until) return res.status(409).send('Course service schedule is not configured\n');
-      await courseRef.update({
-        service_suspension: { suspended_at: requestTime, until, suspended_by: operator.identity.uid },
+    const suspended = action === 'suspend';
+    const eventRef = courseRef.collection(group === 'on_course' ? 'service_events' : 'on_premise_service_events').doc();
+    await db.runTransaction(async (transaction) => {
+      const courseSnapshot = await transaction.get(courseRef);
+      if (!courseSnapshot.exists) throw new Error('Course disappeared during service update');
+      if (resolveCourseServiceState(courseSnapshot.data(), group).suspended === suspended) return;
+      const stateUpdate = group === 'on_course' ? {
+        service_suspension: suspended
+          ? { suspended_at: requestTime, suspended_by: operator.identity.uid }
+          : null,
+      } : {
+        on_premise_service: { active: !suspended, updated_at: requestTime, updated_by: operator.identity.uid },
+      };
+      transaction.update(courseRef, {
+        ...stateUpdate,
         updated_at: requestTime,
       });
-      await courseRef.collection('service_events').add({
-        type: 'suspended', recorded_at: requestTime, operator_id: operator.identity.uid, until,
+      transaction.set(eventRef, {
+        service_group: group,
+        type: suspended ? 'suspended' : 'resumed',
+        recorded_at: requestTime,
+        operator_id: operator.identity.uid,
       });
-    } else {
-      await courseRef.update({ service_suspension: null, updated_at: requestTime });
-      await courseRef.collection('service_events').add({
-        type: 'resumed', recorded_at: requestTime, operator_id: operator.identity.uid,
-      });
-    }
+    });
     const updated = await getCourseForCustomer(db, course.customer_id, course.course_id);
     return res.status(200).json(operatorCourseServiceModel(
-      await courseServiceReadModel(updated, requestTime)
+      await courseServiceReadModel(updated)
     ));
   }
 
@@ -857,6 +952,18 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof OtaError) {
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
+      });
+    }
+    if (error instanceof CourseLocationError) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
+    if (error instanceof ButtonReportError) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
     if (error instanceof CredentialLifecycleError) {
       return res.status(error.status).json({
         error: error.code,
@@ -917,6 +1024,7 @@ function createFairwayHandlers(db, {
       course_id: device.course_id ?? null,
       course_name: course?.course_name ?? null,
       location: device.location ?? null,
+      service_group: resolveServiceGroup(device.service_group),
       comments: device.comments ?? null,
       sim_iccid: device.sim_iccid ?? null,
       hardware_revision: device.hardware_revision ?? null,
@@ -960,11 +1068,12 @@ function createFairwayHandlers(db, {
           course_id: courseSnap.id,
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
-          service_schedule: courseSource.service_schedule ?? null,
+          operation_kind: courseOperation(courseSource).kind,
           service_suspension: courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
+          course_location: courseSource.course_location ?? null,
         };
-        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_schedule', 'service_suspension', 'comments']
+        course.field_status = Object.fromEntries(['course_name', 'timezone', 'service_suspension', 'comments', 'course_location']
           .map((field) => [field, availability(course[field])]));
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
@@ -1012,25 +1121,42 @@ function createFairwayHandlers(db, {
     return res.status(200).json(customer);
   }
 
+  // Optional "City, ST" label; empty clears it. Resolved to coordinates only when it changes.
+  async function resolveCourseLocation(label, current = null) {
+    if (label === undefined) return undefined;
+    if (label === null || (typeof label === 'string' && label.trim() === '')) return null;
+    if (typeof label !== 'string') throw new CourseLocationError('Course location must be "City, ST".');
+    if (current && current.label === label.trim()) return undefined;
+    return geocodeCourseLocation(label, { fetchImpl });
+  }
+
   async function createAdminCourse(req, res, customerId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'course_location', 'service_schedule', 'operation_kind']);
+    const courseLocation = await resolveCourseLocation(req.body.course_location);
     const course = await createCourse(db, {
       customerId,
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
+      operationKind: req.body.operation_kind,
       comments: req.body.comments,
+      courseLocation: courseLocation ?? null,
     });
     return res.status(201).json(course);
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
-    requireBodyFields(req.body, ['course_name', 'timezone', 'service_schedule', 'comments']);
+    requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'course_location', 'service_schedule']);
+    let courseLocation;
+    if (req.body.course_location !== undefined) {
+      const existing = await getCourseForCustomer(db, customerId, courseId);
+      if (!existing) throw new Error(`Unknown course_id: ${courseId}`);
+      courseLocation = await resolveCourseLocation(req.body.course_location, existing.course_location);
+    }
     const course = await updateCourse(db, customerId, courseId, {
       courseName: req.body.course_name,
       timezone: req.body.timezone,
-      serviceSchedule: req.body.service_schedule,
       comments: req.body.comments,
+      courseLocation,
     });
     return res.status(200).json(course);
   }
@@ -1060,21 +1186,23 @@ function createFairwayHandlers(db, {
   }
 
   async function patchAdminDeviceAssignment(req, res, deviceId) {
-    requireBodyFields(req.body, ['customer_id', 'course_id', 'location']);
+    requireBodyFields(req.body, ['customer_id', 'course_id', 'location', 'service_group']);
     const device = await updateDeviceAssignment(db, deviceId, {
       customerId: req.body.customer_id,
       courseId: req.body.course_id,
       location: req.body.location,
+      serviceGroup: req.body.service_group,
     });
     return res.status(200).json(redactDeviceResult(device));
   }
 
   async function patchAdminDeviceState(req, res, deviceId) {
-    requireBodyFields(req.body, ['state', 'customer_id', 'course_id', 'location']);
+    requireBodyFields(req.body, ['state', 'customer_id', 'course_id', 'location', 'service_group']);
     const device = await updateDeviceState(db, deviceId, req.body.state, {
       customerId: req.body.customer_id,
       courseId: req.body.course_id,
       location: req.body.location,
+      serviceGroup: req.body.service_group,
     });
     return res.status(200).json(redactDeviceResult(device));
   }
@@ -1126,6 +1254,85 @@ function createFairwayHandlers(db, {
     }
 
     try {
+      if (req.method === 'GET' && path === '/api/v1/admin/ota/releases') {
+        return res.status(200).json({ releases: await otaService.listReleases() });
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/ota/releases') {
+        return res.status(201).json(await otaService.registerRelease(req.body, admin.uid));
+      }
+      if (req.method === 'GET' && path === '/api/v1/admin/ota/deployments') {
+        return res.status(200).json({
+          deployments: await otaService.listDeployments(),
+          devices: await otaService.listDeviceStatus(),
+        });
+      }
+      if (req.method === 'GET' && path === '/api/v1/admin/ota/fleet') {
+        return res.status(200).json(await otaService.listFleet());
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/ota/assignment-reviews') {
+        return res.status(201).json(await otaService.prepareAssignment(req.body, admin.uid));
+      }
+      const otaReviewMatch = path.match(/^\/api\/v1\/admin\/ota\/assignment-reviews\/([a-f0-9-]{36})\/confirm$/);
+      if (req.method === 'POST' && otaReviewMatch) {
+        return res.status(200).json(await otaService.confirmAssignment(otaReviewMatch[1], admin.uid));
+      }
+      const otaAssignmentMatch = path.match(
+        /^\/api\/v1\/admin\/ota\/devices\/([^/]+)\/assignment$/
+      );
+      if (req.method === 'POST' && otaAssignmentMatch) {
+        if (!req.body || typeof req.body.release_id !== 'string') {
+          throw new OtaError('release_required', 'A release ID is required.');
+        }
+        return res.status(201).json(await otaService.assignRelease(
+          decodeURIComponent(otaAssignmentMatch[1]),
+          req.body.release_id,
+          admin.uid,
+          req.body.not_before ?? null
+        ));
+      }
+
+      if (req.method === 'GET' && path === '/api/v1/admin/requests/excluded') {
+        const { customer_id: customerId, course_id: courseId } = req.query || {};
+        if (typeof customerId !== 'string' || typeof courseId !== 'string' ||
+            !customerId.trim() || !courseId.trim()) {
+          return res.status(400).json({ error: 'customer_id and course_id are required' });
+        }
+        return res.status(200).json(await listExcludedRequests(db, customerId, courseId));
+      }
+      const reportingStateMatch = path.match(/^\/api\/v1\/admin\/requests\/([^/]+)\/reporting-state$/);
+      if (req.method === 'PATCH' && reportingStateMatch) {
+        requireBodyFields(req.body, ['customer_id', 'course_id', 'reporting_state']);
+        const result = await setRequestReportingState(db, {
+          requestId: decodeURIComponent(reportingStateMatch[1]),
+          customerId: req.body.customer_id,
+          courseId: req.body.course_id,
+          reportingState: req.body.reporting_state,
+          adminUid: admin.uid,
+        });
+        return res.status(200).json(result);
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/reports/button-activity') {
+        requireBodyFields(req.body, ['customer_id', 'course_id', 'start_date', 'end_date']);
+        const report = await generateButtonReport(db, req.body, { asOf: now(), source: buttonReportSource, fetchImpl });
+        const pdf = await renderButtonReport(report);
+        res.set('Cache-Control', 'no-store');
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `attachment; filename="cart-request-performance-${req.body.start_date}-${req.body.end_date}.pdf"`);
+        return res.status(200).send(pdf);
+      }
+      const staffMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/staff(?:\/([^/]+))?$/);
+      if (staffMatch) {
+        const customerId = decodeURIComponent(staffMatch[1]);
+        if (req.method === 'GET' && !staffMatch[2]) {
+          return res.status(200).json(await inventory.listStaff(db, customerId));
+        }
+        if (req.method === 'POST' && !staffMatch[2]) {
+          return res.status(201).json(await inventory.createStaff(db, customerId, req.body, admin.uid));
+        }
+        if (req.method === 'PATCH' && staffMatch[2]) {
+          return res.status(200).json(await inventory.updateStaff(db, customerId, decodeURIComponent(staffMatch[2]), req.body, admin.uid));
+        }
+      }
       if (req.method === 'GET' && path === '/api/v1/admin/users') {
         return await listAdminUsers(req, res);
       }
@@ -1249,6 +1456,9 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error instanceof RequestReportingError) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
       if (error.code === 'last_admin') {
         return res.status(409).json({ error: 'last_admin_required' });
       }
@@ -1280,129 +1490,15 @@ function createFairwayHandlers(db, {
   }
 
   async function updateRequestStatus(req, res, requestId, action) {
-    const validActions = {
-      confirm: {
-        status: 'confirmed',
-        timestampField: 'confirmed_at'
-      },
-      complete: {
-        status: 'completed',
-        timestampField: 'completed_at'
-      },
-      cancel: {
-        status: 'cancelled',
-        timestampField: 'cancelled_at'
-      }
-    };
-
-    const actionConfig = validActions[action];
-
-    if (!actionConfig) {
-      return res.status(404).send('Not Found\n');
-    }
-
     const operator = await authorizeOperator(req, res);
-
-    if (!operator) {
-      return res;
+    if (!operator) return res;
+    try {
+      const result = await transitionRequest(db, requestId, action, operator.assignment, operator.identity.uid);
+      return res.status(200).send(`OK ${requestId} ${result.status}\n`);
+    } catch (error) {
+      if (error instanceof RequestError) return res.status(error.status).json({ error: error.message });
+      throw error;
     }
-
-    const requestRef = db.collection('requests').doc(requestId);
-
-    if (action === COMPLETE_COMMAND_TYPE) {
-      const result = await db.runTransaction(async (transaction) => {
-        const requestSnap = await transaction.get(requestRef);
-
-        if (!requestSnap.exists) {
-          return { notFound: true };
-        }
-
-        const requestData = requestSnap.data();
-        if (!operator.assignment.courses.some((course) => (
-          course.customer_id === requestData.customer_id &&
-          course.course_id === requestData.course_id
-        ))) {
-          return { forbidden: true };
-        }
-        const expiresAt = toDate(requestData.demand_window_expires_at);
-
-        if (typeof requestData.device_id !== 'string' || !expiresAt) {
-          return { invalid: true };
-        }
-
-        const commandId = completeCommandId(requestId);
-        const commandRef = db.collection('devices').doc(requestData.device_id)
-          .collection('commands').doc(commandId);
-        const commandSnap = await transaction.get(commandRef);
-
-        if (requestData.status !== actionConfig.status) {
-          transaction.update(requestRef, {
-            status: actionConfig.status,
-            [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-            operator_id: operator.identity.uid,
-          });
-        }
-
-        if (!commandSnap.exists) {
-          transaction.set(commandRef, {
-            command_id: commandId,
-            device_id: requestData.device_id,
-            type: COMPLETE_COMMAND_TYPE,
-            request_id: requestId,
-            status: 'pending',
-            created_at: FieldValue.serverTimestamp(),
-            expires_at: requestData.demand_window_expires_at,
-            created_by: operator.identity.uid,
-            acknowledged_at: null,
-          });
-        }
-
-        return { commandId, created: !commandSnap.exists, deviceId: requestData.device_id };
-      });
-
-      if (result.notFound) {
-        return res.status(404).send('Request not found\n');
-      }
-      if (result.forbidden) {
-        return res.status(403).send('Operator is not authorized for this Course\n');
-      }
-      if (result.invalid) {
-        return res.status(422).send('Request is missing command correlation data\n');
-      }
-
-      console.log('COMPLETE command correlation:', {
-        request_id: requestId,
-        command_id: result.commandId,
-        device_id: result.deviceId,
-        created: result.created,
-      });
-    } else {
-      const requestSnap = await requestRef.get();
-
-      if (!requestSnap.exists) {
-        return res.status(404).send('Request not found\n');
-      }
-
-      if (!operator.assignment.courses.some((course) => (
-        course.customer_id === requestSnap.data().customer_id &&
-        course.course_id === requestSnap.data().course_id
-      ))) {
-        return res.status(403).send('Operator is not authorized for this Course\n');
-      }
-
-      await requestRef.update({
-        status: actionConfig.status,
-        [actionConfig.timestampField]: FieldValue.serverTimestamp(),
-        operator_id: operator.identity.uid,
-      });
-    }
-
-    console.log('Fairway request status updated:', {
-      request_id: requestId,
-      status: actionConfig.status
-    });
-
-    return res.status(200).send(`OK ${requestId} ${actionConfig.status}\n`);
   }
 
   async function pollDeviceCommand(req, res) {
@@ -1561,8 +1657,101 @@ function createFairwayHandlers(db, {
       }
 
       const path = req.path || '/';
+      if (path.startsWith('/api/v1/device-ota/')) {
+        res.set('Cache-Control', 'private, no-store');
+        res.set('Referrer-Policy', 'no-referrer');
+        res.set('X-Content-Type-Options', 'nosniff');
+      }
+      if (path === '/api/v1/sandbox/review-access') {
+        res.set('Cache-Control', 'no-store');
+        if (!publicReviewAccess) return res.status(404).json({ error: 'not_found' });
+        if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+        const identity = await authenticateOperator(req, res);
+        if (!identity) return res;
+        if (!await provisionPublicReviewer(db, identity, publicReviewAccess)) {
+          return res.status(403).json({ error: 'Anonymous review session required' });
+        }
+        return res.status(200).json({ status: 'ready' });
+      }
+      const publicBayMatch = path.match(/^\/api\/v1\/public\/bays\/([A-Za-z0-9_-]+)(\/requests)?$/);
+      if (publicBayMatch) {
+        res.set('Cache-Control', 'no-store');
+        if (!qrEnabled) return res.status(404).json({ error: 'Bay not found' });
+        if (req.method === 'GET' && !publicBayMatch[2]) {
+          return res.status(200).json(await publicBay(db, publicBayMatch[1]));
+        }
+        if (req.method === 'POST' && publicBayMatch[2]) {
+          if (!qrRateKey) throw new RequestError(503, 'Request protection is unavailable');
+          if (!req.body || Object.keys(req.body).length !== 1 || !req.body.operation_id) {
+            throw new RequestError(400, 'Only a submission ID is accepted');
+          }
+          const networkId = crypto.createHmac('sha256', qrRateKey).update(req.ip || req.socket?.remoteAddress || 'unknown').digest('hex');
+          return res.status(200).json(await acceptQrRequest(
+            db, publicBayMatch[1], req.body.operation_id, networkId, now()
+          ));
+        }
+        return res.status(405).send('Method Not Allowed\n');
+      }
       if (path.startsWith('/api/v1/admin/')) {
         return res.status(404).send('Not Found\n');
+      }
+
+      const otaArtifactMatch = path.match(/^\/api\/v1\/device-ota\/artifacts\/([^/]+)$/);
+      if (req.method === 'GET' && otaArtifactMatch) {
+        try {
+          const { grant, release } = await otaService.getAuthorizedArtifact(
+            decodeURIComponent(otaArtifactMatch[1])
+          );
+          const size = release.size_bytes;
+          const rangeHeader = req.get('range');
+          let start = 0;
+          let end = size - 1;
+          let statusCode = 200;
+          if (rangeHeader) {
+            const rangeMatch = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+            if (!rangeMatch || (!rangeMatch[1] && !rangeMatch[2])) {
+              res.set('Content-Range', `bytes */${size}`);
+              return res.status(416).send('');
+            }
+            if (rangeMatch[1]) {
+              start = Number(rangeMatch[1]);
+              end = rangeMatch[2] ? Number(rangeMatch[2]) : size - 1;
+            } else {
+              const suffixLength = Number(rangeMatch[2]);
+              start = Math.max(0, size - suffixLength);
+              end = size - 1;
+            }
+            if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+                || start < 0 || start >= size || end < start || end >= size) {
+              res.set('Content-Range', `bytes */${size}`);
+              return res.status(416).send('');
+            }
+            statusCode = 206;
+          }
+          res.set('Accept-Ranges', 'bytes');
+          res.set('Content-Type', 'application/octet-stream');
+          res.set('Cache-Control', 'private, no-store');
+          res.set('Content-Length', String(end - start + 1));
+          if (statusCode === 206) {
+            res.set('Content-Range', `bytes ${start}-${end}/${size}`);
+          }
+          const artifactStream = await otaService.streamArtifact(grant.object_path, { start, end });
+          artifactStream.on('error', () => {
+            console.error('OTA artifact stream failed; storage_error');
+            if (!res.headersSent) {
+              res.status(502).send('Artifact unavailable\n');
+            } else {
+              res.destroy();
+            }
+          });
+          return artifactStream.pipe(res.status(statusCode));
+        } catch (error) {
+          if (error instanceof OtaError) {
+            return res.status(error.status).json({ error: error.code, message: error.message });
+          }
+          console.error('OTA artifact retrieval failed; storage_error');
+          return res.status(502).send('Artifact unavailable\n');
+        }
       }
 
       if (req.method === 'GET' && path === '/api/v1/operator/bootstrap') {
@@ -1588,6 +1777,44 @@ function createFairwayHandlers(db, {
         return res.status(405).send('Method Not Allowed\n');
       }
 
+      if (path === '/api/v1/device-ota/schedule' ||
+          path === '/api/v1/device-ota/check') {
+        const deviceId = req.body?.device_id;
+        if (typeof deviceId !== 'string') {
+          return res.status(400).json({ error: 'device_id_required' });
+        }
+        const device = await authenticateDevice(req, res, deviceId);
+        if (!device) return res;
+        if (req.body.hardware_id !== HARDWARE_ID) {
+          return res.status(409).json({ error: 'unsupported_hardware' });
+        }
+        if (path.endsWith('/schedule')) {
+          return res.status(200).json({
+            next_check_at_utc_ms: await otaService.getNextCheck(device),
+          });
+        }
+        return res.status(200).json(await otaService.checkForUpdate(
+          deviceId, device, req.body.hardware_id
+        ));
+      }
+
+      const otaEventMatch = path.match(
+        /^\/api\/v1\/device-ota\/deployments\/([^/]+)\/events$/
+      );
+      if (otaEventMatch) {
+        const deviceId = req.body?.device_id;
+        if (typeof deviceId !== 'string') {
+          return res.status(400).json({ error: 'device_id_required' });
+        }
+        const device = await authenticateDevice(req, res, deviceId);
+        if (!device) return res;
+        return res.status(200).json(await otaService.reportUpdateEvent(
+          decodeURIComponent(otaEventMatch[1]),
+          deviceId,
+          req.body
+        ));
+      }
+
       if (path === '/api/v1/device-commands/poll') {
         return await pollDeviceCommand(req, res);
       }
@@ -1597,10 +1824,10 @@ function createFairwayHandlers(db, {
         return await acknowledgeDeviceCommand(req, res, commandAckMatch[1]);
       }
 
-      const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete|cancel)$/);
+      const statusMatch = path.match(/^\/api\/v1\/requests\/([^/]+)\/(confirm|complete|cancel|clear-rejected)$/);
       if (statusMatch) {
         const requestId = statusMatch[1];
-        const action = statusMatch[2];
+        const action = statusMatch[2] === 'clear-rejected' ? 'clear_rejected' : statusMatch[2];
 
         return await updateRequestStatus(req, res, requestId, action);
       }
@@ -1611,10 +1838,24 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error instanceof RequestError) {
+        if (error.status === 429) res.set('Retry-After', '60');
+        return res.status(error.status).json({ error: error.message });
+      }
       if (error && error.type === 'entity.parse.failed') {
         return res.status(400).send('Invalid JSON\n');
       }
-      console.error('Failed to handle Fairway request:', error);
+      if (error instanceof OtaError) {
+        return res.status(error.status).json({
+          error: error.code,
+          message: error.message,
+        });
+      }
+      if ((req.path || '').startsWith('/api/v1/device-ota/')) {
+        console.error('Failed to handle OTA device request; internal_error');
+      } else {
+        console.error('Failed to handle Fairway request:', error);
+      }
       return res.status(500).send('Internal Server Error\n');
     }
   }
@@ -1691,29 +1932,55 @@ function createFairwayHandlers(db, {
       if (req.method === 'GET' && action === '') {
         return res.status(200).json(await inventory.listInventory(db, customerId, courseId));
       }
-      if (req.method === 'GET' && action === 'preview') {
-        return res.status(200).json(await inventory.previewMenu(db, customerId, courseId));
+      if (req.method === 'GET' && action === 'staff') {
+        return res.status(200).json(await inventory.listStaff(db, customerId, { activeOnly: true, courseId }));
       }
-      if (req.method === 'POST' && action === 'publish') {
-        return res.status(200).json(await inventory.publishMenu(db, customerId, courseId, identity.uid));
+      if (req.method === 'POST' && action === 'staff') {
+        return res.status(201).json(await inventory.createStaff(db, customerId, req.body, identity.uid, { operational: true, courseId }));
+      }
+      if (req.method === 'POST' && action === 'shifts/select') {
+        return res.status(200).json(await inventory.selectShift(db, customerId, courseId, identity.uid, req.body));
+      }
+      if (req.method === 'GET' && action === 'shifts/session') {
+        return res.status(200).json(await inventory.getSessionShift(db, customerId, courseId, identity.uid, req.query?.session_id));
+      }
+      const closeShiftMatch = action.match(/^shifts\/([^/]+)\/close$/);
+      if (req.method === 'POST' && closeShiftMatch) {
+        return res.status(200).json(await inventory.closeShift(db, customerId, courseId, decodeURIComponent(closeShiftMatch[1]), req.body, identity.uid));
+      }
+      if (req.method === 'POST' && action === 'audits') {
+        return res.status(201).json(await inventory.createAudit(db, customerId, courseId, req.body, identity.uid));
+      }
+      if (req.method === 'GET' && action === 'audits') {
+        return res.status(200).json(await inventory.auditHistory(db, customerId, courseId));
+      }
+      const stockMatch = action.match(/^products\/([^/]+)\/stock$/);
+      if (req.method === 'POST' && stockMatch) {
+        return res.status(200).json(await inventory.updateStock(db, customerId, courseId, decodeURIComponent(stockMatch[1]), req.body, identity.uid));
+      }
+      if (action === 'preview' || action === 'publish') {
+        return res.status(410).json({
+          error: 'manual_publication_retired',
+          message: 'The golfer menu automatically reflects saved On Cart products. Refresh Inventory and use View golfer menu.',
+        });
       }
       if (req.method === 'POST' && action === 'categories') {
-        requireBodyFields(req.body, ['name']);
+        requireBodyFields(req.body, ['name', 'shift_id', 'operation_id']);
         return res.status(201).json(await inventory.createCategory(
-          db, customerId, courseId, req.body.name, identity.uid
+          db, customerId, courseId, req.body.name, identity.uid, req.body
         ));
       }
       const subcategoryMatch = action.match(/^categories\/([^/]+)\/subcategories$/);
       if (req.method === 'POST' && subcategoryMatch) {
-        requireBodyFields(req.body, ['name']);
+        requireBodyFields(req.body, ['name', 'shift_id', 'operation_id']);
         return res.status(201).json(await inventory.createSubcategory(
-          db, customerId, courseId, decodeURIComponent(subcategoryMatch[1]), req.body.name, identity.uid
+          db, customerId, courseId, decodeURIComponent(subcategoryMatch[1]), req.body.name, identity.uid, req.body
         ));
       }
       const categoryIdMatch = action.match(/^categories\/([^/]+)$/);
       if (req.method === 'DELETE' && categoryIdMatch) {
         return res.status(200).json(await inventory.deleteCategory(
-          db, customerId, courseId, decodeURIComponent(categoryIdMatch[1]), identity.uid
+          db, customerId, courseId, decodeURIComponent(categoryIdMatch[1]), identity.uid, req.body
         ));
       }
       if (req.method === 'POST' && action === 'products') {
@@ -1730,7 +1997,7 @@ function createFairwayHandlers(db, {
       const archiveMatch = action.match(/^products\/([^/]+)\/archive$/);
       if (archiveMatch && req.method === 'POST') {
         return res.status(200).json(await inventory.archiveProduct(
-          db, customerId, courseId, decodeURIComponent(archiveMatch[1]), identity.uid
+          db, customerId, courseId, decodeURIComponent(archiveMatch[1]), identity.uid, req.body
         ));
       }
       return res.status(404).json({ error: 'not_found' });
@@ -1765,7 +2032,10 @@ function createFairwayHandlers(db, {
 const runtimeEnvironment = resolveRuntimeEnvironment();
 const handlers = createFairwayHandlers(new Firestore({
   projectId: runtimeEnvironment.projectId,
-}), { allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins });
+}), {
+  allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins,
+  artifactStore: createGcsArtifactStore(process.env.FAIRWAY_OTA_BUCKET),
+});
 
 if (runtimeEnvironment.serviceMode === 'admin') {
   functions.http('fairwayAdmin', handlers.fairwayAdmin);

@@ -272,6 +272,79 @@ full-surface Option C queue, completion feedback and transaction increment,
 guarded Cancel action, empty state, schedule visibility/editability, and
 independent Operator/Admin authorization paths at `app.fairwayrefresh.com`.
 
+## Admin Firmware OTA Management (Deployed with Empty Catalog, 2026-11-09)
+
+The Admin capability is deployed; no firmware is published or assigned.
+Exact production identities, verification limits and remaining publication/
+commissioning gates are owned by the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#ota-administration-production-deployment-2026-11-09).
+
+- Firmware OTA is part of the existing global Admin application. Customer/Cart
+  authorization does not grant release-management access.
+- The desktop layout has two columns: **Approved Firmware Updates**, a simple
+  release/version dropdown with description and approval status, and **Select
+  Devices**, an expandable checkbox hierarchy. Below 760 px the columns stack;
+  long IDs, status evidence and local/UTC windows wrap without horizontal overflow.
+  The CPO surface has no artifact upload, manifest, signing or arbitrary
+  date/time controls. VSC publishes through the engineering workflow separately;
+  publication never selects or assigns a device.
+- Only published releases satisfying all five governed publication prerequisites
+  are selectable: verification/testing, CPO release approval, Alignment Register
+  recognition, approved source/release records committed and remotely backed up,
+  and explicit CPO authorization for VSC publication. The backend enforces this;
+  UI filtering is not the security boundary. An empty approved inventory is an
+  explicit state, never a placeholder approval of an accepted artifact.
+- The tree is Customers → Customer → Course → Device, plus separate Inventory
+  and Maintenance branches. It projects canonical registry records, never a
+  second OTA inventory. Lifecycle determines exactly one category. Maintenance
+  remains an active headquarters-held asset eligible for testing when initialized
+  and communicating; it is not shown as a Customer/Course deployment.
+  Parent selection toggles eligible descendants; partial selection is
+  indeterminate. Expanding/collapsing does not change selection. Individual and
+  arbitrary cross-Customer/Course/HQ selections are supported. Blocked devices
+  display a reason rather than disappearing or becoming silently eligible.
+- Changing release clears selection and confirmation. Review submits 1–50
+  explicit device IDs to the backend and shows release, count, every individual
+  ID, category/placement and applicable local/UTC window. An explicit checkbox
+  and Confirm action authorize that exact five-minute review. Changed
+  eligibility/windows require a fresh review; active assignments conflict
+  instead of being replaced. Later Customer/Course membership changes never
+  add devices to an existing authorization.
+- Routine updates become eligible at **12:30 AM local time**, using each
+  deployed Course's IANA timezone and DST, not the browser timezone.
+  Inventory/Maintenance use CPO-approved **America/Los_Angeles** headquarters
+  time (PST/PDT as applicable). This approved policy supersedes the earlier
+  unresolved Pacific assumption; no date/time or headquarters-zone preference
+  is exposed to the CPO.
+  This fixed policy is not a user preference. Scheduling does not wake, reset
+  or force-install a device; installation follows its autonomous check.
+- OTA 0.1 is USB-only initialization, never a dropdown update. Its already
+  installed FRB-0005 bootstrap performs a single persisted 900-second check.
+  A review for the first OTA 0.1alt transition explicitly shows immediate
+  bootstrap eligibility with unknown remaining check time, not a nightly
+  installation promise. A reported consumed check cannot be rearmed by Admin.
+  OTA 0.1alt and subsequent firmware establish recurring nightly behavior;
+  accepted original images require the scheduler qualification described in
+  the Deployment Guide before claiming that behavior is operational.
+- Status separates assignment/eligibility, authenticated check-in, image offer,
+  artifact request, device-reported downloading/verifying/staged/activation,
+  trial boot, confirmation, rollback and failure. Device-reported version and
+  server receipt timestamps are shown. Download request/offer is not completed
+  installation, and no evidence is shown as unknown rather than successful.
+  Trial/confirmation are authenticated firmware reports, not independent boot
+  attestation. Refresh explicitly retrieves the current evidence.
+  If a device's placement, trust or timezone changes after authorization,
+  delivery is blocked and status explains the need for engineering reconciliation;
+  the dashboard never silently substitutes a new tenant or window.
+- OTA 0.1alt (`0.1.0+2`) and OTA 1.0 (`1.0.0+1`) remain accepted immutable
+  artifacts, not proof of all publication prerequisites or recurring readiness.
+  Replacement lineage requires separate release approval. Local fixture
+  demonstrations use fictional approvals and fleet records; no production
+  publication, assignment or physical-device installation is implied.
+
+Operational/security deployment gates are owned by the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#prototype-40-admindistribution-readiness--implemented-locally).
+
 ## Superseded Single-Indicator Behavior (Historical)
 
 The pre-Prototype-3.2 firmware used one indicator: three brief transmitting

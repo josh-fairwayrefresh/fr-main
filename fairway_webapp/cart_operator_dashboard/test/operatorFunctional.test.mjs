@@ -9,7 +9,10 @@ const entrySource = await readFile(new URL('../src/main.jsx', import.meta.url), 
 const operatorStyles = await readFile(new URL('../src/operator.css', import.meta.url), 'utf8');
 
 test('functional Option C operator surface keeps the approved workflow contract', () => {
-  assert.match(source, /OLDEST ACTIVE REQUEST/);
+  assert.match(source, /Selected request/);
+  assert.match(source, /Other active requests/);
+  assert.match(source, /aria-label=\{`Select \$\{rejected \? 'rejected ' : ''\}request \$\{requestLocationLabel\(request\)\}`\}/);
+  assert.match(source, /onRequestAction\(request, action\)/);
   assert.match(source, /Complete service/);
   assert.match(source, /Cancel request/);
   assert.match(source, /operator\/service\/\$\{action\}/);
@@ -20,22 +23,46 @@ test('functional Option C operator surface keeps the approved workflow contract'
   assert.doesNotMatch(source, />CONFIRM</);
 });
 
+test('service-suspended attempts have a durable-clear-only dashboard action and red history outcome', () => {
+  assert.match(entrySource, /request\.status === 'rejected' && request\.rejection_reason === 'service_suspended'/);
+  assert.match(entrySource, /!request\.rejected_cleared_at/);
+  assert.match(source, /Request Rejected — Service Suspended/);
+  assert.match(source, /Clear Rejected Request/);
+  assert.match(source, /act\('clear-rejected'\)/);
+  assert.match(source, /item\.status === 'cancelled' \? 'Cancelled' : 'Service Suspended'/);
+  assert.match(operatorStyles, /\.op-priority\.rejected/);
+  assert.match(operatorStyles, /\.op-outcome\.rejected/);
+  assert.match(operatorStyles, /@media \(max-width: 620px\)[\s\S]*\.op-priority \{ grid-template-columns: 1fr;/);
+});
+
+test('request selection remains stable and notification focus is one-shot', () => {
+  assert.match(source, /requests\.find\(\(request\) => request\.id === selectedRequestId\) \|\| requests\[0\]/);
+  assert.match(source, /pendingNotificationSelection\.current = \{\s*requestId: focusedRequestId/);
+  assert.match(source, /notificationSelection\.selectionVersion !== manualSelectionVersion\.current/);
+  assert.match(source, /selectedRequestIdRef\.current = oldestRequestId/);
+  assert.match(source, /key=\{`requests:\$\{selectedCourseKeyValue\}`\}/);
+  assert.match(source, /disabled=\{actionPending\}/);
+  assert.match(source, /requestActionInFlight\.current \|\| actionedRequestIdsRef\.current\.has\(request\.id\)/);
+  assert.match(source, /requestLocationLabel\(request\)/);
+});
+
 test('Assigned customer users have an Inventory link into the shared authenticated session', () => {
-  assert.match(source, /<a className="op-inventory" href=\{courseContextUrl\('\/inventory', course\)\}/);
+  assert.match(source, /<a className="op-inventory" href=\{contextPending \? undefined : courseContextUrl\('\/inventory', course\)\}/);
   assert.doesNotMatch(source, /canManageInventory/);
 });
 
 test('course matching in OperatorApp matches on customer_id and course_id', () => {
-  assert.match(source, /mergeDashboardCourse\(selectedCourse, dashboard\?\.courses\)/);
-  assert.match(source, /\{courseDisplayLabel\(course\)\}/);
+  assert.match(source, /mergeDashboardCourse\(selectedCourse, currentDashboard\?\.courses\)/);
+  assert.match(source, /dashboard\?\.key === selectedCourseKeyValue \? dashboard\.data : null/);
+  assert.match(source, /aria-label=\{courseDisplayLabel\(course\)\}/);
 });
 
 test('mobile operator header preserves navigation, course selection, and labeled service actions', () => {
-  assert.match(source, /<nav aria-label="Cart Operator navigation">/);
+  assert.match(source, /<nav aria-label="Course Operator navigation">/);
   assert.match(source, /aria-label="Select course"/);
   assert.match(source, /aria-label=\{`\$\{serviceActionLabel\} for \$\{course\?\.course_name/);
   assert.match(source, /<span>\{serviceActionLabel\}<\/span>/);
-  assert.match(operatorStyles, /@media \(max-width: 1180px\)/);
+  assert.match(operatorStyles, /@media \(max-width: 740px\)/);
   assert.match(operatorStyles, /\.op-course-context \{ display: grid;/);
   assert.match(operatorStyles, /\.op-service-controls \{ display: flex; flex-wrap: wrap;/);
   assert.match(operatorStyles, /\.op-notifications \{ position: static;/);

@@ -2,36 +2,223 @@
 
 ## Current Deployment and OTA Readiness
 
-This snapshot was reconciled on 2026-11-07 from canonical owner documents,
-repository configuration, and dated deployment evidence. “Last verified”
-means the date of the evidence, not a live check on 2026-11-07. Confirm actual
+This snapshot includes the CPO-authorized 2026-11-09 production deployment of
+empty-catalog OTA administration following production/OTA source alignment.
+“Last verified” means the date of the evidence,
+not continuous production monitoring. Confirm actual
 serving state and obtain release-specific authorization before production
-changes.
+changes. OTA rows and the readiness subsection below include subsequent
+FRB-0005 commissioning evidence and the local Prototype 4.0 readiness increment;
+the accepted firmware artifacts remain unchanged.
 
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
-| Production Hosting | Production site `savvy-kit-496703-r5`; responsive release version `995c6b063a9af3c5` | Last recorded 2026-10-15. Authenticated physical-phone/Safari acceptance was not performed. Verify the live version before change. |
-| Production Admin / receiver | Admin `fairway-admin-00017-dvk`; receiver `fairway-button-receiver-roll-26b6201` | Admin last recorded Ready/100% traffic on 2026-10-17. Read-only Cloud Run metadata on 2026-11-07 showed receiver `roll-26b6201` Ready at 100%, image `sha256:cf29d45e7f3abe1dc5aa7b8ea69f48473a65e83a9605e466209cb7fe9ef45d56`, created `2026-11-02T21:14:05.229847Z`. Build/source annotations are recorded below; exact Git commit correspondence was not established. No authenticated production credential-lifecycle request was made. |
-| OTA implementation | Common-image firmware delivery, PSA-backed identity/schedule state, authenticated backend release/assignment/reporting, GCS artifact streaming, and Admin OTA management are implemented in the local branch | Not deployed. The source branch remains dirty at the checkpoint commit; local work does not change the accepted Pilot 1.1 baseline. |
-| Local OTA validation | CPO accepted the three local production-signed releases on 2026-11-09; immutable artifact inventory and corrected source provenance are recorded below | All three passed separate release verification again after provenance cleanup. Development-key and disposable-test-key artifacts are not commissioning candidates. No physical activation, confirmation, rollback, recovery, or installed-device trust-anchor match has been demonstrated. |
-| Field OTA authorization | Not authorized or qualified | Local build and verification evidence do not authorize deployment. No OTA image was flashed. |
-| Production OTA blockers | Installed-device trust-anchor compatibility and physical OTA evidence; production bucket/IAM, log redaction, backend/Admin deployment, and separately authorized FRB-0005 commissioning | The local production-signed package is accepted; artifact validation does not authorize flashing, deployment, assignment, or credential changes. |
-| Production data | 2026-10-17 release evidence says that deployment did not change production records | No repository-controlled backup, restore, point-in-time recovery, or recovery-point verification procedure was found. Do not assume one exists or that code rollback restores data. |
+| Production Hosting | Production site `savvy-kit-496703-r5`; live version `87d3105f0676a782` | Released `2026-11-10T01:16:04.645Z` (November 9 Pacific). All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; 52 QR destinations and cache policies pass. Previous version `c6a6de50274e48b5` retained. |
+| Production Admin / receiver | Admin `fairway-admin-ota-admin-59f81b5`; receiver `fairway-button-receiver-ota-admin-59f81b5` | Both staged Ready at 0%, then promoted receiver first and Admin second to 100%. Runtime identities, environment/secret fingerprints, invocation settings and existing tags preserved. Exact images/builds below. No credential lifecycle operation performed. |
+| OTA implementation | Production Admin/backend capability is deployed with an empty approved catalog. Firmware scheduler correction and physical commissioning remain separate | No firmware built, signed, published, assigned or delivered. The source branch remains dirty at the checkpoint commit; deployment archives identify the actual release, not HEAD alone. Accepted firmware artifacts/Pilot 1.1 baseline unchanged. |
+| Local OTA validation | CPO accepted the three local production-signed releases on 2026-11-09; immutable artifact inventory and corrected source provenance are recorded below | All three passed the then-recorded release verification. Source-confirmed nightly recurrence defects now require corrected successor qualification; original acceptance is not evidence that recurring checks work. FRB-0005 received the exact USB-only OTA 0.1 with flash read-back verification. Autonomous physical transitions remain unvalidated. |
+| FRB-0005 commissioning | OTA 0.1 installed using authorized erase-all; existing identity/credential provisioned successfully through the single USB CDC-ACM connection | Provisioning success response observed. CPO confirmed authenticated, correctly attributed requests, COMPLETE, and a fresh transaction. This is USB baseline commissioning, not a successful OTA update. |
+| Production OTA prerequisites | Empty-catalog Admin deployment completed. Artifact delivery still requires private bucket/IAM and verified token-log protections; publication/commissioning additionally requires qualified releases, all five publication prerequisites, canonical capability records and physical OTA evidence | All six OTA collections verified empty before and after deployment. No OTA bucket/environment configured; `_Default` has no exclusion; organization sink visibility denied. No Firestore data/rules/indexes or IAM changes performed by this rollout. Headquarters zone is approved as `America/Los_Angeles`. |
+| Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
-The source snapshot contains local credential-recovery UI code, but the
-available deployment record does not establish that this UI is included in
-the production Hosting release. The Admin credential-lifecycle backend was
-deployed on 2026-10-17; no production credential operation or authenticated
-Admin lifecycle request was performed. See
+The exact-Device in-inventory credential-recovery UI is included in this
+Hosting release, preserving the existing local protections. The
+credential-lifecycle backend was originally deployed on 2026-10-17;
+this rollout performed no credential operation or authenticated lifecycle
+request. See
 `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+### OTA Administration production deployment (2026-11-09)
+
+CPO explicitly authorized release packaging, no-traffic staging, receiver/Admin
+promotion, Hosting publication and non-destructive verification. Firmware
+publication, assignment, flashing, physical commissioning and Git commit/push
+remain unauthorized and were not performed.
+
+Release source is the production-aligned dirty worktree on
+`review/frb0005-increment-1.0-source-checkpoint-20261105`, HEAD
+`0f21f5ebf849695b40898253136d4589b525a6a4`. HEAD alone is not the deployed
+source identity. Isolated deterministic archives and per-file SHA-256
+inventories are retained under the deployment session's `files/ota-admin-rollout/`
+directory; archives exclude local environment credentials, signing material,
+dependencies and unrelated firmware work.
+The exact local evidence directory is
+`/Users/DuplexLoop/.copilot/session-state/937dc64a-d76a-44ab-9ebd-392a14f06f80/files/ota-admin-rollout/`;
+it includes `release-identity.json`, per-file inventories, before/staged/final
+service fingerprints, Cloud Build identities and full Hosting verification.
+These are retained deployment artifacts, not a Git commit or a firmware release
+record satisfying the separate remote-backup publication prerequisite.
+
+| Release input | SHA-256 |
+|---|---|
+| `backend-source.tar.gz` | `59f81b595ad926d3efe7a345e4718a47b4c1cfc33a77a0a2235f730bfea07c28` |
+| `frontend-source.tar.gz` | `dc94ad651351fa07e86b6ac6d6bf51969ddd216c817ba2433b17c848213da50e` |
+| `hosting-artifact.tar.gz` | `d67b9fdfcc7e92343ad8bd02dfe9ebf58208b3d18714fd0d3bd898ee17e59bfd` |
+| Backend dependency lock | `b9631f65f38cd45d8fb1b1f52f73d93e79bfc861251300d411bf80dff8cd95e8` |
+| Frontend dependency lock | `90a2f6a07104f502ea6ffba6607157d882dbc937dd90b6314b4a0dca24e7fc27` |
+
+| Production resource | Deployed identity |
+|---|---|
+| Receiver revision | `fairway-button-receiver-ota-admin-59f81b5`, 100% |
+| Receiver image SHA-256 | `14eac36752afa9f1b6a7c503076834716948e9547f6d1fe561fd42da20ffaaa4` |
+| Receiver Cloud Build | `1605605e-8064-4b34-97ac-14d4ef55fd6e`, SUCCESS |
+| Admin revision | `fairway-admin-ota-admin-59f81b5`, 100% |
+| Admin image SHA-256 | `6faec16d9a4fed486ce9c87141eb78adb809b125e436435e569bda6b60766c88` |
+| Admin Cloud Build | `b1a4f96f-d657-42fb-9365-092fb15f887c`, SUCCESS |
+| Hosting version / release | `87d3105f0676a782` / `1794273364645000` |
+| Hosting release time | `2026-11-10T01:16:04.645Z` |
+| Entry HTML SHA-256 | `c0eb79c3aebc4da687c39a49154d82b180b521a5c0f8ff60607a2b159af9b64f` |
+| `assets/index-krLtXbu3.js` SHA-256 | `21da5e9fc37dd10d4d966ffedc890546c200f5f3ff4bdb89ac0deeb4db015f29` |
+| `assets/index-DlQhF9OB.css` SHA-256 | `9cfb45a22a62fc9d62414de122384f6f73b19fe19c69d43e6cc0317394e5fd32` |
+| `sw.js` SHA-256 | `86d6194ae42ce84119701d1e2eade1cb72b4a771ef6ec12141fa009895dc0685` |
+
+Images reside in the existing `us-central1` project Artifact Registry
+`cloud-run-source-deploy` repository under each service name. Both services
+were staged with `--no-traffic`, `--revision-suffix=ota-admin-59f81b5` and
+`--tag=ota-admin-release`. Before promotion, prior revisions still held 100%.
+Runtime contract hashes (identities, environment/secret references, container
+settings, invocation/ingress and limits) match before/staged/promoted snapshots.
+All previous revision tags remain; neither invocation IAM policy gained bindings.
+The existing service identities/origins/entrypoints listed in the alignment
+section remain unchanged. No notifier deployment, bucket configuration,
+Firestore rules/index deployment or IAM change was performed.
+
+Staging and production verification reused the existing authenticated CPO
+browser session, keeping bearer values inside the browser. Read-only calls to
+Admin fleet, access bootstrap, Inventory bootstrap and OTA releases/fleet/history
+returned 200; six devices/two Customers remained visible. Receiver operator
+bootstrap was equivalent to the prior revision: three Courses, push configuration
+and notification preferences retained. Dashboard reads returned existing
+history and daily/weekly/monthly reporting. Missing/invalid Firebase tokens
+returned 401 on staged Admin/Inventory reads; the receiver returned 404 for
+Admin OTA routes. Prior local tests cover authenticated non-Admin 403 denial;
+no separate non-Admin session was created in production.
+
+After promotion and Hosting publication, the existing authenticated Admin
+session loaded the actual Firmware OTA dashboard and performance-report UI.
+At 375/430/768/1024/1440 px, all seven Admin sections remained present, OTA had
+no horizontal overflow or error alerts, the release selector had only its
+placeholder and exact-assignment review was disabled. Canonical Customer/Course
+devices and Inventory/Maintenance groups displayed without creating capability
+records. The API returned `releases: []` and empty deployment/status history;
+all six OTA collections were empty before and after. No device discovery,
+schedule, artifact, publication or assignment route was exercised.
+
+Hosting CLI 14.27.0 failed before publication because its separate cached
+credentials were expired. The same authorized Google account successfully used
+the supported Firebase Hosting REST version/populateFiles/upload/finalize/release
+flow, without changing credentials or permissions. Its configuration exactly
+matches prior live routing/cache settings. All 127 uploaded files were verified
+by decoded SHA-256 and cache policy on both production origins (254 checks),
+including all 107 accepted Driving Range files, manifest and service worker.
+All 52 established QR destinations returned the deployed SPA; eight additional
+SPA route checks passed. No public sign/mapping identity was changed.
+
+No error-severity logs were returned for either new revision during the bounded
+rollout observation. This is not an endurance test or physical-phone/Safari
+acceptance. No live COMPLETE/Cancel, stock/shift changes, report generation
+(which can refresh registers), push send, credential operation or physical
+device interaction was induced. Existing regression evidence covers those
+mutation paths; live evidence is explicitly read-only.
+
+Rollback anchors remain Hosting `c6a6de50274e48b5`, Admin
+`fairway-admin-cartperf-35e7c6c` and receiver
+`fairway-button-receiver-roll-26b6201`. Restore Hosting first, then Admin and
+receiver traffic as required, preserving tags and credential-operation safeguards.
+No rollback was necessary. Rollback does not restore data or revoke firmware.
+
+Next gates are separately authorized private artifact storage/IAM and bearer-path
+log protection (including organization/export visibility), corrected nightly
+successor qualification, all five publication prerequisites and exact canonical
+capability evidence. Only then authorize publication, FRB-0005's first physical
+autonomous transition and subsequent recurring transition. Empty-catalog Admin
+deployment is complete; Prototype 4.0 physical OTA acceptance remains open.
+
+#### Securing the accepted Admin baseline (2026-11-09)
+
+The CPO accepted the deployed capability and separately authorized a normal
+commit/push to `https://github.com/josh-fairwayrefresh/fr-main.git` on
+`review/frb0005-increment-1.0-source-checkpoint-20261105`. The baseline commit
+contains the production-aligned backend/frontend source, dependencies,
+configuration, tests and current owner documentation. Per-file reconciliation
+matches all 41 backend and 165 frontend packaged source entries to the recorded
+deployment inventories; source identity is the archive digests above, not an
+assumption based on ancestry. Public assets and build verification remain
+the accepted deployment evidence; generated bundles/archives are not committed.
+The published artifact is 127 files, with exact inventories retained as above.
+
+Unrelated firmware work and disposable `scripts/__pycache__` files are excluded
+from the Admin baseline commit and left in the worktree. In particular, the
+unbuilt recurring-worker correction and its host-test changes are not part of
+the deployed backend/frontend baseline and still require their own source
+checkpoint/remote backup before firmware qualification/publication.
+This commit does not activate `PUBLICATION_APPROVALS`; all five release-specific
+publication prerequisites remain required and are not satisfied by an Admin
+baseline backup.
+Commit identity and fast-forward remote verification are reported by the
+authorized Git operation; this document does not embed its own commit hash.
+
+#### Next commissioning increment — proposed authorization scope
+
+The Admin rollout is accepted; no further architecture/preflight work is needed.
+Existing artifact services, reviewed catalog, exact-device review and local
+00:30/DST policy remain the implementation. Suggested next authorization:
+
+1. **Delivery infrastructure, before publication:** configure one dedicated
+   private GCS bucket with uniform access and public-access prevention; grant
+   Admin bucket-scoped create/get and receiver get, preserving existing identities.
+   Set only the reviewed `FAIRWAY_OTA_BUCKET` binding. Apply the prepared bearer-path
+   exclusion to all applicable sinks; obtain organization `logging.sinks.list`
+   visibility and verify independent routing/exports and sanitized application
+   logging. Verify this with a separately approved short-lived test grant before
+   enabling artifact use. Do not make public objects or weaken auth.
+2. **Corrected release qualification, before publication:** separately checkpoint
+   and back up the existing scheduler correction/tests; reconcile image-size
+   guards to the effective 434,176-byte (424 KiB) MCUboot move-swap ceiling and
+   add boundary regressions. Current original nightly images are 280,144 bytes
+   (273.578 KiB), leaving 154,032 bytes (150.422 KiB), 64.523% utilization.
+   Effective-config evidence/calculation is owned by the Firmware Specification.
+   Agree new immutable successor versions for the 0.1alt and 1.0 lines; preserve
+   OTA 0.1 and all original artifacts. Then authorize builds/signing and focused
+   regression/release verification. No version proposal is approval to build.
+3. **Publication gate:** complete firmware verification/testing, explicit CPO
+   release approval, Alignment Register recognition, source/release records
+   committed/backed up to the canonical remote, and explicit CPO publication
+   authorization. Only then add exact reviewed catalog evidence and publish.
+   Securing this Admin baseline alone does not satisfy firmware release gates.
+4. **Physical commissioning, after infrastructure and first publication:**
+   separately authorize canonical FRB-0005 capability evidence, inspect its
+   persisted/bootstrap-check evidence read-only, and review/confirm only that
+   exact device. Do not assume the one-time 900-second opportunity remains
+   available or rearm it silently; if consumed, stop that transition for CPO
+   recovery direction. Do not erase/reflash OTA 0.1 as routine setup.
+   Demonstrate authenticated download, verification, installation, trial and
+   confirmation of the corrected 0.1alt successor, preserved identity/
+   provisioning/connectivity, request/COMPLETE/new-transaction operation and
+   CPO acceptance. Then separately authorize the corrected 1.0 successor and
+   demonstrate the subsequent autonomous update at the canonical local 00:30
+   window, including subsequent no-update recurrence and operational acceptance.
+
+Infrastructure and corrected-release qualification can proceed independently,
+but publication requires both plus governance; physical assignment/install
+requires explicit target/operation authorization. This preparation authorizes
+none of those cloud, firmware or physical operations.
 
 ### OTA commissioning implementation — local only
 
-The current branch adds an end-to-end source path for the approved OTA 0.1 →
-OTA 0.1alt → OTA 1.0 sequence. It is not deployed to production and no
-physical device or production record was changed.
+The approved Prototype 4.0 sequence is physical USB initialization with OTA 0.1,
+then a first autonomous OTA transition to OTA 0.1alt, then a subsequent autonomous
+transition to OTA 1.0. These are bootstrap/validation stages, not three equivalent
+downloadable releases and not a mandatory three-release path for every future
+device. OTA 0.1 is never published or assignable through OTA. Its signed binary
+in the accepted package is a build/verification product, not an OTA inventory
+entry. The distribution backend/Admin capability is deployed with an empty
+catalog; artifact infrastructure and release publication remain gated.
+The separate authorized FRB-0005 USB baseline
+installation/provisioning is recorded above; this local readiness increment
+does not change physical devices or production records.
 
 The release builder `scripts/build_ota_release.py` produces a common,
 credential-free merged HEX image for the initial USB installation, a signed
@@ -46,9 +233,9 @@ Protected Storage, NV-counter, and release-schedule configuration.
 
 | Release | Firmware / MCUboot version | Schedule |
 |---|---|---|
-| OTA 0.1 | `0.1.0+1` | One persisted check 15 minutes after the first normal boot |
-| OTA 0.1alt | `0.1.0+2` | Nightly 00:30 assigned-Course local time |
-| OTA 1.0 | `1.0.0+1` | Nightly 00:30 assigned-Course local time |
+| OTA 0.1 (USB only) | `0.1.0+1` | One persisted check 15 minutes after the first normal boot |
+| OTA 0.1alt | `0.1.0+2` | Configured nightly local 00:30; original worker has the recurrence defects below |
+| OTA 1.0 | `1.0.0+1` | Configured nightly local 00:30; original worker has the same recurrence defects |
 
 #### Accepted local production package and source checkpoint (2026-11-09)
 
@@ -138,29 +325,367 @@ The generated flash layout is MCUboot `0x00000–0x0C000`, primary slot
 `0xE8000–0xF0000`, TF-M NV counters `0xF0000–0xF8000`, and TF-M PSA
 Protected Storage `0xF8000–0x100000`. Primary and secondary slots are each
 432 KiB. The fixed-partition DTS, static Partition Manager file, and generated
-map now agree. The generated images have not been compared with FRB-0005's
-installed MCUboot; the CPO's one-time USB baseline installation and separate
-physical validation remain outstanding.
+map now agree. FRB-0005's read-back-verified installation used the accepted
+OTA 0.1 merged image, including its production-key MCUboot. Physical autonomous
+OTA verification, activation and confirmation remain outstanding.
 
 Device/API ownership is split between `samples/fairway_power_sandbox/src/ota_*`,
 `fairway_backend/cloudrun_receiver/lib/ota/`, `index.js`, and the Admin
 `OtaManagement.jsx` view. Backend endpoints include Admin release
 registration/listing and exact-device assignment; device endpoints provide
 schedule, authenticated discovery, artifact download, and lifecycle reporting.
-The deployment environment must set `FAIRWAY_OTA_BUCKET` and grant the
-receiver's runtime identity only the required bucket object creation/read
-permissions. The short-lived download token currently appears in the artifact
-request path; before production deployment, configure and verify Cloud Run
-request-log redaction for that path so bearer tokens cannot be retained in
-request logs. This task did not configure a bucket, IAM, log policy, service,
-or production assignment.
+Before artifact publication/delivery, set `FAIRWAY_OTA_BUCKET`; grant the Admin
+runtime identity bucket-scoped object create/get and the receiver object get.
+An initial empty-catalog Admin rollout does not require artifact storage.
+The short-lived download token currently appears in the artifact request path;
+before artifact use, configure and verify Log Router protection for that path
+so bearer tokens cannot be retained in request logs or independent exports.
+No bucket, IAM, log policy, service deployment or production OTA
+assignment was configured by the local readiness work.
 
-Before any physical commissioning, separately authorize the target and
-operation, confirm FRB-0005's registry identity/credential/customer
+#### Prototype 4.0 Admin/distribution readiness — implemented locally
+
+The existing Admin OTA view and `lib/ota/` service remain the single management
+path. No separate mobile, release-management or firmware system is introduced.
+
+- Global schema-v2 Admin authorization and existing allowed-origin checks protect
+  release publication/inventory, deployment history and exact-device assignment.
+  Cart/customer users cannot use these endpoints.
+- The CPO dashboard is a two-column approved-release selector and expandable
+  canonical Customer/Course/Device tree, plus separate Inventory and Maintenance
+  groups. It contains no uploads, manifests, signing controls or arbitrary time
+  picker. VSC retains engineering publication ownership through the existing
+  Admin-authenticated `POST /api/v1/admin/ota/releases` contract; the dashboard
+  never calls that operation. VSC supplies the original release manifest,
+  signed image as `artifact_base64`, matching `release_id`, `version`,
+  `version_string`, `hardware_ids`, `sha256` and optional notes. No publication
+  is authorized by implementation/testing this workflow.
+- `accepted_releases.js` pins accepted image bytes/fingerprint, but hash acceptance
+  alone is insufficient. `publication_policy.js::PUBLICATION_APPROVALS` is a
+  reviewed source-controlled evidence catalog; it is deliberately empty now.
+  Publication, assignment, discovery and artifact grants require its release
+  entry to match the digest and include verification/testing, explicit CPO
+  release approval, Alignment Register recognition, source/release-record commit
+  IDs plus designated-remote backup evidence, and explicit CPO publication
+  authorization. This evidence is established by the engineering review workflow,
+  not self-asserted in an upload body and not verified by a live GitHub API call
+  during a device check. Entries also enumerate exact authorized commissioning
+  device IDs. The server rejects OTA 0.1 publication independently of this catalog.
+  Existing published records are not automatically grandfathered.
+- Exact bytes, header version, slot size and original production provenance remain
+  verified before private create-only storage. Previously signature-verified
+  accepted bytes are allowlisted; this is not a new general-purpose signature
+  verifier. Admin/receiver need no signing key. Replacement bytes require separate
+  release acceptance and reviewed catalog/provenance updates, never a renamed
+  or overwritten accepted package.
+- Publication and assignment are independent. Publication states are
+  `publishing`, `published`, `publish_failed`; only published accepted images
+  can be assigned. A failed publication can be retried with the same accepted
+  image. An existing immutable object is reused only when size and stored
+  release/digest metadata match; it is never overwritten. An interrupted worker
+  left in `publishing` is a stop/inspect condition requiring separately authorized
+  operational reconciliation, not an automatic overwrite or assignment.
+- `GET /api/v1/admin/ota/fleet` projects canonical `customers/{id}`,
+  nested Courses and `devices/{id}`, with OTA reports/assignment evidence.
+  There is no separate asset inventory. Device lifecycle alone determines exactly
+  one operational category; retired records are not selectable. Inventory and
+  Maintenance are headquarters-held, not deployed to a Customer/Course.
+  Canonical lifecycle transitions to either state clear active placement;
+  legacy retained placement copies are not interpreted as an active deployment
+  and are not rewritten by this increment.
+- `POST /api/v1/admin/ota/assignment-reviews` takes only `release_id` and
+  1–50 unique explicit `device_ids`, never a group selector or arbitrary date.
+  Server-side validation resolves each canonical device, verifies physical OTA
+  capability/trust, release-specific commissioning authorization, lifecycle,
+  Course/timezone and absence of an active assignment. The five-minute,
+  Admin-bound review records exact devices, local windows, UTC thresholds and
+  eligibility basis. `POST /api/v1/admin/ota/assignment-reviews/{id}/confirm`
+  revalidates everything transactionally before creating all deployments,
+  exact-device assignments and audit events atomically. Confirmation is idempotent.
+  Changed eligibility/window or an expired review requires a fresh review.
+  The assignment retains the reviewed placement/trust/timezone basis hash.
+  Discovery and existing artifact grants fail closed if that basis subsequently
+  changes; the status view identifies blocked delivery. Reconcile such a pending
+  assignment through a separately authorized engineering operation rather than
+  silently transferring authorization across tenants or changing its window.
+  Pre-integration assignments lacking a basis hash are also blocked and require
+  inspection; do not backfill evidence or recreate assignments automatically.
+  Group membership additions never expand authorization. The old direct
+  `/devices/{id}/assignment` route fails closed with `assignment_review_required`.
+- Physical OTA capability is non-secret commissioning evidence on the existing
+  Device record: `ota_capability: { verified, hardware_id, signing_fingerprint,
+  schedule_mode, evidence_record }`. Missing/unverified capability fails closed;
+  neither a device ID nor a manually entered firmware-generation label proves
+  initialization. No production capability records were written here. Existing
+  field credentials are never returned by the OTA fleet read model.
+- **Routine policy is fixed at next local 00:30**, using the deployed Course's
+  canonical IANA timezone. Inventory/Maintenance use
+  the CPO-approved `America/Los_Angeles` headquarters policy, defined by
+  `fleet_authorization.js::HEADQUARTERS_TIME_ZONE` and used by the runtime
+  without an environment override. This supersedes the earlier unconfirmed
+  Pacific assumption; no separate HQ policy decision is outstanding.
+  The backend computes DST-aware UTC windows and the review shows both local
+  time/zone and UTC. There is no browser-timezone scheduling dependency.
+- **Not-before gates eligibility, not device wake-up or installation.** At/after
+  that threshold the device can discover the assigned image autonomously.
+  The only bootstrap exception is verified FRB-0005 receiving OTA 0.1alt:
+  immediate eligibility preserves its installed one-time 900-second check,
+  explicitly labeled in review rather than pretending it is nightly.
+  Publication does not restart it; an observed completed check blocks a new
+  bootstrap assignment. If no check was observed, pending/consumed status is
+  unknown, not guaranteed. A consumed check needs separate CPO direction.
+- Admin displays backend-received check-in, image offer and artifact-request
+  timestamps separately from authenticated device lifecycle reports. Download
+  authorization/request is not proof of downloaded bytes, installation or boot.
+  `verifying`, `staged`, `activation_pending`, `trial_boot`, `confirmed`,
+  `failed` and `rolled_back` remain distinct. Trial/confirmation reports must
+  name the assigned firmware version; duplicates do not rewrite the original
+  report timestamp. Reports are authenticated device claims, not independent
+  MCUboot attestation. Missing reports mean unknown.
+- Download tokens expire after 30 minutes, are stored hashed and are rechecked
+  against the current assignment and canonical device/release eligibility. Browser access
+  to OTA Firestore collections remains denied by the existing catch-all rule.
+  Do not expose bucket objects publicly.
+- Device OTA responses, including check results containing an artifact grant
+  and error responses, are `private, no-store` with `no-referrer`. Application
+  artifact/OTA internal-error logs contain a fixed operation/error category,
+  never raw storage/transport error text, request URLs or bearer values.
+  These controls do not redact platform-generated Cloud Run request logs.
+  The release dropdown uses the same accepted-byte, hardware, signing-trust and
+  publication checks as assignment, not a weaker UI-only approval flag.
+
+Local validation includes focused OTA route/service/storage tests, existing
+backend/frontend regression suites, production-mode frontend compilation and
+the real C delivery worker/scheduler in host tests for both schedule modes.
+The fleet browser integration uses the actual Admin view/API with fictional
+release approvals/devices and in-memory Firestore on loopback, not accepted
+artifact publication. It demonstrates cross-Customer/Course, Inventory and
+Maintenance selection, partial parent states, collapse/expand preservation,
+exact-device review and local-only confirmation. No simulation is a production
+record, device check-in or installed-firmware observation.
+
+Prior local validation baseline: 33 host ztests pass in each ONE_TIME and NIGHTLY
+configuration; full backend `npm test` passes, including 17 OTA API and
+14 fleet/governance tests; all 64 frontend tests and the production-mode build
+pass (existing bundle-size advisory only). Full Admin-shell loopback checks
+at 375, 430, 768, 1024 and 1440 px show no page overflow or clipped OTA
+controls, including the review confirmation. A four-device arbitrary selection
+and a five-device all-group review resolve exact fictional IDs; review alone
+creates no assignments. These are host/browser results, not Nordic release
+compilation, real Firestore transaction contention or physical-phone/Safari
+acceptance.
+
+#### Accepted-image scheduler discrepancy and required release lineage
+
+The three accepted manifests share historical source digest
+`6c786dd3…`; the verified checkpoint inventory records the original
+`ota_delivery.c` SHA-256
+`d6696e0249ba5042622cb86ab47fa83742b79594be272e4f4c1285560f6f7760`.
+OTA 0.1 enables one-time mode; OTA 0.1alt and OTA 1.0 enable nightly mode.
+Source inspection and real-worker host regressions establish:
+
+- Both schedule preparation and the worker stop condition incorrectly treated
+  `one_time_complete` as a nightly stop flag. One-time-to-nightly migration
+  intentionally retains that flag, so accepted OTA 0.1alt can boot/report after
+  the first OTA yet fail to schedule its subsequent nightly update.
+- Accepted nightly workers exit after no-update/network-failure handling and
+  after release processing, so even fresh nightly state is not recurring.
+  The OTA 0.1alt → OTA 1.0 transition and later nightly operation are at risk.
+  OTA 1.0 contains the same nightly defects. These are source-confirmed,
+  not physically demonstrated failures.
+- Local source now mode-gates both completion guards, keeps the nightly worker
+  sleeping through successive server-provided windows, and retries unavailable
+  schedule discovery with a bounded 24-hour offline backoff. Server-provided
+  local 00:30/DST policy is reacquired rather than replacing it with a permanent
+  24-hour UTC cadence. Protected-state corruption/save failures still stop
+  explicitly, without storage repair. The persisted state format, rollback
+  migration, wire protocol, lifecycle manager and power-policy ownership are
+  unchanged. OTA 0.1's single 900-second behavior remains unchanged in tests.
+- No accepted binary, configuration or manifest has been rebuilt, re-signed,
+  overwritten, flashed or published. All twelve accepted package file hashes
+  are checked against the protected pre-change archive inventory.
+- Recurring qualification needs a corrected OTA 0.1alt-line successor before
+  the first autonomous transition, followed by a corrected OTA 1.0-line successor
+  for the subsequent transition. New version/build identities and immutable
+  packages require CPO agreement; do not silently reuse the accepted names/bytes
+  as though corrected. A possible version progression is `0.1.0+3` then
+  `1.0.0+2`, **proposal only**, not an authorized build or release.
+  Keep the installed USB-only OTA 0.1 unchanged. Complete firmware testing,
+  authorized release builds/signature verification, CPO acceptance, Alignment
+  Register recognition, source/release-record commit and remote backup, and
+  explicit publication authorization before activating catalog entries.
+
+#### Production deployment prerequisites — require separate CPO authorization
+
+1. Reuse the completed 2026-11-09 read-only preflight and established production
+   references. Immediately before authorized rollout, recheck serving identities
+   and traffic for rollback anchoring, not another provenance investigation.
+   The initial deployment performs no real-device assignment or commissioning.
+2. Select an isolated, reviewed backend source package/lockfile containing the
+   OTA modules and `@google-cloud/storage`, with no local credentials or signing
+   material. Use the existing [backend deployment](#backend-deployment) and
+   [web deployment](#web-application-deployment) procedures/targets, preserving
+   existing production environment variables, runtime identities, CORS allowlist,
+   authentication and service entry points.
+3. Before artifact publication/delivery (not an empty-catalog Admin rollout),
+   configure a dedicated private bucket with uniform bucket-level access and
+   enforced public-access prevention. Set `FAIRWAY_OTA_BUCKET` on the services
+   that publish/serve artifacts. Grant Admin only required object create/get
+   permissions (get supports exact retry validation); receiver requires object
+   get. If the services share an identity, document its combined permissions.
+   Do not grant public access, object deletion or project-wide Storage Admin.
+4. **Security release gate:** configure and verify a supported request-log
+   exclusion/redaction or equivalent delivery control that prevents the
+   `/api/v1/device-ota/artifacts/<bearer>` path from retaining tokens in Cloud Run
+   access logs, application logs, exports and other retention sinks. Cloud Run
+   request logging is platform-generated; an application logger filter alone
+   is insufficient. Verify against the actual logging configuration and
+   short-lived test grants before production artifact use. If that cannot be
+   demonstrated without changing the accepted firmware contract, stop for an
+   architectural decision rather than enabling artifact delivery with a known
+   token leak. Empty-catalog deployment issues no artifact grants.
+   The prepared Log Router exclusion object is
+   `fairway_backend/cloudrun_receiver/config/ota-artifact-log-exclusion.json`.
+   It is enabled and unsampled, matches all `cloud_run_revision` request URLs
+   containing `/api/v1/device-ota/artifacts/`, and intentionally has no revision,
+   service-name or response-status restriction. Under separate cloud-write
+   authorization, add its name/description/filter/disabled values as an exclusion
+   on the project's `_Default` sink and every other applicable project,
+   folder/organization aggregated or export sink routing these request logs.
+   Preserve existing sink destinations, filters and exclusions. A project
+   exclusion does not protect an independently routed aggregated sink.
+   Inspect intercepting sinks and retention/exports as part of this verification.
+   Do not disable all request logging or assume deleting retained entries
+   retroactively protects already issued tokens.
+5. Verify production Firestore rules deny all direct client reads/writes to OTA
+   collections, including token, device-status and authorization-review documents. No new composite
+   index is required by the current single-field inventory/history queries.
+   Establish separately authorized token expiry-document cleanup/retention;
+   expiry is enforced by the API even before cleanup exists. The
+   headquarters policy is already fixed to `America/Los_Angeles`; no runtime
+   environment variable or further CPO timezone approval is needed. Record
+   capability evidence through a separately authorized canonical Device
+   commissioning operation, never a duplicate inventory or an inferred label.
+6. Deploy only the separately authorized receiver, Admin and production Hosting
+   surfaces. Record prior service revisions and Hosting version for rollback;
+   code rollback does not undo published objects, assignments or device state.
+   Perform no artifact publication or assignment as a deployment side effect.
+   Keep the reviewed publication catalog empty for the initial capability rollout.
+   Deploy compatible backend services before Hosting, retaining current runtime
+   project/origin/mode settings. Do not add a bucket setting until artifact
+   infrastructure is separately authorized and configured.
+   Record exact service revisions/images, source/lockfile identity, current
+   traffic allocations and Hosting version before rollout. Roll back Hosting
+   first if necessary, then restore each service's recorded traffic allocation;
+   preserve existing credential-recovery safeguards described in the rollback
+   procedure. Do not select historical revision names without current preflight.
+7. Smoke-test Admin denial for non-Admin users, empty inventory/read-only status,
+   existing request/COMPLETE behavior, targeted eligibility and log controls.
+   Publication, FRB-0005 assignment and physical OTA qualification then require
+   explicit operation-specific authorization and separately accepted corrected
+   successor packages; do not use the original nightly packages as though
+   they contain the local scheduler correction.
+   Do not publish/assign OTA 1.0 or perform rollback testing implicitly.
+
+#### Production source/configuration alignment (2026-11-09, local only)
+
+The CPO established Admin `35e7c6c`, receiver `26b6201`, OTA checkpoint
+`0f21f5ebf849695b40898253136d4589b525a6a4` and Hosting
+`c6a6de50274e48b5` as the integration baseline. Git ancestry alone is not a
+functional compatibility test. Direct comparison against shared base
+`97332a0dc63bd4a87eb0ae3a5b30708cc3e02c38` found missing production reporting,
+Inventory/QR, notification recovery and responsive Cart functionality.
+The production delta in the two application subtrees is now integrated, not
+a wholesale replacement of the OTA tree. All 252 production-delta files were
+accounted for, including tests and accepted public assets. Production-only
+behavior is preserved; overlapping entrypoints combine Reports/staff routes
+with OTA routes, credential recovery protections and headquarters-held
+Maintenance behavior. The shared backend includes the reporting changes
+through `35e7c6c`; its receiver entrypoint remains compatible with `26b6201`.
+No notifier deployment is included.
+
+`firebase.json` retains the exact production site and SPA rewrite, general
+`no-cache`, and `public,max-age=31536000,immutable` for `/assets/**`. The
+production build again verifies all 107 accepted Driving Range public assets.
+Backend dependency/lockfile alignment retains production PDF/reporting
+dependencies and the OTA storage dependency; frontend production dependency
+and build contracts are restored. The mobile Admin navigation has seven
+columns for Reports plus Firmware OTA, without dropping existing sections.
+Publication approvals remain empty; no firmware source or accepted artifact
+is changed by this alignment.
+
+Alignment validation: the backend operational/API suite passes, including
+33 Admin API, 42 receiver, 29 Inventory operations, 17 OTA API,
+20 fleet/governance and 16 performance report tests. Frontend evidence is
+95 existing unit tests plus two new
+Hosting/empty-catalog checks, all passing. Thirteen selected browser tests
+pass for Reports, Inventory/shift/sign-out guards, notification recovery,
+responsive Cart layout and the combined seven-section Admin shell.
+The new shell regression checks Reports/OTA at 375/430/768/1024/1440 px,
+no horizontal overflow, HQ-held Maintenance placement and service-group
+preservation on explicit deployment using fictional local data.
+Production compilation and the 107-asset check pass; the existing large-chunk
+advisory remains. Prior firmware and comprehensive OTA commissioning evidence
+is reused, not repeated. These checks do not represent production mutations
+or physical-device acceptance.
+
+Deployment continues to use the existing Cloud Run services/entrypoints:
+
+| Contract | Receiver | Admin |
+|---|---|---|
+| Service / region | `fairway-button-receiver` / `us-central1` | `fairway-admin` / `us-central1` |
+| Runtime identity | `936892386735-compute@developer.gserviceaccount.com` | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
+| Runtime environment / mode | `FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=receiver` | `FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=admin` |
+| Entry function | `fairwayButtonReceiver` | `fairwayAdmin` |
+| Prior serving revision | `fairway-button-receiver-roll-26b6201` | `fairway-admin-cartperf-35e7c6c` |
+
+Both project environment variables remain `savvy-kit-496703-r5`. Preserve
+all existing environment/secret bindings, invocation settings, limits, traffic
+tags and Admin allowed origins
+`https://savvy-kit-496703-r5.web.app,https://app.fairwayrefresh.com`; do not
+replace them with a partial `--set-env-vars` list. Neither service needs a
+bucket setting for the empty rollout. Existing app authorization remains the
+boundary on public-invocation services. Deploy isolated reviewed source without
+local credentials, `.env` files or signing material.
+
+With separate CPO authorization, stage receiver and Admin revisions with no
+traffic, perform nonmutating readiness/authentication smoke checks, promote
+receiver then Admin, and deploy Hosting last (`--only hosting`, not rules/indexes).
+Use the established `gcloud run deploy` source/function commands with
+`--no-traffic` and distinct approved revision tags for this staged rollout;
+do not use the immediate-traffic examples elsewhere in this guide unchanged.
+Deploy only from the isolated reviewed package and retain its exact source
+and lockfile checksums with the rollout record.
+Do not probe real-device OTA checks or create production assignments as a smoke
+test. On failure restore Hosting version `c6a6de50274e48b5`, then Admin traffic
+to `fairway-admin-cartperf-35e7c6c` and receiver traffic to
+`fairway-button-receiver-roll-26b6201`, preserving existing tags. These anchors
+must still be checked immediately before rollout. Code rollback does not
+restore Firestore data.
+
+Artifact follow-on remains gated: project `_Default` retains 30 days and has
+no bearer-path exclusion; organization `284487864580` sink inspection requires
+`logging.sinks.list`. Receiver's existing `roles/run.builder` includes object
+get; it is not evidence that the missing dedicated private bucket is configured.
+Do not broaden runtime IAM merely to make the empty dashboard deployable.
+
+An empty, governed Admin capability can be deployed independently of firmware
+successor acceptance, once the infrastructure preflight and deployment
+authorization are satisfied. Qualified release publication, real-device
+assignment and physical commissioning are separate gates, not prerequisites
+for locally finishing the Admin UI. No source-only test establishes live IAM,
+log-sink effectiveness or production rollback availability.
+
+For initial USB commissioning, separately authorize the target and
+operation, confirm the registry identity/credential/customer
 association, install the OTA 0.1 merged image by the established USB
 procedure, provision the existing backend credential into PSA Protected
-Storage through service-mode UART, and verify normal request/COMPLETE
-behavior. Assign OTA 0.1alt only to FRB-0005 through the Admin UI; confirm
+Storage through the existing USB CDC-ACM serial port in service mode (see
+[USB Runtime UART Console — Verified Development Connection](#usb-runtime-uart-console--verified-development-connection);
+no additional UART cable or adapter is required), and verify normal request/COMPLETE
+behavior. FRB-0005 has completed those USB/provisioning/functional steps;
+do not repeat its erase/flash merely to deploy Admin. Under separate future
+authorization, assign OTA 0.1alt only to FRB-0005 through the Admin UI; confirm
 download, signature acceptance, trial-health confirmation, post-reboot
 stability, identity retention, customer CUST-0002 request attribution,
 low-power behavior, and backend reporting. Do not describe the sequence as
@@ -476,6 +1001,97 @@ The Alignment Register preserves historical release evidence and provenance;
 its entries describe the state at their recorded dates. It does not supersede
 the current subsystem owner Sources of Truth or newer accepted evidence
 summarized above. New entries are placed at the TOP of this register.
+
+### Prototype 4.0 empty-catalog OTA Administration production release (2026-11-09)
+
+- CPO-authorized no-traffic staging, receiver-then-Admin promotion and Hosting
+  publication completed. Current source/archive, image/build and Hosting
+  identities are recorded in the production deployment subsection above.
+- Runtime/secret/origin contracts and existing tags retained; complete
+  127-file Hosting artifact and all 107 accepted Driving Range assets verified
+  on both origins. Authenticated read-only OTA/fleet/Inventory/Cart/reporting
+  checks pass; actual empty-catalog OTA UI passes five responsive widths.
+- All six OTA collections remain empty. No business mutations, Firestore
+  rules/index or IAM changes, firmware build/signing/publication/delivery,
+  real-device assignment, physical operation, Git commit or push occurred.
+- Prior production versions remain available as rollback anchors. Firmware
+  publication/infrastructure and physical commissioning remain separate gates;
+  this deployment does not establish Prototype 4.0 physical OTA completion.
+
+### Prototype 4.0 production/OTA source alignment (2026-11-09, local only)
+
+- Integrated the demonstrated production application delta against the existing
+  OTA worktree, preserving credential protections, OTA contracts and corrected
+  local scheduler source. Reports, Inventory/QR, notification recovery and
+  responsive Cart behavior are no longer absent from the candidate.
+- Reconciled production Hosting routing/cache headers, retained accepted public
+  assets and restored production dependency/build contracts. Publication
+  approvals remain empty; accepted firmware artifacts remain untouched.
+- Backend regressions, 97 frontend unit/config checks, 13 selected browser
+  regressions and production compilation/107-public-asset verification pass.
+  The current alignment subsection above owns rollout identities, configuration
+  preservation and rollback anchors. No new firmware tests or production
+  preflight were performed.
+- Source/configuration is ready for separately authorized staged empty-catalog
+  deployment. No deployment, cloud write, firmware build/signing/publication,
+  real-device assignment, physical operation, Git commit or push occurred.
+
+### Prototype 4.0 Admin OTA integration completion (2026-11-09, local only)
+
+- **CPO decision reconciliation:** headquarters timezone is approved as
+  `America/Los_Angeles`, superseding the unresolved-HQ status of the preceding
+  local checkpoint. Course IANA zones still govern deployed assets; the fixed
+  update window remains local 00:30. OTA 0.1 remains USB-only.
+- **Source integration:** runtime HQ default, shared catalog/assignment
+  eligibility, post-authorization placement/trust/timezone binding, private
+  noncacheable device responses, sanitized application transport-error logging,
+  and a prepared Cloud Logging exclusion complete the remaining local gaps.
+  Existing fleet selection/review/confirmation and publication separation are
+  preserved. No new release approvals or production records were fabricated.
+- **Validation:** full backend operational regressions pass after the shared
+  receiver response/error changes; focused OTA coverage includes 17 API and
+  20 fleet/governance tests plus the logging-exclusion configuration test.
+  Eight focused frontend/authorization tests and production frontend compilation
+  pass. Prior firmware and unrelated frontend tests are reused, not repeated.
+  Full-Admin-shell browser validation demonstrates exact four-device
+  confirmation and authenticated **simulated** confirmed/downloading/failed
+  reports, with a fourth device remaining assignment-only and firmware unknown.
+  Phone/tablet/desktop checks at 375/430/768/1024/1440 px pass without overflow.
+  Rules and exclusion configuration checks validate local source shape, not
+  deployed rules, live Log Router efficacy or physical installation.
+- **Deployment boundary:** local validation supports review of the Admin
+  capability with an empty governed catalog. Live bucket/IAM, log routing,
+  revision/Hosting rollback preflight and CPO deployment authorization remain
+  required. Firmware acceptance/publication and physical commissioning remain
+  independently gated; this entry is not authorization for any cloud operation.
+
+### Prototype 4.0 OTA artifact recognition and local recurrence/fleet correction
+
+- **Recognized immutable artifacts:** OTA 0.1 `0.1.0+1` (USB initialization
+  only), OTA 0.1alt `0.1.0+2` and OTA 1.0 `1.0.0+1`, CPO-accepted
+  2026-11-09. Exact package hashes, original dirty-build provenance and
+  source-only checkpoint `0f21f5ebf849695b40898253136d4589b525a6a4`
+  are recorded at the top of this Guide. This entry does not change that
+  provenance, authorize publication or assert remote backup of current edits.
+- **Discrepancy:** both accepted nightly packages contain source-confirmed
+  recurrence defects. Local real-worker host tests establish corrected
+  mode-sensitive completion and repeat-check/retry behavior; no accepted image
+  was rebuilt/re-signed/replaced. Corrected successors need separately approved
+  identities and complete acceptance. OTA 0.1 remains physically installed and
+  unchanged; the remaining pending/consumed one-time check state is unknown.
+- **Local integration:** fixed-local-00:30 exact-ID review/confirmation,
+  canonical fleet hierarchy including Inventory/Maintenance, server-governed
+  publication and truthful lifecycle reporting replace engineering controls
+  in the CPO dashboard. Fictional loopback validation is not production
+  publication/assignment or device installation.
+- **Publication/readiness status:** blocked. Current source/record edits are
+  uncommitted, the reviewed publication catalog is empty, HQ timezone policy
+  needs CPO confirmation, production infrastructure/log protections require
+  verification, and physical autonomous transitions/continued operation remain
+  unaccepted. Existing artifact acceptance and any earlier artifact-specific
+  publication authorization do not authorize corrected successor artifacts.
+  No production deployment, firmware build, flash, publication, assignment,
+  commit or push occurred in this increment.
 
 ### Production Deployment: Cart Operator Mobile Responsiveness (2026-10-15)
 

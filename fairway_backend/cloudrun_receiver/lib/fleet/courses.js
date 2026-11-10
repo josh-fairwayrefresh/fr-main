@@ -3,7 +3,7 @@
 const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
 const { CUSTOMERS_COLLECTION } = require('./customers');
-const { isValidServiceSchedule } = require('../course_service');
+const { courseOperation } = require('../course_operation');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
@@ -29,10 +29,12 @@ function isValidIanaTimezone(timezone) {
  *
  *   course_name                course name
  *   timezone                   IANA timezone name (e.g. "America/Los_Angeles")
- *   service_schedule           { days: [0-6], start: "HH:MM", end: "HH:MM" }
- *                              recurring Course-local beverage-service window
- *   service_suspension         temporary operator suspension or null
+ *   service_schedule           legacy stored field; ignored by active behavior
+ *   service_suspension         persistent operator OFF state or null
  *   comments                   administrator free-text notes
+ *   course_location            { label "City, ST", latitude, longitude,
+ *                              resolved_name, source } or null; used for
+ *                              the daily weather register (course_weather.js)
  *   created_at / updated_at    standard metadata
  */
 
@@ -52,7 +54,8 @@ async function createCourse(db, {
   courseName,
   timezone,
   comments = null,
-  serviceSchedule,
+  operationKind = 'cart',
+  courseLocation = null,
 } = {}) {
   if (!customerId || typeof customerId !== 'string') {
     throw new Error('customerId is required');
@@ -63,12 +66,10 @@ async function createCourse(db, {
   if (!isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
   }
-  if (!isValidServiceSchedule(serviceSchedule)) {
-    throw new Error('Service schedule requires selected days and a valid start/end window');
-  }
   if (comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
+  const operation = courseOperation({ operation_kind: operationKind });
 
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
   if (!customerSnap.exists) {
@@ -79,11 +80,12 @@ async function createCourse(db, {
   const now = new Date();
 
   const courseDoc = {
+    operation_kind: operation.kind,
     course_name: courseName,
     timezone,
-    service_schedule: serviceSchedule,
-    service_suspension: null,
+    service_suspension: operation.kind === 'driving_range' ? { suspended_at: now, suspended_by: 'course_creation' } : null,
     comments,
+    course_location: courseLocation,
     created_at: now,
     updated_at: now,
   };
@@ -112,8 +114,8 @@ async function getCourseForCustomer(db, customerId, courseId) {
 async function updateCourse(db, customerId, courseId, {
   courseName,
   timezone,
-  serviceSchedule,
   comments,
+  courseLocation,
 } = {}) {
   const customerSnap = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).get();
   if (!customerSnap.exists) {
@@ -131,9 +133,6 @@ async function updateCourse(db, customerId, courseId, {
   if (timezone !== undefined && !isValidIanaTimezone(timezone)) {
     throw new Error('Valid Course timezone (IANA name) is required');
   }
-  if (serviceSchedule !== undefined && !isValidServiceSchedule(serviceSchedule)) {
-    throw new Error('Service schedule requires selected days and a valid start/end window');
-  }
   if (comments !== undefined && comments !== null && typeof comments !== 'string') {
     throw new Error('Course comments must be a string or null');
   }
@@ -146,11 +145,11 @@ async function updateCourse(db, customerId, courseId, {
   if (timezone !== undefined) {
     update.timezone = timezone;
   }
-  if (serviceSchedule !== undefined) {
-    update.service_schedule = serviceSchedule;
-  }
   if (comments !== undefined) {
     update.comments = comments;
+  }
+  if (courseLocation !== undefined) {
+    update.course_location = courseLocation;
   }
 
   const batch = db.batch();
@@ -167,7 +166,8 @@ async function updateCourse(db, customerId, courseId, {
   }
 
   await batch.commit();
-  return { course_id: courseId, customer_id: customerId, ...courseSnap.data(), ...update };
+  const { service_schedule: _legacySchedule, ...courseData } = courseSnap.data();
+  return { course_id: courseId, customer_id: customerId, ...courseData, ...update };
 }
 
 module.exports = {
