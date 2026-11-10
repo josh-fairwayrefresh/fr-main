@@ -272,12 +272,12 @@ pass 21 each, including corrected-successor eligibility, fixed Course/HQ local
 00:30/DST policy, reviewed exact-device authorization, governance, capacity
 boundaries, expiring grants and disabled-delivery behavior. These are local/
 synthetic and build results, not LTE, download/install, power-loss, trial-health
-or physical rollback evidence. The CPO's 2026-11-10 organization Logs Router
-inspection and the previously validated project exclusion are recorded in the
-[Deployment Guide](./DEPLOYMENT_GUIDE.md); organization API access was not
-available for independent retrieval. Publication still requires release-
-specific CPO acceptance, completed governance records and explicit publication
-authorization. Physical commissioning remains separately gated.
+or physical rollback evidence. Organization and project logging sinks,
+production delivery activation, and negative authorization checks are recorded
+in the [Deployment Guide](./DEPLOYMENT_GUIDE.md#ota-artifact-delivery-enablement-2026-11-10).
+The enablement does not publish or accept firmware. Publication still requires
+release-specific CPO acceptance, completed governance records and explicit
+publication authorization. Physical commissioning remains separately gated.
 
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image

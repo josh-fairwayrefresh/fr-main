@@ -15,11 +15,11 @@ the accepted firmware artifacts remain unchanged.
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `87d3105f0676a782` | Released `2026-11-10T01:16:04.645Z` (November 9 Pacific). All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; 52 QR destinations and cache policies pass. Previous version `c6a6de50274e48b5` retained. |
-| Production Admin / receiver | Admin `fairway-admin-ota-delivery-43b4da0`; receiver `fairway-button-receiver-ota-delivery-43b4da0`, both 100% | Staged at 0%, verified, then promoted receiver first. Existing runtime identities, environment/secrets, origins and rollback tags preserved; only OTA bucket and closed delivery gate added. Exact identities below. |
+| Production Admin / receiver | Admin `fairway-admin-00062-zuv`; receiver `fairway-button-receiver-00051-dad`, both 100% | 2026-11-10 delivery-gate configuration revisions; same qualified image digests and runtime identities as `ota-delivery-43b4da0`; only `FAIRWAY_OTA_DELIVERY_ENABLED` changed from false to true. Prior revisions remain rollback anchors. |
 | OTA implementation | Corrected successors remain immutable local candidates; source changes are backed up on the review branch; candidates are not published or CPO-accepted | Firmware qualification and hashes are owned by the Firmware Specification. No firmware published, assigned, delivered or flashed. Original accepted artifacts/Pilot 1.1 unchanged. |
 | Local OTA validation | Three original accepted packages preserved; corrected `OTA-0.1alt-r2` / `OTA-1.0-r2` are built/signed/verified and source-backed | Source/host/build evidence covers scheduler corrections and effective image limit, not physical recurrence. FRB-0005 retains the exact accepted USB-only OTA 0.1. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | OTA 0.1 installed using authorized erase-all; existing identity/credential provisioned successfully through the single USB CDC-ACM connection | Provisioning success response observed. CPO confirmed authenticated, correctly attributed requests, COMPLETE, and a fresh transaction. This is USB baseline commissioning, not a successful OTA update. |
-| Production OTA prerequisites | CPO console inspection found no organization sink including child-project logs; private GCS/IAM and project exclusion were previously verified; current Receiver artifact request returns the closed-gate response | Organization API inventory, today's project sink, and live service revision/environment could not be independently retrieved because `gcloud` reauthentication was unavailable. No production changes were made. Admin UI shows no published firmware; all six OTA collections were last verified empty on 2026-11-09. Publication still needs release-specific CPO acceptance, governance records and explicit authorization; physical commissioning remains separately gated. HQ remains `America/Los_Angeles`. |
+| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled on both services | Organization and project sink APIs, live service revisions/env, and private bucket controls verified 2026-11-10. Invalid-token artifact request is rejected; all six OTA collections remain empty. No release published or assignment created. Release acceptance/publication authorization and physical commissioning remain separately gated. HQ remains `America/Los_Angeles`. |
 | Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
@@ -180,28 +180,18 @@ Git object integrity passed. `main` and unrelated firmware work were unchanged.
   lacked create; anonymous GET returned 403. No impersonation role was granted.
   The canary and job were removed; no live objects or firmware were published.
   Default seven-day GCS soft deletion may retain the harmless deleted probe.
-- **Logging boundary:** On 2026-11-10 the CPO manually inspected the Logs Router
+- **Pre-reauth checkpoint (superseded by the activation record below):** On
+  2026-11-10 the CPO manually inspected the Logs Router
   for organization `284487864580` and reported that its only displayed enabled
   sinks were `_Default` and `_Required`, neither including child-project logs;
   no additional organization sinks were displayed. This owner-observed console
   evidence supports that organization sinks do not export this project's Cloud
-  Run request URLs. VSC could not independently retrieve the organization sink
-  inventory: the configured `gcloud` identity required interactive
-  reauthentication and the noninteractive refresh failed. Do not describe the
-  organization API result as independently verified.
-  The project `_Default` sink's unsampled `fairway-ota-artifact-bearer-paths`
-  exclusion was independently validated on 2026-11-09; its scope is
-  `resource.type="cloud_run_revision"` plus
-  `httpRequest.requestUrl =~ "/api/v1/device-ota/artifacts/"`, and the tested
-  artifact-path marker was absent while a normal request-log control remained.
-  Application auth/OTA transport failures log fixed codes, not raw credentials,
-  URLs or error objects. Today's project sink and live service configuration
-  could not be re-read after cloud reauthentication failed. The combined
-  evidence supports the logging design. A nonsecret GET to the production
-  Receiver's artifact endpoint returned HTTP 503 with
-  `artifact_delivery_disabled` on 2026-11-10, confirming the live delivery
-  behavior is still gated. The service revision/environment and current project
-  sink could not be re-read or changed after cloud reauthentication failed.
+  Run request URLs. At this checkpoint, `gcloud` required interactive
+  reauthentication and the organization API inventory could not yet be
+  independently retrieved. The project exclusion had been validated on
+  2026-11-09, and a nonsecret Receiver artifact-path GET returned HTTP 503
+  `artifact_delivery_disabled`. The later authenticated API readback, project
+  sink inspection and staged activation are recorded in the next subsection.
 - **Production package:** backend archive SHA-256
   `43b4da080f4c69bef2c47d3cff21ea6ca14ab5c7b0c9280f862af656ecf47fd0`;
   unchanged dependency lock. Receiver `fairway-button-receiver-ota-delivery-43b4da0`
@@ -211,15 +201,15 @@ Git object integrity passed. `main` and unrelated firmware work were unchanged.
   `sha256:48d270597204edfc5f75beaa2b9c2cb356b77a5aefff7e75d29bc2d6b808bb99`,
   build `4e835db7-3cec-4dc7-971c-9b31c69a8b7d`. Both are Ready/100%.
   Both bind `FAIRWAY_OTA_BUCKET=savvy-kit-496703-r5-ota-artifacts` and
-  `FAIRWAY_OTA_DELIVERY_ENABLED=false` in the last verified deployment
-  snapshot; current live configuration was not re-read in this increment.
+  `FAIRWAY_OTA_DELIVERY_ENABLED=false` in the original `43b4da0` deployment
+  snapshot; the later enablement revision is recorded below.
   Code also defaults closed before token issuance, authorization or streaming.
   An early no-traffic `7aa3cd6` staging
   revision was superseded before promotion; it never served production.
-- **Verification/rollback:** staged/live authenticated Admin and Cart bootstrap
-  return 200; OTA releases/deployments are empty, unauthenticated Admin returns
-  401, artifact retrieval returns explicit 503 while gated. All six OTA
-  collections are empty. No Firestore rules/index/data, Hosting, customer,
+- **Pre-activation verification/rollback:** staged/live authenticated Admin
+  and Cart bootstrap returned 200; OTA releases/deployments were empty,
+  unauthenticated Admin returned 401, and artifact retrieval returned explicit
+  503 while gated. All six OTA collections were empty. No Firestore rules/index/data, Hosting, customer,
   identity or credential mutation occurred. Hosting `87d3105f0676a782` and its
   public assets remain unchanged. Compatible code rollback is receiver to
   `fairway-button-receiver-ota-admin-59f81b5`, then Admin to
@@ -239,13 +229,67 @@ Git object integrity passed. `main` and unrelated firmware work were unchanged.
 
 Bounded cloud/source evidence is retained in the deployment session's
 `files/ota-delivery-qualification/`. No real bearer was generated for logging
-validation. Organization-level console evidence and the previously validated
-project exclusion support the logging boundary. A nonsecret production
-artifact-endpoint probe returned the explicit delivery-disabled response;
-no real authorization was issued. Current service revision/environment and
-project sink configuration could not be re-read or changed after cloud
-reauthentication failed.
+validation. See the 2026-11-10 delivery activation record below for final
+organization/project sink evidence, service revisions, non-destructive
+validation and remaining publication boundaries.
 FRB-0005 physical authorization remains separate.
+
+### OTA artifact delivery enablement (2026-11-10)
+
+- **Logging boundary:** independently retrieved the complete organization
+  `284487864580` sink inventory. Only enabled `_Default` and `_Required` sinks
+  exist; both have `includeChildren=false`. `_Required` filters only audit,
+  system-event and access-transparency logs; `_Default` excludes those same
+  log IDs and also does not include child-project logs. No organization sink
+  exports this project's Cloud Run request logs. The CPO's prior console
+  inspection is consistent with the API response.
+- **Project request logs:** project `savvy-kit-496703-r5` has the normal
+  `_Default` request-log sink with the active, unsampled
+  `fairway-ota-artifact-bearer-paths` exclusion:
+  `resource.type="cloud_run_revision" AND httpRequest.requestUrl =~ "/api/v1/device-ota/artifacts/"`.
+  `_Required` contains audit/system logs only, not Cloud Run request logs.
+  Existing application error handling logs fixed error codes rather than raw
+  URLs, tokens or transport errors. Earlier harmless marker validation showed
+  the artifact path excluded while an ordinary request-log control remained.
+- **Private storage:** `savvy-kit-496703-r5-ota-artifacts` reverified with
+  uniform bucket-level access and public access prevention enforced. Bucket
+  custom roles remain least-privilege: Admin publisher has object create/get;
+  Receiver reader has object get. No public object access or project-wide
+  storage grant was added.
+- **Staged activation:** created Receiver revision
+  `fairway-button-receiver-00051-dad` and Admin revision
+  `fairway-admin-00062-zuv` with no traffic first. Both were Ready, retained
+  their prior image digests and runtime service accounts, and changed only
+  `FAIRWAY_OTA_DELIVERY_ENABLED=false` to `true`; bucket and unrelated
+  environment/secret bindings were preserved. Staged Receiver rejected a
+  non-real invalid token with `403 download_not_authorized`; staged Admin
+  returned `401` without authentication.
+- **Production promotion:** promoted Receiver first, verified its production
+  invalid-token response remained `403 download_not_authorized`, then promoted
+  Admin. Both new revisions are Ready at 100% traffic. Current image digests
+  remain Receiver `sha256:bf91cd69f3ed253e5becdfa19a63e445df1533d76a38066ffbe73f9a1a3c8c1b`
+  and Admin `sha256:48d270597204edfc5f75beaa2b9c2cb356b77a5aefff7e75d29bc2d6b808bb99`;
+  runtime service accounts are unchanged. Production Admin API still returns
+  `401` without operator authentication.
+- **Scope/effect:** no valid artifact token was generated, no real device was
+  queried or authorized, and no artifact was requested or downloaded. All six
+  OTA collections (`ota_releases`, `ota_assignments`, `ota_deployments`,
+  `ota_device_status`, `ota_download_tokens`, `ota_authorization_reviews`)
+  were read-only counted at zero after promotion. Admin continues to show no
+  published firmware. Delivery infrastructure is enabled and guarded, but the
+  empty catalog means this change alone offers no firmware.
+- **Rollback:** if a material issue is found before publication, restore the
+  Receiver to `fairway-button-receiver-ota-delivery-43b4da0` and Admin to
+  `fairway-admin-ota-delivery-43b4da0` using the established
+  `gcloud run services update-traffic ... --to-revisions=<revision>=100`
+  procedure. Those revisions preserve the delivery-disabled gate. This is a
+  configuration/code rollback, not artifact revocation or data recovery.
+- **Not authorized/performed:** no OTA release publication, real-device
+  assignment, valid download grant, firmware delivery, flash, or physical
+  commissioning. Each corrected release still needs its release-specific CPO
+  acceptance, complete publication-governance records and explicit publication
+  authorization. FRB-0005 physical commissioning requires its separate
+  authorization after a published, assigned candidate is confirmed ready.
 
 #### Next commissioning increment — proposed authorization scope
 
@@ -1093,6 +1137,29 @@ its entries describe the state at their recorded dates. It does not supersede
 the current subsystem owner Sources of Truth or newer accepted evidence
 summarized above. New entries are placed at the TOP of this register.
 
+### Prototype 4.0 artifact delivery enablement (2026-11-10)
+
+- Independently verified organization `284487864580` has only enabled
+  `_Default` and `_Required` sinks, neither with child-resource inclusion.
+  The project `_Default` sink's unsampled artifact URL exclusion remains active;
+  `_Required` routes audit/system logs, not request URLs.
+- Reverified the private bucket's uniform access/public-access prevention,
+  least-privilege Admin publisher and Receiver reader roles, and the unchanged
+  production image/runtime identities. Staged and promoted Receiver
+  `fairway-button-receiver-00051-dad` then Admin `fairway-admin-00062-zuv`,
+  each Ready at 100%, changing only
+  `FAIRWAY_OTA_DELIVERY_ENABLED=false` to `true`.
+- Staged and production negative tests reject an invalid artifact token with
+  `403 download_not_authorized`; unauthenticated production Admin access remains
+  `401`. All six OTA collections were read-only counted at zero after promotion.
+  No valid token, release publication, real-device assignment or download was
+  created; no firmware was delivered/flashed and no physical commissioning
+  occurred. Corrected-release acceptance/governance/publication and physical
+  commissioning authorizations remain separate.
+- Rollback anchors are the prior delivery-disabled revisions
+  `fairway-button-receiver-ota-delivery-43b4da0` and
+  `fairway-admin-ota-delivery-43b4da0`.
+
 ### Prototype 4.0 OTA security evidence and source backup (2026-11-10)
 
 - The CPO manually inspected the organization Logs Router for
@@ -1102,13 +1169,9 @@ summarized above. New entries are placed at the TOP of this register.
   retrieved organization API response; VSC's `gcloud` credentials required
   interactive reauthentication, which was unavailable in the noninteractive
   execution context.
-- The project-level unsampled artifact-path exclusion and production bucket,
-  IAM and service configuration were validated on 2026-11-09, including the
-  delivery-disabled gate. The project sink and service revision/environment
-  were not re-read on 2026-11-10; the live artifact endpoint returned HTTP 503
-  `artifact_delivery_disabled`. No production changes were made in this
-  increment. No release was published, no real-device assignment or grant was
-  created, and no firmware was delivered or flashed.
+- This was an earlier same-day checkpoint before interactive CLI
+  reauthentication and delivery activation. Its limitation has been superseded
+  by the immediately preceding API-verified enablement record.
 - The qualified immutable candidates remain `OTA-0.1alt-r2` (`0.1.0+3`,
   280,387 bytes, SHA-256
   `2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844`) and
