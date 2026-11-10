@@ -248,9 +248,11 @@ The persistent local recovery/evidence directory
 contains the manifests, per-file inventory, verification results and a
 106-file source/tooling/test archive (`source.tar.gz`, SHA-256
 `b1c91255499d9f843dadfce80447ded91321b490a33d93a0c3c1759a6a27cbf6`).
-These support reproduction using the separately held key and installed SDK;
-they are not an authorized Git checkpoint or remote backup. No claim of
-byte-for-byte independent rebuild is made; ECDSA signatures can vary.
+These support reproduction using the separately held key and installed SDK.
+The corrected source, tests and canonical documentation are now backed up at
+`685cf64f2eddb6f90e50ca552718950b920d947b` on the canonical review branch;
+the archive remains supplemental local evidence, not the source backup. No
+claim of byte-for-byte independent rebuild is made; ECDSA signatures can vary.
 
 Generated evidence in both new builds confirms unchanged primary/secondary
 addresses and 432 KiB slot sizes, MOVE mode, 256 maximum sectors, 4,096-byte
@@ -270,8 +272,12 @@ pass 21 each, including corrected-successor eligibility, fixed Course/HQ local
 00:30/DST policy, reviewed exact-device authorization, governance, capacity
 boundaries, expiring grants and disabled-delivery behavior. These are local/
 synthetic and build results, not LTE, download/install, power-loss, trial-health
-or physical rollback evidence. Publication remains blocked by unverified
-organization logging, CPO acceptance and the remaining governance gates.
+or physical rollback evidence. The CPO's 2026-11-10 organization Logs Router
+inspection and the previously validated project exclusion are recorded in the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md); organization API access was not
+available for independent retrieval. Publication still requires release-
+specific CPO acceptance, completed governance records and explicit publication
+authorization. Physical commissioning remains separately gated.
 
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image

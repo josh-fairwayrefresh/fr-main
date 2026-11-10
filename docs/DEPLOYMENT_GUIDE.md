@@ -19,7 +19,7 @@ the accepted firmware artifacts remain unchanged.
 | OTA implementation | Corrected successors remain immutable local candidates; source changes are backed up on the review branch; candidates are not published or CPO-accepted | Firmware qualification and hashes are owned by the Firmware Specification. No firmware published, assigned, delivered or flashed. Original accepted artifacts/Pilot 1.1 unchanged. |
 | Local OTA validation | Three original accepted packages preserved; corrected `OTA-0.1alt-r2` / `OTA-1.0-r2` are built/signed/verified and source-backed | Source/host/build evidence covers scheduler corrections and effective image limit, not physical recurrence. FRB-0005 retains the exact accepted USB-only OTA 0.1. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | OTA 0.1 installed using authorized erase-all; existing identity/credential provisioned successfully through the single USB CDC-ACM connection | Provisioning success response observed. CPO confirmed authenticated, correctly attributed requests, COMPLETE, and a fresh transaction. This is USB baseline commissioning, not a successful OTA update. |
-| Production OTA prerequisites | Private GCS/IAM and project log exclusion configured; CPO console inspection found no organization sink including child-project logs; delivery remains disabled | Organization API inventory and today's live project/service settings could not be independently retrieved because `gcloud` reauthentication was unavailable. The project exclusion and service settings were previously validated on 2026-11-09. The catalog/collections were last verified empty then. Publication still needs release-specific CPO acceptance, governance records and explicit authorization; physical commissioning remains separately gated. HQ remains `America/Los_Angeles`. |
+| Production OTA prerequisites | CPO console inspection found no organization sink including child-project logs; private GCS/IAM and project exclusion were previously verified; current Receiver artifact request returns the closed-gate response | Organization API inventory, today's project sink, and live service revision/environment could not be independently retrieved because `gcloud` reauthentication was unavailable. No production changes were made. Admin UI shows no published firmware; all six OTA collections were last verified empty on 2026-11-09. Publication still needs release-specific CPO acceptance, governance records and explicit authorization; physical commissioning remains separately gated. HQ remains `America/Los_Angeles`. |
 | Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
@@ -197,8 +197,11 @@ Git object integrity passed. `main` and unrelated firmware work were unchanged.
   Application auth/OTA transport failures log fixed codes, not raw credentials,
   URLs or error objects. Today's project sink and live service configuration
   could not be re-read after cloud reauthentication failed. The combined
-  evidence supports the logging design, but delivery remains disabled until
-  production service state is reverified and the existing enablement is applied.
+  evidence supports the logging design. A nonsecret GET to the production
+  Receiver's artifact endpoint returned HTTP 503 with
+  `artifact_delivery_disabled` on 2026-11-10, confirming the live delivery
+  behavior is still gated. The service revision/environment and current project
+  sink could not be re-read or changed after cloud reauthentication failed.
 - **Production package:** backend archive SHA-256
   `43b4da080f4c69bef2c47d3cff21ea6ca14ab5c7b0c9280f862af656ecf47fd0`;
   unchanged dependency lock. Receiver `fairway-button-receiver-ota-delivery-43b4da0`
@@ -237,9 +240,11 @@ Git object integrity passed. `main` and unrelated firmware work were unchanged.
 Bounded cloud/source evidence is retained in the deployment session's
 `files/ota-delivery-qualification/`. No real bearer was generated for logging
 validation. Organization-level console evidence and the previously validated
-project exclusion support the logging boundary; however, production artifact
-delivery remains **disabled** because current production service configuration
-could not be reverified or changed after cloud reauthentication failed.
+project exclusion support the logging boundary. A nonsecret production
+artifact-endpoint probe returned the explicit delivery-disabled response;
+no real authorization was issued. Current service revision/environment and
+project sink configuration could not be re-read or changed after cloud
+reauthentication failed.
 FRB-0005 physical authorization remains separate.
 
 #### Next commissioning increment — proposed authorization scope
@@ -1098,9 +1103,11 @@ summarized above. New entries are placed at the TOP of this register.
   interactive reauthentication, which was unavailable in the noninteractive
   execution context.
 - The project-level unsampled artifact-path exclusion and production bucket,
-  IAM and service configuration were validated on 2026-11-09. Their current
-  state was not re-read on 2026-11-10. Production artifact delivery remains
-  disabled; no release was published, no real-device assignment or grant was
+  IAM and service configuration were validated on 2026-11-09, including the
+  delivery-disabled gate. The project sink and service revision/environment
+  were not re-read on 2026-11-10; the live artifact endpoint returned HTTP 503
+  `artifact_delivery_disabled`. No production changes were made in this
+  increment. No release was published, no real-device assignment or grant was
   created, and no firmware was delivered or flashed.
 - The qualified immutable candidates remain `OTA-0.1alt-r2` (`0.1.0+3`,
   280,387 bytes, SHA-256
@@ -1110,12 +1117,12 @@ summarized above. New entries are placed at the TOP of this register.
   They remain unaccepted and unpublished; existing OTA 0.1 bootstrap and
   historical release identities are unchanged.
 - Corrected source, tests and owner documentation are backed up on
-  `review/frb0005-increment-1.0-source-checkpoint-20261105`; its exact commit
-  is recorded in the source-backup follow-up entry below. This source backup
-  satisfies neither release-specific CPO acceptance nor publication
-  authorization. The OTA catalog and assignment collections were last verified
-  empty on 2026-11-09. FRB-0005 physical OTA commissioning remains unperformed
-  and separately gated.
+  `review/frb0005-increment-1.0-source-checkpoint-20261105` at source commit
+  `685cf64f2eddb6f90e50ca552718950b920d947b`. This source backup satisfies
+  neither release-specific CPO acceptance nor publication authorization. The
+  OTA catalog and assignment collections were last verified empty on
+  2026-11-09. FRB-0005 physical OTA commissioning remains unperformed and
+  separately gated.
 
 ### Prototype 4.0 delivery infrastructure and corrected candidates (2026-11-09)
 
