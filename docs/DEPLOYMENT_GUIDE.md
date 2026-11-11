@@ -362,6 +362,21 @@ The original manifest is retained in `docs/releases/`. Publication withdraws
 `OTA-1.0-r3` from new selection while preserving its bytes and history. This
 record is also the Alignment Register recognition for `OTA-1.0-r4`.
 
+Acceptance records were pushed as `cc79c02` and the exact-hash approval as
+`b843c42` (remote verified; no merge). Both services were staged at zero
+traffic as `*-ota-10r4-2e0b5a9` (archive SHA-256
+`2e0b5a9edcbb5a8dcff9c23906046edb1f7cdadbcf7ff765c1e10df17debc445`),
+verified Ready with unchanged runtime/identity and serving traffic, denied
+unauthenticated calls (401), and promoted to 100%; `*-ota-r4-53cf494` are
+retained for rollback. `OTA-1.0-r4` was published through the authenticated
+Admin route at `2026-11-11T02:53:31.067Z` (GCS generation
+`1794365611041915`); stored bytes match the accepted manifest, private
+bucket controls remain enforced, and the loopback handoff was stopped. The
+selector shows `OTA-1.0-r4` and `OTA-0.1alt-r4`; `OTA-1.0-r3` is retained
+but unselectable. At record time FRB-0005's current target was still the
+CPO's `OTA-1.0-r3` deployment `f79ea43a-3f49-4fa6-8e1b-bd3549e40915`
+(12:30 AM Pacific); the CPO will supersede it with `OTA-1.0-r4` through Admin.
+
 #### OTA assignment-contract correction — 2026-11-10
 
 The CPO clarified that the Admin page must never lock a device against a new
