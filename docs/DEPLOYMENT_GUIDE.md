@@ -138,6 +138,15 @@ the device. The task was prepared, not executed. This readiness does not claim
 that a flash resets the already consumed schedule or clears the old backend
 assignment.
 
+On 2026-11-10 at approximately 16:15 Pacific, the CPO reported FRB-0005
+connected by USB and ready for the new bootstrap. Preflight found no devices
+through nRF Connect and a single canonical `probe-rs list` returned
+`No debug probes were found.` The required exact CMSIS-DAP debugger therefore
+was not accessible. The maintenance task was not started; no flash, erase,
+reset, serial provisioning, credential operation, reconnect listener or OTA
+assignment occurred. Resume only once stable authorized service access is
+established, per the existing SOP; connection alone is not debugger readiness.
+
 #### Verified application rollout and remaining release blockers
 
 - Completion-enabled Admin `fairway-admin-ota-complete-abf92e9` and receiver
