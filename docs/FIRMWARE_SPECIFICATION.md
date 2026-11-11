@@ -9,6 +9,7 @@ This document describes the accepted firmware implementation. Pilot 1.1 is an in
 - Board: `circuitdojo_feather_nrf9151@1/nrf9151/ns`.
 - Configuration: `prj_a.conf`.
 - Image architecture: MCUboot + TF-M + non-secure application.
+- Prototype 4.0 field-validated baseline (FRB-0005 only, 2026-11-11): `OTA-1.0-r4` (`1.0.0+4`), source tag `prototype-4.0-field-validated`. Pilot 1.1 remains the fleet image on other units. Exact identity and limitations are in the [Deployment Guide Alignment Register](./DEPLOYMENT_GUIDE.md#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11).
 - Current OTA images are common signed images and contain no device identity or credential. Device identity and credential are provisioned separately into TF-M PSA Protected Storage; never commit or document plaintext credentials.
 
 The firmware build, flashing, and deployment procedure is owned by `docs/DEPLOYMENT_GUIDE.md`. Device provisioning and commissioning evidence is owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.

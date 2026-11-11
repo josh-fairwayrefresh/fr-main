@@ -15,10 +15,10 @@ the original accepted firmware artifacts remain unchanged.
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `ba810bdc550d6501` | Released `2026-11-11T00:56:32.950Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds assignment supersession disclosure to Firmware OTA. Prior versions retained (`5eb383e4a44c3d13` previous). |
-| Production Admin / receiver | Admin `fairway-admin-ota-r4-53cf494`; receiver `fairway-button-receiver-ota-r4-53cf494`, both Ready, 100% | Promoted `2026-11-11T01:52Z`; isolated source archive `53cf494291071d149cc727ddee1e6e9e68b1e78606f46b6d10fbc5714e32c85c` (source `e2d5db8`). Adds r4 acceptance, publication approval and r4 successor provenance. Runtime identities/configuration unchanged; `*-ota-target-12cf730` retained as rollback. |
-| OTA implementation | First autonomous OTA physically verified: FRB-0005 installed `OTA-0.1alt-r4` (`0.1.0+7`) and confirmed it at `2026-11-11T02:20:47.946Z` | `OTA-0.1alt-r4` and `OTA-1.0-r3` are selectable for FRB-0005; r3/r2 0.1alt are retained but not selectable. `OTA-1.0-r3` still contains the r3 discovery defect. Nightly recurrence is not yet observed. |
+| Production Admin / receiver | Admin `fairway-admin-ota-10r4-2e0b5a9`; receiver `fairway-button-receiver-ota-10r4-2e0b5a9`, both Ready, 100% | Promoted `2026-11-11T02:52Z`; isolated source archive `2e0b5a9edcbb5a8dcff9c23906046edb1f7cdadbcf7ff765c1e10df17debc445` (source `b843c42`). Runtime identities/configuration unchanged; `*-ota-r4-53cf494` retained as rollback. No later deployment. |
+| OTA implementation | **Prototype 4.0 — CPO field-validated stable firmware baseline** (2026-11-11): FRB-0005 autonomously installed `OTA-1.0-r4` (`1.0.0+4`) in its 12:30 AM Pacific window and confirmed it at 12:32:45 AM | See the [Prototype 4.0 Alignment Register entry](#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11). Selectable releases: `OTA-1.0-r4`, `OTA-0.1alt-r4` (FRB-0005 only). Superseded r2/r3 releases retained, not selectable; r3 images carry the discovery defect. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
-| FRB-0005 commissioning | Running `0.1.0+7` (nightly) after clean USB install of `OTA-0.1-r4` (`0.1.0+6`) at 17:57 Pacific and OTA; credential generation 6 active | Authenticated running confirmation (sequence 2), Admin registry display, and a post-OTA real request with device-acknowledged COMPLETE verified; CPO confirmed request UI and button behavior. PV8 still required for service access. |
+| FRB-0005 commissioning | Running `1.0.0+4` (nightly) via autonomous OTA from `0.1.0+7`; credential generation 6 active | Clean USB install of `OTA-0.1-r4` (2026-11-10 17:57 Pacific), OTA to `0.1.0+7` with post-OTA request/COMPLETE, then nightly OTA to `1.0.0+4` (2026-11-11). Post-`1.0.0+4` request/COMPLETE not separately exercised. PV8 still required for USB service access. |
 | Production OTA prerequisites | Private GCS controls verified; exact `OTA-0.1alt-r4` stored bytes verified; delivery enabled | Assignment never requires reconciling earlier targets. HQ remains `America/Los_Angeles`. Installation is shown only from authenticated device evidence. |
 | Production data | Publication created `OTA-0.1alt-r4`; authorized recoveries activated FRB-0005 credential generations 4–6; CPO assignments superseded earlier targets with retained history; the successful deployment cleared its assignment | Permanent identity and placement unchanged. No other devices were changed. Preflight reports PITR/delete protection disabled; code rollback is not data recovery. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
@@ -376,6 +376,33 @@ selector shows `OTA-1.0-r4` and `OTA-0.1alt-r4`; `OTA-1.0-r3` is retained
 but unselectable. At record time FRB-0005's current target was still the
 CPO's `OTA-1.0-r3` deployment `f79ea43a-3f49-4fa6-8e1b-bd3549e40915`
 (12:30 AM Pacific); the CPO will supersede it with `OTA-1.0-r4` through Admin.
+
+#### OTA-1.0-r4 field installation — CPO field validation 2026-11-11
+
+The CPO superseded the r3 target by assigning `OTA-1.0-r4` to FRB-0005
+through normal Admin review (deployment
+`f89395d0-3e0b-4383-9898-0eebe0bb5fc8`, `nightly_0030`, eligible
+`2026-11-11T08:30:00Z`). FRB-0005, running `OTA-0.1alt-r4` (`0.1.0+7`),
+performed its first scheduled nightly check and installed the update without
+physical interaction. Authenticated production Admin evidence (Pacific):
+
+| Time | Evidence |
+|---|---|
+| 12:30:08 AM | Nightly check-in; image offered |
+| 12:30:22 AM | `downloading` |
+| 12:31:52 AM | Authorized artifact request recorded |
+| 12:31:54 / 12:31:57 / 12:32:02 AM | `verifying`, `staged`, `activation_pending` |
+| 12:32:45 AM | Authenticated running-image confirmation `1.0.0+4`; deployment `confirmed`, assignment cleared |
+
+Admin Firmware OTA then showed Confirmed firmware `1.0.0+4`, no pending
+release and next window Nov 12 12:30 AM; the registry Firmware generation
+showed `1.0.0+4`, `Last confirmed running: Nov 11, 2026, 12:32 AM`. This also
+demonstrates the nightly schedule of the `0.1.0+7` image. Evidence was read
+through the authenticated Admin UI; a separate Firestore/Cloud Run log read
+was not repeated because the operator gcloud session had expired. Not
+exercised: a post-`1.0.0+4` request/COMPLETE, rollback, and interrupted
+download recovery. The CPO accepted this as the Prototype 4.0 field
+validation recorded in the Alignment Register.
 
 #### OTA assignment-contract correction — 2026-11-10
 
@@ -5249,6 +5276,70 @@ The Alignment Register preserves historical release evidence and provenance;
 its entries describe the state at their recorded dates. It does not supersede
 the current subsystem owner Sources of Truth or newer accepted evidence
 summarized above. New entries are placed at the TOP of this register.
+
+### Prototype 4.0 — CPO Field-Validated Stable Firmware Baseline (2026-11-11)
+
+**Status:** CPO-accepted stable firmware baseline for the Prototype 4.0
+architecture: common credential-free MCUboot + TF-M images with TF-M PSA
+protected identity, production-signed autonomous OTA, and authenticated
+running-version confirmation. Field-validated on FRB-0005 only.
+
+- **Source rollback reference:** annotated tag `prototype-4.0-field-validated`
+  on the `main` merge commit that integrates the reviewed branch
+  `review/frb0005-increment-1.0-source-checkpoint-20261105` (merge-preparation
+  commit `1e6e96d6f30a5bdc7e1696f68185bb0a5ce3768d`, which contains
+  `main` `609664ef97883764ebcd34065cc73c94f3be934a`). The tag is immutable;
+  do not move or recreate it.
+- **Validated firmware:** `OTA-1.0-r4`, version `1.0.0+4`, nightly schedule;
+  signed SHA-256
+  `cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e`
+  (281659 bytes), production ECDSA-P256 fingerprint
+  `sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`.
+  Built from base `cfc98efde2db49e6190c769064c5e587c2076a10`; firmware source
+  digest `831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9`,
+  identical in the tagged source. Original manifest
+  `docs/releases/OTA-1.0-r4-manifest.json`; CPO exact-hash acceptance and
+  publication under
+  [OTA-1.0-r4 correction](#ota-10-r4-correction--cpo-acceptance-and-publication-authorization-2026-11-10);
+  production GCS generation `1794365611041915`.
+- **Companion releases (same firmware source):** USB-only bootstrap
+  `OTA-0.1-r4` (`0.1.0+6`, `00a33f9f06056e3468ad7165af51a255ffad40574d9a14570cccd78c030717e1`)
+  and nightly `OTA-0.1alt-r4` (`0.1.0+7`,
+  `e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2`),
+  accepted under
+  [r4 discovery parsing correction](#r4-discovery-parsing-correction--cpo-acceptance-and-publication-authorization-2026-11-10).
+- **Platform:** Circuit Dojo nRF9151 Feather,
+  `circuitdojo_feather_nrf9151@1/nrf9151/ns`, Nordic NCS 3.1.1, `prj_a.conf`,
+  MCUboot move-swap with the production trust anchor, TF-M.
+- **CPO field acceptance (2026-11-11), FRB-0005:** clean USB install of
+  `OTA-0.1-r4`; autonomous OTA to `0.1.0+7` (2026-11-10 18:20 Pacific) with
+  CPO-confirmed post-OTA request and COMPLETE; then scheduled nightly OTA to
+  `1.0.0+4`: download, verification, staging, activation, reboot and
+  authenticated running confirmation at 12:32:45 AM, displayed in Admin
+  Firmware OTA and the device registry. Records:
+  [r4 installation and first OTA](#r4-publication-frb-0005-installation-and-first-verified-ota--2026-11-10)
+  and [OTA-1.0-r4 field installation](#ota-10-r4-field-installation--cpo-field-validation-2026-11-11).
+- **Automated validation (merge preparation, 2026-11-10):** full backend
+  suite (including 30 OTA API and 34 fleet/governance cases), 100 frontend
+  unit tests, 29 browser tests (3 private-fixture skips), production build
+  with 107 verified Driving Range assets, 119 Python release/provisioning
+  tests (1 skip), and the OTA host suite including the real NCS JSON decoder
+  regression and concurrent registration test.
+- **Supersedes as current baseline:** earlier Prototype 4.0 development
+  checkpoints and readiness records, and the original, r2 and r3 OTA
+  artifacts. Those remain immutable history; r3 images contain the 32-bit
+  discovery defect and must not be reassigned.
+- **Limitations and qualifications:** validated on FRB-0005 only; the rest of
+  the fleet remains on Pilot 1.1 images with no verified OTA capability.
+  Routine USB service still requires PV8. A clean reinstall restarts the
+  running-confirmation sequence, which the backend rejects until a higher
+  sequence arrives. Rollback, interrupted-download recovery and a
+  post-`1.0.0+4` request/COMPLETE were not exercised. Pack autonomy and fleet
+  power behavior are unqualified.
+- **Rollback meaning:** the tag recovers source and records only. Reverting
+  source is not a validated device rollback; firmware downgrade, MCUboot
+  trust and security-counter compatibility, re-signing and production
+  redeployment remain separately authorized operations.
 
 ### Running-confirmation successors — CPO acceptance and publication authorization (2026-11-10)
 
