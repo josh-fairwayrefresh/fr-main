@@ -188,6 +188,31 @@ async function run() {
       assert.equal(publicationEligible(usbOnly, DIGEST, { [usbOnly]: record }), false, usbOnly);
     }
   });
+  await test('1.0 r4 replacement withdraws r3 from new selection; a superseding review replaces an r3 target', async () => {
+    const { db, options } = await setup();
+    const fixture = (await db.collection('ota_releases').doc(RELEASE).get()).data();
+    const ids = ['OTA-1.0-r3', 'OTA-1.0-r4'];
+    const ota = createOtaService(db, {
+      ...options,
+      publicationApprovals: Object.fromEntries(ids.map((id) => [id, {
+        ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
+      }])),
+      acceptedReleases: Object.fromEntries(ids.map((id) => [id, DIGEST])),
+    });
+    await db.collection('ota_device_status').doc('FRB-0005').set({ confirmed_schedule_mode: 'nightly' });
+    await db.collection('ota_releases').doc(ids[0]).set({ ...fixture, release_id: ids[0], version_string: '1.0.0+3' });
+    const old = await ota.confirmAssignment((await ota.prepareAssignment({
+      release_id: ids[0], device_ids: ['FRB-0005'] }, 'admin')).review_id, 'admin');
+    await db.collection('ota_releases').doc(ids[1]).set({ ...fixture, release_id: ids[1], version_string: '1.0.0+4' });
+    const releases = await ota.listReleases();
+    assert.equal(releases.find((item) => item.release_id === ids[0]).assignable, false);
+    assert.equal(releases.find((item) => item.release_id === ids[1]).assignable, true);
+    const next = await ota.confirmAssignment((await ota.prepareAssignment({
+      release_id: ids[1], device_ids: ['FRB-0005'] }, 'admin')).review_id, 'admin');
+    assert.equal(next.assignments[0].replaces_deployment_id, old.assignments[0].deployment_id);
+    assert.equal(next.assignments[0].schedule, 'nightly_0030');
+    assert.equal((await db.collection('ota_assignments').doc('FRB-0005').get()).data().release_id, ids[1]);
+  });
   await test('0.1alt r4 replacement withdraws r3 from new selection and keeps r3 history', async () => {
     const { db, options } = await setup();
     const fixture = (await db.collection('ota_releases').doc(RELEASE).get()).data();

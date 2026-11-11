@@ -83,7 +83,7 @@ def main() -> int:
         ]
         subprocess.run(nightly_command, check=True)
         subprocess.run([str(executable)], check=True)
-        for version in ("0.1.0+4", "0.1.0+5", "1.0.0+3", "0.1.0+6", "0.1.0+7"):
+        for version in ("0.1.0+4", "0.1.0+5", "1.0.0+3", "0.1.0+6", "0.1.0+7", "1.0.0+4"):
             subprocess.run([
                 *compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
                 f'-DCONFIG_FAIRWAY_OTA_FIRMWARE_VERSION="{version}"',

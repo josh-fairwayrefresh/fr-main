@@ -77,6 +77,7 @@ const RELEASE_REPLACEMENTS = Object.freeze({
   'OTA-0.1alt-r2': 'OTA-0.1alt-r3',
   'OTA-1.0-r2': 'OTA-1.0-r3',
   'OTA-0.1alt-r3': 'OTA-0.1alt-r4',
+  'OTA-1.0-r3': 'OTA-1.0-r4',
 });
 
 function publicationEligible(releaseId, digest, approvals = PUBLICATION_APPROVALS) {

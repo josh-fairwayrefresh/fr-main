@@ -333,7 +333,34 @@ at `02:42:25.320Z`; its `complete__lW9tI1TW3W1rtA7ezW3Y` command was
 acknowledged by the device at `02:42:54.657Z`.
 
 Not yet observed: a subsequent nightly check and PV8-free service access.
-`OTA-1.0-r3` was not rebuilt.
+
+#### OTA-1.0-r4 correction — CPO acceptance and publication authorization 2026-11-10
+
+At `02:42:59Z` the CPO assigned `OTA-1.0-r3` to FRB-0005 for the 12:30 AM
+Pacific window. Because r3 retains the discovery defect, FRB-0005 would
+install it but then reject every later offer. The CPO approved building the
+corrected `OTA-1.0-r4` and will reassign FRB-0005 to it before the window,
+superseding the r3 target through normal Admin review.
+
+`OTA-1.0-r4` (`1.0.0+4`, nightly) was built from base
+`cfc98efde2db49e6190c769064c5e587c2076a10` plus its release registration;
+its firmware source digest
+`831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9` is
+identical to the accepted 0.1alt-r4 source. Independently verified with
+production fingerprint
+`sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`.
+Validation: full OTA host suite including the real-SDK decoder regression,
+119 Python tests (one skip), and 30 OTA API plus 34 fleet/governance backend
+cases, including r3→r4 1.0 replacement and supersession of an r3 target.
+The CPO accepted the exact hash and authorized publication for FRB-0005 only:
+
+| Release | Version | Signed bytes | SHA-256 |
+|---|---|---:|---|
+| `OTA-1.0-r4` | `1.0.0+4` | 281659 | `cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e` |
+
+The original manifest is retained in `docs/releases/`. Publication withdraws
+`OTA-1.0-r3` from new selection while preserving its bytes and history. This
+record is also the Alignment Register recognition for `OTA-1.0-r4`.
 
 #### OTA assignment-contract correction — 2026-11-10
 

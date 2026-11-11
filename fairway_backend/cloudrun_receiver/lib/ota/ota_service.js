@@ -21,6 +21,7 @@ const RELEASE_VERSIONS = Object.freeze({
   'OTA-1.0-r3': '1.0.0+3',
   'OTA-0.1-r4': '0.1.0+6',
   'OTA-0.1alt-r4': '0.1.0+7',
+  'OTA-1.0-r4': '1.0.0+4',
 });
 const USB_ONLY_RELEASES = Object.freeze(['OTA-0.1', 'OTA-0.1-r3', 'OTA-0.1-r4']);
 const TERMINAL_STATES = new Set(['confirmed', 'failed', 'rolled_back']);
