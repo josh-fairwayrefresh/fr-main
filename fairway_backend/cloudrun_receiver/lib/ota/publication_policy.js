@@ -2,6 +2,19 @@
 
 // Reviewed release evidence belongs in source control, never in an upload body.
 const PUBLICATION_APPROVALS = Object.freeze({
+  'OTA-1.0-r4': Object.freeze({
+    sha256: 'cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e',
+    verification_record: 'docs/DEPLOYMENT_GUIDE.md#ota-10-r4-correction--cpo-acceptance-and-publication-authorization-2026-11-10; independently verified original manifest docs/releases/OTA-1.0-r4-manifest.json',
+    cpo_approval_record: 'docs/DEPLOYMENT_GUIDE.md#ota-10-r4-correction--cpo-acceptance-and-publication-authorization-2026-11-10; exact-hash acceptance',
+    alignment_record: 'docs/DEPLOYMENT_GUIDE.md#ota-10-r4-correction--cpo-acceptance-and-publication-authorization-2026-11-10',
+    source_commit: 'cc79c0213ebe736abb6b31cd4f98b8a273f7fedd',
+    release_record_commit: 'cc79c0213ebe736abb6b31cd4f98b8a273f7fedd',
+    remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/cc79c0213ebe736abb6b31cd4f98b8a273f7fedd (review/frb0005-increment-1.0-source-checkpoint-20261105)',
+    publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#ota-10-r4-correction--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
+    device_ids: Object.freeze(['FRB-0005']),
+    build_base_commit: 'cfc98efde2db49e6190c769064c5e587c2076a10',
+    build_source_sha256: '831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9',
+  }),
   'OTA-0.1alt-r4': Object.freeze({
     sha256: 'e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2',
     verification_record: 'docs/DEPLOYMENT_GUIDE.md#r4-discovery-parsing-correction--cpo-acceptance-and-publication-authorization-2026-11-10; independently verified original manifest docs/releases/OTA-0.1alt-r4-manifest.json',

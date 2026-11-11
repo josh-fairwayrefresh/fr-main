@@ -242,6 +242,7 @@ async function run() {
       'OTA-0.1alt-r3': '79e53b5643fcc78cabb152e89eeac4fc1377587dd58b71c51d41c0cb7637275d',
       'OTA-1.0-r3': '2869c2f47cb1b6a35665235e6b24bacd401aaafe8dfa59f632514d0cf0ebd41d',
       'OTA-0.1alt-r4': 'e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2',
+      'OTA-1.0-r4': 'cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e',
     };
     assert.deepEqual(Object.keys(PUBLICATION_APPROVALS).sort(), Object.keys(accepted).sort());
     for (const [releaseId, digest] of Object.entries(accepted)) {
@@ -249,7 +250,8 @@ async function run() {
       assert.equal(publicationEligible(releaseId, digest), true);
       assert.equal(publicationEligible(releaseId, '0'.repeat(64)), false);
       assert.deepEqual(PUBLICATION_APPROVALS[releaseId].device_ids, ['FRB-0005']);
-      const base = releaseId === 'OTA-0.1alt-r4' ? 'a6350d738088557463909886c411775149fd5984'
+      const base = releaseId === 'OTA-1.0-r4' ? 'cfc98efde2db49e6190c769064c5e587c2076a10'
+        : releaseId === 'OTA-0.1alt-r4' ? 'a6350d738088557463909886c411775149fd5984'
         : releaseId === 'OTA-0.1alt-r3' ? 'a99c45cf97de478c5c199381e48e6061d9de5fcd'
         : releaseId === 'OTA-1.0-r3' ? '00530a1a5875c3217e1de7e0368cd8b323fe1173'
         : '11213b4ad0607486df12f28d764f6d6abd90cdb6';
