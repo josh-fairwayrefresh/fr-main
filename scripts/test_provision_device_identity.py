@@ -245,7 +245,7 @@ class OrchestrationTests(unittest.TestCase):
         self.args = types.SimpleNamespace(
             commissioning_manifest=root / "commissioning.json",
             operational_manifest=root / "operational.json",
-            recover_usb=False, probe_serial=PROBE_SERIAL, device_id=DEVICE_ID,
+            erase=False, probe_serial=PROBE_SERIAL, device_id=DEVICE_ID,
         )
         self.operational = {
             "release_id": "OTA-0.1", "artifact_file": "signed.bin",
@@ -267,8 +267,9 @@ class OrchestrationTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def run_sequence(self, fail_transaction=None, fail_flash=False):
+    def run_sequence(self, fail_transaction=None, fail_flash=False, fail_operation=None):
         events = []
+        self.events = events
 
         def tx(_connection, operation, *_):
             events.append(operation)
@@ -278,6 +279,8 @@ class OrchestrationTests(unittest.TestCase):
 
         def probe(_serial, *command):
             events.append(command)
+            if command[0] == fail_operation:
+                raise RuntimeError("probe operation failed")
             if fail_flash and command[0] == "download" and events.count(b"V") == 2:
                 raise RuntimeError("flash failed")
 
@@ -288,6 +291,7 @@ class OrchestrationTests(unittest.TestCase):
             return original_request(*args, **kwargs)
 
         with mock.patch.object(provisioner, "run_probe", side_effect=probe), \
+             mock.patch.object(provisioner, "require_probe"), \
              mock.patch.object(provisioner, "connect_commissioner", return_value=mock.Mock()), \
              mock.patch.object(provisioner, "transaction", side_effect=tx), \
              mock.patch.object(self.backend, "request", side_effect=request), \
@@ -339,6 +343,15 @@ class OrchestrationTests(unittest.TestCase):
             self.run_sequence()
         self.backend.request.assert_not_called()
 
+    def test_revised_bootstrap_accepts_storage_and_trust_compatible_commissioner(self):
+        self.operational["release_id"] = "OTA-0.1-r3"
+        provisioner.validate_pair(self.helper, self.operational)
+
+    def test_nightly_successor_is_not_a_usb_operational_bootstrap(self):
+        self.operational["release_id"] = "OTA-0.1alt-r3"
+        with self.assertRaises(ValueError):
+            provisioner.validate_pair(self.helper, self.operational)
+
     def test_changed_secure_image_is_rejected(self):
         root = self.args.commissioning_manifest.parent
         (root / "other.bin").write_bytes(b"y" * 0x21000)
@@ -349,13 +362,57 @@ class OrchestrationTests(unittest.TestCase):
         probe.assert_not_called()
         self.assertEqual(self.backend.request.call_count, 1)
 
-    def test_recovery_is_never_allowed_after_activation(self):
-        self.args.recover_usb = True
+    def test_erase_is_never_allowed_after_activation(self):
+        self.args.erase = True
         self.backend.request.side_effect = [{"state": "activated"}]
-        with mock.patch.object(provisioner, "recover_usb") as recover:
-            with self.assertRaisesRegex(RuntimeError, "erase refused"):
-                self.run_sequence()
-        recover.assert_not_called()
+        with self.assertRaisesRegex(RuntimeError, "erase refused"):
+            self.run_sequence()
+        self.assertFalse(any(isinstance(event, tuple) for event in self.events))
+
+    def test_clean_install_erases_once_then_installs_full_helper_before_provisioning(self):
+        self.args.erase = True
+        events = self.run_sequence()
+        operations = [event for event in events if isinstance(event, tuple)]
+        self.assertEqual(operations[0], ("erase", "--allow-erase-all"))
+        self.assertEqual(operations[1], (
+            "download", "--binary-format", "hex", "--verify",
+            str(self.args.commissioning_manifest.parent / "merged.hex"),
+        ))
+        self.assertEqual(sum(event[0] == "erase" for event in operations), 1)
+        self.assertLess(events.index(operations[1]), events.index(b"P"))
+        final = next(event for event in reversed(operations) if event[0] == "download")
+        self.assertIn("--restore-unwritten", final)
+        self.assertIn("0x10000", final)
+        self.assertNotIn("--allow-erase-all", final)
+        self.assertNotIn("--chip-erase", final)
+
+    def test_ambiguous_erase_failure_stops_without_retry_flash_or_activation(self):
+        self.args.erase = True
+        with self.assertRaisesRegex(RuntimeError, "probe operation failed"):
+            self.run_sequence(fail_operation="erase")
+        self.assertEqual(self.events, ["preflight", ("erase", "--allow-erase-all")])
+        self.backend.request.assert_called_once_with()
+
+    def test_helper_flash_failure_stops_without_provisioning_or_activation(self):
+        self.args.erase = True
+        with self.assertRaisesRegex(RuntimeError, "probe operation failed"):
+            self.run_sequence(fail_operation="download")
+        self.assertNotIn(b"P", self.events)
+        self.assertNotIn("activate", self.events)
+        self.assertEqual(sum(isinstance(e, tuple) and e[0] == "download"
+                             for e in self.events), 1)
+
+    def test_activated_rotation_maintenance_preserves_storage_and_does_not_reactivate(self):
+        self.backend.request.side_effect = [{"state": "activated"}]
+        events = self.run_sequence()
+        self.assertNotIn("activate", events)
+        self.assertEqual(events.count(b"V"), 2)
+        for event in events:
+            if isinstance(event, tuple):
+                self.assertNotEqual(event[0], "erase")
+                self.assertNotIn("--allow-erase-all", event)
+                if event[0] == "download":
+                    self.assertIn("--restore-unwritten", event)
 
     def test_wrong_generation_preflight_prevents_device_changes(self):
         self.backend.request.side_effect = [{"state": "prepared", "can_activate": False}]
@@ -365,20 +422,58 @@ class OrchestrationTests(unittest.TestCase):
         probe.assert_not_called()
 
 
-class RecoveryTests(unittest.TestCase):
-    def test_waits_for_exact_probe_before_usb_erase(self):
-        outputs = [
-            types.SimpleNamespace(stdout="another-probe"),
-            types.SimpleNamespace(stdout=f"2e8a:000c:{PROBE_SERIAL}"),
-        ]
-        with mock.patch.object(provisioner.subprocess, "run", side_effect=outputs), \
-             mock.patch.object(provisioner, "run_probe") as probe, \
-             mock.patch.object(provisioner.time, "sleep"), \
-             contextlib.redirect_stdout(io.StringIO()):
-            provisioner.recover_usb(PROBE_SERIAL)
-        probe.assert_called_once_with(
-            PROBE_SERIAL, "erase", "--connect-under-reset", "--allow-erase-all"
+class ProbeAccessTests(unittest.TestCase):
+    def test_exact_accessible_probe_is_required_once_without_reconnection_wait(self):
+        inventory = mock.Mock(stdout=(
+            f"[0]: Debug Probe -- 2e8a:000c-0:{PROBE_SERIAL} (CMSIS-DAP)\n"
+        ))
+        with mock.patch.object(provisioner.subprocess, "run", return_value=inventory) as run, \
+             mock.patch.object(provisioner.time, "sleep") as sleep:
+            provisioner.require_probe(PROBE_SERIAL)
+        run.assert_called_once_with(
+            ["probe-rs", "list"], capture_output=True, text=True, check=True, timeout=5
         )
+        sleep.assert_not_called()
+
+    def test_absent_wrong_ambiguous_or_partial_probe_never_causes_retry_or_erase(self):
+        for output in ("", "2e8a:000c:other (CMSIS-DAP)",
+                       f"2e8a:000c:{PROBE_SERIAL}-other (CMSIS-DAP)",
+                       f"9999:000c:{PROBE_SERIAL} (CMSIS-DAP)",
+                       f"2e8a:000c:{PROBE_SERIAL} (CMSIS-DAP)\n" * 2):
+            with self.subTest(output=output), \
+                 mock.patch.object(provisioner.subprocess, "run",
+                                   return_value=mock.Mock(stdout=output)) as run, \
+                 mock.patch.object(provisioner, "run_probe") as probe, \
+                 mock.patch.object(provisioner.time, "sleep") as sleep:
+                with self.assertRaisesRegex(RuntimeError, "Establish stable authorized service access"):
+                    provisioner.require_probe(PROBE_SERIAL)
+                self.assertEqual(run.call_count, 1)
+                probe.assert_not_called()
+                sleep.assert_not_called()
+
+    def test_absent_probe_blocks_entire_sequence_before_any_device_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "signed.bin").write_bytes(b"x" * 0x21000)
+            manifest = {
+                "release_id": "OTA-0.1", "artifact_file": "signed.bin",
+                "merged_artifact_file": "merged.hex",
+            }
+            args = types.SimpleNamespace(
+                commissioning_manifest=root / "helper.json",
+                operational_manifest=root / "final.json", probe_serial=PROBE_SERIAL,
+                erase=True,
+            )
+            backend = mock.Mock()
+            backend.request.return_value = {"state": "prepared", "can_activate": True}
+            with mock.patch.object(provisioner, "validate_pair"), \
+                 mock.patch.object(provisioner.subprocess, "run",
+                                   return_value=mock.Mock(stdout="")), \
+                 mock.patch.object(provisioner, "run_probe") as probe:
+                with self.assertRaisesRegex(RuntimeError, "exact USB debugger"):
+                    provisioner.commission(args, manifest, manifest, DEVICE_KEY, backend)
+            probe.assert_not_called()
+            backend.request.assert_called_once_with()
 
     def test_probe_failure_never_reports_success(self):
         with mock.patch.object(provisioner.subprocess, "run", return_value=mock.Mock(returncode=1)):
@@ -388,6 +483,39 @@ class RecoveryTests(unittest.TestCase):
     def test_admin_redirect_is_refused(self):
         with self.assertRaises(RuntimeError):
             provisioner.NoRedirect().redirect_request(None, None, 302, "", {}, "https://example.com")
+
+
+class FirmwarePolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.source = Path(__file__).resolve().parents[1] / "samples/fairway_power_sandbox/src"
+
+    def test_field_policy_does_not_infer_usb_from_vbus_or_disable_psm(self):
+        policy = (self.source / "power_policy.c").read_text()
+        self.assertIn("return set_buck2_service_rail(service_mode);", policy)
+        self.assertIn("enabled ? regulator_enable(buck2_dev) : regulator_disable(buck2_dev)", policy)
+        self.assertIn("while (interaction_awake_active)", policy)
+        self.assertIn("k_sem_take(&keeper_sem, K_FOREVER);", policy)
+        self.assertNotIn("vbus_hold", policy)
+        self.assertNotIn("modem_service_set_psm_requested", policy)
+
+    def test_operational_service_gate_precedes_lte_and_retains_boot_button_selection(self):
+        main = (self.source / "main.c").read_text()
+        self.assertIn("button_ux_is_pressed(&service_mode)", main)
+        self.assertIn("power_policy_init(service_mode)", main)
+        service = main.index('LOG_INF("Debugger service mode:')
+        field = main.index("modem_service_notify_local_hw_ready")
+        self.assertLess(service, field)
+        self.assertIn("k_sleep(K_FOREVER);", main[service:field])
+        self.assertNotIn("fairway_device_identity_provision(", main)
+
+    def test_commissioner_remains_separate_from_field_runtime(self):
+        commissioner = (self.source / "usb_commissioning.c").read_text()
+        self.assertIn("power_policy_init(true)", commissioner)
+        self.assertIn("uart_irq_rx_enable(uart);", commissioner)
+        self.assertIn("fairway_device_identity_provision(expected_id, expected_key)", commissioner)
+        self.assertNotIn("button_ux_is_pressed", commissioner)
+        self.assertNotIn("modem_service_notify_local_hw_ready", commissioner)
+        self.assertNotIn("fairway_ota_delivery_init", commissioner)
 
 
 class DeviceStorageTests(unittest.TestCase):

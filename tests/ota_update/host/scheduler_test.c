@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <string.h>
+#include <pm_config.h>
 
 #include <zephyr/ztest.h>
 
@@ -21,6 +22,171 @@ static void reset_manager(void)
 {
 	ota_update_test_reset();
 	zassert_equal(ota_update_init(false), 0);
+}
+
+ZTEST(fairway_ota_scheduler, test_actual_confirmation_retries_survive_restart_and_stop_after_ack)
+{
+	struct fairway_ota_confirmation confirmation;
+	ota_test_reset_fakes();
+	fairway_ota_delivery_confirmation_init();
+	ota_test.image_header.h.v1.sem_ver.major = 0;
+	ota_test.image_header.h.v1.sem_ver.minor = 1;
+	ota_test.image_header.h.v1.sem_ver.revision = 0;
+	ota_test.image_header.h.v1.sem_ver.build_num = 1;
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EAGAIN);
+	zassert_equal(ota_test.confirmation_calls, 0);
+	fairway_ota_delivery_confirmation_healthy();
+	ota_test.confirmation_error = -EIO;
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EIO);
+	zassert_equal(ota_test.last_header_area_id, PM_MCUBOOT_PRIMARY_ID);
+	zassert_equal(ota_test.confirmation_calls, 1);
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+1", &confirmation), 0);
+	zassert_equal(confirmation.sequence, 1);
+	zassert_false(confirmation.acknowledged);
+	reset_manager();
+	fairway_ota_delivery_confirmation_init();
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EAGAIN);
+	fairway_ota_delivery_confirmation_healthy();
+	ota_test.confirmation_error = 0;
+	zassert_equal(fairway_ota_delivery_confirm_running(), 0);
+	zassert_equal(ota_test.confirmation_calls, 2);
+	zassert_equal(ota_test.confirmation_sequence, 1);
+	zassert_equal(fairway_ota_delivery_confirm_running(), 0);
+	zassert_equal(ota_test.confirmation_calls, 2);
+}
+
+ZTEST(fairway_ota_scheduler, test_actual_confirmation_requires_confirmed_matching_primary_header)
+{
+	ota_test_reset_fakes();
+	fairway_ota_delivery_confirmation_init();
+	fairway_ota_delivery_confirmation_healthy();
+	ota_test.image_confirmed = false;
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EAGAIN);
+	ota_test.image_confirmed = true;
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EPROTO);
+	ota_test.header_error = -EIO;
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EIO);
+	zassert_equal(ota_test.confirmation_calls, 0);
+}
+
+ZTEST(fairway_ota_scheduler, test_actual_confirmation_binds_only_matching_pending_activation)
+{
+	for (int scenario = 0; scenario < 4; scenario++) {
+		ota_test_reset_fakes();
+		fairway_ota_delivery_confirmation_init();
+		fairway_ota_delivery_confirmation_healthy();
+		ota_test.image_header.h.v1.sem_ver.major = 0;
+		ota_test.image_header.h.v1.sem_ver.minor = 1;
+		ota_test.image_header.h.v1.sem_ver.revision = 0;
+		ota_test.image_header.h.v1.sem_ver.build_num = 1;
+		zassert_equal(fairway_ota_scheduler_initialize(1000,
+			CONFIG_FAIRWAY_OTA_FIRMWARE_VERSION, FAIRWAY_OTA_SCHEDULE_MODE_ONE_TIME), 0);
+		zassert_equal(fairway_ota_scheduler_set_deployment("bound-deployment",
+			scenario == 1 ? "99.0.0+1" : CONFIG_FAIRWAY_OTA_FIRMWARE_VERSION), 0);
+		if (scenario != 2) {
+			zassert_equal(fairway_ota_scheduler_mark_activation_pending(), 0);
+		}
+		if (scenario == 3) {
+			zassert_equal(fairway_ota_scheduler_mark_deployment_terminal(), 0);
+		}
+		ota_test.confirmation_error = -EIO;
+		zassert_equal(fairway_ota_delivery_confirm_running(), -EIO);
+		zassert_equal(strcmp(ota_test.confirmation_deployment_id,
+			scenario == 0 ? "bound-deployment" : ""), 0);
+		fairway_ota_delivery_confirmation_init();
+		fairway_ota_delivery_confirmation_healthy();
+		ota_test.confirmation_error = 0;
+		zassert_equal(fairway_ota_delivery_confirm_running(), 0);
+		zassert_equal(ota_test.confirmation_calls, 2);
+		zassert_equal(ota_test.confirmation_sequence, 1);
+		zassert_equal(strcmp(ota_test.confirmation_deployment_id,
+			scenario == 0 ? "bound-deployment" : ""), 0);
+	}
+}
+
+ZTEST(fairway_ota_scheduler, test_corrupt_deployment_binding_is_not_acknowledged_or_reset)
+{
+	static const uint8_t corrupt[] = {1, 2};
+	ota_test_reset_fakes();
+	fairway_ota_delivery_confirmation_init();
+	fairway_ota_delivery_confirmation_healthy();
+	ota_test.image_header.h.v1.sem_ver.major = 0;
+	ota_test.image_header.h.v1.sem_ver.minor = 1;
+	ota_test.image_header.h.v1.sem_ver.revision = 0;
+	ota_test.image_header.h.v1.sem_ver.build_num = 1;
+	ota_test_ps_put(SCHEDULE_UID, corrupt, sizeof(corrupt));
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EBADMSG);
+	zassert_equal(ota_test.confirmation_calls, 0);
+}
+
+ZTEST(fairway_ota_scheduler, test_deployment_confirmation_also_waits_for_current_boot_health)
+{
+	ota_test_reset_fakes();
+	reset_manager();
+	fairway_ota_delivery_confirmation_init();
+	zassert_equal(fairway_ota_scheduler_initialize(1000,
+		CONFIG_FAIRWAY_OTA_FIRMWARE_VERSION, FAIRWAY_OTA_SCHEDULE_MODE_ONE_TIME), 0);
+	zassert_equal(fairway_ota_scheduler_set_deployment("health-gate",
+		CONFIG_FAIRWAY_OTA_FIRMWARE_VERSION), 0);
+	fairway_ota_delivery_report_pending_boot();
+	zassert_equal(ota_test.report_calls, 0);
+	fairway_ota_delivery_confirmation_healthy();
+	fairway_ota_delivery_report_pending_boot();
+	zassert_equal(ota_test.report_calls, 0);
+	ota_test.image_header.h.v1.sem_ver.major = 0;
+	ota_test.image_header.h.v1.sem_ver.minor = 1;
+	ota_test.image_header.h.v1.sem_ver.revision = 0;
+	ota_test.image_header.h.v1.sem_ver.build_num = 1;
+	ota_test.confirmation_error = -EIO;
+	zassert_equal(fairway_ota_delivery_confirm_running(), -EIO);
+	fairway_ota_delivery_report_pending_boot();
+	zassert_equal(ota_test.report_calls, 0);
+	ota_test.confirmation_error = 0;
+	zassert_equal(fairway_ota_delivery_confirm_running(), 0);
+	fairway_ota_delivery_report_pending_boot();
+	zassert_equal(ota_test.report_calls, 1);
+	zassert_equal(strcmp(ota_test.last_report_state, "confirmed"), 0);
+}
+
+ZTEST(fairway_ota_scheduler, test_confirmation_changes_increment_sequence_including_return_to_prior_version)
+{
+	struct fairway_ota_confirmation initial, successor, rollback, restored;
+	ota_test_reset_fakes();
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &initial), 0);
+	zassert_equal(fairway_ota_confirmation_acknowledge(&initial), 0);
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &restored), 0);
+	zassert_true(restored.acknowledged);
+	zassert_equal(restored.sequence, initial.sequence);
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+5", &successor), 0);
+	zassert_equal(successor.sequence, 2);
+	zassert_false(successor.acknowledged);
+	zassert_equal(fairway_ota_confirmation_acknowledge(&initial), -ESTALE);
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &rollback), 0);
+	zassert_equal(rollback.sequence, 3);
+	zassert_false(rollback.acknowledged);
+}
+
+ZTEST(fairway_ota_scheduler, test_confirmation_storage_errors_do_not_acknowledge_or_rearm_schedule)
+{
+	struct fairway_ota_confirmation confirmation;
+	struct fairway_ota_schedule_state schedule;
+	static const uint8_t corrupt[] = {1, 2};
+	ota_test_reset_fakes();
+	zassert_equal(fairway_ota_scheduler_initialize(1000, "0.1.0+4",
+		FAIRWAY_OTA_SCHEDULE_MODE_ONE_TIME), 0);
+	zassert_equal(fairway_ota_scheduler_mark_check_complete(), 0);
+	ota_test_ps_fail_next_set();
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &confirmation), -EIO);
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &confirmation), 0);
+	ota_test_ps_fail_next_set();
+	zassert_equal(fairway_ota_confirmation_acknowledge(&confirmation), -EIO);
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &confirmation), 0);
+	zassert_false(confirmation.acknowledged);
+	zassert_equal(fairway_ota_scheduler_get(&schedule), 0);
+	zassert_true(schedule.one_time_complete);
+	zassert_false(schedule.check_due);
+	ota_test_ps_put(0x46520004u, corrupt, sizeof(corrupt));
+	zassert_equal(fairway_ota_confirmation_prepare("0.1.0+4", &confirmation), -EBADMSG);
 }
 
 static void seed_identity(void)

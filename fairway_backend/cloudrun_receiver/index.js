@@ -1010,7 +1010,7 @@ function createFairwayHandlers(db, {
     throw error;
   }
 
-  function deviceReadModel(deviceSnap, customersById, coursesByPath) {
+  function deviceReadModel(deviceSnap, customersById, coursesByPath, otaStatus) {
     const device = deviceSnap.data();
     const identityIsAuthoritative = device.system_identity?.source === 'verified_provenance';
     const customer = device.customer_id ? customersById.get(device.customer_id) : null;
@@ -1030,6 +1030,8 @@ function createFairwayHandlers(db, {
       sim_iccid: device.sim_iccid ?? null,
       hardware_revision: device.hardware_revision ?? null,
       firmware_generation: device.firmware_generation ?? null,
+      confirmed_firmware_version: otaStatus?.confirmed_firmware_version ?? null,
+      confirmed_firmware_at: otaStatus?.confirmed_at ?? null,
       system_identity: identityIsAuthoritative ? {
         source: device.system_identity.source,
         observed_at: device.system_identity.observed_at ?? null,
@@ -1053,9 +1055,10 @@ function createFairwayHandlers(db, {
   }
 
   async function listAdminFleet(req, res) {
-    const [customersSnap, devicesSnap] = await Promise.all([
+    const [customersSnap, devicesSnap, otaStatuses] = await Promise.all([
       db.collection('customers').limit(500).get(),
       db.collection('devices').limit(500).get(),
+      otaService.listDeviceStatus(),
     ]);
 
     const customersById = new Map();
@@ -1093,8 +1096,9 @@ function createFairwayHandlers(db, {
       return customer;
     }));
 
+    const statusById = new Map(otaStatuses.map((status) => [status.device_id, status]));
     const devices = devicesSnap.docs.map((deviceSnap) =>
-      deviceReadModel(deviceSnap, customersById, coursesByPath));
+      deviceReadModel(deviceSnap, customersById, coursesByPath, statusById.get(deviceSnap.id)));
 
     return res.status(200).json({
       review_mode: 'production_admin',
@@ -1801,6 +1805,16 @@ function createFairwayHandlers(db, {
         return res.status(200).json(await otaService.checkForUpdate(
           deviceId, device, req.body.hardware_id
         ));
+      }
+
+      if (path === '/api/v1/device-ota/confirmation') {
+        const deviceId = req.body?.device_id;
+        if (typeof deviceId !== 'string') {
+          return res.status(400).json({ error: 'device_id_required' });
+        }
+        const device = await authenticateDevice(req, res, deviceId);
+        if (!device) return res;
+        return res.status(200).json(await otaService.confirmRunningFirmware(deviceId, req.body));
       }
 
       const otaEventMatch = path.match(

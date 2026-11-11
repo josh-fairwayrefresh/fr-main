@@ -29,6 +29,16 @@ def write_artifact(path: Path, contents: bytes) -> str:
 
 
 class OtaReleaseVerificationTests(unittest.TestCase):
+    def test_revised_releases_have_unique_versions_and_preserve_bootstrap_policy(self):
+        versions = [release["version_string"] for release in RELEASES.values()]
+        self.assertEqual(len(versions), len(set(versions)))
+        self.assertEqual(RELEASES["OTA-0.1-r3"]["version_string"], "0.1.0+4")
+        self.assertEqual(RELEASES["OTA-0.1-r3"]["schedule"], "one_time")
+        self.assertEqual(RELEASES["OTA-0.1alt-r3"]["version_string"], "0.1.0+5")
+        self.assertEqual(RELEASES["OTA-0.1alt-r3"]["schedule"], "nightly")
+        self.assertEqual(RELEASES["OTA-1.0-r3"]["version_string"], "1.0.0+3")
+        self.assertEqual(RELEASES["OTA-1.0-r3"]["schedule"], "nightly")
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.work_dir = Path(self.temp_dir.name)

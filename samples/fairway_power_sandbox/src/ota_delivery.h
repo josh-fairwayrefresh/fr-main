@@ -12,5 +12,8 @@ int fairway_ota_delivery_initialize_and_report_boot(
 	int64_t first_boot_utc_ms, const char *running_version,
 	enum fairway_ota_schedule_mode desired_mode);
 void fairway_ota_delivery_report_pending_boot(void);
+void fairway_ota_delivery_confirmation_init(void);
+void fairway_ota_delivery_confirmation_healthy(void);
+int fairway_ota_delivery_confirm_running(void);
 
 #endif

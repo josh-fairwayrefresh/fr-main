@@ -62,9 +62,24 @@ RELEASES = {
         "version_string": "0.1.0+3",
         "schedule": "nightly",
     },
+    "OTA-0.1-r3": {
+        "version": {"major": 0, "minor": 1, "revision": 0, "build": 4},
+        "version_string": "0.1.0+4",
+        "schedule": "one_time",
+    },
+    "OTA-0.1alt-r3": {
+        "version": {"major": 0, "minor": 1, "revision": 0, "build": 5},
+        "version_string": "0.1.0+5",
+        "schedule": "nightly",
+    },
     "OTA-1.0-r2": {
         "version": {"major": 1, "minor": 0, "revision": 0, "build": 2},
         "version_string": "1.0.0+2",
+        "schedule": "nightly",
+    },
+    "OTA-1.0-r3": {
+        "version": {"major": 1, "minor": 0, "revision": 0, "build": 3},
+        "version_string": "1.0.0+3",
         "schedule": "nightly",
     },
 }
@@ -647,8 +662,8 @@ def main() -> int:
     parser.add_argument("--usb-commissioning", action="store_true",
                         help="build the persistent USB commissioning application, not an OTA release")
     args = parser.parse_args()
-    if args.usb_commissioning and args.release_id != "OTA-0.1":
-        parser.error("--usb-commissioning requires --release-id OTA-0.1")
+    if args.usb_commissioning and RELEASES[args.release_id]["schedule"] != "one_time":
+        parser.error("--usb-commissioning requires a USB-only one-time bootstrap release")
     try:
         with _cleanup_on_termination_signals():
             build_release(args)

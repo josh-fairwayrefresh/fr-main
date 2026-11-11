@@ -472,6 +472,10 @@ int ota_update_confirm_healthy(bool mandatory_init_ready,
 		return -EACCES;
 	}
 	k_mutex_lock(&update_mutex, K_FOREVER);
+	if (!mandatory_init_ready || !modem_bootstrap_ready || boot_service_mode) {
+		k_mutex_unlock(&update_mutex);
+		return -EAGAIN;
+	}
 	if (update_status.state == FAIRWAY_OTA_CONFIRMED) {
 		k_mutex_unlock(&update_mutex);
 		return 0;

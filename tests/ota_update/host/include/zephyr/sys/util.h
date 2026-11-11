@@ -6,5 +6,7 @@
 #define FAIRWAY_UTIL_IS_ENABLED_0 0
 #define FAIRWAY_UTIL_IS_ENABLED_1 1
 #define IS_ENABLED(config) FAIRWAY_UTIL_CAT(FAIRWAY_UTIL_IS_ENABLED_, config)
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
+#define BIT_MASK(bits) ((1UL << (bits)) - 1UL)
 
 #endif

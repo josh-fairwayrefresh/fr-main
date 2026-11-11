@@ -34,11 +34,15 @@ const RELEASE_BLOCKERS = Object.freeze([
   'Release-specific CPO publication authorization must be recorded.',
   'Accepted nightly images require a separately accepted scheduler correction.',
 ]);
+const RELEASE_REPLACEMENTS = Object.freeze({
+  'OTA-0.1alt-r2': 'OTA-0.1alt-r3',
+  'OTA-1.0-r2': 'OTA-1.0-r3',
+});
 
 function publicationEligible(releaseId, digest, approvals = PUBLICATION_APPROVALS) {
   const approval = approvals[releaseId];
-  return releaseId !== 'OTA-0.1' && !!approval && approval.sha256 === digest
-    && (!releaseId.endsWith('-r2') || (
+  return !['OTA-0.1', 'OTA-0.1-r3'].includes(releaseId) && !!approval && approval.sha256 === digest
+    && (!/-r[23]$/.test(releaseId) || (
       /^[a-f0-9]{40}$/.test(approval.build_base_commit || '')
       && /^[a-f0-9]{64}$/.test(approval.build_source_sha256 || '')
     ))
@@ -52,4 +56,4 @@ function publicationEligible(releaseId, digest, approvals = PUBLICATION_APPROVAL
     && approval.device_ids.every((id) => /^FRB-\d{4}$/.test(id));
 }
 
-module.exports = { PUBLICATION_APPROVALS, RELEASE_BLOCKERS, publicationEligible };
+module.exports = { PUBLICATION_APPROVALS, RELEASE_BLOCKERS, RELEASE_REPLACEMENTS, publicationEligible };

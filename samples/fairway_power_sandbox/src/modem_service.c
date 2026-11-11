@@ -77,6 +77,8 @@ void modem_service_wait_for_lte_registration(void)
 	while (!modem_service_lte_is_registered()) {
 		k_sem_take(&registration_ready_sem, K_FOREVER);
 	}
+	/* A semaphore wakes one waiter; pass registration to other boot workers. */
+	k_sem_give(&registration_ready_sem);
 }
 
 /* Single globally-registered LTE event handler (lte_lc_connect_async() and

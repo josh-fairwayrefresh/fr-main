@@ -68,6 +68,21 @@ headquarters configuration was changed in this local increment.
 
 ## Provisioning workflow
 
+The revised `OTA-0.1-r3` USB bootstrap and `OTA-0.1alt-r3` successor report
+the healthy, MCUboot-confirmed primary-image version through authenticated
+OTA status. This is separate from historical `firmware_generation` registry
+metadata and does not mutate identity, credentials or physical-capability
+evidence. The Admin registry's firmware field shows last confirmed actual
+version and backend acceptance time, or explicitly unknown.
+The protected confirmation sequence must be preserved during normal USB
+maintenance and OTA. Erasing Protected Storage after sequence-protected
+confirmation requires separately authorized engineering reconciliation:
+the backend must reject a reset/lower sequence rather than silently accepting
+stale firmware evidence. Neither a reflash nor reporting authorizes clearing
+an active OTA assignment or re-arming an already observed bootstrap check.
+Firmware behavior and publication gates remain owned by the Firmware
+Specification and Deployment Guide.
+
 Assembled → hardware inspected → permanent Device and backend credential
 created through the established workflow → common credential-free firmware
 installed → identity/credential written to TF-M PSA Protected Storage →
@@ -114,6 +129,20 @@ physical request delivery and normal device indication following COMPLETE.
 See the [physical evidence](./DEPLOYMENT_GUIDE.md#frb-0005-physical-commissioning-evidence--2026-11-10).
 Disconnect field power before attaching USB, as required by the Assembly Guide.
 
+Service versus field is an operator-controlled power-connection procedure:
+disconnect Voltaic, connect USB, perform only authorized maintenance, then
+disconnect USB before reconnecting Voltaic for normal operation. Both supplies
+feed the same VBUS entry; firmware does not distinguish them. Existing field
+low-power behavior is unchanged.
+
+**Service prerequisite:** the exact onboard debugger must already be stably
+accessible. The host checks it once before programming and fails closed if it
+is absent or ambiguous. It never waits for a USB reconnect or races boot.
+The exceptional FRB-0005 PV8 recovery is physical evidence, not proof of
+routine PV8-free maintenance. The remaining architectural issue and required
+CPO decision are owned by the
+[Firmware Specification](./FIRMWARE_SPECIFICATION.md#unresolved-routine-usb-debugger-access).
+
 The dedicated `CONFIG_FAIRWAY_USB_COMMISSIONING` build keeps BUCK2/debugger
 power on and never starts LTE, golfer transactions, or OTA scheduling.
 It reuses the same `device_identity.c` PSA writer and loader as the operational
@@ -139,6 +168,30 @@ python3 scripts/provision_device_identity.py \
   --admin-session-port 0
 ```
 
+This is the single supported commissioning entry point on macOS, where the
+host binds USB serial ancestry to the exact CMSIS-DAP serial. Once that
+debugger is accessible, choose the authorized operation:
+
+- **Clean installation on a new Feather or explicitly authorized replacement:**
+  add `--erase`. The existing assigned identity/credential and matching
+  prepared, activatable backend rotation must be available. The host erases
+  once, installs the complete verified commissioning HEX, and provisions
+  through the established protected-storage writer. This is not a new Device
+  allocation or a new credential issuer.
+- **Storage-preserving maintenance/resumption:** omit `--erase`. Both
+  commissioner and final firmware are written only to the primary slot.
+  Supply the same retained credential and matching prepared or activated
+  rotation. Same-ID/same-key provisioning is idempotent and verifies retained
+  values; different values fail closed. An activated rotation is not activated
+  again. This path requires compatible existing MCUboot/TF-M infrastructure;
+  it is not an installation path for an erased board.
+
+The current commissioner does not overwrite a different stored credential.
+A genuinely different replacement requires the existing authorized credential
+lifecycle and a separately authorized clean installation with its prepared
+replacement; do not treat maintenance as an in-place key-change command.
+An activated rotation cannot authorize `--erase`.
+
 Use the established Nordic Python environment for commissioning as well as
 building: put `$NCS_TOOLCHAIN_DIR/bin` on `PATH` and invoke that bundle's
 Python. Selecting Nordic Python alone does not put its `west` executable on
@@ -163,16 +216,13 @@ with read-back verification and no chip erase. It then activates the exact
 prepared rotation through the existing Admin API and resets into normal operation.
 It does not allocate Devices or alter assignment/history.
 
-For firmware already disabling the onboard debugger, add `--recover-usb` only
-with explicit erase authorization. Wait for `RECOVERY ARMED`, then reconnect
-USB without pressing a button. The recovery listener remains armed until the probe arrives or the operator
-cancels; there is no operator countdown. The host performs
-the vendor-described early erase, followed by complete commissioning-image
-installation. This is a destructive **pre-provisioning recovery**, not the
-credential protocol or a manually timed command. Its availability depends on
-physical USB enumeration; failure to capture the probe is a real recovery
-failure, not successful commissioning. Erase is refused for an activated
-rotation. Never use this flag to resume after successful installation/activation.
+An erase, flash, or provisioning failure stops the sequence; device commands
+and credential writes are not automatically replayed. A failed/timed-out erase
+or flash may have partially changed the target. Preserve the observed result
+and establish the device state before any new destructive operation. Do not
+repeat `--erase` merely because a previous run did not reach its final message.
+Bounded serial readiness checks after a commanded reset are retained: they
+wait for the persistent commissioner, not a briefly powered debugger.
 
 The serial protocol is `FRC1`, operation (`?` status, `P` install, `V` verify),
 16-byte random request nonce, an eight-byte ID and 43-byte credential for

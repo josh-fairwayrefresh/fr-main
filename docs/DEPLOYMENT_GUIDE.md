@@ -14,10 +14,10 @@ the original accepted firmware artifacts remain unchanged.
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
-| Production Hosting | Production site `savvy-kit-496703-r5`; live version `87d3105f0676a782` | Released `2026-11-10T01:16:04.645Z` (November 9 Pacific). All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; 52 QR destinations and cache policies pass. Previous version `c6a6de50274e48b5` retained. |
-| Production Admin / receiver | Admin `fairway-admin-ota-r2-cb02`; receiver `fairway-button-receiver-ota-r2-cb02`, both 100% | Release-catalog source commit `cb02beb08b8ab5f1876194e753d0deef1bfe6a6e`; images `sha256:3477ee58d759e3a5b9c7c0df120ef0af7c80b9f0caa47163e515c6480571de87` and `sha256:4f79f35740e5db66fa407c9fc6fd3555f0c3550c10395c6495a131fd09b70cb9`; existing runtime identities and delivery-enabled settings retained. Prior delivery-enabled revisions `fairway-admin-00062-zuv` and `fairway-button-receiver-00051-dad` remain rollback anchors. |
+| Production Hosting | Production site `savvy-kit-496703-r5`; live version `5eb383e4a44c3d13` | Released `2026-11-10T23:28:13.852Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds last-confirmed-running version/time to the existing registry field. Prior versions retained; exact rollout evidence below. |
+| Production Admin / receiver | Admin `fairway-admin-ota-complete-abf92e9`; receiver `fairway-button-receiver-ota-complete-abf92e9`, both Ready, 100% | Verified `2026-11-10T23:48:16Z`; isolated dirty-worktree source archive `abf92e931fdecd3807063c365f2ed867d8666a548f7272b1382b1ee278ad3ed2`. Adds exact-deployment confirmed-success cleanup while retaining history. Runtime identities and delivery-enabled settings unchanged. Prior revisions retained. |
 | OTA implementation | Corrected successors are published and authorized for FRB-0005 only; CPO assigned OTA-0.1alt-r2 through Admin | Firmware qualification and hashes are owned by the Firmware Specification. On 2026-11-10, after successful physical commissioning, the CPO authorized recording verified initialization and matching production trust on FRB-0005. At approximately 14:23 Pacific, refreshed Admin showed pending OTA-0.1alt-r2, result `assigned`, and no reported OTA check-in or confirmed version. Installation remains unverified. Original artifacts/Pilot 1.1 unchanged. |
-| Local OTA validation | Three original accepted packages preserved; corrected `OTA-0.1alt-r2` / `OTA-1.0-r2` are built/signed/verified and source-backed | Source/host/build evidence covers scheduler corrections and effective image limit, not physical recurrence. FRB-0005 retains the exact accepted USB-only OTA 0.1. Autonomous physical transitions remain unvalidated. |
+| Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | Recommissioned on 2026-11-10 with unchanged OTA 0.1; protected credential verified after reboot and matching backend rotation activated | One explicitly authorized PV8-assisted recovery established stable access. Full erase, verified commissioning-image flash, protected provisioning, and storage-preserving verified OTA 0.1 flash succeeded. CPO confirmed device-originated Cart delivery and normal device indication after COMPLETE. See physical evidence below; routine button-free recovery is not established. |
 | Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled; both corrected releases published; FRB-0005 physical capability recorded | Admin and Receiver revisions, private object metadata, and the published release catalog were verified 2026-11-10. Following physical commissioning, FRB-0005's capability was recorded and read back at `2026-11-10T22:19:59.099414Z`; the CPO subsequently assigned OTA-0.1alt-r2 in Admin. No device download or installation is yet verified. HQ remains `America/Los_Angeles`. |
 | Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
@@ -29,6 +29,183 @@ credential-lifecycle backend was originally deployed on 2026-10-17;
 this rollout performed no credential operation or authenticated lifecycle
 request. See
 `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+### Running-image confirmation revision — implementation and release boundary (2026-11-10)
+
+The CPO authorized the revised USB-only bootstrap, matching nightly successor,
+local validation, production backend/frontend rollout and new release
+publication, but did not authorize physical operations, assignments or Git
+commit/push/merge. New build identities are `OTA-0.1-r3` (`0.1.0+4`, USB only)
+and `OTA-0.1alt-r3` (`0.1.0+5`, nightly). No existing release identity or
+artifact may be overwritten. The original commissioning helper may be reused
+only after the existing verifier and pairing checks establish matching
+partitions, protected-storage settings, signing trust and TF-M payload.
+Provisioning accepts the revised bootstrap, not a nightly image, as its final
+operational image.
+
+Runtime confirmation behavior is owned by the Firmware Specification.
+The backend adds authenticated `POST /api/v1/device-ota/confirmation` with
+Device ID, primary-image version and protected monotonic change sequence.
+Exact acknowledgment, idempotent time, stale protection and the existing
+registry projection use `ota_device_status`; no second inventory is created.
+The CPO subsequently approved automatic completion cleanup only after
+confirmed-running installation. OTA reports bind the existing persisted
+activation deployment ID to the actual primary-image version; the backend
+transaction records successful deployment/event evidence, preserves
+`last_deployment_id` for fleet history and clears only that matching current
+assignment. It never guesses from a version alone, fabricates missed lifecycle
+events, or clears a newer assignment from duplicate/stale/older-deployment
+reports. The authenticated legacy confirmed path retains its ordered lifecycle
+checks and the same exact-assignment protection. Offer/download/failure and
+an unbound or different-version USB report do not perform this success cleanup.
+This is not authorization to cancel FRB-0005's unresolved old assignment.
+
+The selectable-catalog replacement is conditional: after the exact accepted,
+governance-complete `OTA-0.1alt-r3` is published, new selections and unconfirmed
+reviews of `OTA-0.1alt-r2` are rejected. The old release, object, deployment
+history and existing assignment's delivery authorization remain intact.
+This does not cancel or retarget an active assignment. A pending old
+assignment and an already observed one-time check still block a new
+FRB-0005 assignment under the existing guards; a reflash alone is not
+authorization to reconcile those backend records.
+
+**Current publication scope (2026-11-10):** the CPO now authorizes required
+source/release-record commits and push to the existing review branch and its
+designated `origin` remote, without merge. The CPO requests both
+`OTA-0.1alt-r3` and the newly added `OTA-1.0-r3` (`1.0.0+3`, nightly) in Admin
+before FRB-0005 is reflashed. The final bootstrap and 0.1alt packages remain
+unchanged; only the additional 1.0 identity needs a signed build. Exact-hash
+acceptance, actual remote-backup evidence and governed catalog deployment
+remain prerequisites. Publishing does not assign a device. The old unresolved
+assignment and consumed bootstrap state need separately scoped reconciliation;
+do not start a physical commissioning window while they still block selection.
+
+**Publication stop until evidence is complete:** the new source/release records are not yet committed
+and backed up to the designated remote, and no new exact signed hashes have
+been accepted. Existing r2 approvals do not authorize r3 bytes. Do not populate
+`accepted_releases.js` or `PUBLICATION_APPROVALS` with invented evidence.
+Complete local builds/verification and separately authorized application
+deployment where possible, then obtain explicit commit/push scope and exact-hash
+acceptance before publication. No device or assignment operation is permitted
+as a deployment side effect. Production rollout/build evidence must be recorded
+below when actually verified; this subsection does not assert completion.
+
+#### Verified application rollout and remaining release blockers
+
+- Completion-enabled Admin `fairway-admin-ota-complete-abf92e9` and receiver
+  `fairway-button-receiver-ota-complete-abf92e9` are Ready and receive 100%,
+  verified `2026-11-10T23:48:16Z`. Their image digests respectively are
+  `sha256:8cd877776dd3f5bb10f494f4b35f99f517adb075fe207d0536846905d9da4a35`
+  and `sha256:e59ed58dacbed02507aa458b8598761db5963f6dc12e8265291cd31546fc38dd`.
+  The isolated 40-file source archive SHA-256 is
+  `abf92e931fdecd3807063c365f2ed867d8666a548f7272b1382b1ee278ad3ed2`.
+  Both were staged at zero traffic, verified Ready with unchanged runtime/
+  identity fingerprints and unchanged prior traffic, then promoted and read
+  back. Well-formed unauthenticated Admin and confirmation calls return 401.
+  Prior `*-ota-confirm-12eed29` and `*-ota-r2-cb02` revisions remain available.
+  Source inventory, immutable revision identities, redacted before/staged/
+  promoted snapshots, denial checks, full backend/Python validation and
+  unchanged read-only FRB-0005 evidence are retained under
+  `/Users/DuplexLoop/.copilot/session-state/4078b11f-7d91-4c26-8b5b-285780cd8598/files/ota-completion-release/`.
+  The full backend runner includes atomic commit failure/retry, exact-deployment
+  binding, duplicate/stale/older-report protection, retained fleet history,
+  legacy completion and invalidation of prior artifact grants after success.
+- The initial running-confirmation backend rollout was followed by the final registry-layout Hosting
+  release at `2026-11-10T23:28:13.852Z`.
+  Admin `fairway-admin-ota-confirm-12eed29` and receiver
+  `fairway-button-receiver-ota-confirm-12eed29` were Ready and received 100%
+  before the completion-enabled rollout above.
+  Their image digests respectively are
+  `sha256:272f4b1f4fd15e5e43de6c810be21758c471549447ac376b7932ec8f547c3c2d`
+  and `sha256:993711b8720e09f22f3ed43b42db8e5f4da9bd8dcf9b1b513c85785a7877f48b`.
+  Both were first staged with no traffic; runtime identities/configuration
+  fingerprints matched the prior serving revisions before promotion.
+  Prior `*-ota-r2-cb02` revisions remain rollback anchors.
+- Hosting version `5eb383e4a44c3d13`, release `1794353293852000`, is live on
+  both production origins. All 127 published file hashes and entry/asset cache
+  policies were verified on both origins, including all 107 accepted Driving
+  Range assets. The other accepted public files are unchanged. Fifteen ignored
+  numbered duplicate files copied by Vite were excluded from the isolated release
+  snapshot without deleting or modifying the workspace copies. Hosting config
+  equals the prior serving version. The first rollout version
+  `83b7935f50996e65` and previous baseline `87d3105f0676a782` are retained.
+  Publication used the Hosting REST API with the authenticated authorized
+  principal, explicit production quota project and verified TLS CA bundle.
+- The isolated 40-file backend source archive SHA-256 is
+  `12eed29c6feb2a12c13ad7ffff61dfd273c69731183af993ba41068b7aa0211f`.
+  Source inventories, redacted runtime/traffic snapshots, staging logs, exact
+  Hosting snapshot and per-file production verification are retained under
+  `/Users/DuplexLoop/.copilot/session-state/4078b11f-7d91-4c26-8b5b-285780cd8598/files/ota-confirmation-release/`.
+  Final Hosting evidence is in its `final-ui/` subdirectory.
+  This is dirty-worktree deployment evidence, not Git or remote-backed firmware
+  publication evidence.
+- The complete backend regression runner passes, including exact-Device
+  confirmation authentication, registry projection, duplicate/stale/conflicting
+  reports, delayed legacy lifecycle protection and conditional replacement
+  selection with preserved active delivery. Seven focused Admin tests and the
+  production frontend build pass. Production unauthenticated Admin fleet and
+  running-confirmation requests both return 401. The shared authenticated
+  browser could not be inspected because the VS Code tools have no connected
+  client; no authenticated production confirmation was synthesized.
+- Local Python validation passes 119 tests with one skip. Actual OTA manager/
+  scheduler/delivery host tests pass 42 cases in each schedule mode, covering primary flash-area ID,
+  current-boot health and MCUboot gating, persistent retry/ack and unchanged
+  one-time discovery. The real reporting request/acknowledgment code also
+  compiles and passes boundary tests for both `0.1.0+4` and `0.1.0+5`, with the
+  vendor JSON decoder and transport mocked. The real registration-wait
+  function is additionally compiled against blocking pthread semaphore fakes:
+  the two-worker deadlock reproduced before the fix, and both registration
+  and reconnect now release both boot workers without polling. A successful
+  waiter passes the existing registration semaphore signal to other waiters;
+  power and registration policy are unchanged. VS Code task/diagnostic tools
+  still have no connected client. The CPO explicitly authorized the macOS
+  Terminal alternative using the existing builder's hidden prompt. Earlier
+  candidates are preserved, not published; final complete-source signed builds
+  and independent verification succeeded, as recorded below. No passphrase is captured in
+  chat, command arguments, environment or logs.
+- Read-only current-state verification finds FRB-0005's existing
+  `OTA-0.1alt-r2` deployment `18d1f946-f809-43b0-8a02-58925e630add` still
+  `assigned`, with last OTA check `2026-11-10T22:30:49.128Z` and no confirmed
+  version. The active assignment and consumed bootstrap guard prevent a new
+  assignment until separately authorized engineering reconciliation. No
+  assignment, capability, registry or credential record was changed by rollout.
+- New r3 publication, old-r2 selectable withdrawal and physical qualification
+  remain unperformed. Required next boundaries are exact-hash acceptance, authorized source/release commits
+  and designated-remote backup, and explicit scope for old-assignment/bootstrap
+  reconciliation. No physical operation, OTA assignment, commit, push or merge
+  was performed.
+
+#### Final revised firmware packages — built and verified, not accepted/published
+
+The final packages include both the persisted deployment binding and the
+two-worker LTE registration handoff fix. Both use production ECDSA-P256 trust
+fingerprint
+`sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`.
+The existing builder and independent verifier passed signature, version,
+credential-exclusion, generated layout/trust and capacity checks. Both are
+below the 434,176-byte signed-image ceiling.
+
+| Release | Version | Signed bytes | Signed image SHA-256 |
+|---|---|---|---|
+| `OTA-0.1-r3` (USB only) | `0.1.0+4` | 281,476 | `a93b4620d119a7d08b253ca76e1dcbe697557f329d2bf262246b742d58d6986d` |
+| `OTA-0.1alt-r3` (nightly successor) | `0.1.0+5` | 281,659 | `79e53b5643fcc78cabb152e89eeac4fc1377587dd58b71c51d41c0cb7637275d` |
+
+Final directories under `/Users/DuplexLoop/fairway-builds/` are
+`ota-OTA-0.1-r3-production-20261110-r3/` and
+`ota-OTA-0.1alt-r3-production-20261110-r3/`. Both record build-source digest
+`7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051`,
+verified against current firmware inputs, based on HEAD
+`a99c45cf97de478c5c199381e48e6061d9de5fcd` with authorized uncommitted changes.
+The existing `usb-commissioning-20261110-r2` helper passes the independent
+verification/pairing checks and exact secure TF-M payload comparison with
+the final bootstrap. No helper rebuild or physical operation was performed.
+The bootstrap retains its one-time 900-second policy.
+
+Final build logs and verification status are under the completion evidence
+directory's `firmware-r3-retry1/`. Earlier local candidates and the failed
+unlock attempt remain separate evidence; they are not the final packages.
+Recorded hashes are verification evidence only, not CPO acceptance, remote
+backup, or permission to bypass publication gates. No further build is planned.
 
 ### OTA Administration production deployment (2026-11-09)
 
@@ -3142,91 +3319,34 @@ this build's source and host assertions do not prove physical recovery.
 
 ### Flash Procedure
 
-The USB-only commissioning replacement below supersedes PV8/timed credential
-provisioning for the newly authorized workflow. The following PV8/erase-all
-instructions describe the pre-existing service programming path and are not
-the storage-preserving final step after USB commissioning.
+Use the [single commissioning entry point](./DEVICE_PROVISIONING_GUIDE.md#usb-only-commissioning)
+for clean installation or compatible storage-preserving maintenance.
+Firmware is credential-free; per-device identity and credential installation
+uses TF-M Protected Storage, not device-specific firmware headers.
+Disconnect field power and measurement supplies before USB service as
+specified by the [Assembly Guide](./HARDWARE_ASSEMBLY_GUIDE.md#current-field-power-and-service-isolation).
 
-The documented Circuit Dojo nRF9151 Feather development/service programming
-procedure is to select PV8 service mode, then program the complete
-device-specific merged image with `probe-rs` and read it back for
-verification. This procedure is subject to separate CPO authorization for the
-target device and operation; it is not an OTA procedure or authorization to
-flash. Historical recovery experiments later in this section are evidence,
-not replacements for this documented workflow.
-
-The documented command uses erase-all. Erase-all clears device flash; do not
-assume it preserves persistent credentials or other device-local state. The
-complete image is not a backup of backend records, device identity, or an
-active backend credential. The current credential is provided through the
-device-specific firmware input; any persistent credential behavior must be
-established separately, not inferred from a successful flash. In USB/debug/
-service mode, disconnect V25/V50/V75 field power and PPK2 before connecting
-Feather USB. Prototype 3.3 field and USB development/service configurations
-are mutually exclusive, as specified by
-`docs/HARDWARE_ASSEMBLY_GUIDE.md`.
-
-**Destructive-operation gate:** the command below erases all target flash. It
-may remove the installed firmware and any device-local credential
-material. The FRB-0003 cutover procedure in
-`docs/DEVICE_PROVISIONING_GUIDE.md` requires an approved target-specific flash
-procedure and prohibits erase-all without separate CPO approval. The
-documented FRB-0005 erase-all method is not blanket approval for FRB-0003.
-For any separately authorized flash, confirm the permanent Device ID,
-credential lifecycle state, approved full image, and recovery plan before
-connecting the probe. For a production/field image, confirm the approved
-production signing key and matching bootloader trust anchor; the
-NCS-distributed debug signing key is not production-qualified.
+**Destructive-operation gate:** complete erase destroys existing firmware and
+device-local credentials. It requires separate target-specific authorization
+and a prepared replacement credential/rotation. No FRB-0005 authorization
+applies to another device. Normal maintenance must not erase protected
+storage. Verify the approved artifacts and production signing trust before
+programming; the NCS debug signing key is not production-qualified.
 
 The current low-power firmware disables BUCK2 during normal operation, which
 removes power from the Feather's RP2040 debugger. To enter its explicit
 development/service mode, keep the PV8 button pressed while applying USB
 service power or pressing RESET, and hold it through startup. The firmware
 then keeps BUCK2 enabled and does not start LTE or golfer-request runtime.
-Wait for the CMSIS-DAP probe to enumerate before programming. Release PV8
-before the final reset to return to normal operation, where BUCK2 is disabled.
-The two-second application startup initialization remains unchanged and is
-distinct from Circuit Dojo's separate early-erase timing for firmware without
-this service mode.
-
-Build and independently verify the complete device-specific image using the
-procedure above. Confirm the attached probe serial identifies the authorized
-target. Program the complete merged Intel HEX image and read it back:
-
-```sh
-probe-rs download --chip nRF9151_xxAA \
-  --probe 2e8a:000c:<probe-serial> --non-interactive \
-  --chip-erase --allow-erase-all --binary-format hex --verify <merged.hex>
-```
-
-Erase-all clears target flash, so always use the complete, independently
-verified, device-specific merged image; an application-only image is not
-restoration. This is the recorded development programming workflow, not a
-general authorization for a field update. It does not update or rotate backend
-credentials. On the validated FRB-0005 probe, probe-rs reported that Core 0
-was locked and initiated its erase/unlock procedure when this complete image
-command was run; programming and read-back verification then succeeded.
-Successful programming is indicated by probe-rs completing and reporting
-success. Reset the target after programming:
-
-```sh
-probe-rs reset --chip nRF9151_xxAA \
-  --probe 2e8a:000c:<probe-serial> --non-interactive
-```
-
-The board's existing `startup.c` application initialization sets the PMIC VBUS
-input limit and then delays application startup by exactly two seconds. Keep
-that initialization unchanged. The service-button procedure above is the
-current normal programming path; it does not depend on issuing an erase during
-that startup delay. The separate Circuit Dojo early-erase instruction is not
-the current Fairway procedure and the Circuit Dojo recovery utility is not
-used.
-
-After a separately authorized erase-all, verify boot and device-specific
-behavior using the manual validation procedure below. The historical
-physical-RESET service-entry evidence is retained below as supporting
-context; it does not resolve the FRB-0003 procedure conflict or authorize an
-erase-all/reflash.
+This explicit physical service entry is retained for separately authorized
+board recovery, not automated or presented as routine PV8-free maintenance.
+Wait for stable exact-probe enumeration; release PV8 before the final
+operational reset. FRB-0005's one successful recovery is recorded below.
+Do not repeat USB reconnects to catch a brief startup window. If access is
+absent, the host stops without erasing. The remaining service-access
+architectural decision is owned by the
+[Firmware Specification](./FIRMWARE_SPECIFICATION.md#unresolved-routine-usb-debugger-access).
+The board's PMIC setup and two-second startup initialization are unchanged.
 
 ### USB-only commissioning build and flash
 
@@ -3322,33 +3442,69 @@ The bootloader, secondary slot, TF-M ITS, NV counters, Protected Storage, and
 KMU are not selected for final-image programming. Never substitute a full
 erase after provisioning.
 
-If existing firmware has disabled BUCK2 and powered off the onboard probe,
-the explicitly authorized `--recover-usb` stage arms host probe discovery
-before requesting a USB reconnect. It performs early erase using the exact
-probe and then installs the complete verified commissioning image, before
-credentials are written. Circuit Dojo documents this physical behavior and
-USB-only recovery in
-[Device Recovery](https://docs.circuitdojo.com/nrf9151-feather/device-recovery.html).
-Recovery capture still depends on the board/probe actually enumerating in
-time; neither vendor guidance nor software tests prove a successful capture
-on this unit. No PV8 fallback or automatic repeated erase is part of the tool.
+For explicitly authorized clean installation, `--erase` requires an already
+accessible exact probe and prepared, activatable rotation. It performs one
+`probe-rs erase --allow-erase-all`, then installs the complete verified
+commissioning HEX with `--verify`. It never repeats an uncertain erase or
+flash, polls for debugger reconnection, or captures early boot. All later
+programming preserves protected storage. Without `--erase`, compatible
+existing bootloader/TF-M infrastructure and credentials are retained.
 
 The approved OTA 0.1 signed artifact and trust anchor remain unchanged.
 After acknowledged provisioning and successful verification following a
 commissioner reboot, the utility flashes/read-back-verifies that artifact,
 activates only its matching backend rotation, and resets. The operational
 image retains its accepted low-power behavior; subsequent USB access to this
-old operational image can again require USB recovery. Do not claim that a
+image still requires independently established stable service access. Do not claim that a
 commissioning image makes unchanged field firmware permanently USB-accessible.
 Do not erase a commissioned unit without a separately authorized credential
 recovery plan.
 
-Current build evidence: an initial production-signed commissioning build
+Current build evidence: production-signed commissioning build r2
 succeeded on the established toolchain. Its secure TF-M payload, complete
 partition layout, protected-storage configuration, and trust fingerprint
 matched the accepted OTA 0.1 package. Subsequent source changes require their
-own build verification. Physical commissioning, authentication, and COMPLETE
-response remain unverified until explicitly recorded.
+own build verification. FRB-0005's physical commissioning, authentication,
+and COMPLETE evidence is recorded above. OTA successor download,
+installation, and confirmation remain pending; commissioning does not prove
+autonomous OTA field operation.
+
+#### Local cleanup qualification — 2026-11-10
+
+The post-commissioning cleanup removes the abandoned early-erase listener,
+startup-capture retries, associated recovery tests, and stale workspace task
+invocation. The single host entry point now requires an already accessible
+exact probe. Explicit `--erase` retains the demonstrated erase/full-HEX
+sequence; default maintenance and the final operational installation retain
+primary-only storage-preserving programming. No firmware, board power policy,
+wire protocol, backend contract, or production state was changed in cleanup.
+
+Local validation:
+
+- Python provisioning/release/shared-builder suite: 116 tests run, one skipped;
+  all executed tests passed. Coverage includes pseudo-terminal burst transport,
+  actual C PSA storage logic, clean-install/maintenance ordering, no replay
+  after failed erase/flash, activation gates, signing-role checks, and
+  low-power/service source regressions.
+- Six isolated backend test files passed: credential lifecycle, provisioning,
+  OTA API, OTA fleet authorization, artifact store, and deployment logging
+  configuration. Only fake/sandbox test data was used.
+- Existing OTA firmware host runner compiled the real policy, manager,
+  scheduler, and delivery sources with warnings as errors: 34 checks passed
+  in each of bootstrap and nightly configurations.
+- Unchanged commissioner r2 and OTA 0.1 artifacts passed signed/merged hash,
+  pinned MCUboot public-key fingerprint, SHA-256 TLV, ECDSA-P256 signature,
+  debug-key rejection, and TF-M compatibility checks. No signing private key
+  or credential was needed for these local public-key checks.
+- Editor diagnostics and `git diff --check` passed. Firmware source/build
+  inputs are unchanged by this cleanup, so no Nordic image rebuild or
+  physical test was performed.
+
+These are local regression results, not new physical or autonomous OTA
+evidence. The last observed OTA status remains the CPO-created
+`OTA-0.1alt-r2` assignment; field validation is pending. The unresolved
+routine PV8-free service-access decision remains a review item, not an
+implemented capability.
 
 ### Manual Validation
 

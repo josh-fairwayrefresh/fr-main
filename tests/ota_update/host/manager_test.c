@@ -235,6 +235,19 @@ ZTEST(fairway_ota_update_policy, test_manager_confirmation_requires_both_readine
 	zassert_equal(status.state, FAIRWAY_OTA_CONFIRMED);
 }
 
+ZTEST(fairway_ota_update_policy, test_preconfirmed_image_still_requires_current_boot_health)
+{
+	reset_environment();
+	init_manager(false, false);
+	zassert_equal(ota_update_confirm_healthy(false, true), -EAGAIN);
+	zassert_equal(ota_update_confirm_healthy(true, false), -EAGAIN);
+	zassert_equal(ota_update_confirm_healthy(true, true), 0);
+	zassert_equal(ota_test.confirm_calls, 0);
+	reset_environment();
+	init_manager(false, true);
+	zassert_equal(ota_update_confirm_healthy(true, true), -EAGAIN);
+}
+
 ZTEST(fairway_ota_update_policy, test_manager_trial_deadline_reboots_unconfirmed_image)
 {
 	struct fairway_ota_status status;

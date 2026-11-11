@@ -292,6 +292,7 @@ int fairway_ota_delivery_init(int64_t boot_started_uptime_ms)
 	}
 	first_boot_uptime_ms = boot_started_uptime_ms;
 	delivery_started = true;
+	fairway_ota_delivery_confirmation_init();
 	k_thread_create(&ota_delivery_thread, ota_delivery_stack,
 			K_THREAD_STACK_SIZEOF(ota_delivery_stack),
 			ota_delivery_thread_entry, NULL, NULL, NULL,
@@ -309,5 +310,5 @@ void fairway_ota_delivery_report_boot(void)
 
 void fairway_ota_delivery_report_healthy(void)
 {
-	fairway_ota_delivery_report_pending_boot();
+	fairway_ota_delivery_confirmation_healthy();
 }

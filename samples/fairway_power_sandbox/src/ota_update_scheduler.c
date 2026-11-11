@@ -240,3 +240,95 @@ int fairway_ota_scheduler_mark_deployment_terminal(void)
 	memset(&stored, 0, sizeof(stored));
 	return ret;
 }
+
+/* Separate from the v2 schedule object so retries never re-arm discovery,
+ * and older images retain their existing schedule/rollback contract.
+ */
+#define FAIRWAY_OTA_CONFIRMATION_UID ((psa_storage_uid_t)0x46520004)
+#define FAIRWAY_OTA_CONFIRMATION_MAGIC 0x46524301
+
+struct ota_confirmation_record {
+	uint32_t magic;
+	uint32_t sequence;
+	char version[FAIRWAY_OTA_VERSION_STRING_MAX];
+	uint8_t acknowledged;
+} __packed;
+
+static int confirmation_load(struct ota_confirmation_record *stored)
+{
+	size_t length = 0;
+	psa_status_t status = psa_ps_get(FAIRWAY_OTA_CONFIRMATION_UID, 0,
+					 sizeof(*stored), stored, &length);
+
+	if (status == PSA_ERROR_DOES_NOT_EXIST) {
+		return -ENOENT;
+	}
+	if (status != PSA_SUCCESS) {
+		return -EIO;
+	}
+	if (length != sizeof(*stored) ||
+	    stored->magic != FAIRWAY_OTA_CONFIRMATION_MAGIC ||
+	    stored->sequence == 0 || stored->sequence > INT32_MAX ||
+	    stored->acknowledged > 1 || stored->version[0] == '\0' ||
+	    memchr(stored->version, '\0', sizeof(stored->version)) == NULL) {
+		return -EBADMSG;
+	}
+	return 0;
+}
+
+static int confirmation_save(const struct ota_confirmation_record *stored)
+{
+	return psa_ps_set(FAIRWAY_OTA_CONFIRMATION_UID, sizeof(*stored), stored, 0)
+		== PSA_SUCCESS ? 0 : -EIO;
+}
+
+int fairway_ota_confirmation_prepare(const char *running_version,
+				     struct fairway_ota_confirmation *confirmation)
+{
+	struct ota_confirmation_record stored = {0};
+	int ret;
+
+	if (running_version == NULL || confirmation == NULL ||
+	    running_version[0] == '\0' ||
+	    strlen(running_version) >= sizeof(stored.version)) {
+		return -EINVAL;
+	}
+	ret = confirmation_load(&stored);
+	if (ret != 0 && ret != -ENOENT) {
+		return ret;
+	}
+	if (ret == -ENOENT || strcmp(stored.version, running_version) != 0) {
+		if (stored.sequence == INT32_MAX) {
+			return -EOVERFLOW;
+		}
+		stored.magic = FAIRWAY_OTA_CONFIRMATION_MAGIC;
+		stored.sequence++;
+		strcpy(stored.version, running_version);
+		stored.acknowledged = 0;
+		ret = confirmation_save(&stored);
+		if (ret != 0) {
+			return ret;
+		}
+	}
+	confirmation->sequence = stored.sequence;
+	strcpy(confirmation->version, stored.version);
+	confirmation->acknowledged = stored.acknowledged != 0;
+	return 0;
+}
+
+int fairway_ota_confirmation_acknowledge(
+	const struct fairway_ota_confirmation *confirmation)
+{
+	struct ota_confirmation_record stored = {0};
+	int ret = confirmation_load(&stored);
+
+	if (ret != 0) {
+		return ret;
+	}
+	if (confirmation == NULL || confirmation->sequence != stored.sequence ||
+	    strcmp(confirmation->version, stored.version) != 0) {
+		return -ESTALE;
+	}
+	stored.acknowledged = 1;
+	return confirmation_save(&stored);
+}

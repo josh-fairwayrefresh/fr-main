@@ -53,6 +53,10 @@ dkms.conf
 version.conf
 .cache
 
+# Generated Python tooling bytecode
+__pycache__/
+*.pyc
+
 # Zephyr related
 build*/
 sparkfun

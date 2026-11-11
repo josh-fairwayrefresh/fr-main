@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <pm_config.h>
 
 #include "dfu/dfu_target.h"
 #include "dfu/dfu_target_mcuboot.h"
@@ -94,13 +95,14 @@ psa_status_t psa_ps_get(psa_storage_uid_t uid, uint32_t data_offset,
 psa_status_t psa_ps_set(psa_storage_uid_t uid, size_t data_length,
 			const void *p_data, uint32_t create_flags)
 {
-	struct ota_test_storage_object *object = storage_find(uid, true);
+	struct ota_test_storage_object *object;
 
 	(void)create_flags;
 	if (ps_set_fail_count > 0) {
 		ps_set_fail_count--;
 		return PSA_ERROR_GENERIC_ERROR;
 	}
+	object = storage_find(uid, true);
 	if (object == NULL || p_data == NULL ||
 	    data_length > sizeof(object->data)) {
 		return PSA_ERROR_GENERIC_ERROR;
@@ -123,6 +125,19 @@ int fairway_ota_report(const char *deployment_id, const char *state,
 	ota_test.last_report_error_code = error_code;
 	ota_test.report_calls++;
 	return 0;
+}
+
+int fairway_ota_report_confirmation(const struct fairway_ota_confirmation *confirmation,
+				    const char *deployment_id)
+{
+	ota_test.confirmation_calls++;
+	ota_test.confirmation_sequence = confirmation->sequence;
+	if (deployment_id != NULL) {
+		strcpy(ota_test.confirmation_deployment_id, deployment_id);
+	} else {
+		ota_test.confirmation_deployment_id[0] = '\0';
+	}
+	return ota_test.confirmation_error;
 }
 
 void ota_test_digest(const uint8_t *bytes, size_t length, uint8_t digest[32])
@@ -180,7 +195,10 @@ int boot_write_img_confirmed(void)
 int boot_read_bank_header(uint8_t bank_id, struct mcuboot_img_header *header,
 			  size_t header_size)
 {
-	(void)bank_id;
+	ota_test.last_header_area_id = bank_id;
+	if (bank_id != PM_MCUBOOT_PRIMARY_ID && bank_id != PM_MCUBOOT_SECONDARY_ID) {
+		return -EINVAL;
+	}
 	if (ota_test.header_error != 0) {
 		return ota_test.header_error;
 	}

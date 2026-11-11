@@ -36,7 +36,7 @@ def verify_release(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if commissioning:
         if manifest.get("image_role") != "usb_commissioning" \
-                or manifest.get("release_id") != "OTA-0.1":
+                or manifest.get("release_id") not in ("OTA-0.1", "OTA-0.1-r3"):
             raise ValueError("expected a USB commissioning image, not an operational release")
     elif manifest.get("image_role") is not None:
         raise ValueError("commissioning images are not operational OTA releases")
@@ -108,7 +108,7 @@ def verify_release(
     if not isinstance(secondary, dict) or secondary.get("size") != SECONDARY_SLOT_BYTES:
         raise ValueError("manifest MCUboot secondary slot size is invalid")
     capacity = manifest.get("generated_image_capacity")
-    if manifest["release_id"].endswith("-r2") or capacity is not None:
+    if re.search(r"-r[23]$", manifest["release_id"]) or capacity is not None:
         expected = {
             "raw_slot_bytes": SECONDARY_SLOT_BYTES, "erase_block_bytes": 4096,
             "write_block_bytes": 4, "max_image_sectors": 256, "trailer_bytes": 3120,

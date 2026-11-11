@@ -147,6 +147,241 @@ async function setUp() {
   };
 }
 
+test('running confirmations persist once, reject stale/conflicting reports and allow real version changes', async () => {
+  const { ota, db, setTime } = await setUp();
+  const first = { firmware_version: '0.1.0+4', confirmation_sequence: 1 };
+  const ack = await ota.confirmRunningFirmware(DEVICE_ID, first);
+  assert.deepStrictEqual(ack, { device_id: DEVICE_ID, ...first, acknowledged: true });
+  const ref = db.collection('ota_device_status').doc(DEVICE_ID);
+  const initial = (await ref.get()).data();
+  assert.strictEqual(initial.confirmed_firmware_version, first.firmware_version);
+  assert.strictEqual(initial.confirmed_deployment_id, null);
+  setTime('2026-03-08T08:00:00Z');
+  await ota.confirmRunningFirmware(DEVICE_ID, first);
+  assert.deepStrictEqual((await ref.get()).data(), initial);
+  await assert.rejects(ota.confirmRunningFirmware(DEVICE_ID, {
+    ...first, firmware_version: '0.1.0+5',
+  }), (error) => error.code === 'conflicting_confirmation');
+  await ota.confirmRunningFirmware(DEVICE_ID, {
+    firmware_version: '0.1.0+5', confirmation_sequence: 2,
+  });
+  await assert.rejects(ota.confirmRunningFirmware(DEVICE_ID, first),
+    (error) => error.code === 'stale_confirmation');
+  await ota.confirmRunningFirmware(DEVICE_ID, {
+    firmware_version: '0.1.0+4', confirmation_sequence: 3,
+  });
+  assert.strictEqual((await ref.get()).data().confirmed_firmware_version, '0.1.0+4');
+  for (const sequence of [0, -1, 1.5, '4', 0x80000000]) {
+    await assert.rejects(ota.confirmRunningFirmware(DEVICE_ID, {
+      ...first, confirmation_sequence: sequence,
+    }), (error) => error.code === 'invalid_confirmation');
+  }
+});
+
+test('bound running confirmation atomically records completion, clears only its assignment and retains fleet history', async () => {
+  const { ota, db } = await setUp();
+  await ota.registerRelease(createReleaseBody(), 'admin-1');
+  const assigned = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  const device = (await db.collection('devices').doc(DEVICE_ID).get()).data();
+  const offer = await ota.checkForUpdate(DEVICE_ID, device, HARDWARE_ID);
+  const token = offer.artifact_path.split('/').pop();
+  await ota.getAuthorizedArtifact(token);
+  const assignmentRef = db.collection('ota_assignments').doc(DEVICE_ID);
+  assert.strictEqual((await assignmentRef.get()).exists, true);
+  const deploymentRef = db.collection('ota_deployments').doc(assigned.deployment_id);
+  const initialEvents = (await deploymentRef.collection('events').get()).size;
+  const report = {
+    firmware_version: VERSION_STRING, confirmation_sequence: 1,
+    deployment_id: assigned.deployment_id,
+  };
+  await Promise.all([
+    ota.confirmRunningFirmware(DEVICE_ID, report),
+    ota.confirmRunningFirmware(DEVICE_ID, report),
+  ]);
+  assert.strictEqual((await assignmentRef.get()).exists, false);
+  const deployment = (await deploymentRef.get()).data();
+  assert.strictEqual(deployment.state, 'confirmed');
+  assert.strictEqual(deployment.confirmation_source, 'authenticated_running_image');
+  assert.strictEqual(deployment.confirmation_sequence, 1);
+  assert.strictEqual(deployment.reported_at.downloading, undefined);
+  const events = await deploymentRef.collection('events').get();
+  assert.strictEqual(events.size, initialEvents + 1);
+  assert.strictEqual(events.docs.filter((event) => event.data().state === 'confirmed').length, 1);
+  const status = (await db.collection('ota_device_status').doc(DEVICE_ID).get()).data();
+  assert.strictEqual(status.last_deployment_id, assigned.deployment_id);
+  const fleet = (await ota.listFleet()).devices.find((item) => item.device_id === DEVICE_ID);
+  assert.strictEqual(fleet.pending, null);
+  assert.strictEqual(fleet.last_result.deployment_id, assigned.deployment_id);
+  assert.strictEqual(fleet.last_result.state, 'confirmed');
+  assert.strictEqual(fleet.eligible, true);
+  await assert.rejects(ota.getAuthorizedArtifact(token),
+    (error) => error.code === 'download_not_authorized');
+  const duplicate = await ota.reportUpdateEvent(assigned.deployment_id, DEVICE_ID, {
+    state: 'confirmed', firmware_version: VERSION_STRING,
+  });
+  assert.strictEqual(duplicate.duplicate, true);
+  assert.strictEqual((await deploymentRef.collection('events').get()).size, initialEvents + 1);
+  await db.collection('devices').doc(DEVICE_ID).update({ ota_capability: null });
+  const blocked = (await ota.listFleet()).devices.find((item) => item.device_id === DEVICE_ID);
+  assert.strictEqual(blocked.eligible, false);
+  assert.strictEqual(blocked.last_result.deployment_id, assigned.deployment_id);
+});
+
+test('unbound or mismatched running evidence never guesses which assignment to complete', async () => {
+  for (const evidence of [
+    { firmware_version: VERSION_STRING },
+    { firmware_version: VERSION_STRING, deployment_id: 'older-deployment' },
+    { firmware_version: '0.1.0+4', match: true },
+  ]) {
+    const { ota, db } = await setUp();
+    await ota.registerRelease(createReleaseBody(), 'admin-1');
+    const assigned = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+    const assignmentRef = db.collection('ota_assignments').doc(DEVICE_ID);
+    const before = (await assignmentRef.get()).data();
+    await ota.confirmRunningFirmware(DEVICE_ID, {
+      firmware_version: evidence.firmware_version, confirmation_sequence: 1,
+      ...(evidence.match ? { deployment_id: assigned.deployment_id }
+        : evidence.deployment_id ? { deployment_id: evidence.deployment_id } : {}),
+    });
+    assert.deepStrictEqual((await assignmentRef.get()).data(), before);
+    assert.strictEqual((await ota.listDeployments())[0].state, 'assigned');
+  }
+});
+
+test('duplicate, stale and delayed older-deployment reports cannot clear a newer matching-version assignment', async () => {
+  const { ota, db, setTime } = await setUp();
+  await ota.registerRelease(createReleaseBody(), 'admin-1');
+  const old = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  const report = {
+    firmware_version: VERSION_STRING, confirmation_sequence: 2,
+    deployment_id: old.deployment_id,
+  };
+  await ota.confirmRunningFirmware(DEVICE_ID, report);
+  const statusRef = db.collection('ota_device_status').doc(DEVICE_ID);
+  const initial = (await statusRef.get()).data();
+  const next = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  const assignmentRef = db.collection('ota_assignments').doc(DEVICE_ID);
+  const before = (await assignmentRef.get()).data();
+  setTime('2026-03-08T08:00:00Z');
+  await ota.confirmRunningFirmware(DEVICE_ID, report);
+  await assert.rejects(ota.confirmRunningFirmware(DEVICE_ID, { ...report, confirmation_sequence: 1 }),
+    (error) => error.code === 'stale_confirmation');
+  assert.deepStrictEqual((await statusRef.get()).data(), initial);
+  await ota.confirmRunningFirmware(DEVICE_ID, { ...report, confirmation_sequence: 3 });
+  await ota.reportUpdateEvent(old.deployment_id, DEVICE_ID, {
+    state: 'confirmed', firmware_version: VERSION_STRING,
+  });
+  assert.deepStrictEqual((await assignmentRef.get()).data(), before);
+  assert.strictEqual((await ota.listDeployments()).find(
+    (item) => item.deployment_id === next.deployment_id).state, 'assigned');
+});
+
+test('failed confirmation commit leaves version, deployment, event and assignment unchanged until retry', async () => {
+  const { ota, db } = await setUp();
+  await ota.registerRelease(createReleaseBody(), 'admin-1');
+  const assigned = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  const before = new Map(db._docs);
+  const report = {
+    firmware_version: VERSION_STRING, confirmation_sequence: 1,
+    deployment_id: assigned.deployment_id,
+  };
+  db.failNextTransactionCommit = true;
+  await assert.rejects(ota.confirmRunningFirmware(DEVICE_ID, report), /Simulated transaction commit failure/);
+  assert.deepStrictEqual(db._docs, before);
+  await ota.confirmRunningFirmware(DEVICE_ID, report);
+  assert.strictEqual((await db.collection('ota_assignments').doc(DEVICE_ID).get()).exists, false);
+});
+
+test('legacy confirmed lifecycle atomically clears its matching assignment but not a newer assignment', async () => {
+  const { ota, db } = await setUp();
+  await ota.registerRelease(createReleaseBody(), 'admin-1');
+  const old = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  for (const state of ['downloading', 'verifying', 'staged', 'activation_pending', 'trial_boot']) {
+    await ota.reportUpdateEvent(old.deployment_id, DEVICE_ID, { state, firmware_version: VERSION_STRING });
+    assert.strictEqual((await db.collection('ota_assignments').doc(DEVICE_ID).get()).exists, true);
+  }
+  const before = new Map(db._docs);
+  db.failNextTransactionCommit = true;
+  await assert.rejects(ota.reportUpdateEvent(old.deployment_id, DEVICE_ID, {
+    state: 'confirmed', firmware_version: VERSION_STRING,
+  }), /Simulated transaction commit failure/);
+  assert.deepStrictEqual(db._docs, before);
+  await ota.reportUpdateEvent(old.deployment_id, DEVICE_ID, {
+    state: 'confirmed', firmware_version: VERSION_STRING,
+  });
+  assert.strictEqual((await db.collection('ota_assignments').doc(DEVICE_ID).get()).exists, false);
+  const next = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  await ota.reportUpdateEvent(old.deployment_id, DEVICE_ID, {
+    state: 'confirmed', firmware_version: VERSION_STRING,
+  });
+  assert.strictEqual((await db.collection('ota_assignments').doc(DEVICE_ID).get()).data().deployment_id,
+    next.deployment_id);
+});
+
+test('running confirmation route authenticates the exact active Device and registry projects only confirmed evidence', async () => {
+  const { db } = await setUp();
+  const { secret, verifier } = generateDeviceCredential();
+  await db.collection('devices').doc(DEVICE_ID).update({
+    credential: verifier, firmware_generation: 'historical metadata',
+  });
+  await db.collection('user_access').doc('admin-1').set({
+    schema_version: 2, admin: true, customer_id: null, course_ids: [],
+  });
+  const handlers = createFairwayHandlers(db, {
+    verifyOperatorToken: async () => ({ uid: 'admin-1' }),
+  });
+  const body = { device_id: DEVICE_ID, firmware_version: '0.1.0+4', confirmation_sequence: 1 };
+  const call = async (credential, payload = body) => {
+    const response = createJsonResponse();
+    await handlers.fairwayButtonReceiver(createRequest({
+      path: '/api/v1/device-ota/confirmation',
+      headers: { 'x-fairway-device-key': credential }, body: payload,
+    }), response);
+    return response;
+  };
+  assert.strictEqual((await call('wrong')).statusCode, 401);
+  assert.strictEqual((await db.collection('ota_device_status').get()).size, 0);
+  assert.strictEqual((await call(secret, { ...body, device_id: 'FRB-0006' })).statusCode, 404);
+  await db.collection('devices').doc('FRB-0006').set({
+    state: 'maintenance', credential: generateDeviceCredential().verifier,
+  });
+  assert.strictEqual((await call(secret, { ...body, device_id: 'FRB-0006' })).statusCode, 401);
+  const response = await call(secret);
+  assert.strictEqual(response.statusCode, 200);
+  assert.strictEqual(response.body.acknowledged, true);
+  assert.strictEqual(response.headers['Cache-Control'], 'private, no-store');
+  const fleetResponse = createJsonResponse();
+  await handlers.fairwayAdmin(createRequest({
+    method: 'GET', path: '/api/v1/admin/fleet',
+    headers: { authorization: 'Bearer test-admin-token' },
+  }), fleetResponse);
+  assert.strictEqual(fleetResponse.statusCode, 200);
+  const device = fleetResponse.body.devices.find((item) => item.device_id === DEVICE_ID);
+  assert.strictEqual(device.confirmed_firmware_version, body.firmware_version);
+  assert.ok(device.confirmed_firmware_at);
+  assert.strictEqual(device.firmware_generation, 'historical metadata');
+  await db.collection('devices').doc(DEVICE_ID).update({ state: 'retired' });
+  assert.strictEqual((await call(secret, { ...body, confirmation_sequence: 2 })).statusCode, 403);
+});
+
+test('delayed legacy deployment confirmation cannot replace newer sequence-protected running evidence', async () => {
+  const { ota, db } = await setUp();
+  await ota.registerRelease(createReleaseBody(), 'admin-1');
+  const assignment = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  await ota.confirmRunningFirmware(DEVICE_ID, {
+    firmware_version: '0.1.0+5', confirmation_sequence: 2,
+  });
+  const ref = db.collection('ota_device_status').doc(DEVICE_ID);
+  const before = (await ref.get()).data();
+  for (const state of ['downloading', 'verifying', 'staged', 'activation_pending', 'trial_boot', 'confirmed']) {
+    await ota.reportUpdateEvent(assignment.deployment_id, DEVICE_ID, {
+      state, firmware_version: VERSION_STRING, error_code: 0,
+    });
+  }
+  assert.deepStrictEqual((await ref.get()).data(), before);
+  assert.strictEqual((await ota.listDeployments())[0].state, 'confirmed');
+});
+
 test('production routes authorize Admin/device operations and stream ranged artifacts', async () => {
   const db = new FakeFirestore();
   const artifactStore = createArtifactStore();

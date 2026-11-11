@@ -51,6 +51,71 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
+## Running-image confirmation revision — local, not yet published (2026-11-10)
+
+The revised USB-only bootstrap is `OTA-0.1-r3` (`0.1.0+4`); its matching
+nightly successor is `OTA-0.1alt-r3` (`0.1.0+5`). The CPO subsequently requested
+the same revision for `OTA-1.0-r3` (`1.0.0+3`, nightly). These are new immutable
+identities, not replacements of the bytes behind any earlier release ID.
+All three operational images include the same change-driven running-image report.
+The bootstrap retains exactly one persisted check at first normal boot +900
+seconds; confirmation retries do not restart or repeat that check.
+
+After the existing mandatory local boot-health evaluation and successful
+MCUboot confirmation, a bounded reporting worker reads the primary-slot image
+header and checks it against the compiled image version. It reports through
+the existing authenticated OTA transport/status infrastructure, independently
+of an OTA assignment, trusted UTC acquisition, or the discovery schedule.
+No running-image confirmation is released from service mode or a failed
+mandatory health path, including an already MCUboot-confirmed image.
+Deployment `confirmed` lifecycle reporting also waits for this boot's
+running-image acknowledgment, so it cannot bypass actual-version validation.
+
+The scheduler module owns a separate PSA object (`0x46520004`) containing the
+last observed healthy version, a monotonic change sequence and acknowledgment
+bit. Its existing v2 schedule object, identity/credential objects, partitions,
+trust anchor and rollback behavior are unchanged. A new healthy version,
+including a return to a previous version, advances the sequence. Pending
+reports retry after 300-second backoffs until the backend acknowledges the
+exact Device/version/sequence; interrupted acknowledgment writes and reboots
+retry the same evidence. An acknowledged unchanged image sends nothing more.
+Storage corruption, counter exhaustion and write errors are explicit failures,
+not resets or default evidence. This is not recurring telemetry or discovery
+polling, and does not change power policy.
+The existing LTE registration semaphore signal is passed on by a successful
+waiter so both discovery and confirmation boot workers can proceed from one
+registration event; this does not add registration polling or change power
+policy. A real-function pthread boundary regression covers both simultaneous
+waiters and reconnect.
+
+The backend transaction stores last confirmed actual version and server
+acceptance time in `ota_device_status`. Duplicate acknowledgment does not
+refresh that time; lower sequences and same-sequence/different-version
+reports are rejected. Older deployment lifecycle events cannot overwrite a
+sequence-protected running-image confirmation. The existing Admin registry
+firmware field displays that version/time, or explicitly unknown; historical
+registry generation metadata and desired assignments are not actual-running
+evidence. Device-authenticated reporting is not independent boot attestation.
+
+For an OTA-installed image, the report also carries the existing persisted
+deployment ID, but only when activation is pending and its target version
+matches the healthy primary image. This is not a new assignment lookup or a
+second inventory. The backend atomically records the confirmed deployment/event,
+retains its last-result reference and deletes only the current assignment
+matching that exact deployment and version. Missing intermediate lifecycle
+events remain missing; they are not fabricated. Unbound USB reports and
+different-version/deployment reports cannot clear an assignment, and duplicate
+or stale evidence cannot clear a newer assignment. The existing authenticated
+deployment-confirmed path also clears only its matching assignment when not
+contradicted by newer running evidence. Confirmation retries survive reboot
+with the same persisted binding until acknowledgment.
+
+Publication and physical acceptance remain separate gates, owned by the
+Deployment Guide. Original artifacts, physical-device state, golfer behavior
+and field-power policy are unchanged. Deployment itself does not mutate an
+assignment; subsequent matching device-confirmed success completes it as
+described above.
+
 ## OTA delivery implementation — local, not physically qualified
 
 The current branch implements the production OTA path for the Circuit Dojo
@@ -446,6 +511,31 @@ debugger rail on and does not start LTE or golfer-request runtime. The service
 mode exists to preserve an intentional development/programming path; it is
 not part of normal golfer operation. Exact build, programming, and field
 validation evidence is owned by `docs/DEPLOYMENT_GUIDE.md`.
+
+### Unresolved routine USB debugger access
+
+The intended service procedure is operator-controlled: disconnect Voltaic,
+connect USB, run authorized maintenance, disconnect USB, then reconnect
+Voltaic for field operation. The shared VBUS entry does not identify which
+cable is connected. No approved USB-presence signal or automatic firmware
+service-selection mechanism is established.
+
+Operational firmware disables BUCK2 and therefore powers down the RP2040
+USB debugger in normal mode. The dedicated commissioning image keeps it
+powered, but installing that image first requires access to the debugger.
+FRB-0005's 2026-11-10 commissioning succeeded only after an explicitly
+authorized PV8-assisted boot established stable access. This does not
+demonstrate routine PV8-free maintenance; the unchanged OTA 0.1 image can
+again remove debugger access on normal boot.
+
+The minimum unresolved issue is a reliable means of obtaining programming
+access from the field-powered-down debugger state without a button or
+startup race, while retaining accepted field low-power behavior. A durable
+service-access mechanism requires CPO approval before hardware or firmware
+redesign. Do not infer USB from VBUS, silently leave BUCK2 powered in field
+operation, or reinstate early-erase listeners. Existing board recovery and
+explicit PV8 firmware behavior remain intact; the host does not automate
+them and refuses to program an unavailable probe.
 
 The CPO accepted this FRB-0005-specific Increment 2.0 outcome on 2026-11-06.
 This device-specific acceptance does not change the accepted fleet firmware

@@ -333,9 +333,26 @@ commissioning gates are owned by the
   installation, and no evidence is shown as unknown rather than successful.
   Trial/confirmation are authenticated firmware reports, not independent boot
   attestation. Refresh explicitly retrieves the current evidence.
+  Successful confirmed-running installation records its result/history and
+  clears only the matching pending assignment, atomically. The last confirmed
+  result remains visible after the assignment is cleared. Offer, download,
+  mismatched firmware, and delayed reports from older deployments do not
+  clear a newer assignment. A USB bootstrap report does not count as success
+  for a pending successor of a different version.
   If a device's placement, trust or timezone changes after authorization,
   delivery is blocked and status explains the need for engineering reconciliation;
   the dashboard never silently substitutes a new tenant or window.
+- The 2026-11-10 registry-display revision uses the existing **Firmware
+  generation** field for the last device-confirmed actual-running version and
+  its acceptance time. With no confirmation it explicitly says **Unknown — no
+  device confirmation**. An assigned update, historical generation label,
+  download or image offer must not appear as running firmware. The timestamp
+  is not a continuous online/health indicator and duplicate retries do not
+  refresh it.
+- When a separately approved replacement is actually published, its predecessor
+  is removed from new selection. Existing predecessor assignments and history
+  remain visible and unchanged; the replacement never silently cancels or
+  retargets a device.
 - OTA 0.1alt (`0.1.0+2`) and OTA 1.0 (`1.0.0+1`) remain accepted immutable
   artifacts, not proof of all publication prerequisites or recurring readiness.
   Replacement lineage requires separate release approval. Local fixture

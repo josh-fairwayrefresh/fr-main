@@ -99,6 +99,39 @@ async function run() {
       (error) => error.code === 'release_unavailable');
     assert.equal((await db.collection('ota_assignments').get()).size, 0);
   });
+  await test('published governed replacement withdraws only new selection and preserves active old delivery', async () => {
+    const { db, options } = await setup();
+    const old = 'OTA-0.1alt-r2';
+    const replacement = 'OTA-0.1alt-r3';
+    const fixture = (await db.collection('ota_releases').doc(RELEASE).get()).data();
+    const approvals = {
+      [old]: { ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
+      [replacement]: { ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
+    };
+    const ota = createOtaService(db, {
+      ...options, publicationApprovals: approvals,
+      acceptedReleases: { [old]: DIGEST, [replacement]: DIGEST },
+    });
+    await db.collection('ota_releases').doc(old).set({ ...fixture, release_id: old });
+    const active = await ota.prepareAssignment({ release_id: old, device_ids: ['FRB-0005'] }, 'admin');
+    await ota.confirmAssignment(active.review_id, 'admin');
+    const stale = await ota.prepareAssignment({ release_id: old, device_ids: ['FRB-0012'] }, 'admin');
+    const oldAssignment = (await db.collection('ota_assignments').doc('FRB-0005').get()).data();
+    await db.collection('ota_releases').doc(replacement).set({
+      ...fixture, state: 'publish_failed', release_id: replacement,
+    });
+    assert.equal((await ota.listReleases()).find((release) => release.release_id === old).assignable, true);
+    await db.collection('ota_releases').doc(replacement).update({ state: 'published' });
+    assert.equal((await ota.listReleases()).find((release) => release.release_id === old).assignable, false);
+    assert.equal((await ota.listReleases()).find((release) => release.release_id === replacement).assignable, true);
+    await assert.rejects(ota.prepareAssignment({ release_id: old, device_ids: ['FRB-0012'] }, 'admin'),
+      (error) => error.code === 'release_superseded');
+    await assert.rejects(ota.confirmAssignment(stale.review_id, 'admin'),
+      (error) => error.code === 'release_superseded');
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    assert.equal((await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID)).update_available, true);
+    assert.deepEqual((await db.collection('ota_assignments').doc('FRB-0005').get()).data(), oldAssignment);
+  });
   await test('missing artifact storage never produces a success-shaped offer or download token', async () => {
     const { db, ota, options } = await setup();
     const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin');

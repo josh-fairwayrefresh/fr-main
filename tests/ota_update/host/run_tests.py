@@ -3,6 +3,7 @@
 
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -34,6 +35,22 @@ def main() -> int:
     ]
     with tempfile.TemporaryDirectory(prefix="fairway-ota-host-") as temp_dir:
         executable = Path(temp_dir) / "ota_manager_tests"
+        registration_wait = re.findall(
+            r"^void modem_service_wait_for_lte_registration\(void\)\n\{.*?^\}",
+            (source_dir / "modem_service.c").read_text(), re.MULTILINE | re.DOTALL,
+        )
+        if len(registration_wait) != 1:
+            raise SystemExit("Expected exactly one real modem registration wait function")
+        registration_source = Path(temp_dir) / "registration_wait_test.c"
+        registration_source.write_text(
+            (host_dir / "registration_wait_test.c").read_text()
+            + "\n" + registration_wait[0] + "\n"
+        )
+        subprocess.run([
+            *compiler, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pthread",
+            str(registration_source), "-o", str(executable),
+        ], check=True)
+        subprocess.run([str(executable)], check=True)
         command = [
             *compiler,
             "-std=c11",
@@ -66,6 +83,16 @@ def main() -> int:
         ]
         subprocess.run(nightly_command, check=True)
         subprocess.run([str(executable)], check=True)
+        for version in ("0.1.0+4", "0.1.0+5", "1.0.0+3"):
+            subprocess.run([
+                *compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
+                f'-DCONFIG_FAIRWAY_OTA_FIRMWARE_VERSION="{version}"',
+                "-I", str(host_dir / "include"), "-I", str(source_dir),
+                str(host_dir / "reporting_protocol_test.c"),
+                str(source_dir / "ota_update_reporting.c"),
+                "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
     return 0
 
 

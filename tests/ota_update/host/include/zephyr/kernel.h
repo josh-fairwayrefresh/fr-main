@@ -14,6 +14,7 @@ struct k_mutex {
 #define K_SECONDS(seconds) ((int64_t)(seconds) * 1000)
 #define K_MSEC(ms) (ms)
 #define ARG_UNUSED(value) ((void)(value))
+int64_t k_uptime_get(void);
 #define MIN(left, right) ((left) < (right) ? (left) : (right))
 #define __aligned(alignment) __attribute__((aligned(alignment)))
 

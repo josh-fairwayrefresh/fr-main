@@ -53,7 +53,8 @@ bool http_transport_dns_prewarm(void);
  *   -ECANCELED  Yielded to an accepted golfer press (yieldable only).
  *   -errno/-ETIMEDOUT  No response could be obtained at all.
  *
- * When yieldable is true (COMPLETE only), golfer_txn_is_pending() is
+ * When yieldable is true (COMPLETE and OTA running-image confirmation),
+ * golfer_txn_is_pending() is
  * checked before/after every stage; a pending golfer press aborts this
  * call immediately with -ECANCELED so COMPLETE never holds the shared
  * transport once a golfer transaction has been accepted. The golfer's own

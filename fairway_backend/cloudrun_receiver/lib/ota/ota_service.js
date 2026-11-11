@@ -8,14 +8,17 @@ const { createFleetAuthorization, HEADQUARTERS_TIME_ZONE } = require('./fleet_au
 const HARDWARE_ID = 'circuitdojo_feather_nrf9151@1/nrf9151/ns';
 const MCUBOOT_SECONDARY_SLOT_BYTES = 0x6c000;
 const MAX_SIGNED_IMAGE_BYTES = 0x6a000;
-const RELEASE_ID_PATTERN = /^OTA-(?:0\.1|(?:0\.1alt|1\.0)(?:-r2)?)$/;
+const RELEASE_ID_PATTERN = /^OTA-(?:0\.1|(?:0\.1alt|1\.0)(?:-r[23])?)$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+\+\d+$/;
 const RELEASE_VERSIONS = Object.freeze({
   'OTA-0.1': '0.1.0+1',
   'OTA-0.1alt': '0.1.0+2',
   'OTA-1.0': '1.0.0+1',
   'OTA-0.1alt-r2': '0.1.0+3',
+  'OTA-0.1-r3': '0.1.0+4',
+  'OTA-0.1alt-r3': '0.1.0+5',
   'OTA-1.0-r2': '1.0.0+2',
+  'OTA-1.0-r3': '1.0.0+3',
 });
 const TERMINAL_STATES = new Set(['confirmed', 'failed', 'rolled_back']);
 const UPDATE_STATES = new Set([
@@ -114,7 +117,7 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES,
   const encoded = body?.artifact_base64;
   const expectedDigest = body?.sha256;
   const notes = body?.notes ?? '';
-  if (releaseId === 'OTA-0.1') {
+  if (releaseId === 'OTA-0.1' || releaseId === 'OTA-0.1-r3') {
     throw new OtaError('physical_initialization_only', 'OTA 0.1 is USB-only initialization, never an OTA update.');
   }
 
@@ -162,7 +165,7 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES,
     throw new OtaError('invalid_notes', 'Release notes must be 1000 characters or fewer.');
   }
   const manifest = body.manifest;
-  const successor = releaseId.endsWith('-r2');
+  const successor = /-r[23]$/.test(releaseId);
   const sourceCommit = successor ? publicationApprovals[releaseId]?.build_base_commit
     : '2d72b5de401b3faecb09a5e86a5410156692d18e';
   const sourceDigest = successor ? publicationApprovals[releaseId]?.build_source_sha256
@@ -241,10 +244,10 @@ function createOtaService(db, {
 
   async function listReleases() {
     const snapshot = await releases.orderBy('created_at', 'desc').limit(100).get();
-    return snapshot.docs.filter((doc) => doc.id !== 'OTA-0.1').map((doc) => {
+    return Promise.all(snapshot.docs.filter((doc) => !['OTA-0.1', 'OTA-0.1-r3'].includes(doc.id)).map(async (doc) => {
       let assignable = true;
       try {
-        fleet.requireRelease(doc.id, doc.data());
+        await fleet.requireSelectableRelease(doc.id, doc.data(), (ref) => ref.get());
       } catch (error) {
         if (!(error instanceof OtaError)) throw error;
         assignable = false;
@@ -254,7 +257,7 @@ function createOtaService(db, {
         approval_status: assignable ? 'Approved and published' : 'Release unavailable or publication prerequisites incomplete',
         authorized_device_ids: publicationApprovals[doc.id]?.device_ids || [],
       };
-    });
+    }));
   }
 
   async function listDeployments() {
@@ -460,6 +463,10 @@ function createOtaService(db, {
         throw new OtaError('invalid_state_transition', 'OTA lifecycle transition is not permitted.', 409);
       }
       const eventSnap = await transaction.get(eventRef);
+      const statusRef = db.collection('ota_device_status').doc(deviceId);
+      const statusSnap = state === 'confirmed' ? await transaction.get(statusRef) : null;
+      const assignmentRef = assignments.doc(deviceId);
+      const assignmentSnap = state === 'confirmed' ? await transaction.get(assignmentRef) : null;
       if (eventSnap.exists) {
         result = { deployment_id: deploymentId, state: deployment.state, duplicate: true };
         return;
@@ -481,15 +488,112 @@ function createOtaService(db, {
         reported_at: { ...deployment.reported_at, [state]: recordedAt },
       });
       if (state === 'confirmed') {
-        transaction.set(db.collection('ota_device_status').doc(deviceId), {
-          confirmed_firmware_version: firmwareVersion, confirmed_at: recordedAt,
-          confirmed_deployment_id: deploymentId,
-          confirmed_schedule_mode: 'nightly',
-        }, { merge: true });
+        const status = statusSnap.exists ? statusSnap.data() : {};
+        const currentAssignment = assignmentSnap.exists
+          && assignmentSnap.data().deployment_id === deploymentId;
+        if (currentAssignment && !status.confirmation_sequence) {
+          transaction.set(statusRef, {
+            confirmed_firmware_version: firmwareVersion, confirmed_at: recordedAt,
+            confirmed_deployment_id: deploymentId,
+            last_deployment_id: deploymentId,
+            confirmed_schedule_mode: 'nightly',
+          }, { merge: true });
+          transaction.delete(assignmentRef);
+        } else if (currentAssignment && status.confirmed_firmware_version === firmwareVersion) {
+          transaction.set(statusRef, {
+            confirmed_deployment_id: deploymentId,
+            last_deployment_id: deploymentId,
+            confirmed_schedule_mode: 'nightly',
+          }, { merge: true });
+          transaction.delete(assignmentRef);
+        }
       }
       result = { deployment_id: deploymentId, state, duplicate: deployment.state === state };
     });
     return result;
+  }
+
+  async function confirmRunningFirmware(deviceId, body) {
+    const version = body?.firmware_version;
+    const sequence = body?.confirmation_sequence;
+    const deploymentId = body?.deployment_id;
+    if (typeof version !== 'string' || version.length >= 32 || !VERSION_PATTERN.test(version)
+        || !Number.isInteger(sequence) || sequence < 1 || sequence > 0x7fffffff
+        || (deploymentId !== undefined
+          && (typeof deploymentId !== 'string' || !/^[A-Za-z0-9_-]{1,63}$/.test(deploymentId)))) {
+      throw new OtaError('invalid_confirmation', 'A running firmware version and protected sequence are required.');
+    }
+    const ref = db.collection('ota_device_status').doc(deviceId);
+    const recordedAt = now();
+    await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+      const status = snap.exists ? snap.data() : {};
+      const previous = status.confirmation_sequence ?? 0;
+      if (sequence < previous) {
+        throw new OtaError('stale_confirmation', 'A newer running firmware confirmation is already recorded.', 409);
+      }
+      if (sequence === previous) {
+        if (status.confirmed_firmware_version !== version) {
+          throw new OtaError('conflicting_confirmation', 'This confirmation sequence already identifies different firmware.', 409);
+        }
+        return;
+      }
+      const assignmentRef = assignments.doc(deviceId);
+      const assignmentSnap = await transaction.get(assignmentRef);
+      let completedDeploymentId = null;
+      let deploymentRef = null;
+      let deployment = null;
+      let eventRef = null;
+      let eventExists = false;
+      if (assignmentSnap.exists && assignmentSnap.data().deployment_id === deploymentId) {
+        deploymentRef = deployments.doc(deploymentId);
+        const deploymentSnap = await transaction.get(deploymentRef);
+        if (!deploymentSnap.exists || deploymentSnap.data().device_id !== deviceId) {
+          throw new OtaError('invalid_assignment', 'The current OTA assignment requires engineering reconciliation.', 409);
+        }
+        deployment = deploymentSnap.data();
+        if (deployment.version_string === version
+            && (!TERMINAL_STATES.has(deployment.state) || deployment.state === 'confirmed')) {
+          completedDeploymentId = deploymentRef.id;
+          eventRef = deploymentRef.collection('events').doc(eventDocumentId('confirmed', version, 0));
+          eventExists = (await transaction.get(eventRef)).exists;
+        }
+      }
+      if (completedDeploymentId) {
+        if (!eventExists) {
+          transaction.set(eventRef, {
+            state: 'confirmed', firmware_version: version, error_code: 0,
+            created_at: recordedAt, source: 'authenticated_running_image',
+            confirmation_sequence: sequence,
+          });
+        }
+        if (deployment.state !== 'confirmed') {
+          transaction.update(deploymentRef, {
+            state: 'confirmed', firmware_version: version, error_code: 0,
+            updated_at: recordedAt,
+            reported_at: { ...deployment.reported_at, confirmed: recordedAt },
+            confirmation_source: 'authenticated_running_image',
+            confirmation_sequence: sequence,
+          });
+        }
+        transaction.delete(assignmentRef);
+      }
+      transaction.set(ref, {
+        confirmed_firmware_version: version,
+        confirmed_at: recordedAt,
+        confirmation_sequence: sequence,
+        confirmation_source: 'authenticated_running_image',
+        confirmed_deployment_id: completedDeploymentId,
+        ...(completedDeploymentId ? { last_deployment_id: completedDeploymentId } : {}),
+        confirmed_schedule_mode: Object.entries(RELEASE_VERSIONS).some(([id, value]) => (
+          value === version && /^(OTA-0\.1alt|OTA-1\.0)/.test(id)
+        )) ? 'nightly' : null,
+      }, { merge: true });
+    });
+    return {
+      device_id: deviceId, firmware_version: version,
+      confirmation_sequence: sequence, acknowledged: true,
+    };
   }
 
   async function getAuthorizedArtifact(token) {
@@ -555,6 +659,7 @@ function createOtaService(db, {
       return snapshots.docs.map((snap) => ({ ...snap.data(), device_id: snap.id }));
     },
     registerRelease,
+    confirmRunningFirmware,
     reportUpdateEvent,
     streamArtifact,
   };

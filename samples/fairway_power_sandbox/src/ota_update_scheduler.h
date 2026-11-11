@@ -34,4 +34,15 @@ int fairway_ota_scheduler_set_deployment(const char *deployment_id,
 int fairway_ota_scheduler_mark_activation_pending(void);
 int fairway_ota_scheduler_mark_deployment_terminal(void);
 
+struct fairway_ota_confirmation {
+	uint32_t sequence;
+	char version[FAIRWAY_OTA_VERSION_STRING_MAX];
+	bool acknowledged;
+};
+
+int fairway_ota_confirmation_prepare(const char *running_version,
+				     struct fairway_ota_confirmation *confirmation);
+int fairway_ota_confirmation_acknowledge(
+	const struct fairway_ota_confirmation *confirmation);
+
 #endif

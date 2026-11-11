@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { isDeviceCommunicationAllowed } = require('../fleet/schema');
 const { isValidIanaTimezone } = require('../fleet/courses');
-const { PUBLICATION_APPROVALS, publicationEligible } = require('./publication_policy');
+const { PUBLICATION_APPROVALS, RELEASE_REPLACEMENTS, publicationEligible } = require('./publication_policy');
 
 const TERMINAL = new Set(['confirmed', 'failed', 'rolled_back']);
 const MAX_SELECTION = 50;
@@ -48,10 +48,25 @@ function createFleetAuthorization(db, {
     }
     if (capability.schedule_mode === 'one_time'
         && (device.device_id !== 'FRB-0005' || releaseId
-          && !['OTA-0.1alt', 'OTA-0.1alt-r2'].includes(releaseId))) {
+          && !['OTA-0.1alt', 'OTA-0.1alt-r2', 'OTA-0.1alt-r3'].includes(releaseId))) {
       return 'The bootstrap exception is restricted to FRB-0005 receiving OTA 0.1alt.';
     }
     return null;
+  }
+
+  async function requireSelectableRelease(releaseId, release, read) {
+    requireRelease(releaseId, release);
+    const replacementId = RELEASE_REPLACEMENTS[releaseId];
+    if (!replacementId) return;
+    const replacement = await read(releases.doc(replacementId));
+    if (!replacement.exists) return;
+    try {
+      requireRelease(replacementId, replacement.data());
+    } catch (error) {
+      if (!(error instanceof OtaError)) throw error;
+      return;
+    }
+    throw new OtaError('release_superseded', `Choose ${replacementId}; the older release is retained for existing assignments and history.`, 409);
   }
 
   async function resolve(deviceId, read, releaseId = null) {
@@ -89,11 +104,13 @@ function createFleetAuthorization(db, {
     const assignmentSnap = await read(assignments.doc(deviceId));
     let pending = null;
     let last = null;
-    if (assignmentSnap.exists) {
-      const snap = await read(deployments.doc(assignmentSnap.data().deployment_id));
+    const lastDeploymentId = assignmentSnap.exists
+      ? assignmentSnap.data().deployment_id : status.last_deployment_id;
+    if (lastDeploymentId) {
+      const snap = await read(deployments.doc(lastDeploymentId));
       if (!snap.exists) throw new OtaError('invalid_assignment', `${deviceId} has an unresolved assignment.`, 409);
       last = { ...snap.data(), deployment_id: snap.id };
-      if (!TERMINAL.has(last.state)) pending = last;
+      if (assignmentSnap.exists && !TERMINAL.has(last.state)) pending = last;
     }
     const bootstrap = device.ota_capability.schedule_mode === 'one_time';
     const basis = {
@@ -145,12 +162,14 @@ function createFleetAuthorization(db, {
           const [status, assignment] = await Promise.all([
             db.collection('ota_device_status').doc(snap.id).get(), assignments.doc(snap.id).get(),
           ]);
-          const lastSnap = assignment.exists ? await deployments.doc(assignment.data().deployment_id).get() : null;
+          const lastId = assignment.exists ? assignment.data().deployment_id
+            : status.exists ? status.data().last_deployment_id : null;
+          const lastSnap = lastId ? await deployments.doc(lastId).get() : null;
           const last = lastSnap?.exists ? lastSnap.data() : null;
           return { ...base, eligible: false, reason: error.message,
             confirmed_firmware_version: status.exists ? status.data().confirmed_firmware_version || null : null,
             last_check_at: status.exists ? status.data().last_check_at || null : null,
-            pending: last && !TERMINAL.has(last.state) ? last : null, last_result: last };
+            pending: assignment.exists && last && !TERMINAL.has(last.state) ? last : null, last_result: last };
         }
       }));
     return { customers, devices: fleet, headquarters_timezone: headquartersTimeZone,
@@ -174,7 +193,7 @@ function createFleetAuthorization(db, {
     return db.runTransaction(async (tx) => {
       const releaseSnap = await tx.get(releases.doc(body.release_id));
       const release = releaseSnap.exists ? releaseSnap.data() : null;
-      requireRelease(body.release_id, release);
+      await requireSelectableRelease(body.release_id, release, (ref) => tx.get(ref));
       const selected = [];
       for (const id of [...body.device_ids].sort()) {
         const device = await resolve(id, (ref) => tx.get(ref), body.release_id);
@@ -212,7 +231,7 @@ function createFleetAuthorization(db, {
       }
       const releaseSnap = await tx.get(releases.doc(review.release_id));
       const release = releaseSnap.exists ? releaseSnap.data() : null;
-      requireRelease(review.release_id, release);
+      await requireSelectableRelease(review.release_id, release, (ref) => tx.get(ref));
       if (release.sha256 !== review.release_sha256) throw new OtaError('review_changed', 'Release changed.', 409);
       const verified = [];
       for (const previous of review.devices) {
@@ -250,7 +269,7 @@ function createFleetAuthorization(db, {
     });
   }
 
-  return { listFleet, prepare, confirm, requireRelease, resolve, capabilityError };
+  return { listFleet, prepare, confirm, requireRelease, requireSelectableRelease, resolve, capabilityError };
 }
 
 module.exports = { createFleetAuthorization, HEADQUARTERS_TIME_ZONE };

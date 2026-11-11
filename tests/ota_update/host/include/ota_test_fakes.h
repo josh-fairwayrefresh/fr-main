@@ -13,6 +13,7 @@ struct ota_test_fakes {
 	bool image_confirmed;
 	struct mcuboot_img_header image_header;
 	int header_error;
+	uint8_t last_header_area_id;
 	int confirm_error;
 	int confirm_calls;
 	int reboot_calls;
@@ -44,6 +45,10 @@ struct ota_test_fakes {
 	char last_report_state[32];
 	int last_report_error_code;
 	int report_calls;
+	int confirmation_calls;
+	int confirmation_error;
+	uint32_t confirmation_sequence;
+	char confirmation_deployment_id[64];
 };
 
 extern struct ota_test_fakes ota_test;

@@ -274,21 +274,27 @@ def run_probe(probe_serial: str, *command: str, timeout=120) -> None:
     )
     if result.returncode:
         # Debug output may contain memory; expose operation and exit status, not raw dumps.
-        raise RuntimeError(f"probe-rs {command[0]} failed (exit {result.returncode}); no next stage executed")
-
-
-def recover_usb(probe_serial: str) -> None:
-    print("RECOVERY ARMED: reconnect USB without pressing any buttons; "
-          "the utility will capture the exact probe and erase before provisioning.", flush=True)
-    while True:
-        inventory = subprocess.run(
-            ["probe-rs", "list"], capture_output=True, text=True, check=True, timeout=5
+        raise RuntimeError(
+            f"probe-rs {command[0]} failed (exit {result.returncode}); no next stage executed. "
+            "The device may be partially changed; establish its state before retrying."
         )
-        if probe_serial.lower() in inventory.stdout.lower():
-            run_probe(probe_serial, "erase", "--connect-under-reset", "--allow-erase-all")
-            print("USB recovery erase completed; provisioning has not started.", flush=True)
-            return
-        time.sleep(0.02)
+
+
+def require_probe(probe_serial: str) -> None:
+    inventory = subprocess.run(
+        ["probe-rs", "list"], capture_output=True, text=True, check=True, timeout=5
+    )
+    matches = re.findall(
+        r"2e8a:000c(?:-[0-9]+)?:([A-Za-z0-9_-]+)\s+\(CMSIS-DAP\)",
+        inventory.stdout,
+        flags=re.IGNORECASE,
+    )
+    if matches.count(probe_serial) != 1:
+        raise RuntimeError(
+            "exact USB debugger is not available; no device changes performed. "
+            "Establish stable authorized service access before running again; "
+            "this utility does not wait for reconnection or capture startup."
+        )
 
 
 def load_admin_token(path: str) -> str:
@@ -401,7 +407,7 @@ class RotationClient:
 def validate_pair(commissioning: dict, operational: dict) -> None:
     if commissioning.get("image_role") != "usb_commissioning" \
             or operational.get("image_role") is not None \
-            or operational.get("release_id") != "OTA-0.1":
+            or operational.get("release_id") not in ("OTA-0.1", "OTA-0.1-r3"):
         raise ValueError("commissioning and operational artifact roles do not match")
     for field in ("generated_partition_layout", "generated_protected_storage_configuration"):
         if commissioning.get(field) != operational.get(field):
@@ -435,14 +441,17 @@ def commission(args, commissioning: dict, operational: dict, device_key: str, ba
         raise ValueError("commissioning and OTA 0.1 secure TF-M payloads differ")
     if len(final_bytes) > 0x6C000:
         raise ValueError("operational image exceeds primary slot")
-    if args.recover_usb:
+    require_probe(args.probe_serial)
+    if args.erase:
         if rotation["state"] == "activated":
-            raise RuntimeError("recovery erase refused for an activated rotation; use non-destructive resume")
-        recover_usb(args.probe_serial)
+            raise RuntimeError("erase refused for an activated rotation; use storage-preserving maintenance")
+        print("Erasing the selected device once; existing firmware and credentials will be destroyed.",
+              flush=True)
+        run_probe(args.probe_serial, "erase", "--allow-erase-all")
     print("Installing verified commissioning firmware.", flush=True)
-    if args.recover_usb:
+    if args.erase:
         run_probe(args.probe_serial, "download", "--binary-format", "hex", "--verify",
-                  "--allow-erase-all", str(helper_root / commissioning["merged_artifact_file"]))
+                  str(helper_root / commissioning["merged_artifact_file"]))
     else:
         run_probe(args.probe_serial, "download", "--binary-format", "bin", "--base-address",
                   "0x10000", "--verify", "--restore-unwritten", str(helper))
@@ -488,8 +497,9 @@ def main() -> int:
     auth.add_argument("--admin-token-file")
     auth.add_argument("--admin-session-port", type=int,
                       help="receive the signed-in Admin bearer once over loopback (0 selects a free port)")
-    parser.add_argument("--recover-usb", action="store_true",
-                        help="explicitly authorize pre-provisioning erase and arm USB-only recovery")
+    parser.add_argument("--erase", action="store_true",
+                        help="authorize one complete erase and clean installation; "
+                             "requires an already accessible exact probe and prepared rotation")
     args = parser.parse_args()
     device_key = ""
     try:
