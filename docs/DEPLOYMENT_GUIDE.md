@@ -170,9 +170,10 @@ is permitted as a publication side effect.
 - New r3 publication, old-r2 selectable withdrawal and physical qualification
   remain unperformed at the application-rollout checkpoint. Exact-hash
   acceptance and commit/push authorization have since been granted; release
-  publication is recorded separately below. Explicit scope for old-assignment/bootstrap
-  reconciliation. No physical operation, OTA assignment, commit, push or merge
-  was performed.
+  publication is recorded separately below. Explicit scope for old-assignment/
+  bootstrap reconciliation is still needed. No physical operation or new OTA
+  assignment was performed. Commits/push were subsequently authorized and
+  completed on the review branch; no merge was performed.
 
 #### Final revised firmware packages — built and verified, not accepted/published
 
@@ -1430,6 +1431,11 @@ summarized above. New entries are placed at the TOP of this register.
   assignment and consumed one-time schedule require explicit reconciliation
   before a new 900-second commissioning attempt. The CPO will make the next
   OTA assignment personally.
+- Original manifests and release acceptance records are remotely backed up at
+  `fd631ecf9d9479ada8f11c937e072093b80797a5`, independently verified on the
+  designated review-branch remote before enabling the approval catalog.
+  Default production validation accepts the exact two final artifact/manifest
+  pairs and the complete release-specific governance evidence.
 
 ### Prototype 4.0 corrected successor publication (2026-11-10)
 
