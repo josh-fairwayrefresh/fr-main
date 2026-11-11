@@ -126,6 +126,18 @@ side effect.
   Temporary loopback payload serving was stopped after publication. No physical
   operation, new assignment, credential operation or merge was performed.
 
+The CPO clarified the immediate deliverable: publish the latest 0.1alt/1.0
+versions so the CPO can make assignments, and ready the new USB 0.1 image for
+the normal FRB-0005 SOP. No new recommissioning procedure is requested.
+The existing workspace `Maintain FRB-0005 USB` task now selects the accepted
+`ota-OTA-0.1-r3-production-20261110-r3/OTA-0.1-r3-manifest.json`, retaining
+the exact probe, existing credential/rotation, verified commissioner and
+storage-preserving flags. Its artifact hash, current firmware-source match,
+pairing and byte-identical secure payload were rechecked without accessing
+the device. The task was prepared, not executed. This readiness does not claim
+that a flash resets the already consumed schedule or clears the old backend
+assignment.
+
 #### Verified application rollout and remaining release blockers
 
 - Completion-enabled Admin `fairway-admin-ota-complete-abf92e9` and receiver
