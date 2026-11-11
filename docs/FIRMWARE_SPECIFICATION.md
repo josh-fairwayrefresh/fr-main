@@ -543,6 +543,17 @@ operation, or reinstate early-erase listeners. Existing board recovery and
 explicit PV8 firmware behavior remain intact; the host does not automate
 them and refuses to program an unavailable probe.
 
+On 2026-11-10, the CPO explicitly requested a permanent PV8-free solution
+after the current bootstrap installation, rather than treating PV8-assisted
+recovery as routine maintenance. Required acceptance must include usable
+target programming access after repeated field-to-USB cycles without PV8,
+startup races or protected-storage loss, while preserving accepted field
+behavior. USB probe enumeration alone is insufficient: the latest authorized
+maintenance attempt enumerated the probe but could not access target Memory
+APs or complete the commissioning-primary download. Exact attempt evidence
+is owned by the Deployment Guide. No permanent mechanism is yet implemented
+or physically validated.
+
 The CPO accepted this FRB-0005-specific Increment 2.0 outcome on 2026-11-06.
 This device-specific acceptance does not change the accepted fleet firmware
 baseline stated above. In the physical service-mode check, holding PV8 through

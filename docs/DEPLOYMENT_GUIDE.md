@@ -147,6 +147,22 @@ reset, serial provisioning, credential operation, reconnect listener or OTA
 assignment occurred. Resume only once stable authorized service access is
 established, per the existing SOP; connection alone is not debugger readiness.
 
+During the subsequent CPO-authorized PV8-assisted service entry on the same
+date, `probe-rs list` detected exact serial `E66550A147969135`. The existing
+no-erase maintenance task was then run in a visible Terminal with its hidden
+signing-key prompt. Both original signed artifacts independently verified,
+including accepted bootstrap SHA-256
+`a93b4620d119a7d08b253ca76e1dcbe697557f329d2bf262246b742d58d6986d`.
+The first commissioning-primary `probe-rs download` failed with exit 1.
+The host stopped without executing provisioning, the final bootstrap write,
+backend activation or final reset. A subsequent exact-probe `probe-rs info`
+identified a Nordic DPv2 debug port, but Memory APs 0, 1 and 3 reported
+`Memory AP is not accessible, DeviceEn bit not set`. This does not establish
+the cause of the failed download or whether its first write partially changed
+the primary slot; the new bootstrap is not installed/verified. No erase,
+new rotation, assignment change or blind programming retry was performed.
+Probe enumeration is therefore not sufficient evidence of programming access.
+
 #### Verified application rollout and remaining release blockers
 
 - Completion-enabled Admin `fairway-admin-ota-complete-abf92e9` and receiver
