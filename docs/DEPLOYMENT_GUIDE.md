@@ -247,7 +247,7 @@ real `lib/utils/json.c` and unmodified `json.h` with the real
 `ota_update_discovery.c` and a production-shaped offer. It fails against the
 r3 source and passes with the correction. Acceptance evidence: full OTA host
 suite (including this regression), 119 Python release/provisioning tests
-(one skip), and 29 OTA API plus 34 fleet/governance backend cases.
+(one skip), and 29 OTA API plus 33 fleet/governance backend cases.
 
 The CPO approved the r4 correction and accepted these exact production-signed
 hashes (fingerprint

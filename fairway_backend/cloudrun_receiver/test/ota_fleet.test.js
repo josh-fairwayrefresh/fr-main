@@ -216,6 +216,7 @@ async function run() {
       'OTA-1.0-r2': '21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c',
       'OTA-0.1alt-r3': '79e53b5643fcc78cabb152e89eeac4fc1377587dd58b71c51d41c0cb7637275d',
       'OTA-1.0-r3': '2869c2f47cb1b6a35665235e6b24bacd401aaafe8dfa59f632514d0cf0ebd41d',
+      'OTA-0.1alt-r4': 'e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2',
     };
     assert.deepEqual(Object.keys(PUBLICATION_APPROVALS).sort(), Object.keys(accepted).sort());
     for (const [releaseId, digest] of Object.entries(accepted)) {
@@ -223,12 +224,14 @@ async function run() {
       assert.equal(publicationEligible(releaseId, digest), true);
       assert.equal(publicationEligible(releaseId, '0'.repeat(64)), false);
       assert.deepEqual(PUBLICATION_APPROVALS[releaseId].device_ids, ['FRB-0005']);
-      const base = releaseId === 'OTA-0.1alt-r3' ? 'a99c45cf97de478c5c199381e48e6061d9de5fcd'
+      const base = releaseId === 'OTA-0.1alt-r4' ? 'a6350d738088557463909886c411775149fd5984'
+        : releaseId === 'OTA-0.1alt-r3' ? 'a99c45cf97de478c5c199381e48e6061d9de5fcd'
         : releaseId === 'OTA-1.0-r3' ? '00530a1a5875c3217e1de7e0368cd8b323fe1173'
         : '11213b4ad0607486df12f28d764f6d6abd90cdb6';
       assert.equal(PUBLICATION_APPROVALS[releaseId].build_base_commit, base);
       assert.equal(PUBLICATION_APPROVALS[releaseId].build_source_sha256,
-        releaseId.endsWith('-r3') ? '7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051'
+        releaseId.endsWith('-r4') ? '831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9'
+          : releaseId.endsWith('-r3') ? '7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051'
           : '47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3');
     }
   });
