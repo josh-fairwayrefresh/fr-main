@@ -1,0 +1,315 @@
+{
+  "release_id": "OTA-0.1-r3",
+  "version": {
+    "major": 0,
+    "minor": 1,
+    "revision": 0,
+    "build": 4
+  },
+  "version_string": "0.1.0+4",
+  "hardware_ids": [
+    "circuitdojo_feather_nrf9151@1/nrf9151/ns"
+  ],
+  "schedule": "one_time",
+  "device_credentials_embedded": false,
+  "source_commit": "a99c45cf97de478c5c199381e48e6061d9de5fcd",
+  "source_branch": "review/frb0005-increment-1.0-source-checkpoint-20261105",
+  "source_worktree_dirty": true,
+  "build_source_sha256": "7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051",
+  "build_source_inventory": "git-tracked+explicit-development-v1",
+  "build_source_files": [
+    "boards/circuitdojo/feather_nrf9151/CMakeLists.txt",
+    "boards/circuitdojo/feather_nrf9151/Kconfig",
+    "boards/circuitdojo/feather_nrf9151/Kconfig.circuitdojo_feather_nrf9151",
+    "boards/circuitdojo/feather_nrf9151/Kconfig.defconfig",
+    "boards/circuitdojo/feather_nrf9151/board.cmake",
+    "boards/circuitdojo/feather_nrf9151/board.yml",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151.dts",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_2.overlay",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common-pinctrl.dtsi",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_defconfig",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_nrf9151.yaml",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_nrf9151_ns.yaml",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_ns.dts",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_ns_2.overlay",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_ns_defconfig",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_partition_conf.dtsi",
+    "boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_pm_static.yml",
+    "boards/circuitdojo/feather_nrf9151/pre_dt_board.cmake",
+    "boards/circuitdojo/feather_nrf9151/startup.c",
+    "boards/circuitdojo/feather_nrf9151/sysbuild.cmake",
+    "samples/fairway_power_sandbox/CMakeLists.txt",
+    "samples/fairway_power_sandbox/Kconfig",
+    "samples/fairway_power_sandbox/prj.conf",
+    "samples/fairway_power_sandbox/prj_a.conf",
+    "samples/fairway_power_sandbox/src/button_ux.c",
+    "samples/fairway_power_sandbox/src/button_ux.h",
+    "samples/fairway_power_sandbox/src/certs/google-run-ca-chain-cstr.pem",
+    "samples/fairway_power_sandbox/src/command_protocol.c",
+    "samples/fairway_power_sandbox/src/command_protocol.h",
+    "samples/fairway_power_sandbox/src/complete_poll.c",
+    "samples/fairway_power_sandbox/src/complete_poll.h",
+    "samples/fairway_power_sandbox/src/demand_window.c",
+    "samples/fairway_power_sandbox/src/demand_window.h",
+    "samples/fairway_power_sandbox/src/device_identity.c",
+    "samples/fairway_power_sandbox/src/device_identity.h",
+    "samples/fairway_power_sandbox/src/golfer_protocol.c",
+    "samples/fairway_power_sandbox/src/golfer_protocol.h",
+    "samples/fairway_power_sandbox/src/golfer_txn.c",
+    "samples/fairway_power_sandbox/src/golfer_txn.h",
+    "samples/fairway_power_sandbox/src/http_transport.c",
+    "samples/fairway_power_sandbox/src/http_transport.h",
+    "samples/fairway_power_sandbox/src/main.c",
+    "samples/fairway_power_sandbox/src/modem_service.c",
+    "samples/fairway_power_sandbox/src/modem_service.h",
+    "samples/fairway_power_sandbox/src/ota_delivery.c",
+    "samples/fairway_power_sandbox/src/ota_delivery.h",
+    "samples/fairway_power_sandbox/src/ota_delivery_reporting.c",
+    "samples/fairway_power_sandbox/src/ota_update.c",
+    "samples/fairway_power_sandbox/src/ota_update.h",
+    "samples/fairway_power_sandbox/src/ota_update_discovery.c",
+    "samples/fairway_power_sandbox/src/ota_update_discovery.h",
+    "samples/fairway_power_sandbox/src/ota_update_download.c",
+    "samples/fairway_power_sandbox/src/ota_update_download.h",
+    "samples/fairway_power_sandbox/src/ota_update_policy.c",
+    "samples/fairway_power_sandbox/src/ota_update_policy.h",
+    "samples/fairway_power_sandbox/src/ota_update_reporting.c",
+    "samples/fairway_power_sandbox/src/ota_update_reporting.h",
+    "samples/fairway_power_sandbox/src/ota_update_scheduler.c",
+    "samples/fairway_power_sandbox/src/ota_update_scheduler.h",
+    "samples/fairway_power_sandbox/src/ota_update_staging.c",
+    "samples/fairway_power_sandbox/src/ota_update_staging.h",
+    "samples/fairway_power_sandbox/src/power_policy.c",
+    "samples/fairway_power_sandbox/src/power_policy.h",
+    "samples/fairway_power_sandbox/src/sync_primitives.h",
+    "samples/fairway_power_sandbox/src/thread_priorities.h",
+    "samples/fairway_power_sandbox/src/transaction_scheduler.c",
+    "samples/fairway_power_sandbox/src/transaction_scheduler.h",
+    "samples/fairway_power_sandbox/src/usb_commissioning.c",
+    "samples/fairway_power_sandbox/sysbuild/mcuboot.conf",
+    "samples/fairway_power_sandbox/sysbuild.cmake",
+    "samples/fairway_power_sandbox/sysbuild.conf",
+    "samples/fairway_power_sandbox/tests/complete_poll/CMakeLists.txt",
+    "samples/fairway_power_sandbox/tests/complete_poll/host/zephyr/kernel.h",
+    "samples/fairway_power_sandbox/tests/complete_poll/host/zephyr/ztest.h",
+    "samples/fairway_power_sandbox/tests/complete_poll/prj.conf",
+    "samples/fairway_power_sandbox/tests/complete_poll/src/main.c",
+    "samples/fairway_power_sandbox/tests/complete_poll/testcase.yaml"
+  ],
+  "ncs_version": "3.1.1",
+  "toolchain_bundle": "561dce9adf",
+  "west_version": "West version: v1.4.0",
+  "board": "circuitdojo_feather_nrf9151@1/nrf9151/ns",
+  "application_configuration": "prj_a.conf",
+  "build_configuration_file": "release.conf",
+  "build_command": [
+    "/opt/nordic/ncs/toolchains/561dce9adf/bin/west",
+    "build",
+    "--build-dir",
+    "/Users/DuplexLoop/fairway-builds/ota-OTA-0.1-r3-production-20261110-r3/build",
+    "--pristine=always",
+    "/Users/DuplexLoop/Documents/feather_code/nfed/samples/fairway_power_sandbox",
+    "--board",
+    "circuitdojo_feather_nrf9151@1/nrf9151/ns",
+    "--",
+    "-DBOARD_ROOT=/Users/DuplexLoop/Documents/feather_code/nfed",
+    "-DEXTRA_CONF_FILE=prj_a.conf;/Users/DuplexLoop/fairway-builds/ota-OTA-0.1-r3-production-20261110-r3/release.conf",
+    "-DDEBUG_THREAD_INFO=On",
+    "-DCONFIG_DEBUG_THREAD_INFO=y",
+    "-Dfairway_power_sandbox_DEBUG_THREAD_INFO=On",
+    "-Dmcuboot_DEBUG_THREAD_INFO=Off",
+    "-DSB_CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256=y",
+    "-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"<temporary-unlocked-signing-key>\""
+  ],
+  "generated_partition_layout": {
+    "EMPTY_0": {
+      "address": 49152,
+      "end_address": 65536,
+      "size": 16384
+    },
+    "app": {
+      "address": 196608,
+      "end_address": 507904,
+      "size": 311296
+    },
+    "littlefs_storage": {
+      "address": 0,
+      "end_address": 16777216,
+      "size": 16777216
+    },
+    "mcuboot": {
+      "address": 0,
+      "end_address": 49152,
+      "size": 49152
+    },
+    "mcuboot_pad": {
+      "address": 65536,
+      "end_address": 66048,
+      "size": 512
+    },
+    "mcuboot_primary": {
+      "address": 65536,
+      "end_address": 507904,
+      "size": 442368
+    },
+    "mcuboot_primary_app": {
+      "address": 66048,
+      "end_address": 507904,
+      "size": 441856
+    },
+    "mcuboot_secondary": {
+      "address": 507904,
+      "end_address": 950272,
+      "size": 442368
+    },
+    "mcuboot_sram": {
+      "address": 536870912,
+      "end_address": 536961024,
+      "size": 90112
+    },
+    "nrf_modem_lib_ctrl": {
+      "address": 536961024,
+      "end_address": 536962280,
+      "size": 1256
+    },
+    "nrf_modem_lib_rx": {
+      "address": 536970600,
+      "end_address": 536978792,
+      "size": 8192
+    },
+    "nrf_modem_lib_sram": {
+      "address": 536961024,
+      "end_address": 536978792,
+      "size": 17768
+    },
+    "nrf_modem_lib_tx": {
+      "address": 536962280,
+      "end_address": 536970600,
+      "size": 8320
+    },
+    "otp": {
+      "address": 16744712,
+      "end_address": 16745468,
+      "size": 756
+    },
+    "sram_nonsecure": {
+      "address": 536961024,
+      "end_address": 537133056,
+      "size": 172032
+    },
+    "sram_primary": {
+      "address": 536978792,
+      "end_address": 537133056,
+      "size": 154264
+    },
+    "sram_secure": {
+      "address": 536870912,
+      "end_address": 536961024,
+      "size": 90112
+    },
+    "tfm": {
+      "address": 66048,
+      "end_address": 196608,
+      "size": 130560
+    },
+    "tfm_its": {
+      "address": 950272,
+      "end_address": 983040,
+      "size": 32768
+    },
+    "tfm_nonsecure": {
+      "address": 196608,
+      "end_address": 507904,
+      "size": 311296
+    },
+    "tfm_otp_nv_counters": {
+      "address": 983040,
+      "end_address": 1015808,
+      "size": 32768
+    },
+    "tfm_ps": {
+      "address": 1015808,
+      "end_address": 1048576,
+      "size": 32768
+    },
+    "tfm_secure": {
+      "address": 65536,
+      "end_address": 196608,
+      "size": 131072
+    },
+    "tfm_sram": {
+      "address": 536870912,
+      "end_address": 536961024,
+      "size": 90112
+    }
+  },
+  "generated_image_capacity": {
+    "raw_slot_bytes": 442368,
+    "erase_block_bytes": 4096,
+    "write_block_bytes": 4,
+    "max_image_sectors": 256,
+    "trailer_bytes": 3120,
+    "reserved_trailer_bytes": 4096,
+    "move_workspace_bytes": 4096,
+    "max_signed_image_bytes": 434176,
+    "mcuboot_dts_sha256": "c2ca30886e86ed38aadb7f27bb2d89a988f328f87dafbdc4da0417a0b5beec7c"
+  },
+  "generated_boot_configuration": {
+    "fairway_power_sandbox/zephyr": {
+      "CONFIG_MCUBOOT_SIGNATURE_KEY_FILE": "<external-signing-key>",
+      "CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION": "0.1.0+4",
+      "CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_MOVE": "y"
+    },
+    "mcuboot/zephyr": {
+      "CONFIG_BOOT_SIGNATURE_KEY_FILE": "<external-signing-key>",
+      "CONFIG_MCUBOOT": "y",
+      "CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256": "y",
+      "CONFIG_BOOT_SWAP_USING_MOVE": "y",
+      "CONFIG_BOOT_MAX_IMG_SECTORS": "256"
+    }
+  },
+  "signing": {
+    "algorithm": "ECDSA-P256",
+    "fingerprint": "sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb",
+    "fingerprint_algorithm": "SHA-256 of MCUboot DER-encoded SubjectPublicKeyInfo public key",
+    "private_key_in_artifacts": false
+  },
+  "generated_mcuboot_public_key_fingerprint": "sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb",
+  "generated_protected_storage_configuration": {
+    "fairway_power_sandbox/zephyr": {
+      "CONFIG_HW_UNIQUE_KEY": "y",
+      "CONFIG_HW_UNIQUE_KEY_RANDOM": "y",
+      "CONFIG_TFM_PARTITION_PROTECTED_STORAGE": "y",
+      "CONFIG_TFM_PS_ROLLBACK_PROTECTION": "y",
+      "CONFIG_PM_PARTITION_SIZE_TFM": "0x1fe00",
+      "CONFIG_PM_PARTITION_SIZE_TFM_PROTECTED_STORAGE": "0x8000",
+      "CONFIG_PM_PARTITION_SIZE_TFM_INTERNAL_TRUSTED_STORAGE": "0x8000",
+      "CONFIG_PM_PARTITION_SIZE_TFM_OTP_NV_COUNTERS": "0x8000"
+    }
+  },
+  "generated_ota_configuration": {
+    "CONFIG_FAIRWAY_OTA_FIRMWARE_VERSION": "0.1.0+4",
+    "CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION": "0.1.0+4",
+    "CONFIG_FAIRWAY_OTA_SCHEDULE_ONE_TIME": "y",
+    "CONFIG_FAIRWAY_OTA_INITIAL_CHECK_DELAY_SECONDS": "900",
+    "CONFIG_FAIRWAY_OTA_TRIAL_TIMEOUT_SECONDS": "300"
+  },
+  "generated_partition_device_tree": {
+    "file": "fairway_power_sandbox/zephyr/zephyr.dts",
+    "sha256": "91e59f432e7b157195e887bf11e3fbde6fd23d5b5f3e77e063a88a451ad40cbd",
+    "partitions": [
+      "boot_partition: partition@0 {\n\t\t\t\t\t\t\tlabel = \"mcuboot\";    /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi:199 */\n\t\t\t\t\t\t\treg = < 0x0 0xc000 >; /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi:200 */\n\t\t\t\t\t\t};",
+      "slot0_partition: partition@10000 {\n\t\t\t\t\t\t\tlabel = \"image-0\";         /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi:207 */\n\t\t\t\t\t\t\treg = < 0x10000 0x6c000 >; /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_partition_conf.dtsi:25 */\n\t\t\t\t\t\t};",
+      "slot0_ns_partition: partition@30000 {\n\t\t\t\t\t\t\tlabel = \"image-0-nonsecure\"; /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi:210 */\n\t\t\t\t\t\t\treg = < 0x30000 0x4c000 >;   /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_partition_conf.dtsi:29 */\n\t\t\t\t\t\t};",
+      "slot1_partition: partition@7c000 {\n\t\t\t\t\t\t\tlabel = \"image-1\";         /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi:213 */\n\t\t\t\t\t\t\treg = < 0x7c000 0x6c000 >; /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_partition_conf.dtsi:33 */\n\t\t\t\t\t\t};",
+      "slot1_ns_partition: partition@9c000 {\n\t\t\t\t\t\t\tlabel = \"image-1-nonsecure\"; /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_common.dtsi:216 */\n\t\t\t\t\t\t\treg = < 0x9c000 0x4c000 >;   /* in ../../../../Users/DuplexLoop/Documents/feather_code/nfed/boards/circuitdojo/feather_nrf9151/circuitdojo_feather_nrf9151_partition_conf.dtsi:37 */\n\t\t\t\t\t\t};"
+    ]
+  },
+  "merged_artifact_file": "OTA-0.1-r3-merged.hex",
+  "merged_size_bytes": 905702,
+  "merged_sha256": "0e99e939bbf8c1bdc68dcb7d96652104c25483cdf096a29f9a7d1bc44fb4a167",
+  "artifact_file": "OTA-0.1-r3-ota.signed.bin",
+  "size_bytes": 281476,
+  "sha256": "a93b4620d119a7d08b253ca76e1dcbe697557f329d2bf262246b742d58d6986d"
+}

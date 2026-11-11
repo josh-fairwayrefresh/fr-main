@@ -80,15 +80,13 @@ remain prerequisites. Publishing does not assign a device. The old unresolved
 assignment and consumed bootstrap state need separately scoped reconciliation;
 do not start a physical commissioning window while they still block selection.
 
-**Publication stop until evidence is complete:** the new source/release records are not yet committed
-and backed up to the designated remote, and no new exact signed hashes have
-been accepted. Existing r2 approvals do not authorize r3 bytes. Do not populate
-`accepted_releases.js` or `PUBLICATION_APPROVALS` with invented evidence.
-Complete local builds/verification and separately authorized application
-deployment where possible, then obtain explicit commit/push scope and exact-hash
-acceptance before publication. No device or assignment operation is permitted
-as a deployment side effect. Production rollout/build evidence must be recorded
-below when actually verified; this subsection does not assert completion.
+The source checkpoint is now committed and remotely verified at
+`00530a1a5875c3217e1de7e0368cd8b323fe1173`. The CPO explicitly accepted all
+three final signed hashes below and authorized publication of the two nightly
+successors for FRB-0005 only, with the bootstrap remaining USB-only.
+Release-record backup and governed catalog deployment/publication must still
+be verified before claiming availability. No device or assignment operation
+is permitted as a publication side effect.
 
 #### Verified application rollout and remaining release blockers
 
@@ -170,8 +168,9 @@ below when actually verified; this subsection does not assert completion.
   assignment until separately authorized engineering reconciliation. No
   assignment, capability, registry or credential record was changed by rollout.
 - New r3 publication, old-r2 selectable withdrawal and physical qualification
-  remain unperformed. Required next boundaries are exact-hash acceptance, authorized source/release commits
-  and designated-remote backup, and explicit scope for old-assignment/bootstrap
+  remain unperformed at the application-rollout checkpoint. Exact-hash
+  acceptance and commit/push authorization have since been granted; release
+  publication is recorded separately below. Explicit scope for old-assignment/bootstrap
   reconciliation. No physical operation, OTA assignment, commit, push or merge
   was performed.
 
@@ -204,8 +203,21 @@ The bootstrap retains its one-time 900-second policy.
 Final build logs and verification status are under the completion evidence
 directory's `firmware-r3-retry1/`. Earlier local candidates and the failed
 unlock attempt remain separate evidence; they are not the final packages.
-Recorded hashes are verification evidence only, not CPO acceptance, remote
-backup, or permission to bypass publication gates. No further build is planned.
+The CPO subsequently explicitly accepted these exact hashes for the planned
+release and authorized publication of the two nightly successors for FRB-0005
+only. This approval does not bypass the remote-backup/publication gates.
+
+The additionally requested `OTA-1.0-r3` (`1.0.0+3`, nightly) is now independently
+verified at 281,659 signed bytes, SHA-256
+`2869c2f47cb1b6a35665235e6b24bacd401aaafe8dfa59f632514d0cf0ebd41d`,
+in `/Users/DuplexLoop/fairway-builds/ota-OTA-1.0-r3-production-20261110-r1/`.
+It shares the exact firmware-source digest above, records clean source
+checkpoint `00530a1a5875c3217e1de7e0368cd8b323fe1173`, and uses the same
+verified production trust/layout/capacity. The CPO explicitly accepted this
+hash with the bootstrap and 0.1alt hashes. Its build/verification evidence is
+under the session's `ota-publication-r3/`.
+Original final manifests for all three images are retained in `docs/releases/`;
+no binary or secret is a Git input. No further build is planned.
 
 ### OTA Administration production deployment (2026-11-09)
 
@@ -1388,6 +1400,36 @@ The Alignment Register preserves historical release evidence and provenance;
 its entries describe the state at their recorded dates. It does not supersede
 the current subsystem owner Sources of Truth or newer accepted evidence
 summarized above. New entries are placed at the TOP of this register.
+
+### Running-confirmation successors — CPO acceptance and publication authorization (2026-11-10)
+
+- The CPO accepts USB-only `OTA-0.1-r3` (`0.1.0+4`), signed SHA-256
+  `a93b4620d119a7d08b253ca76e1dcbe697557f329d2bf262246b742d58d6986d`;
+  nightly `OTA-0.1alt-r3` (`0.1.0+5`), signed SHA-256
+  `79e53b5643fcc78cabb152e89eeac4fc1377587dd58b71c51d41c0cb7637275d`;
+  and nightly `OTA-1.0-r3` (`1.0.0+3`), signed SHA-256
+  `2869c2f47cb1b6a35665235e6b24bacd401aaafe8dfa59f632514d0cf0ebd41d`.
+- All signatures, production trust, generated layout/capacity, common-image
+  credential exclusion and matching current firmware-source digest are verified.
+  Bootstrap pairing with the existing commissioner is independently verified.
+  Local host, wire-contract and release/provisioning tests are recorded above.
+  This acceptance is not physical autonomous OTA qualification.
+- The CPO authorizes VSC publication of the two nightly successors for FRB-0005
+  only and required source/release commits and push on the existing review
+  branch to `origin`, without merge. Source checkpoint
+  `00530a1a5875c3217e1de7e0368cd8b323fe1173` is remotely verified at
+  `https://github.com/josh-fairwayrefresh/fr-main/commit/00530a1a5875c3217e1de7e0368cd8b323fe1173`.
+  This entry recognizes the release revision in the Alignment Register.
+- Publication must use the existing authenticated Admin engineering contract,
+  exact accepted bytes, original manifests and real remote-backed release
+  evidence. The old r2 releases remain immutable and usable by existing
+  assignments; each becomes unselectable for new assignments only once its
+  governed r3 replacement is actually published. Bootstrap remains USB-only.
+- Publication creates no assignment and authorizes no implicit cancellation,
+  rearming, credential operation or physical flash. FRB-0005's unresolved old
+  assignment and consumed one-time schedule require explicit reconciliation
+  before a new 900-second commissioning attempt. The CPO will make the next
+  OTA assignment personally.
 
 ### Prototype 4.0 corrected successor publication (2026-11-10)
 

@@ -143,6 +143,39 @@ async function run() {
     assert.equal((await db.collection('ota_download_tokens').get()).size, 0);
     assert.equal((await ota.listDeployments())[0].offered_at, null);
   });
+  await test('1.0 replacement retires only new selection and keeps active prior delivery', async () => {
+    const { db, options, setTime } = await setup();
+    const old = 'OTA-1.0-r2';
+    const replacement = 'OTA-1.0-r3';
+    const fixture = (await db.collection('ota_releases').doc(RELEASE).get()).data();
+    const ota = createOtaService(db, {
+      ...options,
+      publicationApprovals: Object.fromEntries([old, replacement].map((id) => [id, {
+        ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40),
+        build_source_sha256: '2'.repeat(64),
+      }])),
+      acceptedReleases: { [old]: DIGEST, [replacement]: DIGEST },
+    });
+    await db.collection('ota_releases').doc(old).set({ ...fixture, release_id: old, version_string: '1.0.0+2' });
+    const review = await ota.prepareAssignment({ release_id: old, device_ids: ['FRB-0012'] }, 'admin');
+    await ota.confirmAssignment(review.review_id, 'admin');
+    const assignmentRef = db.collection('ota_assignments').doc('FRB-0012');
+    const before = (await assignmentRef.get()).data();
+    await db.collection('ota_releases').doc(replacement).set({
+      ...fixture, release_id: replacement, version_string: '1.0.0+3',
+    });
+    const releases = await ota.listReleases();
+    assert.equal(releases.find((item) => item.release_id === old).assignable, false);
+    assert.equal(releases.find((item) => item.release_id === replacement).assignable, true);
+    await assert.rejects(ota.prepareAssignment({ release_id: old, device_ids: ['FRB-0011'] }, 'admin'),
+      (error) => error.code === 'release_superseded');
+    setTime('2026-03-09T08:00:00Z');
+    const device = (await db.collection('devices').doc('FRB-0012').get()).data();
+    const offer = await ota.checkForUpdate('FRB-0012', device, HARDWARE_ID);
+    assert.equal(offer.update_available, true);
+    assert.equal(offer.release_id, old);
+    assert.deepEqual((await assignmentRef.get()).data(), before);
+  });
   await test('five publication prerequisites are independently mandatory and USB baseline is excluded', () => {
     const record = approval(DIGEST);
     assert.equal(publicationEligible(RELEASE, DIGEST, { [RELEASE]: record }), true);
