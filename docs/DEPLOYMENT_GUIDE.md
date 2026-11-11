@@ -15,12 +15,12 @@ the original accepted firmware artifacts remain unchanged.
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `5eb383e4a44c3d13` | Released `2026-11-10T23:28:13.852Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds last-confirmed-running version/time to the existing registry field. Prior versions retained; exact rollout evidence below. |
-| Production Admin / receiver | Admin `fairway-admin-ota-complete-abf92e9`; receiver `fairway-button-receiver-ota-complete-abf92e9`, both Ready, 100% | Verified `2026-11-10T23:48:16Z`; isolated dirty-worktree source archive `abf92e931fdecd3807063c365f2ed867d8666a548f7272b1382b1ee278ad3ed2`. Adds exact-deployment confirmed-success cleanup while retaining history. Runtime identities and delivery-enabled settings unchanged. Prior revisions retained. |
-| OTA implementation | Corrected successors are published and authorized for FRB-0005 only; CPO assigned OTA-0.1alt-r2 through Admin | Firmware qualification and hashes are owned by the Firmware Specification. On 2026-11-10, after successful physical commissioning, the CPO authorized recording verified initialization and matching production trust on FRB-0005. At approximately 14:23 Pacific, refreshed Admin showed pending OTA-0.1alt-r2, result `assigned`, and no reported OTA check-in or confirmed version. Installation remains unverified. Original artifacts/Pilot 1.1 unchanged. |
+| Production Admin / receiver | Admin `fairway-admin-ota-r3-c0d0720`; receiver `fairway-button-receiver-ota-r3-c0d0720`, both Ready, 100% | Verified `2026-11-11T00:09:32Z`; isolated source archive `c0d0720c6820659ac7dcd969438c76873cc766c518ab458af93cfea3f6cc3ad3`, backed source `a38172d159eda8d8344f63b750e0dbdc88b0571c`. Includes confirmed-success cleanup and exact accepted r3 catalog. Runtime identities/configuration unchanged. Prior revisions retained. |
+| OTA implementation | `OTA-0.1alt-r3` and `OTA-1.0-r3` published/approved for FRB-0005 only; both shown in the production Admin selector | Verified `2026-11-11T00:09:32Z` (November 10 Pacific). Old r2 releases are no longer selectable but their exact bytes/history remain intact. FRB-0005's unresolved old r2 assignment, observed bootstrap check and absent running confirmation remain unchanged. No new assignment or physical operation was performed. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | Recommissioned on 2026-11-10 with unchanged OTA 0.1; protected credential verified after reboot and matching backend rotation activated | One explicitly authorized PV8-assisted recovery established stable access. Full erase, verified commissioning-image flash, protected provisioning, and storage-preserving verified OTA 0.1 flash succeeded. CPO confirmed device-originated Cart delivery and normal device indication after COMPLETE. See physical evidence below; routine button-free recovery is not established. |
-| Production OTA prerequisites | Logging boundary verified; private GCS/IAM and project exclusion active; artifact delivery enabled; both corrected releases published; FRB-0005 physical capability recorded | Admin and Receiver revisions, private object metadata, and the published release catalog were verified 2026-11-10. Following physical commissioning, FRB-0005's capability was recorded and read back at `2026-11-10T22:19:59.099414Z`; the CPO subsequently assigned OTA-0.1alt-r2 in Admin. No device download or installation is yet verified. HQ remains `America/Los_Angeles`. |
-| Production data | This deployment performed read-only business verification and no Firestore migrations/business mutations | Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped or treated as a deployment mutation. |
+| Production OTA prerequisites | Private GCS controls, production catalog and exact r3/r2 artifact bytes verified; delivery remains enabled; FRB-0005 physical capability retained | Governed r3 publication is complete. A fresh FRB-0005 attempt still requires explicitly scoped old-assignment/one-time-state reconciliation before flash. HQ remains `America/Los_Angeles`. No installation is inferred from publication. |
+| Production data | Publication created only the two approved release records/artifacts through the existing authenticated Admin engineering contract | No device, assignment, credential or customer/business records changed. Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
 The exact-Device in-inventory credential-recovery UI is included in this
@@ -85,8 +85,46 @@ The source checkpoint is now committed and remotely verified at
 three final signed hashes below and authorized publication of the two nightly
 successors for FRB-0005 only, with the bootstrap remaining USB-only.
 Release-record backup and governed catalog deployment/publication must still
-be verified before claiming availability. No device or assignment operation
-is permitted as a publication side effect.
+be verified before claiming availability; these checks have now passed as
+recorded below. No device or assignment operation is permitted as a publication
+side effect.
+
+#### Verified r3 catalog publication (2026-11-10 Pacific)
+
+- Admin `fairway-admin-ota-r3-c0d0720` and receiver
+  `fairway-button-receiver-ota-r3-c0d0720` are Ready at 100%. Their immutable
+  image digests respectively are
+  `sha256:b0cb1d23b84e69503ef546ab91d9e1bbaa2bf26566d49edaa958a6f5c9d12cf7`
+  and `sha256:a0308cd06a028cc467c1b6a33d6a21f8e37eaa30ba7a8c9d421c4e24fa695ca7`.
+  Both were first staged at zero traffic, with unchanged runtime/identity
+  fingerprints and prior traffic verified. Negative authentication and an
+  authenticated read-only Admin catalog request passed before promotion.
+- The deployed 40-file source archive SHA-256 is
+  `c0d0720c6820659ac7dcd969438c76873cc766c518ab458af93cfea3f6cc3ad3`,
+  from remote-backed approval catalog
+  `a38172d159eda8d8344f63b750e0dbdc88b0571c`. Original manifests and
+  exact-hash acceptance records are remotely backed at
+  `fd631ecf9d9479ada8f11c937e072093b80797a5`.
+- Existing Admin-authenticated `POST /api/v1/admin/ota/releases` returned
+  `201 published` for `OTA-0.1alt-r3` at `2026-11-11T00:08:40.186Z` and
+  `OTA-1.0-r3` at `2026-11-11T00:08:41.220Z`, using exactly the accepted
+  hashes and original manifests below. Production browser refresh shows only
+  these two approved successors in the selector; both are catalog-assignable.
+  Their r2 predecessors remain published but unselectable for new assignments.
+- Authenticated operator-only GCS reads verified all four r3/r2 stored objects
+  byte-for-byte against their original manifests. Private bucket uniform
+  access and enforced public-access prevention remain enabled. No valid device
+  download token or device confirmation was synthesized.
+- Read-only verification at `2026-11-11T00:09:32Z` confirms FRB-0005's old
+  assignment/deployment/check status is unchanged. The production fleet still
+  correctly blocks a new assignment with `An active assignment already exists`.
+  A reflash does not itself reconcile that record or reset consumed PSA
+  schedule state. Do not start the new 900-second physical window yet.
+- Source inventories, redacted before/staged/promoted runtime snapshots,
+  immutable revision identities, build evidence and byte-level publication
+  verification are retained under the session's `ota-publication-r3/`.
+  Temporary loopback payload serving was stopped after publication. No physical
+  operation, new assignment, credential operation or merge was performed.
 
 #### Verified application rollout and remaining release blockers
 
