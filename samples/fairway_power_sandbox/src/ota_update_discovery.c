@@ -53,13 +53,14 @@ static const struct json_obj_descr ota_check_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct ota_check_json, hardware_id, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct ota_check_json, sha256, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct ota_check_json, image_size, JSON_TOK_NUMBER),
-	JSON_OBJ_DESCR_PRIM(struct ota_check_json, next_check_at_utc_ms, JSON_TOK_NUMBER),
+	/* UTC milliseconds exceed int32; JSON_TOK_NUMBER would reject every offer. */
+	JSON_OBJ_DESCR_PRIM(struct ota_check_json, next_check_at_utc_ms, JSON_TOK_INT64),
 	JSON_OBJ_DESCR_OBJECT(struct ota_check_json, version, ota_version_descr),
 };
 
 static const struct json_obj_descr ota_schedule_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct ota_schedule_json, next_check_at_utc_ms,
-			    JSON_TOK_NUMBER),
+			    JSON_TOK_INT64),
 };
 
 static char response_storage[OTA_HTTP_RESPONSE_CAPACITY];

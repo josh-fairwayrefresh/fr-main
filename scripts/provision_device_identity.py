@@ -407,7 +407,7 @@ class RotationClient:
 def validate_pair(commissioning: dict, operational: dict) -> None:
     if commissioning.get("image_role") != "usb_commissioning" \
             or operational.get("image_role") is not None \
-            or operational.get("release_id") not in ("OTA-0.1", "OTA-0.1-r3"):
+            or operational.get("release_id") not in ("OTA-0.1", "OTA-0.1-r3", "OTA-0.1-r4"):
         raise ValueError("commissioning and operational artifact roles do not match")
     for field in ("generated_partition_layout", "generated_protected_storage_configuration"):
         if commissioning.get(field) != operational.get(field):

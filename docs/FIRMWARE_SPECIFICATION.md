@@ -70,6 +70,16 @@ version/time, and a real button request and device-acknowledged COMPLETE were
 verified; the CPO confirmed normal completion indication and idle. Exact
 recovery evidence is owned by the Deployment Guide. This is not qualification
 of an autonomous OTA successor installation or permanent PV8-free access.
+
+**r4 discovery correction (2026-11-10).** OTA discovery must decode the
+UTC-millisecond `next_check_at_utc_ms` in both check and schedule responses
+as `JSON_TOK_INT64`. The r3 images used `JSON_TOK_NUMBER` (32-bit) and on
+the nRF9151 rejected every offer before download, without a failure report.
+`OTA-0.1-r4` (`0.1.0+6`, USB-only bootstrap) and `OTA-0.1alt-r4` (`0.1.0+7`,
+nightly) carry the correction; their behavior is otherwise identical to r3.
+Discovery parsing is regression-tested against the installed SDK's real JSON
+decoder, not a fake. Accepted hashes and evidence are owned by the
+Deployment Guide.
 The bootstrap retains exactly one persisted check at first normal boot +900
 seconds; confirmation retries do not restart or repeat that check.
 

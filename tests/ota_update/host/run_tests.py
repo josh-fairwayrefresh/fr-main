@@ -83,7 +83,7 @@ def main() -> int:
         ]
         subprocess.run(nightly_command, check=True)
         subprocess.run([str(executable)], check=True)
-        for version in ("0.1.0+4", "0.1.0+5", "1.0.0+3"):
+        for version in ("0.1.0+4", "0.1.0+5", "1.0.0+3", "0.1.0+6", "0.1.0+7"):
             subprocess.run([
                 *compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
                 f'-DCONFIG_FAIRWAY_OTA_FIRMWARE_VERSION="{version}"',
@@ -93,6 +93,26 @@ def main() -> int:
                 "-o", str(executable),
             ], check=True)
             subprocess.run([str(executable)], check=True)
+        # Real SDK decoder: discovery parsing must not be validated against a fake.
+        ncs = Path(os.environ.get("NCS_INSTALL_DIR", "/opt/nordic/ncs/v3.1.1"))
+        sdk_json_source = ncs / "zephyr/lib/utils/json.c"
+        sdk_json_header = ncs / "zephyr/include/zephyr/data/json.h"
+        if not sdk_json_source.is_file() or not sdk_json_header.is_file():
+            raise SystemExit("Set NCS_INSTALL_DIR to the installed NCS 3.1.1 SDK")
+        sdk_include = Path(temp_dir) / "sdk-include"
+        (sdk_include / "zephyr/data").mkdir(parents=True)
+        shutil.copyfile(sdk_json_header, sdk_include / "zephyr/data/json.h")
+        subprocess.run([
+            *compiler, "-std=gnu11", "-Wall", "-Werror", "-Wno-unused-parameter",
+            '-DCONFIG_FAIRWAY_OTA_HARDWARE_ID="circuitdojo_feather_nrf9151@1/nrf9151/ns"',
+            '-DCONFIG_FAIRWAY_OTA_FIRMWARE_VERSION="0.1.0+6"',
+            "-I", str(sdk_include), "-I", str(host_dir / "sdk_json_include"),
+            "-I", str(source_dir),
+            str(host_dir / "discovery_json_test.c"),
+            str(source_dir / "ota_update_discovery.c"), str(sdk_json_source),
+            "-o", str(executable),
+        ], check=True)
+        subprocess.run([str(executable)], check=True)
     return 0
 
 

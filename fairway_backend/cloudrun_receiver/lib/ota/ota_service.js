@@ -8,7 +8,7 @@ const { createFleetAuthorization, HEADQUARTERS_TIME_ZONE } = require('./fleet_au
 const HARDWARE_ID = 'circuitdojo_feather_nrf9151@1/nrf9151/ns';
 const MCUBOOT_SECONDARY_SLOT_BYTES = 0x6c000;
 const MAX_SIGNED_IMAGE_BYTES = 0x6a000;
-const RELEASE_ID_PATTERN = /^OTA-(?:0\.1|(?:0\.1alt|1\.0)(?:-r[23])?)$/;
+const RELEASE_ID_PATTERN = /^OTA-(?:0\.1|(?:0\.1alt|1\.0)(?:-r[234])?)$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+\+\d+$/;
 const RELEASE_VERSIONS = Object.freeze({
   'OTA-0.1': '0.1.0+1',
@@ -19,7 +19,10 @@ const RELEASE_VERSIONS = Object.freeze({
   'OTA-0.1alt-r3': '0.1.0+5',
   'OTA-1.0-r2': '1.0.0+2',
   'OTA-1.0-r3': '1.0.0+3',
+  'OTA-0.1-r4': '0.1.0+6',
+  'OTA-0.1alt-r4': '0.1.0+7',
 });
+const USB_ONLY_RELEASES = Object.freeze(['OTA-0.1', 'OTA-0.1-r3', 'OTA-0.1-r4']);
 const TERMINAL_STATES = new Set(['confirmed', 'failed', 'rolled_back']);
 const UPDATE_STATES = new Set([
   'downloading',
@@ -117,7 +120,7 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES,
   const encoded = body?.artifact_base64;
   const expectedDigest = body?.sha256;
   const notes = body?.notes ?? '';
-  if (releaseId === 'OTA-0.1' || releaseId === 'OTA-0.1-r3') {
+  if (USB_ONLY_RELEASES.includes(releaseId)) {
     throw new OtaError('physical_initialization_only', 'OTA 0.1 is USB-only initialization, never an OTA update.');
   }
 
@@ -244,7 +247,7 @@ function createOtaService(db, {
 
   async function listReleases() {
     const snapshot = await releases.orderBy('created_at', 'desc').limit(100).get();
-    return Promise.all(snapshot.docs.filter((doc) => !['OTA-0.1', 'OTA-0.1-r3'].includes(doc.id)).map(async (doc) => {
+    return Promise.all(snapshot.docs.filter((doc) => !USB_ONLY_RELEASES.includes(doc.id)).map(async (doc) => {
       let assignable = true;
       try {
         await fleet.requireSelectableRelease(doc.id, doc.data(), (ref) => ref.get());

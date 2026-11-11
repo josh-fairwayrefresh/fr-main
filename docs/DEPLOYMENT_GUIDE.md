@@ -222,9 +222,55 @@ OTA qualification and permanent PV8-free access remain separate work.
 
 At its first 900-second check (`2026-11-11T00:54:02.421Z`), the device was
 offered the then-current old `OTA-0.1alt-r2` (`0.1.0+3`) target, older than
-its running `0.1.0+4`. No artifact request or lifecycle report followed; the
-cause was not investigated. The consumed one-time check required a fresh
-installation for a new attempt.
+its running `0.1.0+4`. No artifact request or lifecycle report followed. The
+cause was later identified as the r3 discovery parsing defect below, not the
+older version. The consumed one-time check required a fresh installation for
+a new attempt.
+
+#### r4 discovery parsing correction — CPO acceptance and publication authorization 2026-11-10
+
+After the 17:06 reinstall, FRB-0005's 900-second check at
+`2026-11-11T01:21:17Z` received an 813-byte HTTP 200 `OTA-0.1alt-r3` offer.
+Cloud Run logs show no subsequent artifact request or lifecycle report,
+matching the 14:30 and 16:54 attempts. Root cause: discovery decoded
+`next_check_at_utc_ms` (UTC milliseconds, about 1.79e12) with
+`JSON_TOK_NUMBER`, which the NCS 3.1.1 decoder stores as `int32_t` through
+32-bit `strtol`. On the nRF9151 that returns `ERANGE`, so every offer and
+schedule response was rejected with `-EPROTO` before a deployment ID was
+retained, preventing a failure report. Earlier host tests replaced the
+vendor decoder, so they did not exercise this boundary. All r3 images
+(`0.1.0+4`, `0.1.0+5`, `1.0.0+3`) contain the defect.
+
+Correction: both schedule fields use `JSON_TOK_INT64`. The new
+`tests/ota_update/host/discovery_json_test.c` compiles the installed SDK's
+real `lib/utils/json.c` and unmodified `json.h` with the real
+`ota_update_discovery.c` and a production-shaped offer. It fails against the
+r3 source and passes with the correction. Acceptance evidence: full OTA host
+suite (including this regression), 119 Python release/provisioning tests
+(one skip), and 29 OTA API plus 34 fleet/governance backend cases.
+
+The CPO approved the r4 correction and accepted these exact production-signed
+hashes (fingerprint
+`sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb`),
+built from base `a6350d738088557463909886c411775149fd5984` plus the corrected
+source (firmware source digest
+`831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9`), each
+independently verified for signature, version, schedule, trust, layout,
+capacity and credential exclusion:
+
+| Release | Version | Role | Signed bytes | SHA-256 |
+|---|---|---|---:|---|
+| `OTA-0.1-r4` | `0.1.0+6` | USB-only bootstrap, one-time 900 s | 281474 | `00a33f9f06056e3468ad7165af51a255ffad40574d9a14570cccd78c030717e1` |
+| `OTA-0.1alt-r4` | `0.1.0+7` | Nightly OTA successor | 281660 | `e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2` |
+
+Original manifests are retained in `docs/releases/`; outputs are under
+`/Users/DuplexLoop/fairway-builds/ota-OTA-0.1{,alt}-r4-production-20261110-r1/`.
+The existing commissioner passes pairing and byte-identical secure TF-M
+comparison with the r4 bootstrap. The CPO authorized publication of
+`OTA-0.1alt-r4` for FRB-0005 only; publication withdraws `OTA-0.1alt-r3`
+from new selection while preserving its bytes and history. The bootstrap
+is never published. `OTA-1.0-r3` was not rebuilt and retains the defect.
+This record is also the Alignment Register recognition for r4.
 
 #### OTA assignment-contract correction — 2026-11-10
 

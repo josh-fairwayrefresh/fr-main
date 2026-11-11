@@ -63,12 +63,13 @@ const RELEASE_BLOCKERS = Object.freeze([
 const RELEASE_REPLACEMENTS = Object.freeze({
   'OTA-0.1alt-r2': 'OTA-0.1alt-r3',
   'OTA-1.0-r2': 'OTA-1.0-r3',
+  'OTA-0.1alt-r3': 'OTA-0.1alt-r4',
 });
 
 function publicationEligible(releaseId, digest, approvals = PUBLICATION_APPROVALS) {
   const approval = approvals[releaseId];
-  return !['OTA-0.1', 'OTA-0.1-r3'].includes(releaseId) && !!approval && approval.sha256 === digest
-    && (!/-r[23]$/.test(releaseId) || (
+  return !['OTA-0.1', 'OTA-0.1-r3', 'OTA-0.1-r4'].includes(releaseId) && !!approval && approval.sha256 === digest
+    && (!/-r[234]$/.test(releaseId) || (
       /^[a-f0-9]{40}$/.test(approval.build_base_commit || '')
       && /^[a-f0-9]{64}$/.test(approval.build_source_sha256 || '')
     ))

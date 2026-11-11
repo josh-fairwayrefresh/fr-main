@@ -344,13 +344,15 @@ class OrchestrationTests(unittest.TestCase):
         self.backend.request.assert_not_called()
 
     def test_revised_bootstrap_accepts_storage_and_trust_compatible_commissioner(self):
-        self.operational["release_id"] = "OTA-0.1-r3"
-        provisioner.validate_pair(self.helper, self.operational)
+        for release_id in ("OTA-0.1-r3", "OTA-0.1-r4"):
+            self.operational["release_id"] = release_id
+            provisioner.validate_pair(self.helper, self.operational)
 
     def test_nightly_successor_is_not_a_usb_operational_bootstrap(self):
-        self.operational["release_id"] = "OTA-0.1alt-r3"
-        with self.assertRaises(ValueError):
-            provisioner.validate_pair(self.helper, self.operational)
+        for release_id in ("OTA-0.1alt-r3", "OTA-0.1alt-r4"):
+            self.operational["release_id"] = release_id
+            with self.assertRaises(ValueError):
+                provisioner.validate_pair(self.helper, self.operational)
 
     def test_changed_secure_image_is_rejected(self):
         root = self.args.commissioning_manifest.parent

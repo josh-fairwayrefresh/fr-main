@@ -38,6 +38,10 @@ class OtaReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(RELEASES["OTA-0.1alt-r3"]["schedule"], "nightly")
         self.assertEqual(RELEASES["OTA-1.0-r3"]["version_string"], "1.0.0+3")
         self.assertEqual(RELEASES["OTA-1.0-r3"]["schedule"], "nightly")
+        self.assertEqual(RELEASES["OTA-0.1-r4"]["version_string"], "0.1.0+6")
+        self.assertEqual(RELEASES["OTA-0.1-r4"]["schedule"], "one_time")
+        self.assertEqual(RELEASES["OTA-0.1alt-r4"]["version_string"], "0.1.0+7")
+        self.assertEqual(RELEASES["OTA-0.1alt-r4"]["schedule"], "nightly")
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

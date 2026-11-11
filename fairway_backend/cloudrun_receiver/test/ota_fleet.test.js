@@ -184,7 +184,31 @@ async function run() {
       delete missing[field];
       assert.equal(publicationEligible(RELEASE, DIGEST, { [RELEASE]: missing }), false, field);
     }
-    assert.equal(publicationEligible('OTA-0.1', DIGEST, { 'OTA-0.1': record }), false);
+    for (const usbOnly of ['OTA-0.1', 'OTA-0.1-r3', 'OTA-0.1-r4']) {
+      assert.equal(publicationEligible(usbOnly, DIGEST, { [usbOnly]: record }), false, usbOnly);
+    }
+  });
+  await test('0.1alt r4 replacement withdraws r3 from new selection and keeps r3 history', async () => {
+    const { db, options } = await setup();
+    const fixture = (await db.collection('ota_releases').doc(RELEASE).get()).data();
+    const ids = ['OTA-0.1alt-r3', 'OTA-0.1alt-r4'];
+    const ota = createOtaService(db, {
+      ...options,
+      publicationApprovals: Object.fromEntries(ids.map((id) => [id, {
+        ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
+      }])),
+      acceptedReleases: Object.fromEntries(ids.map((id) => [id, DIGEST])),
+    });
+    await db.collection('ota_releases').doc(ids[0]).set({ ...fixture, release_id: ids[0], version_string: '0.1.0+5' });
+    await db.collection('ota_releases').doc(ids[1]).set({ ...fixture, release_id: ids[1], version_string: '0.1.0+7' });
+    const releases = await ota.listReleases();
+    assert.equal(releases.find((item) => item.release_id === ids[0]).assignable, false);
+    assert.equal(releases.find((item) => item.release_id === ids[1]).assignable, true);
+    await assert.rejects(ota.prepareAssignment({ release_id: ids[0], device_ids: ['FRB-0005'] }, 'admin'),
+      (error) => error.code === 'release_superseded');
+    const review = await ota.prepareAssignment({ release_id: ids[1], device_ids: ['FRB-0005'] }, 'admin');
+    assert.equal(review.devices[0].schedule, 'bootstrap_900_seconds');
+    assert.equal((await db.collection('ota_releases').doc(ids[0]).get()).data().state, 'published');
   });
   await test('production publication approvals pin only the accepted successor bytes and FRB-0005', () => {
     const accepted = {

@@ -651,8 +651,10 @@ test('accepted-byte allowance cannot bypass publication governance and USB initi
   const ota = createOtaService(db, { artifactStore, acceptedReleases: testAcceptedReleases });
   await assert.rejects(ota.registerRelease(createReleaseBody(), 'admin-1'),
     (error) => error.code === 'publication_not_authorized');
-  await assert.rejects(ota.registerRelease({ ...createReleaseBody(), release_id: 'OTA-0.1' }, 'admin-1'),
-    (error) => error.code === 'physical_initialization_only');
+  for (const releaseId of ['OTA-0.1', 'OTA-0.1-r3', 'OTA-0.1-r4']) {
+    await assert.rejects(ota.registerRelease({ ...createReleaseBody(), release_id: releaseId }, 'admin-1'),
+      (error) => error.code === 'physical_initialization_only');
+  }
   assert.strictEqual((await db.collection('ota_releases').get()).size, 0);
   assert.strictEqual(artifactStore.objects.size, 0);
 });

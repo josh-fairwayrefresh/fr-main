@@ -82,6 +82,16 @@ RELEASES = {
         "version_string": "1.0.0+3",
         "schedule": "nightly",
     },
+    "OTA-0.1-r4": {
+        "version": {"major": 0, "minor": 1, "revision": 0, "build": 6},
+        "version_string": "0.1.0+6",
+        "schedule": "one_time",
+    },
+    "OTA-0.1alt-r4": {
+        "version": {"major": 0, "minor": 1, "revision": 0, "build": 7},
+        "version_string": "0.1.0+7",
+        "schedule": "nightly",
+    },
 }
 
 
