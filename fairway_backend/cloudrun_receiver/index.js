@@ -205,32 +205,22 @@ function createFairwayHandlers(db, {
     artifactStore, now, acceptedReleases: acceptedOtaReleases,
     publicationApprovals: otaPublicationApprovals, headquartersTimeZone, artifactDeliveryEnabled,
   });
-  /* Persists a golfer request using the validated demand-window suppression. */
+  /*
+   * Persists a golfer request using the validated demand-window suppression.
+   * The window query and the new record are one transaction: Firestore's
+   * serializable transactions prevent concurrent deliveries from both
+   * passing the query and creating duplicate authoritative records.
+   * Service-suspended presses use the same fixed window against their
+   * rejected records, so device retries and repeat presses within it do not
+   * create further records or notifications, while still returning 503.
+   */
   async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now, rejection = null) {
-    if (!rejection) {
-      const existingOpenRequests = await db.collection('requests')
-        .where('device_id', '==', deviceId)
-        .where('status', 'in', ['new', 'confirmed'])
-        .where('demand_window_expires_at', '>', now)
-        .limit(1)
-        .get();
-
-      if (!existingOpenRequests.empty) {
-        const existingRequest = existingOpenRequests.docs[0];
-
-        console.log('Suppressed duplicate button request because its demand window remains active:', {
-          device_id: deviceId,
-          existing_request_id: existingRequest.id,
-        });
-
-        return res.status(200).json({
-          status: 'accepted',
-          event_type: EVENT_TYPES.BUTTON_PRESS,
-          request_id: existingRequest.id,
-          duplicate: true,
-        });
-      }
-    }
+    const requests = db.collection('requests');
+    const requestRef = requests.doc();
+    const windowQuery = requests
+      .where('device_id', '==', deviceId)
+      .where('status', 'in', rejection ? ['rejected'] : ['new', 'confirmed'])
+      .where('demand_window_expires_at', '>', now);
 
     const courseLocalDateHour = course
       ? resolveCourseLocalDateHour(now, course.timezone)
@@ -253,7 +243,7 @@ function createFairwayHandlers(db, {
       operator_id: null,
       repeat_press_count: 0,
       last_repeat_press_at: null,
-      demand_window_expires_at: rejection ? null : new Date(now.getTime() + DEMAND_WINDOW_MS),
+      demand_window_expires_at: new Date(now.getTime() + DEMAND_WINDOW_MS),
       device_state_at_request: device.state,
       course_local_date: courseLocalDateHour ? courseLocalDateHour.date : null,
       course_local_hour: courseLocalDateHour ? courseLocalDateHour.hour : null,
@@ -269,10 +259,40 @@ function createFairwayHandlers(db, {
       } : {}),
     };
 
-    const docRef = await db.collection('requests').add(requestDoc);
+    const existingRequestId = await db.runTransaction(async (transaction) => {
+      const openRequests = await transaction.get(windowQuery);
+      // An operator-cleared rejection closes its window, as COMPLETE/Cancel do.
+      const existing = openRequests.docs.find((doc) => !(rejection && doc.data().rejected_cleared_at));
+      if (existing) return existing.id;
+      transaction.set(requestRef, requestDoc);
+      return null;
+    });
+
+    if (existingRequestId) {
+      console.log('Suppressed duplicate button request because its demand window remains active:', {
+        device_id: deviceId,
+        existing_request_id: existingRequestId,
+        service_suspended: Boolean(rejection),
+      });
+      if (rejection) {
+        return res.status(503).json({
+          status: 'service_unavailable',
+          event_type: EVENT_TYPES.BUTTON_PRESS,
+          request_id: existingRequestId,
+          rejection_reason: 'service_suspended',
+          duplicate: true,
+        });
+      }
+      return res.status(200).json({
+        status: 'accepted',
+        event_type: EVENT_TYPES.BUTTON_PRESS,
+        request_id: existingRequestId,
+        duplicate: true,
+      });
+    }
 
     console.log('Fairway button request stored:', {
-      request_id: docRef.id,
+      request_id: requestRef.id,
       device_id: deviceId,
       event_type: eventType
     });
@@ -281,7 +301,7 @@ function createFairwayHandlers(db, {
       return res.status(503).json({
         status: 'service_unavailable',
         event_type: EVENT_TYPES.BUTTON_PRESS,
-        request_id: docRef.id,
+        request_id: requestRef.id,
         rejection_reason: 'service_suspended',
       });
     }
@@ -289,7 +309,7 @@ function createFairwayHandlers(db, {
     return res.status(200).json({
       status: 'accepted',
       event_type: EVENT_TYPES.BUTTON_PRESS,
-      request_id: docRef.id,
+      request_id: requestRef.id,
     });
   }
 
