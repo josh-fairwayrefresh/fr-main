@@ -168,7 +168,7 @@ function validateArtifact(body, acceptedReleases = ACCEPTED_RELEASES,
     throw new OtaError('invalid_notes', 'Release notes must be 1000 characters or fewer.');
   }
   const manifest = body.manifest;
-  const successor = /-r[23]$/.test(releaseId);
+  const successor = /-r[234]$/.test(releaseId);
   const sourceCommit = successor ? publicationApprovals[releaseId]?.build_base_commit
     : '2d72b5de401b3faecb09a5e86a5410156692d18e';
   const sourceDigest = successor ? publicationApprovals[releaseId]?.build_source_sha256

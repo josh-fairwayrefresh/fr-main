@@ -922,4 +922,25 @@ test('qualified successor version is distinct and still needs accepted bytes and
   }).versionString, '0.1.0+3');
 });
 
+test('r4 successor provenance is bound to its own approved build source, not the original OTA 0.1 source', () => {
+  const artifact = createArtifact();
+  artifact.writeUInt32LE(7, 24);
+  const body = createReleaseBody(artifact);
+  body.release_id = 'OTA-0.1alt-r4';
+  body.version = { ...VERSION, build: 7 };
+  body.version_string = '0.1.0+7';
+  Object.assign(body.manifest, {
+    release_id: body.release_id, version_string: body.version_string,
+    source_commit: '3'.repeat(40), build_source_sha256: '4'.repeat(64),
+    generated_image_capacity: { max_signed_image_bytes: MAX_SIGNED_IMAGE_BYTES },
+  });
+  const accepted = { [body.release_id]: body.sha256 };
+  const approval = { [body.release_id]: { build_base_commit: '3'.repeat(40),
+    build_source_sha256: '4'.repeat(64) } };
+  assert.strictEqual(validateArtifact(body, accepted, approval).versionString, '0.1.0+7');
+  assert.throws(() => validateArtifact(body, accepted, {
+    [body.release_id]: { ...approval[body.release_id], build_source_sha256: '5'.repeat(64) },
+  }), (e) => e.code === 'invalid_provenance');
+});
+
 run();
