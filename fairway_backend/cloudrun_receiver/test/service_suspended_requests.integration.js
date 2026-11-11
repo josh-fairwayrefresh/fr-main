@@ -108,25 +108,42 @@ async function main() {
     assert.equal(notifications.at(-1).title, 'Fairway Refresh');
 
     await courseRef.update({ service_suspension: { suspended_at: new Date() } });
-    const rejectedResponses = await Promise.all([sendDevicePress(), sendDevicePress()]);
-    assert.deepEqual(rejectedResponses.map((res) => res.statusCode), [503, 503]);
-    const rejectedIds = rejectedResponses.map((res) => res.body.request_id);
-    assert.notEqual(rejectedIds[0], rejectedIds[1]);
-    for (const id of rejectedIds) {
+    const deviceRejected = async () => (await db.collection('requests')
+      .where('device_id', '==', DEVICE_ID).where('status', '==', 'rejected').get()).docs;
+    const assertRejectedRecord = async (id) => {
       const record = await db.doc(`requests/${id}`).get();
       assert.equal(record.data().status, 'rejected');
       assert.equal(record.data().rejection_reason, 'service_suspended');
       assert.deepEqual(record.data().service_state_at_receipt, {
         active: false, suspended: true, service_group: 'on_course',
       });
-      assert.equal(record.data().demand_window_expires_at, null);
+      assert.equal(record.data().demand_window_expires_at.toDate().toISOString(),
+        '2026-10-29T18:05:00.000Z');
+      const sent = notifications.length;
       assert.equal((await dispatchRequestNotifications(db, id, sendNotification)).accepted, 1);
+      assert.equal(notifications.length, sent + 1);
       assert.equal(notifications.at(-1).title, 'Request Rejected — Service Suspended');
       assert.match(notifications.at(-1).body, /Hole 7/);
       assert.match(notifications.at(-1).url, new RegExp(id));
-    }
+    };
 
-    for (const id of rejectedIds) {
+    // Concurrent duplicate deliveries race through real Firestore transactions.
+    const concurrent = await Promise.all(Array.from({ length: 4 }, () => sendDevicePress()));
+    assert.deepEqual(concurrent.map((res) => res.statusCode), [503, 503, 503, 503]);
+    assert.ok(concurrent.every((res) => res.body.status === 'service_unavailable'
+      && res.body.rejection_reason === 'service_suspended'));
+    assert.equal(new Set(concurrent.map((res) => res.body.request_id)).size, 1);
+    assert.equal(concurrent.filter((res) => res.body.duplicate === true).length, 3);
+    assert.equal((await deviceRejected()).length, 1);
+    const firstRejected = concurrent[0].body.request_id;
+    await assertRejectedRecord(firstRejected);
+    const retry = await sendDevicePress();
+    assert.equal(retry.statusCode, 503);
+    assert.equal(retry.body.request_id, firstRejected);
+    assert.equal(retry.body.duplicate, true);
+    assert.equal((await deviceRejected()).length, 1, 'a suppressed retry creates no record or notification');
+
+    for (const id of [firstRejected]) {
       for (const action of ['complete', 'cancel']) {
         const res = response();
         await fairwayButtonReceiver(request({
@@ -152,8 +169,15 @@ async function main() {
       }), res);
       return res;
     };
-    assert.equal((await clear(rejectedIds[0])).statusCode, 200);
-    assert.equal((await clear(rejectedIds[0])).statusCode, 200);
+    assert.equal((await clear(firstRejected)).statusCode, 200);
+    assert.equal((await clear(firstRejected)).statusCode, 200);
+    // Clearing closes the rejected window; a later suspended press is a new event.
+    const afterClear = await sendDevicePress();
+    assert.equal(afterClear.statusCode, 503);
+    assert.equal(afterClear.body.duplicate, undefined);
+    assert.notEqual(afterClear.body.request_id, firstRejected);
+    await assertRejectedRecord(afterClear.body.request_id);
+    const rejectedIds = [firstRejected, afterClear.body.request_id];
     assert.equal((await clear(rejectedIds[1], 'foreign-suspended-test')).statusCode, 403);
     const cleared = await db.doc(`requests/${rejectedIds[0]}`).get();
     assert.equal(cleared.data().status, 'rejected');
@@ -211,7 +235,7 @@ async function main() {
       rejectedIds.sort(),
     );
     assert.equal((await db.doc(`requests/${rejectedIds[0]}`).get()).data().status, 'rejected');
-    console.log('PASS real Firestore emulator lifecycle: ON acceptance, suspended persistence, separate attempts, notifications, no-shift delivery path, forbidden completion/cancellation, authorized durable clear, Course isolation, post-resume rejection, historical visibility and unchanged completion/service-hour metrics.');
+    console.log('PASS real Firestore emulator lifecycle: ON acceptance, suspended persistence, concurrent/retry duplicate suppression with 503, one notification per record, clear-reopened window, no-shift delivery path, forbidden completion/cancellation, authorized durable clear, Course isolation, post-resume rejection, historical visibility and unchanged completion/service-hour metrics.');
   } finally {
     await db.terminate();
   }

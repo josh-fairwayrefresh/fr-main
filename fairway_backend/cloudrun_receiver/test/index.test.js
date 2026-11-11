@@ -564,63 +564,170 @@ test('authenticated CONFIRM records the verified Firebase uid', async () => {
   assert.strictEqual(request.data().operator_id, 'firebase-uid');
 });
 
-test('service-suspended button attempts persist separately and remain non-actionable after service resumes', async () => {
-  const db = new FakeFirestore();
+async function setUpSuspendedDevice(db, suspended = true) {
   await setUpOperatorAssignment(db);
   await seedCourse(db, 'CUST-0001', 'COURSE-0001', {
     course_name: 'Tony Lema Course',
     timezone: 'America/Los_Angeles',
-    service_suspension: { suspended_at: new Date('2026-10-01T18:00:00.000Z') },
+    service_suspension: suspended ? { suspended_at: new Date('2026-10-01T18:00:00.000Z') } : null,
   });
-  const secret = await setUpDeployedDevice(db, 'FRB-0001', {
+  return setUpDeployedDevice(db, 'FRB-0001', {
     customer_id: 'CUST-0001',
     course_id: 'COURSE-0001',
     course_name: 'Tony Lema Course',
     service_group: 'on_course',
     location: { hole: 7 },
   });
+}
+
+async function pressButton(handleDeviceEvent, secret) {
+  const response = createResponse();
+  await handleDeviceEvent(createRequest({
+    body: { device_id: 'FRB-0001', event_type: 'button_press' },
+    headers: { 'x-fairway-device-key': secret },
+  }), response);
+  return response;
+}
+
+async function deviceRequests(db) {
+  return (await db.collection('requests').where('device_id', '==', 'FRB-0001').get()).docs;
+}
+
+function assertSuspendedResponse(response, requestId, duplicate) {
+  assert.strictEqual(response.statusCode, 503, 'suspension must keep the device-facing failure');
+  assert.strictEqual(response.body.status, 'service_unavailable');
+  assert.strictEqual(response.body.event_type, 'button_press');
+  assert.strictEqual(response.body.rejection_reason, 'service_suspended');
+  assert.strictEqual(response.body.request_id, requestId);
+  assert.strictEqual(response.body.duplicate, duplicate ? true : undefined);
+}
+
+test('a service-suspended press creates one rejected record; retries and repeat presses in its window are suppressed with 503', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpSuspendedDevice(db);
+  let time = new Date('2026-10-01T19:00:00.000Z');
   const { handleDeviceEvent, updateRequestStatus } = createFairwayHandlers(db, {
-    now: () => new Date('2026-10-01T19:00:00.000Z'),
+    now: () => new Date(time),
     verifyOperatorToken: async () => ({ uid: 'operator-123' }),
   });
 
-  const rejectedIds = [];
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = createResponse();
-    await handleDeviceEvent(createRequest({
-      body: { device_id: 'FRB-0001', event_type: 'button_press' },
-      headers: { 'x-fairway-device-key': secret },
-    }), response);
-    assert.strictEqual(response.statusCode, 503);
-    assert.strictEqual(response.body.status, 'service_unavailable');
-    assert.strictEqual(response.body.rejection_reason, 'service_suspended');
-    rejectedIds.push(response.body.request_id);
-  }
-  assert.notStrictEqual(rejectedIds[0], rejectedIds[1]);
+  const first = await pressButton(handleDeviceEvent, secret);
+  assert.strictEqual(first.statusCode, 503);
+  const rejectedId = first.body.request_id;
+  assertSuspendedResponse(first, rejectedId, false);
 
-  const requests = await db.collection('requests').where('device_id', '==', 'FRB-0001').get();
-  assert.strictEqual(requests.size, 2);
-  for (const snapshot of requests.docs) {
-    assert.strictEqual(snapshot.data().status, 'rejected');
-    assert.strictEqual(snapshot.data().rejection_reason, 'service_suspended');
-    assert.deepStrictEqual(snapshot.data().service_state_at_receipt, {
-      active: false,
-      suspended: true,
-      service_group: 'on_course',
-    });
-    assert.strictEqual(snapshot.data().demand_window_expires_at, null);
+  // Firmware retries a 503 within the same press; the golfer may press again.
+  for (const offsetMs of [2000, 60000, 299000]) {
+    time = new Date(Date.parse('2026-10-01T19:00:00.000Z') + offsetMs);
+    assertSuspendedResponse(await pressButton(handleDeviceEvent, secret), rejectedId, true);
   }
+
+  const records = await deviceRequests(db);
+  assert.strictEqual(records.length, 1, 'suppressed duplicates must not create records (or notifications)');
+  const record = records[0].data();
+  assert.strictEqual(record.status, 'rejected');
+  assert.strictEqual(record.rejection_reason, 'service_suspended');
+  assert.deepStrictEqual(record.service_state_at_receipt, {
+    active: false,
+    suspended: true,
+    service_group: 'on_course',
+  });
+  assert.strictEqual(record.demand_window_expires_at.toISOString(), '2026-10-01T19:05:00.000Z',
+    'suspended presses use the fixed five-minute demand window');
 
   await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
     .update({ service_suspension: null });
   const complete = createResponse();
   await updateRequestStatus(createRequest({
-    headers: { authorization: 'Bearer test-operator-token' },
-  }), complete, rejectedIds[0], 'complete');
+    headers: { authorization: 'Bearer operator-token' },
+  }), complete, rejectedId, 'complete');
   assert.strictEqual(complete.statusCode, 409);
-  const unchanged = await db.collection('requests').doc(rejectedIds[0]).get();
+  const unchanged = await db.collection('requests').doc(rejectedId).get();
   assert.strictEqual(unchanged.data().status, 'rejected');
   assert.strictEqual(unchanged.data().completed_at, null);
+});
+
+test('concurrent suspended deliveries create exactly one authoritative rejected record', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpSuspendedDevice(db);
+  const { handleDeviceEvent } = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-01T19:00:00.000Z'),
+  });
+  const responses = await Promise.all(Array.from({ length: 4 }, () => pressButton(handleDeviceEvent, secret)));
+  const records = await deviceRequests(db);
+  assert.strictEqual(records.length, 1);
+  assert.deepStrictEqual(responses.map((response) => response.statusCode), [503, 503, 503, 503]);
+  assert.deepStrictEqual(new Set(responses.map((response) => response.body.request_id)), new Set([records[0].id]));
+  assert.strictEqual(responses.filter((response) => response.body.duplicate === true).length, 3);
+});
+
+test('concurrent active-service deliveries create exactly one open request', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpSuspendedDevice(db, false);
+  const { handleDeviceEvent } = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-01T19:00:00.000Z'),
+  });
+  const responses = await Promise.all(Array.from({ length: 3 }, () => pressButton(handleDeviceEvent, secret)));
+  const records = await deviceRequests(db);
+  assert.strictEqual(records.length, 1);
+  assert.strictEqual(records[0].data().status, 'new');
+  assert.deepStrictEqual(responses.map((response) => response.statusCode), [200, 200, 200]);
+  assert.ok(responses.every((response) => response.body.status === 'accepted'
+    && response.body.request_id === records[0].id));
+  assert.strictEqual(responses.filter((response) => response.body.duplicate === true).length, 2);
+});
+
+test('suspended presses after the window, after an operator clears the rejection, or after resume are separate events', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpSuspendedDevice(db);
+  let time = new Date('2026-10-01T19:00:00.000Z');
+  const { handleDeviceEvent, updateRequestStatus } = createFairwayHandlers(db, {
+    now: () => new Date(time),
+    verifyOperatorToken: async () => ({ uid: 'operator-123' }),
+  });
+
+  const first = (await pressButton(handleDeviceEvent, secret)).body.request_id;
+  time = new Date('2026-10-01T19:05:00.000Z');
+  const afterWindow = await pressButton(handleDeviceEvent, secret);
+  assertSuspendedResponse(afterWindow, afterWindow.body.request_id, false);
+  assert.notStrictEqual(afterWindow.body.request_id, first);
+
+  const clear = createResponse();
+  await updateRequestStatus(createRequest({
+    headers: { authorization: 'Bearer operator-token' },
+  }), clear, afterWindow.body.request_id, 'clear_rejected');
+  assert.strictEqual(clear.statusCode, 200);
+  time = new Date('2026-10-01T19:06:00.000Z');
+  const afterClear = await pressButton(handleDeviceEvent, secret);
+  assertSuspendedResponse(afterClear, afterClear.body.request_id, false);
+  assert.ok(![first, afterWindow.body.request_id].includes(afterClear.body.request_id));
+
+  await db.collection('customers').doc('CUST-0001').collection('courses').doc('COURSE-0001')
+    .update({ service_suspension: null });
+  time = new Date('2026-10-01T19:07:00.000Z');
+  const resumed = await pressButton(handleDeviceEvent, secret);
+  assert.strictEqual(resumed.statusCode, 200, 'an open rejection never blocks a request once service resumes');
+  assert.strictEqual(resumed.body.status, 'accepted');
+  assert.strictEqual(resumed.body.duplicate, undefined);
+
+  const statuses = (await deviceRequests(db)).map((doc) => doc.data().status).sort();
+  assert.deepStrictEqual(statuses, ['new', 'rejected', 'rejected', 'rejected']);
+});
+
+test('a pre-existing rejected record without a demand window never suppresses a new suspended press', async () => {
+  const db = new FakeFirestore();
+  const secret = await setUpSuspendedDevice(db);
+  await db.collection('requests').doc('legacy-rejected').set({
+    device_id: 'FRB-0001', status: 'rejected', rejection_reason: 'service_suspended',
+    demand_window_expires_at: null,
+  });
+  const { handleDeviceEvent } = createFairwayHandlers(db, {
+    now: () => new Date('2026-10-01T19:00:00.000Z'),
+  });
+  const response = await pressButton(handleDeviceEvent, secret);
+  assertSuspendedResponse(response, response.body.request_id, false);
+  assert.notStrictEqual(response.body.request_id, 'legacy-rejected');
+  assert.strictEqual((await deviceRequests(db)).length, 2);
 });
 
 test('authorized clear persists on a rejected request, is idempotent, and cannot cross Course scope', async () => {

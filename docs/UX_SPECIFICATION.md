@@ -822,7 +822,14 @@ for Admin/Hosting only.
    receipt. The receiver keeps its service-unavailable failure response to the
    marker; the existing request-created notification workflow sends one
    identified push per stored rejected request to eligible active subscriptions,
-   without requiring an active operator shift or service to be ON. It respects
+   without requiring an active operator shift or service to be ON. A suspended
+   press opens the same fixed five-minute demand window on its rejected record:
+   firmware retries and repeat presses from that marker within the window,
+   including concurrent deliveries, create no further record or notification
+   and still receive the service-unavailable failure response (identifying the
+   original request as a duplicate). An operator clearing the rejected request,
+   window expiry, or service resuming ends that suppression; a press after
+   resume follows the normal active-service path. It respects
    the saved preference and browser/device permission behavior. The request card
    and notification identify **Request Rejected — Service Suspended**; the
    notification links to the originating Course and request.
