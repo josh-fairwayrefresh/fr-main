@@ -15,7 +15,7 @@ the original accepted firmware artifacts remain unchanged.
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `ba810bdc550d6501` | Released `2026-11-11T00:56:32.950Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds assignment supersession disclosure to Firmware OTA. Prior versions retained (`5eb383e4a44c3d13` previous). |
-| Production Admin / receiver | Admin `fairway-admin-ota-10r4-2e0b5a9`; receiver `fairway-button-receiver-ota-10r4-2e0b5a9`, both Ready, 100% | Promoted `2026-11-11T02:52Z`; isolated source archive `2e0b5a9edcbb5a8dcff9c23906046edb1f7cdadbcf7ff765c1e10df17debc445` (source `b843c42`). Runtime identities/configuration unchanged; `*-ota-r4-53cf494` retained as rollback. No later deployment. |
+| Production Admin / receiver | Admin `fairway-admin-ota-10r4-2e0b5a9`; receiver `fairway-button-receiver-dedup-68ce31f`, both Ready, 100% | Receiver promoted 2026-11-11 (source `main` `68ce31f`, archive `bfd1f1f0e72348bf9f4a01366ec3c8e36a4ba9c155e046786295c184806b9b1a`): transactional duplicate suppression for service-suspended and active button requests; see the [release record](#receiver-service-suspended-duplicate-suppression-production-release-2026-11-11). Admin unchanged since `2026-11-11T02:52Z`. Runtime identities/configuration unchanged; receiver rollback `fairway-button-receiver-ota-10r4-2e0b5a9`. |
 | OTA implementation | **Prototype 4.0 — CPO field-validated stable firmware baseline** (2026-11-11): FRB-0005 autonomously installed `OTA-1.0-r4` (`1.0.0+4`) in its 12:30 AM Pacific window and confirmed it at 12:32:45 AM | See the [Prototype 4.0 Alignment Register entry](#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11). Selectable releases: `OTA-1.0-r4`, `OTA-0.1alt-r4` (FRB-0005 only). Superseded r2/r3 releases retained, not selectable; r3 images carry the discovery defect. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | Running `1.0.0+4` (nightly) via autonomous OTA from `0.1.0+7`; credential generation 6 active | Clean USB install of `OTA-0.1-r4` (2026-11-10 17:57 Pacific), OTA to `0.1.0+7` with post-OTA request/COMPLETE, then nightly OTA to `1.0.0+4` (2026-11-11). Post-`1.0.0+4` request/COMPLETE not separately exercised. PV8 still required for USB service access. |
@@ -1578,6 +1578,62 @@ current live state. Current procedures begin under “Purpose and Operational
 Procedures” and the
 operational sections linked above. Preserve this history when updating the
 runbook.
+
+## Receiver service-suspended duplicate suppression production release (2026-11-11)
+
+**CPO-authorized receiver-only release.** Source is `main`
+`68ce31fb0f616d9608fa7330ec47dd76f84c24f4` (reviewed commit `24f563d`;
+behavior owned by the UX Specification). Service-suspended button presses
+now use the fixed five-minute demand window on their rejected record, and
+the window query and record creation run in one Firestore transaction for
+both suspended and active presses. Duplicates within a suspended window
+create no record or notification and still return HTTP 503
+`service_unavailable` (original `request_id`, `duplicate: true`); active
+duplicates still return 200. Admin, Hosting, firmware, Firestore rules,
+indexes and data were unchanged; historical duplicate records were not
+modified.
+
+- Receiver revision `fairway-button-receiver-dedup-68ce31f` (tag
+  `dedup-68ce31f`) at 100%; image
+  `sha256:798108dfd5cecdbd1ba7f3e7f38964553007eee6ba24c55ad273d3f6aab17ca3`.
+  The isolated 40-file source archive
+  (`bfd1f1f0e72348bf9f4a01366ec3c8e36a4ba9c155e046786295c184806b9b1a`)
+  matched `68ce31f` file-for-file. Rollback target
+  `fairway-button-receiver-ota-10r4-2e0b5a9`.
+- Staged at zero traffic; runtime identity/configuration fingerprints and
+  serving traffic unchanged; Admin untouched. Non-writing smoke checks on the
+  tag and, after promotion, the service URL: unknown device 404, missing
+  device credential 401, unauthenticated OTA confirmation 401. No staged
+  error logs. After promotion the revision is Ready with no error logs, served
+  operator dashboard reads (200) and a real device COMPLETE poll and
+  acknowledgement (200) for an existing request.
+- Duplicate-suppression evidence: unit tests and the real Firestore emulator
+  integration test (baseline emulator: 4 concurrent suspended deliveries
+  created 4 records; fixed: 1). No artificial production requests were
+  created, so no production suspended press has yet exercised the new path.
+
+### Admin reporting-exclusion verification (read-only, 2026-11-11)
+
+Source: exclusions persist through `setRequestReportingState` (transactional
+`reporting_state`, actor/time fields and a `reporting_state_history` entry);
+`isRequestReportingEligible` is applied by Full History and Performance &
+Outcomes (`historyRequestsInRange`, `completedRequestsInRange` via the
+operator dashboard) and by the Cart Request Performance Report
+(`buildButtonReport`). Production data (read-only): 379 requests; 94
+excluded (CUST-0001 Course 1: 89; Course 3: 5 — 79 service-suspended
+rejections, 8 cancelled, 7 completed), all received 2026-10-18 or later,
+each with exactly one `active → excluded` history entry; no invalid
+reporting states. The deployed operator dashboard returned no excluded
+request in any daily/weekly/monthly period; its monthly history exactly
+equalled the independently computed active reportable set (Course 1: 206;
+Course 3: 6) and Course 1's monthly completed count (100) equalled the
+active completed set. The oldest returned outcome was 2026-10-17. The PDF
+report was not invoked because it can write weather cache rows; its
+exclusion handling is covered by passing regression tests. No discrepancy
+was found. Note: operator Full History and Performance & Outcomes cover the
+last 30 local days by design, so 2026-10-17 outcomes leave that view after
+2026-11-15; arbitrary historical ranges remain available through the Admin
+Cart Request Performance Report.
 
 ## Cart Request Performance Report production release (2026-11-03)
 
