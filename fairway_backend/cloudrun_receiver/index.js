@@ -42,6 +42,8 @@ const {
   DEMAND_WINDOW_MS,
 } = require('./lib/fleet/schema');
 const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fleet/hierarchy');
+const { createOtaService, OtaError, HARDWARE_ID } = require('./lib/ota/ota_service');
+const { createGcsArtifactStore } = require('./lib/ota/gcs_artifact_store');
 const inventory = require('./lib/inventory');
 const crypto = require('crypto');
 const { courseOperation } = require('./lib/course_operation');
@@ -193,7 +195,16 @@ function createFairwayHandlers(db, {
   protectedSystemAdminUids = resolveProtectedSystemAdminUids(
     process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FAIRWAY_GCP_PROJECT
   ),
+  artifactStore = null,
+  artifactDeliveryEnabled = false,
+  acceptedOtaReleases,
+  otaPublicationApprovals,
+  headquartersTimeZone,
 } = {}) {
+  const otaService = createOtaService(db, {
+    artifactStore, now, acceptedReleases: acceptedOtaReleases,
+    publicationApprovals: otaPublicationApprovals, headquartersTimeZone, artifactDeliveryEnabled,
+  });
   /* Persists a golfer request using the validated demand-window suppression. */
   async function persistButtonPressRequest(res, deviceId, device, body, eventType, course, now, rejection = null) {
     if (!rejection) {
@@ -390,8 +401,8 @@ function createFairwayHandlers(db, {
       }
 
       return identity;
-    } catch (error) {
-      console.warn('Rejected operator request with invalid Firebase ID token:', error.message || error);
+    } catch {
+      console.warn('Rejected operator request with invalid Firebase ID token; invalid_token');
       res.status(401).send('Unauthorized\n');
       return null;
     }
@@ -942,6 +953,12 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof OtaError) {
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
+      });
+    }
     if (error instanceof CourseLocationError) {
       return res.status(error.status).json({ error: error.message, code: error.code });
     }
@@ -971,11 +988,12 @@ function createFairwayHandlers(db, {
       if (error.cause?.message === 'Device already has a credential') {
         return res.status(409).json({ error: error.cause.message });
       }
-      return res.status(error.deviceId ? 409 : 400).json({
-        error: 'Device provisioning failed',
+      return res.status(error.status).json({
+        error: error.code,
+        message: error.message,
         stage: error.stage,
-        device_id: error.deviceId,
-        recovery_required: Boolean(error.deviceId),
+        ...(error.deviceId ? { device_id: error.deviceId } : {}),
+        recovery_required: error.stage === 'issue_credential',
       });
     }
 
@@ -992,7 +1010,7 @@ function createFairwayHandlers(db, {
     throw error;
   }
 
-  function deviceReadModel(deviceSnap, customersById, coursesByPath) {
+  function deviceReadModel(deviceSnap, customersById, coursesByPath, otaStatus) {
     const device = deviceSnap.data();
     const identityIsAuthoritative = device.system_identity?.source === 'verified_provenance';
     const customer = device.customer_id ? customersById.get(device.customer_id) : null;
@@ -1012,6 +1030,8 @@ function createFairwayHandlers(db, {
       sim_iccid: device.sim_iccid ?? null,
       hardware_revision: device.hardware_revision ?? null,
       firmware_generation: device.firmware_generation ?? null,
+      confirmed_firmware_version: otaStatus?.confirmed_firmware_version ?? null,
+      confirmed_firmware_at: otaStatus?.confirmed_at ?? null,
       system_identity: identityIsAuthoritative ? {
         source: device.system_identity.source,
         observed_at: device.system_identity.observed_at ?? null,
@@ -1035,9 +1055,10 @@ function createFairwayHandlers(db, {
   }
 
   async function listAdminFleet(req, res) {
-    const [customersSnap, devicesSnap] = await Promise.all([
+    const [customersSnap, devicesSnap, otaStatuses] = await Promise.all([
       db.collection('customers').limit(500).get(),
       db.collection('devices').limit(500).get(),
+      otaService.listDeviceStatus(),
     ]);
 
     const customersById = new Map();
@@ -1075,8 +1096,9 @@ function createFairwayHandlers(db, {
       return customer;
     }));
 
+    const statusById = new Map(otaStatuses.map((status) => [status.device_id, status]));
     const devices = devicesSnap.docs.map((deviceSnap) =>
-      deviceReadModel(deviceSnap, customersById, coursesByPath));
+      deviceReadModel(deviceSnap, customersById, coursesByPath, statusById.get(deviceSnap.id)));
 
     return res.status(200).json({
       review_mode: 'production_admin',
@@ -1159,8 +1181,8 @@ function createFairwayHandlers(db, {
     });
   }
 
-  async function recoverAdminDeviceCredential(res, deviceId) {
-    const result = await issueCredentialForExistingDevice(db, deviceId);
+  async function recoverAdminDeviceCredential(res, deviceId, adminUid) {
+    const result = await issueCredentialForExistingDevice(db, deviceId, adminUid);
     res.set('Cache-Control', 'no-store');
     return res.status(200).json({
       device_id: result.deviceId,
@@ -1237,6 +1259,43 @@ function createFairwayHandlers(db, {
     }
 
     try {
+      if (req.method === 'GET' && path === '/api/v1/admin/ota/releases') {
+        return res.status(200).json({ releases: await otaService.listReleases() });
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/ota/releases') {
+        return res.status(201).json(await otaService.registerRelease(req.body, admin.uid));
+      }
+      if (req.method === 'GET' && path === '/api/v1/admin/ota/deployments') {
+        return res.status(200).json({
+          deployments: await otaService.listDeployments(),
+          devices: await otaService.listDeviceStatus(),
+        });
+      }
+      if (req.method === 'GET' && path === '/api/v1/admin/ota/fleet') {
+        return res.status(200).json(await otaService.listFleet());
+      }
+      if (req.method === 'POST' && path === '/api/v1/admin/ota/assignment-reviews') {
+        return res.status(201).json(await otaService.prepareAssignment(req.body, admin.uid));
+      }
+      const otaReviewMatch = path.match(/^\/api\/v1\/admin\/ota\/assignment-reviews\/([a-f0-9-]{36})\/confirm$/);
+      if (req.method === 'POST' && otaReviewMatch) {
+        return res.status(200).json(await otaService.confirmAssignment(otaReviewMatch[1], admin.uid));
+      }
+      const otaAssignmentMatch = path.match(
+        /^\/api\/v1\/admin\/ota\/devices\/([^/]+)\/assignment$/
+      );
+      if (req.method === 'POST' && otaAssignmentMatch) {
+        if (!req.body || typeof req.body.release_id !== 'string') {
+          throw new OtaError('release_required', 'A release ID is required.');
+        }
+        return res.status(201).json(await otaService.assignRelease(
+          decodeURIComponent(otaAssignmentMatch[1]),
+          req.body.release_id,
+          admin.uid,
+          req.body.not_before ?? null
+        ));
+      }
+
       if (req.method === 'GET' && path === '/api/v1/admin/requests/excluded') {
         const { customer_id: customerId, course_id: courseId } = req.query || {};
         if (typeof customerId !== 'string' || typeof courseId !== 'string' ||
@@ -1344,7 +1403,7 @@ function createFairwayHandlers(db, {
 
       const credentialRecoveryMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/credential-recovery$/);
       if (req.method === 'POST' && credentialRecoveryMatch) {
-        return await recoverAdminDeviceCredential(res, credentialRecoveryMatch[1]);
+        return await recoverAdminDeviceCredential(res, credentialRecoveryMatch[1], admin.uid);
       }
 
       const credentialRotationsMatch = path.match(
@@ -1404,6 +1463,10 @@ function createFairwayHandlers(db, {
     } catch (error) {
       if (error instanceof RequestReportingError) {
         return res.status(error.status).json({ error: error.message, code: error.code });
+      }
+      if (path.startsWith('/api/v1/admin/ota/') && !(error instanceof OtaError)) {
+        console.error('Failed to handle OTA Admin request; internal_error');
+        return res.status(500).json({ error: 'internal_error' });
       }
       if (error.code === 'last_admin') {
         return res.status(409).json({ error: 'last_admin_required' });
@@ -1603,6 +1666,11 @@ function createFairwayHandlers(db, {
       }
 
       const path = req.path || '/';
+      if (path.startsWith('/api/v1/device-ota/')) {
+        res.set('Cache-Control', 'private, no-store');
+        res.set('Referrer-Policy', 'no-referrer');
+        res.set('X-Content-Type-Options', 'nosniff');
+      }
       if (path === '/api/v1/sandbox/review-access') {
         res.set('Cache-Control', 'no-store');
         if (!publicReviewAccess) return res.status(404).json({ error: 'not_found' });
@@ -1637,6 +1705,64 @@ function createFairwayHandlers(db, {
         return res.status(404).send('Not Found\n');
       }
 
+      const otaArtifactMatch = path.match(/^\/api\/v1\/device-ota\/artifacts\/([^/]+)$/);
+      if (req.method === 'GET' && otaArtifactMatch) {
+        try {
+          const { grant, release } = await otaService.getAuthorizedArtifact(
+            decodeURIComponent(otaArtifactMatch[1])
+          );
+          const size = release.size_bytes;
+          const rangeHeader = req.get('range');
+          let start = 0;
+          let end = size - 1;
+          let statusCode = 200;
+          if (rangeHeader) {
+            const rangeMatch = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+            if (!rangeMatch || (!rangeMatch[1] && !rangeMatch[2])) {
+              res.set('Content-Range', `bytes */${size}`);
+              return res.status(416).send('');
+            }
+            if (rangeMatch[1]) {
+              start = Number(rangeMatch[1]);
+              end = rangeMatch[2] ? Number(rangeMatch[2]) : size - 1;
+            } else {
+              const suffixLength = Number(rangeMatch[2]);
+              start = Math.max(0, size - suffixLength);
+              end = size - 1;
+            }
+            if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+                || start < 0 || start >= size || end < start || end >= size) {
+              res.set('Content-Range', `bytes */${size}`);
+              return res.status(416).send('');
+            }
+            statusCode = 206;
+          }
+          res.set('Accept-Ranges', 'bytes');
+          res.set('Content-Type', 'application/octet-stream');
+          res.set('Cache-Control', 'private, no-store');
+          res.set('Content-Length', String(end - start + 1));
+          if (statusCode === 206) {
+            res.set('Content-Range', `bytes ${start}-${end}/${size}`);
+          }
+          const artifactStream = await otaService.streamArtifact(grant.object_path, { start, end });
+          artifactStream.on('error', () => {
+            console.error('OTA artifact stream failed; storage_error');
+            if (!res.headersSent) {
+              res.status(502).send('Artifact unavailable\n');
+            } else {
+              res.destroy();
+            }
+          });
+          return artifactStream.pipe(res.status(statusCode));
+        } catch (error) {
+          if (error instanceof OtaError) {
+            return res.status(error.status).json({ error: error.code, message: error.message });
+          }
+          console.error('OTA artifact retrieval failed; storage_error');
+          return res.status(502).send('Artifact unavailable\n');
+        }
+      }
+
       if (req.method === 'GET' && path === '/api/v1/operator/bootstrap') {
         return await getOperatorBootstrap(req, res);
       }
@@ -1658,6 +1784,54 @@ function createFairwayHandlers(db, {
 
       if (req.method !== 'POST') {
         return res.status(405).send('Method Not Allowed\n');
+      }
+
+      if (path === '/api/v1/device-ota/schedule' ||
+          path === '/api/v1/device-ota/check') {
+        const deviceId = req.body?.device_id;
+        if (typeof deviceId !== 'string') {
+          return res.status(400).json({ error: 'device_id_required' });
+        }
+        const device = await authenticateDevice(req, res, deviceId);
+        if (!device) return res;
+        if (req.body.hardware_id !== HARDWARE_ID) {
+          return res.status(409).json({ error: 'unsupported_hardware' });
+        }
+        if (path.endsWith('/schedule')) {
+          return res.status(200).json({
+            next_check_at_utc_ms: await otaService.getNextCheck(device),
+          });
+        }
+        return res.status(200).json(await otaService.checkForUpdate(
+          deviceId, device, req.body.hardware_id
+        ));
+      }
+
+      if (path === '/api/v1/device-ota/confirmation') {
+        const deviceId = req.body?.device_id;
+        if (typeof deviceId !== 'string') {
+          return res.status(400).json({ error: 'device_id_required' });
+        }
+        const device = await authenticateDevice(req, res, deviceId);
+        if (!device) return res;
+        return res.status(200).json(await otaService.confirmRunningFirmware(deviceId, req.body));
+      }
+
+      const otaEventMatch = path.match(
+        /^\/api\/v1\/device-ota\/deployments\/([^/]+)\/events$/
+      );
+      if (otaEventMatch) {
+        const deviceId = req.body?.device_id;
+        if (typeof deviceId !== 'string') {
+          return res.status(400).json({ error: 'device_id_required' });
+        }
+        const device = await authenticateDevice(req, res, deviceId);
+        if (!device) return res;
+        return res.status(200).json(await otaService.reportUpdateEvent(
+          decodeURIComponent(otaEventMatch[1]),
+          deviceId,
+          req.body
+        ));
       }
 
       if (path === '/api/v1/device-commands/poll') {
@@ -1690,7 +1864,17 @@ function createFairwayHandlers(db, {
       if (error && error.type === 'entity.parse.failed') {
         return res.status(400).send('Invalid JSON\n');
       }
-      console.error('Failed to handle Fairway request:', error);
+      if (error instanceof OtaError) {
+        return res.status(error.status).json({
+          error: error.code,
+          message: error.message,
+        });
+      }
+      if ((req.path || '').startsWith('/api/v1/device-ota/')) {
+        console.error('Failed to handle OTA device request; internal_error');
+      } else {
+        console.error('Failed to handle Fairway request:', error);
+      }
       return res.status(500).send('Internal Server Error\n');
     }
   }
@@ -1867,7 +2051,11 @@ function createFairwayHandlers(db, {
 const runtimeEnvironment = resolveRuntimeEnvironment();
 const handlers = createFairwayHandlers(new Firestore({
   projectId: runtimeEnvironment.projectId,
-}), { allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins });
+}), {
+  allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins,
+  artifactStore: createGcsArtifactStore(process.env.FAIRWAY_OTA_BUCKET),
+  artifactDeliveryEnabled: process.env.FAIRWAY_OTA_DELIVERY_ENABLED === 'true',
+});
 
 if (runtimeEnvironment.serviceMode === 'admin') {
   functions.http('fairwayAdmin', handlers.fairwayAdmin);

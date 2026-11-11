@@ -3,27 +3,27 @@
 
 #include <stdbool.h>
 
+#include <zephyr/kernel.h>
+
 /*
  * Owns modem init, Cloud Run CA certificate provisioning, LTE connect and
  * registration-event handling, and registration-triggered DNS prewarm.
- * Also the sole owner of whether PSM is actually requested from the modem
- * -- callers (power_policy, on VBUS transitions) do not need to know
- * whether the modem is ready yet; that gate lives entirely here.
+ * Also owns LTE PSM configuration and requests; PSM is independent of VBUS
+ * and its lifecycle is not controlled by power_policy.
  */
 
-/* Releases this module's modem/PSM/cert/LTE bring-up sequence. Called
- * once local button/LED hardware setup has finished, so the golfer button
- * is live regardless of what this sequence does next or how long it
- * takes.
+/* Releases this module's modem/PSM/cert/LTE bring-up sequence after local
+ * hardware setup. The supplied semaphore is given once when local bootstrap
+ * reaches a terminal result; registration is intentionally not awaited.
  */
-void modem_service_notify_local_hw_ready(void);
+void modem_service_notify_local_hw_ready(struct k_sem *application_wake_sem);
+
+/* Returns 0 with the terminal bootstrap result, or -EAGAIN while bootstrap
+ * is still running. LTE registration and backend availability are excluded.
+ */
+int modem_service_local_bootstrap_result(int *result);
 
 bool modem_service_lte_is_registered(void);
-
-/* Requests or withdraws modem PSM. A no-op (logged) if the modem is not
- * yet initialized; power_policy may call this before modem_ready is true
- * (e.g. VBUS removed during early boot) without special-casing it.
- */
-void modem_service_set_psm_requested(bool requested);
+void modem_service_wait_for_lte_registration(void);
 
 #endif /* MODEM_SERVICE_H */

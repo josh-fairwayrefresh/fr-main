@@ -1,0 +1,7 @@
+tests:
+  fairway.ota.update_policy:
+    harness: ztest
+    platform_allow:
+      - native_sim
+    tags:
+      - ota

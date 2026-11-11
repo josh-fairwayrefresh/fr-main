@@ -1,5 +1,8 @@
 #include "button_ux.h"
 
+#include <errno.h>
+#include <stddef.h>
+
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
@@ -37,6 +40,23 @@ static bool button_is_pressed(void)
 	 * fully pressed = raw 0
 	 */
 	return raw == 0;
+}
+
+int button_ux_is_pressed(bool *pressed)
+{
+	int raw;
+
+	if (pressed == NULL) {
+		return -EINVAL;
+	}
+
+	raw = gpio_pin_get(gpio0_dev, BUTTON_PIN);
+	if (raw < 0) {
+		return raw;
+	}
+
+	*pressed = raw == 0;
+	return 0;
 }
 
 static void button_pressed_cb(const struct device *dev, struct gpio_callback *cb,

@@ -8,9 +8,10 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
-#include <fairway_device_key.h>
-
+#include "device_identity.h"
 #include "http_transport.h"
+
+static char http_response_buffer[4096];
 
 struct complete_command_json {
 	const char *command_id;
@@ -76,11 +77,19 @@ int command_protocol_send_poll(const char *active_request_id,
 {
 	char body[256];
 	char request[768];
+	struct fairway_device_identity identity;
+	int ret = fairway_device_identity_load(&identity);
+
+	if (ret != 0) {
+		return ret;
+	}
+
 	int body_len = snprintk(body, sizeof(body),
 		"{\"device_id\":\"%s\",\"active_request_id\":\"%s\"}",
-		FAIRWAY_DEVICE_ID, active_request_id);
+		identity.device_id, active_request_id);
 
 	if (body_len < 0 || body_len >= sizeof(body)) {
+		memset(&identity, 0, sizeof(identity));
 		return -ENOMEM;
 	}
 
@@ -88,26 +97,36 @@ int command_protocol_send_poll(const char *active_request_id,
 		"POST /api/v1/device-commands/poll HTTP/1.1\r\n"
 		"Host: " FAIRWAY_HOST "\r\n"
 		"Content-Type: application/json\r\n"
-		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"X-Fairway-Device-Key: %s\r\n"
 		"Content-Length: %d\r\nConnection: close\r\n\r\n%s",
-		body_len, body);
+		identity.device_key, body_len, body);
 
 	if (request_len < 0 || request_len >= sizeof(request)) {
+		memset(&identity, 0, sizeof(identity));
+		memset(body, 0, sizeof(body));
 		return -ENOMEM;
 	}
 
 	command->command_id[0] = '\0';
 
-	struct http_transport_response response;
-	int ret = http_transport_send(request, request_len, attempt_deadline_ms, true,
-				      &response);
+	struct http_transport_response response = {
+		.storage = http_response_buffer,
+		.storage_capacity = sizeof(http_response_buffer),
+	};
+	ret = http_transport_send(request, request_len, attempt_deadline_ms, true, &response);
+	memset(request, 0, sizeof(request));
+	memset(body, 0, sizeof(body));
 
 	if (ret != 0) {
+		memset(http_response_buffer, 0, sizeof(http_response_buffer));
+		memset(&identity, 0, sizeof(identity));
 		return ret;
 	}
 
 	(void)fairway_parse_complete_command(response.body, response.body_len,
-					     FAIRWAY_DEVICE_ID, active_request_id, command);
+					     identity.device_id, active_request_id, command);
+	memset(http_response_buffer, 0, sizeof(http_response_buffer));
+	memset(&identity, 0, sizeof(identity));
 	return 0;
 }
 
@@ -116,11 +135,20 @@ int command_protocol_send_ack(const struct fairway_complete_command *command,
 {
 	char body[256];
 	char request[768];
+	struct fairway_device_identity identity;
+
+	int ret = fairway_device_identity_load(&identity);
+
+	if (ret != 0) {
+		return ret;
+	}
+
 	int body_len = snprintk(body, sizeof(body),
 		"{\"device_id\":\"%s\",\"request_id\":\"%s\"}",
-		FAIRWAY_DEVICE_ID, command->request_id);
+		identity.device_id, command->request_id);
 
 	if (body_len < 0 || body_len >= sizeof(body)) {
+		memset(&identity, 0, sizeof(identity));
 		return -ENOMEM;
 	}
 
@@ -128,15 +156,25 @@ int command_protocol_send_ack(const struct fairway_complete_command *command,
 		"POST /api/v1/device-commands/%s/ack HTTP/1.1\r\n"
 		"Host: " FAIRWAY_HOST "\r\n"
 		"Content-Type: application/json\r\n"
-		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"X-Fairway-Device-Key: %s\r\n"
 		"Content-Length: %d\r\nConnection: close\r\n\r\n%s",
-		command->command_id, body_len, body);
+		command->command_id, identity.device_key, body_len, body);
 
 	if (request_len < 0 || request_len >= sizeof(request)) {
+		memset(&identity, 0, sizeof(identity));
+		memset(body, 0, sizeof(body));
 		return -ENOMEM;
 	}
 
-	struct http_transport_response response;
+	struct http_transport_response response = {
+		.storage = http_response_buffer,
+		.storage_capacity = sizeof(http_response_buffer),
+	};
 
-	return http_transport_send(request, request_len, attempt_deadline_ms, true, &response);
+	ret = http_transport_send(request, request_len, attempt_deadline_ms, true, &response);
+	memset(request, 0, sizeof(request));
+	memset(body, 0, sizeof(body));
+	memset(&identity, 0, sizeof(identity));
+	memset(http_response_buffer, 0, sizeof(http_response_buffer));
+	return ret;
 }

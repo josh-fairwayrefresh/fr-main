@@ -10,14 +10,15 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
-#include <fairway_device_key.h>
-
+#include "device_identity.h"
 #include "http_transport.h"
 
 LOG_MODULE_REGISTER(golfer_protocol);
 
 #define GOLFER_MAX_ATTEMPTS               2
 #define GOLFER_MIN_RETRY_RESERVE_MS       3000
+
+static char http_response_buffer[4096];
 
 struct button_response_json {
 	const char *request_id;
@@ -54,50 +55,70 @@ static bool fairway_parse_button_response(char *body, size_t body_len,
 static int send_button_press(int64_t attempt_deadline_ms,
 			     char *request_id, size_t request_id_len)
 {
-	static char request_body[128];
+	char request_body[128];
+	struct fairway_device_identity identity;
+	int ret = fairway_device_identity_load(&identity);
+
+	if (ret != 0) {
+		return ret;
+	}
+
 	int request_body_len;
 
 	request_body_len = snprintk(request_body, sizeof(request_body),
 		"{\"device_id\":\"%s\",\"event_type\":\"button_press\"}",
-		FAIRWAY_DEVICE_ID);
+		identity.device_id);
 
 	if (request_body_len < 0 || request_body_len >= sizeof(request_body)) {
+		memset(&identity, 0, sizeof(identity));
 		LOG_ERR("HTTPS request body buffer too small");
 		return -ENOMEM;
 	}
 
-	static char request[512];
+	char request[512];
 	int request_len;
 
 	request_len = snprintk(request, sizeof(request),
 		"POST / HTTP/1.1\r\n"
 		"Host: " FAIRWAY_HOST "\r\n"
 		"Content-Type: application/json\r\n"
-		"X-Fairway-Device-Key: " FAIRWAY_DEVICE_KEY "\r\n"
+		"X-Fairway-Device-Key: %s\r\n"
 		"Content-Length: %d\r\n"
 		"Connection: close\r\n"
 		"\r\n"
 		"%s",
+		identity.device_key,
 		request_body_len,
 		request_body);
 
 	if (request_len < 0 || request_len >= sizeof(request)) {
+		memset(&identity, 0, sizeof(identity));
+		memset(request_body, 0, sizeof(request_body));
 		LOG_ERR("HTTPS request buffer too small");
 		return -ENOMEM;
 	}
 
-	struct http_transport_response response;
-	int ret = http_transport_send(request, request_len, attempt_deadline_ms, false,
+	struct http_transport_response response = {
+		.storage = http_response_buffer,
+		.storage_capacity = sizeof(http_response_buffer),
+	};
+	ret = http_transport_send(request, request_len, attempt_deadline_ms, false,
 				      &response);
+	memset(request, 0, sizeof(request));
+	memset(request_body, 0, sizeof(request_body));
+	memset(&identity, 0, sizeof(identity));
 
 	if (ret != 0) {
+		memset(http_response_buffer, 0, sizeof(http_response_buffer));
 		return ret;
 	}
 
 	if (!fairway_parse_button_response(response.body, response.body_len,
 					   request_id, request_id_len)) {
+		memset(http_response_buffer, 0, sizeof(http_response_buffer));
 		return -EPROTO;
 	}
+	memset(http_response_buffer, 0, sizeof(http_response_buffer));
 
 	return 0;
 }

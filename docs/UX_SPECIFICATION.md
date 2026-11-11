@@ -845,7 +845,7 @@ for Admin/Hosting only.
 The October 1 acceptance below is dated evidence, not proof that every later
 source change is deployed. In particular, configured custom-location display
 was validated in source but was absent from the last-inspected Hosting artifact.
-See the [latest-known deployment alignment](DEPLOYMENT_GUIDE.md#latest-known-alignment--not-a-live-status-claim)
+See the [latest-known deployment alignment](DEPLOYMENT_GUIDE.md#alignment-register)
 and [open defects](feature_backlog.md#material-readiness-items).
 
 - The logged-out Operator, Inventory, and Admin entries use the full
@@ -1103,6 +1103,112 @@ production responsive-layout deployment passed automated/build and unauthenticat
 route checks. Authenticated use and CPO acceptance on physical phone-sized
 screens remain pending; the deployment record is authoritative for the exact
 verification performed.
+
+## Admin Firmware OTA Management (Production, FRB-0005 authorized)
+
+The Admin capability is deployed (2026-11-09). Approved releases are published
+for FRB-0005 only; on 2026-11-10 FRB-0005 autonomously installed and
+confirmed `OTA-0.1alt-r4`. Exact production identities, release records,
+verification limits and remaining gates are owned by the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#ota-administration-production-deployment-2026-11-09).
+
+- Firmware OTA is part of the existing global Admin application. Customer/Cart
+  authorization does not grant release-management access.
+- The desktop layout has two columns: **Approved Firmware Updates**, a simple
+  release/version dropdown with description and approval status, and **Select
+  Devices**, an expandable checkbox hierarchy. Below 760 px the columns stack;
+  long IDs, status evidence and local/UTC windows wrap without horizontal overflow.
+  The CPO surface has no artifact upload, manifest, signing or arbitrary
+  date/time controls. VSC publishes through the engineering workflow separately;
+  publication never selects or assigns a device.
+- Only published releases satisfying all five governed publication prerequisites
+  are selectable: verification/testing, CPO release approval, Alignment Register
+  recognition, approved source/release records committed and remotely backed up,
+  and explicit CPO authorization for VSC publication. The backend enforces this;
+  UI filtering is not the security boundary. An empty approved inventory is an
+  explicit state, never a placeholder approval of an accepted artifact.
+- The tree is Customers → Customer → Course → Device, plus separate Inventory
+  and Maintenance branches. It projects canonical registry records, never a
+  second OTA inventory. Lifecycle determines exactly one category. Maintenance
+  remains an active headquarters-held asset eligible for testing when initialized
+  and communicating; it is not shown as a Customer/Course deployment.
+  Parent selection toggles eligible descendants; partial selection is
+  indeterminate. Expanding/collapsing does not change selection. Individual and
+  arbitrary cross-Customer/Course/HQ selections are supported. Blocked devices
+  display a reason rather than disappearing or becoming silently eligible.
+- Changing release clears selection and confirmation. Review submits 1–50
+  explicit device IDs to the backend and shows release, count, every individual
+  ID, category/placement and applicable local/UTC window. An explicit checkbox
+  and Confirm action authorize that exact five-minute review. Changed
+  eligibility/windows require a fresh review. Later Customer/Course membership
+  changes never add devices to an existing authorization.
+- **Assignment contract (CPO-clarified 2026-11-10):** the authorized Admin may
+  assign any approved, compatible release to any authorized managed device,
+  regardless of its running firmware or the state of earlier assignments. An
+  existing assignment never locks a device. The normal review/confirm action
+  supersedes the prior target atomically, without manual cleanup; the review
+  lists the target being superseded. Only the latest assignment is offered or
+  receives a valid download grant. Earlier deployments remain as history,
+  marked superseded, and their delayed lifecycle or running reports cannot
+  cancel, overwrite or complete the newer target. Assignment does not change
+  the last confirmed running version, which changes only through
+  authenticated device confirmation. A review becomes stale if the current
+  target changes before confirmation. Supersession does not interrupt an
+  image a device is already installing. Signing, accepted-hash, hardware,
+  lifecycle, publication and release-authorization safeguards are unchanged.
+- Routine updates become eligible at **12:30 AM local time**, using each
+  deployed Course's IANA timezone and DST, not the browser timezone.
+  Inventory/Maintenance use CPO-approved **America/Los_Angeles** headquarters
+  time (PST/PDT as applicable). This approved policy supersedes the earlier
+  unresolved Pacific assumption; no date/time or headquarters-zone preference
+  is exposed to the CPO.
+  This fixed policy is not a user preference. Scheduling does not wake, reset
+  or force-install a device; installation follows its autonomous check.
+- OTA 0.1 is USB-only initialization, never a dropdown update. Its already
+  installed FRB-0005 bootstrap performs a single persisted 900-second check.
+  A review for the first OTA 0.1alt transition explicitly shows immediate
+  bootstrap eligibility with unknown remaining check time, not a nightly
+  installation promise. A previously reported bootstrap check no longer blocks
+  assignment, but Admin cannot rearm the device's consumed one-time check;
+  delivery requires a subsequent autonomous check (for the bootstrap, a fresh
+  USB installation restarts that device-side schedule).
+  OTA 0.1alt and subsequent firmware establish recurring nightly behavior;
+  accepted original images require the scheduler qualification described in
+  the Deployment Guide before claiming that behavior is operational.
+- Status separates assignment/eligibility, authenticated check-in, image offer,
+  artifact request, device-reported downloading/verifying/staged/activation,
+  trial boot, confirmation, rollback and failure. Device-reported version and
+  server receipt timestamps are shown. Download request/offer is not completed
+  installation, and no evidence is shown as unknown rather than successful.
+  Trial/confirmation are authenticated firmware reports, not independent boot
+  attestation. Refresh explicitly retrieves the current evidence.
+  Successful confirmed-running installation records its result/history and
+  clears only the matching pending assignment, atomically. The last confirmed
+  result remains visible after the assignment is cleared. Offer, download,
+  mismatched firmware, and delayed reports from older deployments do not
+  clear a newer assignment. A USB bootstrap report does not count as success
+  for a pending successor of a different version.
+  If a device's placement, trust or timezone changes after authorization,
+  delivery is blocked and status explains the need for engineering reconciliation;
+  the dashboard never silently substitutes a new tenant or window.
+- The 2026-11-10 registry-display revision uses the existing **Firmware
+  generation** field for the last device-confirmed actual-running version and
+  its acceptance time. With no confirmation it explicitly says **Unknown — no
+  device confirmation**. An assigned update, historical generation label,
+  download or image offer must not appear as running firmware. The timestamp
+  is not a continuous online/health indicator and duplicate retries do not
+  refresh it.
+- When a separately approved replacement is actually published, its predecessor
+  is removed from new selection. Existing predecessor assignments and history
+  remain visible and unchanged; the replacement never silently cancels or
+  retargets a device.
+- Earlier accepted artifacts (original, r2 and r3) remain immutable history,
+  not selectable updates; r3 images contain the 32-bit discovery defect
+  corrected in r4. Replacement lineage requires separate release approval.
+  Local fixture demonstrations use fictional approvals and fleet records.
+
+Operational/security deployment gates are owned by the
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#prototype-40-admindistribution-readiness--implemented-locally).
 
 ## Design principle
 

@@ -1,0 +1,6 @@
+{
+  "name": "fairway-ota-artifact-bearer-paths",
+  "description": "Exclude OTA artifact bearer URLs from request-log storage and exports. Apply to every applicable sink before enabling production artifact delivery; application error logs separately omit raw transport errors.",
+  "disabled": false,
+  "filter": "resource.type=\"cloud_run_revision\" AND httpRequest.requestUrl =~ \"/api/v1/device-ota/artifacts/\""
+}

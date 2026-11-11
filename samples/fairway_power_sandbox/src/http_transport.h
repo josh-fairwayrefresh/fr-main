@@ -30,13 +30,13 @@
 struct http_transport_response {
 	int http_status;
 	/* Points into an internal static buffer, valid only until the next
-	 * http_transport_send() call on this thread. Non-const because
-	 * Zephyr's JSON parser tokenizes in place. Single-caller model
-	 * (transaction_scheduler is the sole user of the shared transport),
-	 * matching the original design.
+	 * http_transport_send() call using the same storage. Non-const because
+	 * Zephyr's JSON parser tokenizes in place.
 	 */
 	char *body;
 	size_t body_len;
+	char *storage;
+	size_t storage_capacity;
 };
 
 /* Returns true and kicks off the resolver thread if no resolution is
@@ -53,7 +53,8 @@ bool http_transport_dns_prewarm(void);
  *   -ECANCELED  Yielded to an accepted golfer press (yieldable only).
  *   -errno/-ETIMEDOUT  No response could be obtained at all.
  *
- * When yieldable is true (COMPLETE only), golfer_txn_is_pending() is
+ * When yieldable is true (COMPLETE and OTA running-image confirmation),
+ * golfer_txn_is_pending() is
  * checked before/after every stage; a pending golfer press aborts this
  * call immediately with -ECANCELED so COMPLETE never holds the shared
  * transport once a golfer transaction has been accepted. The golfer's own

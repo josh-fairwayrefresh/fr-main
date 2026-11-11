@@ -11,7 +11,6 @@
 
 #include "complete_poll.h"
 #include "http_transport.h"
-#include "power_policy.h"
 #include "thread_priorities.h"
 
 LOG_MODULE_REGISTER(modem_service);
@@ -28,9 +27,13 @@ static const char fairway_ca_cert[] = {
 
 static K_SEM_DEFINE(local_hw_ready_sem, 0, 1);
 static K_SEM_DEFINE(network_wake_sem, 0, 1);
+static K_SEM_DEFINE(registration_ready_sem, 0, 1);
 
 static volatile bool lte_registered_pending;
-static volatile bool modem_ready;
+static struct k_sem *application_wake_sem;
+static struct k_spinlock bootstrap_lock;
+static bool bootstrap_complete;
+static int bootstrap_result;
 
 /* Registration state is written by the LTE callback and read by COMPLETE
  * (via modem_service_lte_is_registered()).
@@ -69,26 +72,13 @@ bool modem_service_lte_is_registered(void)
 		snapshot.registration_state == LTE_LC_NW_REG_REGISTERED_ROAMING);
 }
 
-void modem_service_set_psm_requested(bool requested)
+void modem_service_wait_for_lte_registration(void)
 {
-	int ret;
-
-	if (!modem_ready) {
-		LOG_INF("PSM request deferred: modem not yet ready");
-		return;
+	while (!modem_service_lte_is_registered()) {
+		k_sem_take(&registration_ready_sem, K_FOREVER);
 	}
-
-	ret = lte_lc_psm_req(requested);
-	if (ret) {
-		LOG_ERR("lte_lc_psm_req(%d) failed: %d", requested, ret);
-		return;
-	}
-
-	if (requested) {
-		LOG_INF("PSM requested: RPTAU=default, RAT=0 s");
-	} else {
-		LOG_INF("PSM request withdrawn: VBUS service hold active");
-	}
+	/* A semaphore wakes one waiter; pass registration to other boot workers. */
+	k_sem_give(&registration_ready_sem);
 }
 
 /* Single globally-registered LTE event handler (lte_lc_connect_async() and
@@ -109,27 +99,42 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 		if (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
 		    evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
 			LOG_INF("LTE registered: status=%d", evt->nw_reg_status);
+			k_sem_give(&registration_ready_sem);
 			lte_registered_pending = true;
 			k_sem_give(&network_wake_sem);
 		} else {
 			LOG_INF("LTE registration status update: %d", evt->nw_reg_status);
 		}
+
 		break;
+#if defined(CONFIG_LTE_LC_PSM_MODULE)
+	case LTE_LC_EVT_PSM_UPDATE:
+		LOG_INF("Network PSM update: TAU=%d s, active_time=%d s",
+			evt->psm_cfg.tau, evt->psm_cfg.active_time);
+		break;
+#endif
 	default:
 		break;
 	}
 }
 
-static void configure_psm(void)
+static int configure_psm(void)
 {
 	int ret = lte_lc_psm_param_set_seconds(-1, 0);
 
 	if (ret) {
 		LOG_ERR("lte_lc_psm_param_set_seconds failed: %d", ret);
-		return;
+		return ret;
 	}
 
-	modem_service_set_psm_requested(!power_policy_vbus_hold_active());
+	ret = lte_lc_psm_req(true);
+	if (ret) {
+		LOG_ERR("lte_lc_psm_req(true) failed: %d", ret);
+		return ret;
+	}
+
+	LOG_INF("PSM requested: RPTAU=default, RAT=0 s");
+	return 0;
 }
 
 static int provision_fairway_ca_certificate(void)
@@ -190,9 +195,44 @@ static int provision_fairway_ca_certificate(void)
 	return 0;
 }
 
-void modem_service_notify_local_hw_ready(void)
+void modem_service_notify_local_hw_ready(struct k_sem *wake_sem)
 {
+	application_wake_sem = wake_sem;
 	k_sem_give(&local_hw_ready_sem);
+}
+
+int modem_service_local_bootstrap_result(int *result)
+{
+	k_spinlock_key_t key;
+	bool complete;
+
+	if (result == NULL) {
+		return -EINVAL;
+	}
+
+	key = k_spin_lock(&bootstrap_lock);
+	complete = bootstrap_complete;
+	if (complete) {
+		*result = bootstrap_result;
+	}
+	k_spin_unlock(&bootstrap_lock, key);
+
+	return complete ? 0 : -EAGAIN;
+}
+
+static void report_local_bootstrap_result(int result)
+{
+	k_spinlock_key_t key = k_spin_lock(&bootstrap_lock);
+
+	if (!bootstrap_complete) {
+		bootstrap_result = result;
+		bootstrap_complete = true;
+	}
+	k_spin_unlock(&bootstrap_lock, key);
+
+	if (application_wake_sem != NULL) {
+		k_sem_give(application_wake_sem);
+	}
 }
 
 /* Owns modem startup and registration-triggered DNS prewarm. Blocks on
@@ -205,6 +245,7 @@ static void modem_service_thread_entry(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 	int ret;
+	int local_bootstrap_error = 0;
 
 	k_sem_take(&local_hw_ready_sem, K_FOREVER);
 
@@ -213,29 +254,34 @@ static void modem_service_thread_entry(void *p1, void *p2, void *p3)
 	if (ret) {
 		LOG_ERR("Modem library init failed: %d", ret);
 	} else {
-		LOG_INF("Modem library init succeeded");
-		modem_ready = true;
+		int stage_ret = configure_psm();
 
-		configure_psm();
+		if (stage_ret) {
+			LOG_ERR("Modem PSM initialization failed: %d", stage_ret);
+			local_bootstrap_error = stage_ret;
+		}
 
-		ret = provision_fairway_ca_certificate();
-		if (ret) {
-			LOG_ERR("Cloud Run CA certificate provisioning failed: %d", ret);
-		} else {
-			LOG_INF("Cloud Run CA certificate ready");
+		stage_ret = provision_fairway_ca_certificate();
+		if (stage_ret) {
+			LOG_ERR("Cloud Run CA certificate provisioning failed: %d", stage_ret);
+			if (local_bootstrap_error == 0) {
+				local_bootstrap_error = stage_ret;
+			}
 		}
 
 		LOG_INF("Starting LTE connection (asynchronous)");
 		ret = lte_lc_connect_async(lte_evt_handler);
 		if (ret) {
 			LOG_ERR("lte_lc_connect_async failed: %d", ret);
-			LOG_WRN("Continuing without an LTE connection attempt in progress; "
-				"the golfer path remains available and any request made "
-				"before connectivity is established reaches bounded FAILURE");
+			if (local_bootstrap_error == 0) {
+				local_bootstrap_error = ret;
+			}
 		} else {
 			LOG_INF("LTE connection attempt started; registration reported asynchronously");
 		}
+		ret = local_bootstrap_error;
 	}
+	report_local_bootstrap_result(ret);
 
 	while (1) {
 		if (!lte_registered_pending) {

@@ -2,20 +2,30 @@
 
 const { DEVICE_STATES } = require('./schema');
 const { createDevice, replaceDeviceCredential, issueDeviceCredentialIfMissing } = require('./devices');
+const {
+  prepareCredentialRotation,
+  activateCredentialRotation,
+} = require('./credential_lifecycle');
 
 /*
- * Bounded provisioning-event error. Always distinguishes whether a Device
- * record was already created in Firestore before the failure occurred, so a
- * caller never assumes provisioning failed cleanly when a device_id may
- * already exist and require a credential retry rather than a second device
- * creation.
+ * Bounded provisioning-event error. Creation failures explicitly disclose
+ * when Firestore's outcome is uncertain; failures after a confirmed create
+ * identify the permanent Device ID that requires administrator inspection.
  */
 class ProvisioningError extends Error {
-  constructor(message, { deviceId = null, stage, cause } = {}) {
+  constructor(message, {
+    code = 'device_provisioning_failed',
+    deviceId = null,
+    stage,
+    status = deviceId ? 409 : 400,
+    cause,
+  } = {}) {
     super(message);
     this.name = 'ProvisioningError';
+    this.code = code;
     this.deviceId = deviceId;
     this.stage = stage;
+    this.status = status;
     this.cause = cause;
   }
 }
@@ -41,53 +51,98 @@ async function provisionNewDevice(db, {
 } = {}) {
   let deviceId;
 
+  let device;
   try {
-    const device = await createDevice(db, {
+    device = await createDevice(db, {
       simIccid,
       comments,
       state,
     });
     deviceId = device.device_id;
   } catch (cause) {
-    // Nothing was created; safe to retry provisioning from scratch.
     throw new ProvisioningError(
-      `Device creation failed; no device was created: ${cause.message}`,
-      { deviceId: null, stage: 'create_device', cause }
+      'Device creation did not complete with a confirmed result. Inspect the authoritative Device registry before retrying; the backend cannot confirm whether a record was created.',
+      {
+        code: 'device_creation_outcome_uncertain',
+        deviceId: null,
+        stage: 'create_device',
+        status: 409,
+        cause,
+      }
     );
   }
 
+  let secret;
   try {
-    const { secret } = await replaceDeviceCredential(db, deviceId);
-    return { deviceId, plaintextCredential: secret };
+    ({ secret } = await replaceDeviceCredential(db, deviceId));
   } catch (cause) {
     // The device record now exists without a usable credential. Do not
     // create a second device; retry credential issuance for this exact
     // deviceId instead.
     throw new ProvisioningError(
       `Device ${deviceId} was created but credential issuance failed. Do not `
-      + `re-run device creation for this event; retry replaceDeviceCredential(db, "${deviceId}") `
-      + `for this exact device_id. Cause: ${cause.message}`,
-      { deviceId, stage: 'issue_credential', cause }
+      + `create another Device. Locate this exact Device and use its credential recovery action.`,
+      {
+        code: 'credential_issue_failed',
+        deviceId,
+        stage: 'issue_credential',
+        status: 409,
+        cause,
+      }
     );
   }
+  return { deviceId, plaintextCredential: secret };
 }
 
 /*
- * Executes the partial-provisioning recovery path: issues/replaces a
- * credential for a Device ID that already exists (for example after
- * provisionNewDevice() created the Device record but credential issuance
- * failed). Never calls createDevice(); calls only the existing, unmodified
- * replaceDeviceCredential() primitive, so no second Device can ever be
- * allocated by using this path. Duplicates no credential business logic.
+ * Recovers a credential on an existing in-inventory Device. Missing
+ * credentials use the established issuance primitive; active credentials
+ * use the existing audited rotation lifecycle. This path never allocates a
+ * Device or changes its assignment or operational history.
  */
-async function issueCredentialForExistingDevice(db, deviceId) {
+async function issueCredentialForExistingDevice(db, deviceId, adminUid) {
   try {
-    const { secret } = await issueDeviceCredentialIfMissing(db, deviceId);
+    const deviceRef = db.collection('devices').doc(deviceId);
+    const deviceSnap = await deviceRef.get();
+    if (!deviceSnap.exists) {
+      throw new Error(`Unknown device_id: ${deviceId}`);
+    }
+    if (deviceSnap.data().state !== DEVICE_STATES.IN_INVENTORY) {
+      throw new Error('Credential recovery is only permitted for in-inventory devices');
+    }
+
+    if (!deviceSnap.data().credential) {
+      const { secret } = await issueDeviceCredentialIfMissing(db, deviceId, {
+        requireInInventory: true,
+      });
+      return { deviceId, plaintextCredential: secret };
+    }
+
+    const prepared = await prepareCredentialRotation(db, {
+      deviceId,
+      adminUid,
+      reason: 'Provisioning credential recovery',
+      requireInInventory: true,
+    });
+    await activateCredentialRotation(db, {
+      deviceId,
+      operationId: prepared.operation_id,
+      adminUid,
+      confirmed: true,
+      requireInInventory: true,
+    });
+    const secret = prepared.plaintext_credential;
     return { deviceId, plaintextCredential: secret };
   } catch (cause) {
     throw new ProvisioningError(
-      `Credential issuance failed for existing device ${deviceId}: ${cause.message}`,
-      { deviceId, stage: 'issue_credential', cause }
+      `Credential recovery failed for Device ${deviceId}: ${cause.message}`,
+      {
+        code: 'credential_issue_failed',
+        deviceId,
+        stage: 'issue_credential',
+        status: 409,
+        cause,
+      }
     );
   }
 }

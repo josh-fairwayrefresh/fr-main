@@ -17,6 +17,8 @@ import sys
 BOARD = "circuitdojo_feather_nrf9151@1/nrf9151/ns"
 APPLICATION_CONFIGURATION = "prj_a.conf"
 ACCEPTED_FIRMWARE_SOURCE = "6a19f83c5bd5d1d390efd937daa1c38c0e837eb0"
+REPOSITORY_DIR = Path(__file__).resolve().parents[1]
+APPLICATION_SOURCE_DIR = REPOSITORY_DIR / "samples" / "fairway_power_sandbox"
 DEVICE_ID_RE = re.compile(r"^FRB-[0-9]{4}$")
 DEVICE_ID_DEFINITION_RE = re.compile(
     r"^[ \t]*#[ \t]*define[ \t]+FAIRWAY_DEVICE_ID(?:[ \t]|$).*$",
@@ -145,19 +147,73 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _build_source_sha256(repo_dir: Path, app_dir: Path) -> str:
-    digest = hashlib.sha256()
-    source_files = sorted(
-        path
-        for root in (app_dir, repo_dir / "boards")
-        if root.is_dir()
-        for path in root.rglob("*")
-        if path.is_file()
-        and not path.is_symlink()
-        and "secrets" not in path.relative_to(repo_dir).parts
-        and not any(part.startswith("build") for part in path.relative_to(repo_dir).parts)
+OTA_DEVELOPMENT_SOURCE_FILES = frozenset(
+    f"samples/fairway_power_sandbox/src/{name}"
+    for name in (
+        "device_identity.c", "device_identity.h", "usb_commissioning.c",
+        "ota_delivery.c", "ota_delivery.h", "ota_delivery_reporting.c",
+        "ota_update_discovery.c", "ota_update_discovery.h",
+        "ota_update_download.c", "ota_update_download.h",
+        "ota_update_reporting.c", "ota_update_reporting.h",
+        "ota_update_scheduler.c", "ota_update_scheduler.h",
     )
-    for path in source_files:
+)
+
+
+def _is_build_source_path(path: Path) -> bool:
+    return (
+        not any(part in ("secrets", "artifacts", "__pycache__")
+                or part.startswith("build") for part in path.parts)
+        and path.suffix.lower() not in (
+            ".hex", ".bin", ".elf", ".o", ".a", ".map", ".pyc", ".log",
+        )
+    )
+
+
+def _build_source_files(repo_dir: Path, app_dir: Path) -> list[Path]:
+    repo_dir = repo_dir.resolve(strict=True)
+    roots = (app_dir.resolve(strict=True).relative_to(repo_dir).as_posix(), "boards")
+
+    def git_files(*options: str) -> set[str]:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo_dir), "ls-files", "-z", *options, "--", *roots],
+                capture_output=True, check=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError("could not inventory firmware source with Git") from exc
+        return {os.fsdecode(name) for name in result.stdout.split(b"\0") if name}
+
+    tracked = git_files("--cached")
+    untracked = git_files("--others", "--exclude-standard")
+    unexpected = sorted(
+        name for name in untracked
+        if _is_build_source_path(Path(name)) and name not in OTA_DEVELOPMENT_SOURCE_FILES
+    )
+    if unexpected:
+        raise ValueError("unregistered firmware development inputs: " + ", ".join(unexpected))
+    selected = tracked | (untracked & OTA_DEVELOPMENT_SOURCE_FILES)
+    files = []
+    for relative in sorted(Path(name) for name in selected):
+        name = relative.as_posix()
+        if not _is_build_source_path(relative):
+            continue
+        path = repo_dir / relative
+        if path.is_symlink() or any(parent.is_symlink() for parent in path.parents
+                                    if parent != repo_dir and repo_dir in parent.parents):
+            raise ValueError(f"firmware source must not be a symlink: {name}")
+        if not path.is_file():
+            raise ValueError(f"required firmware source is missing: {name}")
+        files.append(path)
+    if not files:
+        raise ValueError("firmware source inventory is empty")
+    return files
+
+
+def _build_source_sha256(repo_dir: Path, app_dir: Path) -> str:
+    repo_dir = repo_dir.resolve(strict=True)
+    digest = hashlib.sha256()
+    for path in _build_source_files(repo_dir, app_dir):
         relative = path.relative_to(repo_dir).as_posix().encode("utf-8")
         digest.update(len(relative).to_bytes(4, "big"))
         digest.update(relative)
@@ -165,6 +221,247 @@ def _build_source_sha256(repo_dir: Path, app_dir: Path) -> str:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(chunk)
     return digest.hexdigest()
+
+
+def _generated_partition_layout(build_dir: Path) -> dict[str, dict[str, int]]:
+    reports = sorted(build_dir.rglob("partitions.yml"))
+    if len(reports) != 1:
+        raise ValueError(
+            f"expected one generated Partition Manager report, found {len(reports)}"
+        )
+
+    layout: dict[str, dict[str, int]] = {}
+    current_name = None
+    for line in reports[0].read_text(encoding="utf-8").splitlines():
+        if line and not line[0].isspace() and line.endswith(":"):
+            current_name = line[:-1]
+            layout[current_name] = {}
+            continue
+        if current_name is None:
+            continue
+        match = re.fullmatch(
+            r"\s+(address|size|end_address):\s+(0x[0-9a-fA-F]+|\d+)", line
+        )
+        if match:
+            layout[current_name][match.group(1)] = int(match.group(2), 0)
+
+    required = ("mcuboot_primary", "mcuboot_secondary")
+    if any(
+        name not in layout or not {"address", "size"} <= layout[name].keys()
+        for name in required
+    ):
+        raise ValueError("generated partition report is missing MCUboot image slots")
+    return {
+        name: values
+        for name, values in layout.items()
+        if {"address", "size"} <= values.keys()
+    }
+
+
+def _generated_boot_configuration(build_dir: Path) -> dict[str, dict[str, str]]:
+    tracked_options = {
+        "CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256",
+        "CONFIG_BOOT_SIGNATURE_TYPE_ED25519",
+        "CONFIG_BOOT_SIGNATURE_TYPE_NONE",
+        "CONFIG_BOOT_SIGNATURE_TYPE_RSA",
+        "CONFIG_BOOT_SIGNATURE_KEY_FILE",
+        "CONFIG_BOOT_SWAP_USING_MOVE",
+        "CONFIG_BOOT_MAX_IMG_SECTORS",
+        "CONFIG_BOOT_SWAP_USING_OFFSET",
+        "CONFIG_MCUBOOT",
+        "CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION",
+        "CONFIG_MCUBOOT_SIGNATURE_KEY_FILE",
+        "CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_MOVE",
+        "CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET",
+    }
+    configurations = {}
+    for path in sorted(build_dir.rglob(".config")):
+        selected = {}
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("CONFIG_") and "=" in line:
+                name, value = line.split("=", 1)
+                if name in tracked_options:
+                    selected[name] = value.strip('"')
+        if selected:
+            key = path.parent.relative_to(build_dir).as_posix() or "."
+            configurations[key] = selected
+    if not configurations:
+        raise ValueError("build did not produce bootloader and image configuration evidence")
+    return configurations
+
+
+def _ncs_imgtool(ncs_install_dir: Path) -> Path:
+    ncs_dir = ncs_install_dir.resolve(strict=True)
+    version_file = ncs_dir / "nrf" / "VERSION"
+    if not version_file.is_file() or version_file.read_text(encoding="utf-8").strip() != "3.1.1":
+        raise ValueError("NCS_INSTALL_DIR must be the installed nRF Connect SDK v3.1.1")
+    imgtool = ncs_dir / "bootloader" / "mcuboot" / "scripts" / "imgtool.py"
+    if imgtool.is_symlink() or not imgtool.is_file():
+        raise ValueError("NCS 3.1.1 MCUboot imgtool.py is unavailable")
+    return imgtool
+
+
+def _west_topdir(west: str, working_dir: Path) -> Path:
+    try:
+        result = subprocess.run(
+            [west, "topdir"],
+            cwd=working_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("could not determine the NCS West workspace top directory") from exc
+    topdir = Path(result.stdout.strip())
+    if not topdir.is_absolute() or not topdir.is_dir():
+        raise ValueError("NCS West workspace top directory is invalid")
+    return topdir.resolve()
+
+
+def _resolve_signing_key(key_value: str, app_config_dir: Path, west_topdir: Path | None) -> Path:
+    if not key_value:
+        raise ValueError("generated MCUboot signing configuration has no key file")
+    configured_path = Path(key_value)
+    candidates = (
+        [configured_path]
+        if configured_path.is_absolute()
+        else [
+            app_config_dir / configured_path,
+            *([west_topdir / configured_path] if west_topdir is not None else []),
+        ]
+    )
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+        if not resolved.is_file():
+            raise ValueError("configured MCUboot signing key is not a regular file")
+        try:
+            with resolved.open("rb"):
+                pass
+        except OSError as exc:
+            raise ValueError("configured MCUboot signing key is inaccessible") from exc
+        return resolved
+    raise ValueError("configured MCUboot signing key is missing or inaccessible")
+
+
+def _configured_ota_signing_key(
+    generated_configuration: object,
+    app_config_dir: Path,
+    west_topdir: Path | None,
+    ncs_dir: Path,
+) -> Path:
+    if not isinstance(generated_configuration, dict):
+        raise ValueError("generated signing configuration is missing from the OTA manifest")
+
+    app_key_configs = [
+        config
+        for config in generated_configuration.values()
+        if isinstance(config, dict) and "CONFIG_MCUBOOT_SIGNATURE_KEY_FILE" in config
+    ]
+    boot_key_configs = [
+        config
+        for config in generated_configuration.values()
+        if isinstance(config, dict) and "CONFIG_BOOT_SIGNATURE_KEY_FILE" in config
+    ]
+    if len(app_key_configs) != 1 or len(boot_key_configs) != 1:
+        raise ValueError(
+            "generated application and MCUboot signing configurations are required"
+        )
+
+    app_key_value = app_key_configs[0]["CONFIG_MCUBOOT_SIGNATURE_KEY_FILE"]
+    boot_config = boot_key_configs[0]
+    boot_key_value = boot_config["CONFIG_BOOT_SIGNATURE_KEY_FILE"]
+    if not isinstance(app_key_value, str) or not isinstance(boot_key_value, str):
+        raise ValueError("generated application and MCUboot signing key paths are invalid")
+    enabled_types = [
+        name
+        for name in (
+            "CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256",
+            "CONFIG_BOOT_SIGNATURE_TYPE_ED25519",
+            "CONFIG_BOOT_SIGNATURE_TYPE_RSA",
+        )
+        if boot_config.get(name) == "y"
+    ]
+    if boot_config.get("CONFIG_BOOT_SIGNATURE_TYPE_NONE") == "y" or len(enabled_types) != 1:
+        raise ValueError("generated MCUboot configuration does not select one signature type")
+
+    if app_key_value != boot_key_value:
+        raise ValueError("generated application and MCUboot signing keys do not match")
+    key_path = Path(app_key_value)
+    if (
+        west_topdir is None
+        and not key_path.is_absolute()
+        and not (app_config_dir / key_path).is_file()
+    ):
+        west = shutil.which("west")
+        if west is None:
+            raise ValueError("west is required to resolve the generated MCUboot signing key")
+        west_topdir = _west_topdir(west, ncs_dir)
+    return _resolve_signing_key(app_key_value, app_config_dir, west_topdir)
+
+
+def _verify_mcuboot_signature(artifact: Path, key: Path, imgtool: Path) -> None:
+    command = [
+        sys.executable,
+        str(imgtool),
+        "verify",
+        "--key",
+        str(key),
+        str(artifact),
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise ValueError("could not execute NCS imgtool for MCUboot signature verification") from exc
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout).strip()
+        message = f"MCUboot signature verification failed for {artifact.name}"
+        if details:
+            message = f"{message}: {details}"
+        raise ValueError(message)
+
+
+def _generated_partition_device_tree(build_dir: Path) -> dict[str, object]:
+    candidates = [
+        path
+        for path in sorted(build_dir.rglob("zephyr.dts"))
+        if "fairway_power_sandbox" in path.relative_to(build_dir).parts
+    ]
+    if len(candidates) != 1:
+        raise ValueError(
+            f"expected one generated application devicetree, found {len(candidates)}"
+        )
+
+    text = candidates[0].read_text(encoding="utf-8", errors="replace")
+    partition_blocks = re.findall(
+        r"(?m)^\s*(?:[A-Za-z_][A-Za-z0-9_]*:\s*)?partition@[^{]+\{.*?^\s*\};",
+        text,
+        re.DOTALL,
+    )
+    labels = {
+        "mcuboot",
+        "image-0",
+        "image-0-nonsecure",
+        "image-1",
+        "image-1-nonsecure",
+        "storage",
+    }
+    relevant = [
+        block.strip()
+        for block in partition_blocks
+        if any(f'label = "{label}";' in block for label in labels)
+    ]
+    if not relevant:
+        raise ValueError("generated application devicetree has no MCUboot partition nodes")
+    return {
+        "file": candidates[0].relative_to(build_dir).as_posix(),
+        "sha256": _sha256_file(candidates[0]),
+        "partitions": relevant,
+    }
 
 
 def _intel_hex_runs(artifact: Path) -> list[tuple[int, bytes]]:
@@ -242,6 +539,14 @@ def _verify_embedded_inputs(artifact: Path, device_id: str, credential: str) -> 
         raise ValueError("firmware artifact does not contain the selected Device identity and credential")
 
 
+def _verify_ota_image_inputs(artifact: Path, device_id: str, credential: str) -> None:
+    image = artifact.read_bytes()
+    if not image.startswith(bytes((0x3D, 0xB8, 0xF3, 0x96))):
+        raise ValueError("OTA artifact does not begin with a MCUboot image header")
+    if device_id.encode("ascii") not in image or credential.encode("ascii") not in image:
+        raise ValueError("OTA artifact does not contain the selected Device identity and credential")
+
+
 def _protect_tree(root: Path) -> None:
     if os.name == "nt" or not root.exists():
         return
@@ -262,7 +567,11 @@ def verify_artifact(
     expected_device_id: str,
     secrets_dir: Path,
     input_file: Path | None = None,
+    ota_artifact: Path | None = None,
+    ncs_install_dir: Path | None = None,
+    west_topdir: Path | None = None,
 ) -> dict:
+    signature_verification: tuple[Path, Path, Path] | None = None
     if not isinstance(expected_device_id, str) or not DEVICE_ID_RE.fullmatch(expected_device_id):
         raise ValueError("target Device ID must have the form FRB-XXXX")
     if artifact.is_symlink() or manifest_path.is_symlink():
@@ -320,6 +629,49 @@ def verify_artifact(
     if _sha256_file(artifact) != manifest["sha256"]:
         raise ValueError("firmware artifact SHA-256 does not match the manifest")
 
+    ota_fields = {"ota_artifact_file", "ota_size_bytes", "ota_sha256"}
+    if ota_artifact is not None and not ota_fields.issubset(manifest):
+        raise ValueError("OTA image metadata is required for OTA artifact verification")
+    if ota_fields.intersection(manifest):
+        if not ota_fields.issubset(manifest):
+            raise ValueError("OTA image metadata is incomplete")
+        if (
+            not isinstance(manifest["ota_artifact_file"], str)
+            or Path(manifest["ota_artifact_file"]).name != manifest["ota_artifact_file"]
+        ):
+            raise ValueError("OTA image metadata is invalid or does not match the manifest")
+        if ota_artifact is None:
+            ota_artifact = manifest_path.parent / manifest["ota_artifact_file"]
+        if ota_artifact.is_symlink() or not ota_artifact.is_file():
+            raise ValueError("OTA image artifact must be a regular file, not a symlink")
+        _require_private_regular_file(ota_artifact, "OTA image artifact")
+        if (
+            not isinstance(manifest["ota_artifact_file"], str)
+            or manifest["ota_artifact_file"] != ota_artifact.name
+            or Path(manifest["ota_artifact_file"]).name != manifest["ota_artifact_file"]
+            or not isinstance(manifest["ota_size_bytes"], int)
+            or isinstance(manifest["ota_size_bytes"], bool)
+            or manifest["ota_size_bytes"] <= 0
+            or not isinstance(manifest["ota_sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", manifest["ota_sha256"]) is None
+        ):
+            raise ValueError("OTA image metadata is invalid or does not match the manifest")
+        if ota_artifact.stat().st_size != manifest["ota_size_bytes"]:
+            raise ValueError("OTA image size does not match the manifest")
+        if _sha256_file(ota_artifact) != manifest["ota_sha256"]:
+            raise ValueError("OTA image SHA-256 does not match the manifest")
+        if ncs_install_dir is None:
+            raise ValueError("NCS_INSTALL_DIR is required to verify an OTA image signature")
+        ncs_dir = ncs_install_dir.resolve(strict=True)
+        imgtool = _ncs_imgtool(ncs_dir)
+        signing_key = _configured_ota_signing_key(
+            manifest.get("generated_boot_configuration"),
+            APPLICATION_SOURCE_DIR,
+            west_topdir,
+            ncs_dir,
+        )
+        signature_verification = (ota_artifact, signing_key, imgtool)
+
     try:
         credential = _parse_device_input(
             selected_header.read_text(encoding="utf-8"), expected_device_id
@@ -327,6 +679,10 @@ def verify_artifact(
     except (OSError, UnicodeError) as exc:
         raise ValueError("provisioning input could not be read") from exc
     _verify_embedded_inputs(artifact, expected_device_id, credential)
+    if ota_artifact is not None:
+        _verify_ota_image_inputs(ota_artifact, expected_device_id, credential)
+    if signature_verification is not None:
+        _verify_mcuboot_signature(*signature_verification)
     return manifest
 
 
@@ -367,6 +723,7 @@ def build(args: argparse.Namespace) -> None:
     west_path = Path(west).resolve()
     if toolchain_dir not in west_path.parents:
         raise ValueError("west must resolve from the selected Nordic toolchain bundle")
+    west_topdir = _west_topdir(west, ncs_dir)
 
     repo_dir = Path(__file__).resolve().parents[1]
     app_dir = repo_dir / "samples" / "fairway_power_sandbox"
@@ -434,20 +791,36 @@ def build(args: argparse.Namespace) -> None:
             for path in config_files
         ):
             raise ValueError("build unexpectedly enables experimental trust-resilience components")
+        generated_partition_layout = _generated_partition_layout(build_dir)
+        generated_boot_configuration = _generated_boot_configuration(build_dir)
+        generated_partition_device_tree = _generated_partition_device_tree(build_dir)
 
         artifact_name = f"fairway-{device_id}-merged.hex"
         artifact = output_dir / artifact_name
         if artifact.exists():
             raise ValueError("verified firmware artifact already exists; refusing to overwrite")
         shutil.copyfile(merged_hex, artifact)
+        ota_image = build_dir / "fairway_power_sandbox" / "zephyr" / "zephyr.signed.bin"
+        if ota_image.is_symlink() or not ota_image.is_file():
+            raise ValueError("successful build did not produce the signed MCUboot OTA image")
+        ota_artifact = output_dir / f"fairway-{device_id}-ota.signed.bin"
+        if ota_artifact.exists():
+            raise ValueError("OTA image artifact already exists; refusing to overwrite")
+        shutil.copyfile(ota_image, ota_artifact)
         _protect_tree(output_dir)
+        credential = _parse_device_input(
+            selected_header.read_text(encoding="utf-8"), device_id
+        )
         _verify_embedded_inputs(
             artifact,
             device_id,
-            _parse_device_input(selected_header.read_text(encoding="utf-8"), device_id),
+            credential,
         )
+        _verify_ota_image_inputs(ota_artifact, device_id, credential)
         digest = _sha256_file(artifact)
         size_bytes = artifact.stat().st_size
+        ota_digest = _sha256_file(ota_artifact)
+        ota_size_bytes = ota_artifact.stat().st_size
         west_version = subprocess.check_output([west, "--version"], text=True).strip()
         manifest = {
             "device_id": device_id,
@@ -463,24 +836,44 @@ def build(args: argparse.Namespace) -> None:
             "board": BOARD,
             "application_configuration": APPLICATION_CONFIGURATION,
             "build_command": command,
+            "generated_partition_layout": generated_partition_layout,
+            "generated_boot_configuration": generated_boot_configuration,
+            "generated_partition_device_tree": generated_partition_device_tree,
             "credential_embedded": True,
             "artifact_file": artifact_name,
             "size_bytes": size_bytes,
             "sha256": digest,
+            "ota_artifact_file": ota_artifact.name,
+            "ota_size_bytes": ota_size_bytes,
+            "ota_sha256": ota_digest,
         }
         manifest_path = output_dir / f"fairway-{device_id}-manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         checksum_path = output_dir / f"{artifact_name}.sha256"
         checksum_path.write_text(f"{digest}  {artifact_name}\n", encoding="ascii")
+        ota_checksum_path = output_dir / f"{ota_artifact.name}.sha256"
+        ota_checksum_path.write_text(
+            f"{ota_digest}  {ota_artifact.name}\n", encoding="ascii"
+        )
         _protect_tree(output_dir)
         verify_artifact(
-            artifact, manifest_path, device_id, secrets_dir, args.input_file
+            artifact,
+            manifest_path,
+            device_id,
+            secrets_dir,
+            args.input_file,
+            ota_artifact,
+            ncs_dir,
+            west_topdir,
         )
         shutil.rmtree(build_dir)
         _protect_tree(output_dir)
         print(f"Built and verified {device_id}: {artifact}")
         print(f"Manifest: {manifest_path}")
         print(f"Artifact SHA-256: {digest}")
+        print(f"Signed OTA image: {ota_artifact}")
+        print(f"OTA image SHA-256: {ota_digest}")
+        print("MCUboot OTA image signature verified with the generated signing key.")
         print("Protected build intermediates were removed after verification.")
     finally:
         _protect_tree(output_dir)

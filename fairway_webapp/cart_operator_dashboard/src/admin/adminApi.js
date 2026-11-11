@@ -3,7 +3,7 @@ async function readError(response) {
   if (contentType.includes('application/json')) {
     const body = await response.json();
     return {
-      message: body.error || body.message || `Request failed with status ${response.status}`,
+      message: body.message || body.error || `Request failed with status ${response.status}`,
       details: body,
     };
   }

@@ -37,9 +37,8 @@ function nextCredentialGeneration(device) {
  *
  *   state                 canonical DEVICE_STATES value (in_inventory,
  *                         deployed, maintenance, retired); no delete workflow
- *   customer_id            owning Customer; authoritative, set once and not
- *                          changed by normal Course reassignment (no
- *                          cross-Customer transfer workflow)
+ *   customer_id            active Customer; authoritative, not changed by
+ *                          normal Course reassignment; cleared when held at HQ
  *   customer_name          synchronized display copy of the owning
  *                          Customer's `customer_name`; never independently
  *                          editable, always sourced from the Customer record
@@ -48,7 +47,7 @@ function nextCredentialGeneration(device) {
  *   course_name            synchronized display copy of the assigned
  *                          Course's `course_name`; never independently
  *                          editable, always sourced from the Course record
- *   location                null while in_inventory; otherwise
+ *   location                null while in_inventory or maintenance; otherwise
  *                          { type: 'hole', hole: 1-18 } or
  *                          { type: 'custom', name: string }; hole number and
  *                          display text are always derived from this field
@@ -83,8 +82,8 @@ function nextCredentialGeneration(device) {
  *
  * customer_name/course_name are always sourced from the authoritative
  * Customer/Course records; the caller cannot supply arbitrary display names.
- * A Device is created without a Course/location assignment (In Inventory),
- * with optional permanent Customer ownership, and deployed later through
+ * An In Inventory or Maintenance Device has no active assignment,
+ * and is deployed later through
  * updateDeviceState().
  */
 async function createDevice(db, {
@@ -100,9 +99,9 @@ async function createDevice(db, {
   if (!isValidDeviceState(state)) {
     throw new Error(`Invalid device state: ${state}`);
   }
-  if (state === DEVICE_STATES.IN_INVENTORY
+  if ([DEVICE_STATES.IN_INVENTORY, DEVICE_STATES.MAINTENANCE].includes(state)
       && (customerId !== null || courseId !== null || location !== null)) {
-    throw new Error('In Inventory devices cannot have an active assignment');
+    throw new Error(`${state === DEVICE_STATES.IN_INVENTORY ? 'In Inventory' : 'Maintenance'} devices cannot have an active assignment`);
   }
   if (location !== null && !isValidMarkerLocation(location)) {
     throw new Error('Invalid marker location');
@@ -198,11 +197,11 @@ async function updateDeviceAssignment(db, deviceId, {
       update.service_group = serviceGroup;
     }
 
-    if (current.state === DEVICE_STATES.IN_INVENTORY
+    if ([DEVICE_STATES.IN_INVENTORY, DEVICE_STATES.MAINTENANCE].includes(current.state)
         && (customerId !== undefined && customerId !== null
           || courseId !== undefined && courseId !== null
           || location !== undefined && location !== null)) {
-      throw new Error('In Inventory devices cannot have an active assignment');
+      throw new Error(`${current.state === DEVICE_STATES.IN_INVENTORY ? 'In Inventory' : 'Maintenance'} devices cannot have an active assignment`);
     }
 
     if (location !== undefined) {
@@ -297,7 +296,7 @@ async function updateDeviceState(db, deviceId, nextState, {
     const current = deviceSnap.data();
     const update = { state: nextState, updated_at: new Date() };
 
-    if (nextState === DEVICE_STATES.IN_INVENTORY) {
+    if ([DEVICE_STATES.IN_INVENTORY, DEVICE_STATES.MAINTENANCE].includes(nextState)) {
       update.customer_id = null;
       update.customer_name = null;
       update.course_id = null;
@@ -451,7 +450,7 @@ async function replaceDeviceCredential(db, deviceId) {
   return { device_id: deviceId, secret };
 }
 
-async function issueDeviceCredentialIfMissing(db, deviceId) {
+async function issueDeviceCredentialIfMissing(db, deviceId, { requireInInventory = false } = {}) {
   const deviceRef = db.collection(DEVICES_COLLECTION).doc(deviceId);
   const { secret, verifier } = generateDeviceCredential();
 
@@ -460,13 +459,17 @@ async function issueDeviceCredentialIfMissing(db, deviceId) {
     if (!deviceSnap.exists) {
       throw new Error(`Unknown device_id: ${deviceId}`);
     }
-    if (deviceSnap.data().credential) {
+    const device = deviceSnap.data();
+    if (requireInInventory && device.state !== DEVICE_STATES.IN_INVENTORY) {
+      throw new Error('Credential recovery is only permitted for in-inventory devices');
+    }
+    if (device.credential) {
       throw new Error('Device already has a credential');
     }
 
     transaction.update(deviceRef, {
       credential: verifier,
-      credential_generation: nextCredentialGeneration(deviceSnap.data()),
+      credential_generation: nextCredentialGeneration(device),
       updated_at: new Date(),
     });
   });

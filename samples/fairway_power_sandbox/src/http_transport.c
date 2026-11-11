@@ -359,8 +359,12 @@ int http_transport_send(const char *request, int request_len,
 	struct sockaddr_storage addr;
 	socklen_t addr_len;
 
-	static char recv_buf[4096];
 	size_t recv_len;
+
+	if (request == NULL || request_len <= 0 || response == NULL ||
+	    response->storage == NULL || response->storage_capacity < 2) {
+		return -EINVAL;
+	}
 
 	int verify = TLS_PEER_VERIFY_REQUIRED;
 	sec_tag_t sec_tag_list[] = { FAIRWAY_TLS_SEC_TAG };
@@ -469,7 +473,7 @@ int http_transport_send(const char *request, int request_len,
 		goto out;
 	}
 
-	ret = socket_receive_response(fd, recv_buf, sizeof(recv_buf),
+	ret = socket_receive_response(fd, response->storage, response->storage_capacity,
 				     &recv_len, attempt_deadline_ms, yieldable);
 	if (ret != 0) {
 		LOG_ERR("HTTPS response receive failed: %d", ret);
@@ -477,7 +481,6 @@ int http_transport_send(const char *request, int request_len,
 	}
 
 	LOG_INF("HTTPS response received: %u bytes", (unsigned int)recv_len);
-	LOG_INF("HTTPS response preview: %.80s", recv_buf);
 
 	if (yieldable && golfer_txn_is_pending()) {
 		ret = -ECANCELED;
@@ -488,7 +491,8 @@ int http_transport_send(const char *request, int request_len,
 		int http_status = 0;
 		bool http_status_valid;
 
-		http_status_valid = sscanf(recv_buf, "HTTP/%*u.%*u %d", &http_status) == 1;
+		http_status_valid = sscanf(response->storage, "HTTP/%*u.%*u %d",
+					   &http_status) == 1;
 
 		if (!http_status_valid || http_status < 200 || http_status >= 300) {
 			ret = (http_status == 400 || http_status == 401 ||
@@ -496,7 +500,7 @@ int http_transport_send(const char *request, int request_len,
 			goto out;
 		}
 
-		char *body = strstr(recv_buf, "\r\n\r\n");
+		char *body = strstr(response->storage, "\r\n\r\n");
 
 		response->http_status = http_status;
 		response->body = NULL;
@@ -504,7 +508,8 @@ int http_transport_send(const char *request, int request_len,
 		if (body != NULL) {
 			body += 4;
 			response->body = body;
-			response->body_len = recv_len - (size_t)(body - recv_buf);
+			response->body_len =
+				recv_len - (size_t)(body - response->storage);
 		}
 	}
 
