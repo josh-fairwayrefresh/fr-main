@@ -53,10 +53,6 @@ dkms.conf
 version.conf
 .cache
 
-# Generated Python tooling bytecode
-__pycache__/
-*.pyc
-
 # Zephyr related
 build*/
 sparkfun
@@ -88,10 +84,18 @@ log-*.txt
 # Local MCUboot production signing private key
 fairway-mcuboot-production.pem
 
+# Owner-only local commissioning credentials (never commit)
+/.local-secrets/
+
 # Node.js generated dependencies (backend)
 node_modules/
 dist/
 .firebase/
+
+# Generated test and Python artifacts
+*.log
+__pycache__/
+*.py[cod]
 
 # Local environment configuration
 .env
