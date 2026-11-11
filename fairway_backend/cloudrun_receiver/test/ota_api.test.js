@@ -764,12 +764,13 @@ test('download grant is rejected when device eligibility or assignment changes',
     (error) => error.code === 'download_not_authorized');
 });
 
-test('active assignment cannot be replaced and wrong-version boot confirmation is rejected', async () => {
+test('active assignment may be superseded and wrong-version boot confirmation is still rejected', async () => {
   const { ota } = await setUp();
   await ota.registerRelease(createReleaseBody(), 'admin-1');
   const assigned = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
-  await assert.rejects(ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1'),
-    (error) => error.code === 'active_or_consumed');
+  const replacement = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  assert.notStrictEqual(replacement.deployment_id, assigned.deployment_id);
+  assert.strictEqual(replacement.replaces_deployment_id, assigned.deployment_id);
   await assert.rejects(ota.reportUpdateEvent(assigned.deployment_id, DEVICE_ID, {
     state: 'trial_boot', firmware_version: '0.1.0+1',
   }), (error) => error.code === 'firmware_version_mismatch');
@@ -796,8 +797,8 @@ test('download request remains distinct from installation and a reported failure
   assert.strictEqual((await ota.checkForUpdate(DEVICE_ID, device, HARDWARE_ID)).update_available, false);
   await assert.rejects(ota.getAuthorizedArtifact(update.artifact_path.split('/').pop()),
     (error) => error.code === 'download_not_authorized');
-  await assert.rejects(ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1'),
-    (error) => error.code === 'active_or_consumed');
+  const replacement = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1');
+  assert.notStrictEqual(replacement.deployment_id, assigned.deployment_id);
 });
 
 test('failed publication is visible, assign-ineligible, and retryable without device side effects', async () => {

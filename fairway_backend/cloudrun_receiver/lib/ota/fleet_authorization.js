@@ -20,6 +20,12 @@ function createFleetAuthorization(db, {
   const releases = db.collection('ota_releases');
   const reviews = db.collection('ota_authorization_reviews');
 
+  function assignmentBasisMatches(assignment, device) {
+    if (assignment.basis_version !== undefined && assignment.basis_version !== 2) return false;
+    return assignment.basis_hash === device.basis_hash
+      || (assignment.basis_version === undefined && assignment.basis_hash === device.legacy_basis_hash);
+  }
+
   function requireRelease(releaseId, release) {
     if (!release || release.state !== 'published') {
       throw new OtaError('release_unavailable', 'Choose a published firmware update.', 409);
@@ -45,11 +51,6 @@ function createFleetAuthorization(db, {
     }
     if (releaseId && !approvals[releaseId]?.device_ids?.includes(device.device_id)) {
       return 'This device is outside the release commissioning authorization.';
-    }
-    if (capability.schedule_mode === 'one_time'
-        && (device.device_id !== 'FRB-0005' || releaseId
-          && !['OTA-0.1alt', 'OTA-0.1alt-r2', 'OTA-0.1alt-r3'].includes(releaseId))) {
-      return 'The bootstrap exception is restricted to FRB-0005 receiving OTA 0.1alt.';
     }
     return null;
   }
@@ -121,10 +122,15 @@ function createFleetAuthorization(db, {
     };
     return {
       ...basis, customer_name: customerName, course_name: courseName,
-      basis_hash: crypto.createHash('sha256').update(JSON.stringify(basis)).digest('hex'),
+      // A reported running-image schedule change must not revoke the next authorized target.
+      basis_hash: crypto.createHash('sha256').update(JSON.stringify({
+        ...basis, capability: deviceSnap.data().ota_capability,
+      })).digest('hex'),
+      legacy_basis_hash: crypto.createHash('sha256').update(JSON.stringify(basis)).digest('hex'),
       next_window: bootstrap ? null : nextWindow(zone, now()).toISOString(),
       schedule: bootstrap ? 'bootstrap_900_seconds' : 'nightly_0030',
       pending, last_result: last,
+      current_assignment_id: assignmentSnap.exists ? assignmentSnap.data().deployment_id : null,
       confirmed_firmware_version: status.confirmed_firmware_version || null,
       last_check_at: status.last_check_at || null,
       bootstrap_check_observed: bootstrap && !!status.last_check_at,
@@ -151,12 +157,11 @@ function createFleetAuthorization(db, {
         };
         try {
           const value = await resolve(snap.id, (ref) => ref.get());
-          const { capability, basis_hash, ...safe } = value;
-          return { ...safe, eligible: !value.pending && !value.bootstrap_check_observed,
-            reason: value.pending && value.pending.basis_hash !== value.basis_hash
+          const { capability, basis_hash, legacy_basis_hash, ...safe } = value;
+          return { ...safe, eligible: true, reason: null,
+            assignment_notice: value.pending && !assignmentBasisMatches(value.pending, value)
               ? 'Placement, trust or scheduling changed after authorization; delivery is blocked pending engineering reconciliation.'
-              : value.pending ? 'An active assignment already exists.'
-              : value.bootstrap_check_observed ? 'The one-time commissioning check was already observed.' : null };
+              : null };
         } catch (error) {
           if (!(error instanceof OtaError)) throw error;
           const [status, assignment] = await Promise.all([
@@ -197,9 +202,6 @@ function createFleetAuthorization(db, {
       const selected = [];
       for (const id of [...body.device_ids].sort()) {
         const device = await resolve(id, (ref) => tx.get(ref), body.release_id);
-        if (device.pending || device.bootstrap_check_observed) {
-          throw new OtaError('active_or_consumed', `${id}: pending assignment or consumed bootstrap check.`, 409);
-        }
         selected.push(device);
       }
       const id = crypto.randomUUID();
@@ -236,10 +238,10 @@ function createFleetAuthorization(db, {
       const verified = [];
       for (const previous of review.devices) {
         const device = await resolve(previous.device_id, (ref) => tx.get(ref), review.release_id);
-        if (device.pending || device.bootstrap_check_observed
+        if (device.current_assignment_id !== previous.current_assignment_id
             || device.basis_hash !== previous.basis_hash
             || device.next_window !== previous.next_window) {
-          throw new OtaError('review_changed', `${device.device_id} eligibility or window changed; review again.`, 409);
+          throw new OtaError('review_changed', `${device.device_id} target, eligibility or window changed; review again.`, 409);
         }
         verified.push(device);
       }
@@ -253,7 +255,21 @@ function createFleetAuthorization(db, {
           assigned_by: uid, assigned_at: assignedAt, not_before: notBefore,
           timezone: device.timezone, schedule: device.schedule, authorization_id: reviewId,
           basis_hash: device.basis_hash,
+          basis_version: 2,
+          replaces_deployment_id: device.current_assignment_id,
         };
+        if (device.current_assignment_id) {
+          const previousRef = deployments.doc(device.current_assignment_id);
+          tx.update(previousRef, {
+            superseded_by: ref.id, superseded_at: assignedAt, superseded_by_uid: uid,
+          });
+          tx.set(previousRef.collection('events').doc('superseded'), {
+            deployment_id: device.current_assignment_id, device_id: device.device_id,
+            state: 'superseded', previous_state: device.last_result.state,
+            superseded_by: ref.id, authorized_by: uid, authorization_id: reviewId,
+            created_at: assignedAt,
+          });
+        }
         tx.set(assignments.doc(device.device_id), assignment);
         tx.set(ref, {
           ...assignment, version_string: release.version_string, state: 'assigned',
@@ -262,14 +278,16 @@ function createFleetAuthorization(db, {
         });
         tx.set(ref.collection('events').doc('assigned'), { ...assignment, state: 'assigned', created_at: assignedAt });
         result.assignments.push({ device_id: device.device_id, deployment_id: ref.id,
-          not_before: notBefore.toISOString(), schedule: device.schedule });
+          not_before: notBefore.toISOString(), schedule: device.schedule,
+          replaces_deployment_id: device.current_assignment_id });
       }
       tx.update(reviewRef, { state: 'assigned', result, authorized_at: assignedAt });
       return result;
     });
   }
 
-  return { listFleet, prepare, confirm, requireRelease, requireSelectableRelease, resolve, capabilityError };
+  return { listFleet, prepare, confirm, requireRelease, requireSelectableRelease, resolve, capabilityError,
+    assignmentBasisMatches };
 }
 
 module.exports = { createFleetAuthorization, HEADQUARTERS_TIME_ZONE };

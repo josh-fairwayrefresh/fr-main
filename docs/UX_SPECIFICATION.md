@@ -307,9 +307,22 @@ commissioning gates are owned by the
   explicit device IDs to the backend and shows release, count, every individual
   ID, category/placement and applicable local/UTC window. An explicit checkbox
   and Confirm action authorize that exact five-minute review. Changed
-  eligibility/windows require a fresh review; active assignments conflict
-  instead of being replaced. Later Customer/Course membership changes never
-  add devices to an existing authorization.
+  eligibility/windows require a fresh review. Later Customer/Course membership
+  changes never add devices to an existing authorization.
+- **Assignment contract (CPO-clarified 2026-11-10):** the authorized Admin may
+  assign any approved, compatible release to any authorized managed device,
+  regardless of its running firmware or the state of earlier assignments. An
+  existing assignment never locks a device. The normal review/confirm action
+  supersedes the prior target atomically, without manual cleanup; the review
+  lists the target being superseded. Only the latest assignment is offered or
+  receives a valid download grant. Earlier deployments remain as history,
+  marked superseded, and their delayed lifecycle or running reports cannot
+  cancel, overwrite or complete the newer target. Assignment does not change
+  the last confirmed running version, which changes only through
+  authenticated device confirmation. A review becomes stale if the current
+  target changes before confirmation. Supersession does not interrupt an
+  image a device is already installing. Signing, accepted-hash, hardware,
+  lifecycle, publication and release-authorization safeguards are unchanged.
 - Routine updates become eligible at **12:30 AM local time**, using each
   deployed Course's IANA timezone and DST, not the browser timezone.
   Inventory/Maintenance use CPO-approved **America/Los_Angeles** headquarters
@@ -322,7 +335,10 @@ commissioning gates are owned by the
   installed FRB-0005 bootstrap performs a single persisted 900-second check.
   A review for the first OTA 0.1alt transition explicitly shows immediate
   bootstrap eligibility with unknown remaining check time, not a nightly
-  installation promise. A reported consumed check cannot be rearmed by Admin.
+  installation promise. A previously reported bootstrap check no longer blocks
+  assignment, but Admin cannot rearm the device's consumed one-time check;
+  delivery requires a subsequent autonomous check (for the bootstrap, a fresh
+  USB installation restarts that device-side schedule).
   OTA 0.1alt and subsequent firmware establish recurring nightly behavior;
   accepted original images require the scheduler qualification described in
   the Deployment Guide before claiming that behavior is operational.

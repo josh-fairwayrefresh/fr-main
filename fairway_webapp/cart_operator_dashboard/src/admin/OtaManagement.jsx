@@ -21,6 +21,10 @@ function DeviceTree({ nodes, selected, onToggle, disabled }) {
         <SelectionCheckbox label={node.label} ids={node.device.eligible ? [node.id] : []}
           selected={selected} onToggle={onToggle} disabled={disabled || !node.device.eligible} />
         {!node.device.eligible && <small>{node.device.reason}</small>}
+        {node.device.eligible && node.device.current_assignment_id && <small>
+          Current target: {node.device.last_result?.release_id}. A new confirmed assignment supersedes this target.
+        </small>}
+        {node.device.eligible && node.device.assignment_notice && <small>{node.device.assignment_notice}</small>}
       </div> : <details open>
         <summary>{node.label}</summary>
         <SelectionCheckbox label={`Select ${node.label}`} ids={node.ids} selected={selected}
@@ -142,6 +146,8 @@ export default function OtaManagement({ user, apiBaseUrl }) {
           Installation occurs only when the device subsequently checks autonomously.</p>
         <p>FRB-0005&apos;s initial commissioning check remains a separate, one-time 900-second bootstrap.
           Its review will show that exception, not a nightly installation promise.</p>
+        <p>You may assign a new approved target regardless of current firmware or earlier assignments.
+          Confirming supersedes the prior target and preserves its history; it does not interrupt an image already installing.</p>
         <p>Inventory and Maintenance use headquarters time: America/Los_Angeles (Pacific, including daylight saving time).</p>
       </section>
       <section className="a-panel" aria-labelledby="ota-device-title">
@@ -164,12 +170,17 @@ export default function OtaManagement({ user, apiBaseUrl }) {
         <ul>{review.devices.map((device) => <li key={device.device_id}>
           <strong>{device.device_id}</strong> - {device.state === 'deployed'
             ? `${device.customer_name} / ${device.course_name}` : device.state === 'maintenance' ? 'Maintenance' : 'Inventory'}
+          <p>Last confirmed running: {device.confirmed_firmware_version || 'Unknown'}. New target: {review.release_id}.</p>
+          {device.current_assignment_id && <p>Supersedes {device.last_result.release_id}
+            {' '}({device.last_result.state}); earlier delivery and installation evidence will be retained.</p>}
           <p>{device.schedule === 'bootstrap_900_seconds'
             ? 'Commissioning exception: eligible immediately for the existing one-time 900-second check. Whether it remains pending is unknown.'
             : `Next local window: ${formatWindow(device.next_window, device.timezone)}`}</p>
+          {device.bootstrap_check_observed && <p>A one-time check was previously reported.
+            This assignment does not restart the device timer or create another check; delivery requires a subsequent autonomous check.</p>}
         </li>)}</ul>
         <label className="a-ota-confirm"><input type="checkbox" checked={confirmed} disabled={busy}
-          onChange={(event) => setConfirmed(event.target.checked)} />I authorize this release for exactly the devices and windows listed above.</label>
+          onChange={(event) => setConfirmed(event.target.checked)} />I authorize this release for exactly the devices and windows listed above, superseding any listed prior targets.</label>
         <button type="button" className="a-primary" onClick={authorize} disabled={busy || !confirmed}>Confirm assignments</button>
       </div>}
     </section>
@@ -191,6 +202,7 @@ export default function OtaManagement({ user, apiBaseUrl }) {
           <small>Image offered: {formatWindow(device.last_result?.offered_at, device.timezone)}; download requested (not completion): {formatWindow(device.last_result?.artifact_requested_at, device.timezone)}</small>
           {Object.entries(device.last_result?.reported_at || {}).map(([state, at]) => <small key={state}>{state}: {formatWindow(at, device.timezone)}</small>)}
           {device.reason && <small>{device.reason}</small>}
+          {device.assignment_notice && <small>{device.assignment_notice}</small>}
         </div>
       </article>)}</div>
     </section>

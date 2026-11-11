@@ -51,7 +51,7 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
-## Running-image confirmation revision — published, physical qualification pending (2026-11-10)
+## Running-image confirmation revision — published, USB bootstrap physically verified (2026-11-10)
 
 The revised USB-only bootstrap is `OTA-0.1-r3` (`0.1.0+4`); its matching
 nightly successor is `OTA-0.1alt-r3` (`0.1.0+5`). The CPO subsequently requested
@@ -63,7 +63,13 @@ published and shown in production Admin for FRB-0005 only; the bootstrap
 remains USB-only. Exact accepted manifests are in `docs/releases/` and signed
 hashes/publication evidence are owned by the Deployment Guide. Old r2 artifact
 bytes and history are preserved, but r2 is no longer selectable for new
-assignments. No new physical installation or autonomous OTA outcome is claimed.
+assignments. The existing signed USB bootstrap was subsequently installed on
+FRB-0005 through separately authorized clean commissioning. Its authenticated
+actual-running report confirmed `0.1.0+4`, the Admin registry displayed that
+version/time, and a real button request and device-acknowledged COMPLETE were
+verified; the CPO confirmed normal completion indication and idle. Exact
+recovery evidence is owned by the Deployment Guide. This is not qualification
+of an autonomous OTA successor installation or permanent PV8-free access.
 The bootstrap retains exactly one persisted check at first normal boot +900
 seconds; confirmation retries do not restart or repeat that check.
 

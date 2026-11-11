@@ -353,12 +353,12 @@ function createOtaService(db, {
     return nextCourseCheckTime(timeZone, now()).getTime();
   }
 
-  async function issueDownloadToken(deploymentId, deviceId, release) {
+  function issueDownloadToken(transaction, deploymentId, deviceId, release) {
     requireArtifactDelivery();
     const token = crypto.randomBytes(32).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(now().getTime() + DOWNLOAD_TOKEN_LIFETIME_MS);
-    await db.collection('ota_download_tokens').doc(tokenHash).set({
+    transaction.set(db.collection('ota_download_tokens').doc(tokenHash), {
       device_id: deviceId,
       deployment_id: deploymentId,
       release_id: release.release_id,
@@ -370,7 +370,7 @@ function createOtaService(db, {
   }
 
   async function checkForUpdate(deviceId, device, hardwareId) {
-    const eligibility = await fleet.resolve(deviceId, (ref) => ref.get());
+    await fleet.resolve(deviceId, (ref) => ref.get());
     if (hardwareId !== HARDWARE_ID) {
       throw new OtaError('unsupported_hardware', 'Device hardware identifier is incompatible.', 409);
     }
@@ -380,56 +380,59 @@ function createOtaService(db, {
       device_id: deviceId, last_check_at: checkedAt,
       next_check_at: new Date(nextCheckAtUtcMs),
     }, { merge: true });
-    const assignmentSnap = await assignments.doc(deviceId).get();
-    if (!assignmentSnap.exists) {
-      return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
-    }
-    const assignment = assignmentSnap.data();
-    if (assignment.basis_hash !== eligibility.basis_hash) {
-      throw new OtaError('assignment_changed', 'Device placement, trust or scheduling changed after authorization; engineering reconciliation is required.', 409);
-    }
-    const deploymentRef = deployments.doc(assignment.deployment_id);
-    const deploymentSnap = await deploymentRef.get();
-    const releaseSnap = await releases.doc(assignment.release_id).get();
-    if (!deploymentSnap.exists || !releaseSnap.exists ||
-        TERMINAL_STATES.has(deploymentSnap.data().state)) {
-      return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
-    }
-    const release = releaseSnap.data();
-    fleet.requireRelease(assignment.release_id, release);
-    const deviceError = fleet.capabilityError({
-      ...device, device_id: deviceId, ota_capability: eligibility.capability,
-    }, assignment.release_id);
-    if (deviceError) throw new OtaError('device_not_eligible', deviceError, 409);
-    const notBeforeAt = asDate(assignment.not_before);
-    if (!notBeforeAt) {
-      throw new OtaError('invalid_schedule', 'Assignment has no valid eligibility timestamp.', 409);
-    }
-    await deploymentRef.update({ last_check_at: checkedAt });
-    if (notBeforeAt > checkedAt) {
-      return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
-    }
-    if (release.state !== 'published' || !release.hardware_ids?.includes(hardwareId)
-        || release.sha256 !== acceptedReleases[release.release_id]
-        || release.provenance?.signing_fingerprint !== PRODUCTION_FINGERPRINT) {
-      throw new OtaError('release_unavailable', 'Assigned OTA release is no longer available.', 409);
-    }
-    requireArtifactStore();
-    const artifactPath = await issueDownloadToken(
-      assignment.deployment_id, deviceId, release
-    );
-    await deploymentRef.update({ offered_at: checkedAt });
-    return {
-      update_available: true,
-      deployment_id: assignment.deployment_id,
-      release_id: release.release_id,
-      hardware_id: hardwareId,
-      version: release.version,
-      image_size: release.size_bytes,
-      sha256: release.sha256,
-      artifact_path: artifactPath,
-      next_check_at_utc_ms: nextCheckAtUtcMs,
-    };
+    return db.runTransaction(async (transaction) => {
+      const current = await fleet.resolve(deviceId, (ref) => transaction.get(ref));
+      const assignmentSnap = await transaction.get(assignments.doc(deviceId));
+      if (!assignmentSnap.exists) {
+        return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
+      }
+      const assignment = assignmentSnap.data();
+      if (!fleet.assignmentBasisMatches(assignment, current)) {
+        throw new OtaError('assignment_changed', 'Device placement, trust or scheduling changed after authorization; engineering reconciliation is required.', 409);
+      }
+      const deploymentRef = deployments.doc(assignment.deployment_id);
+      const deploymentSnap = await transaction.get(deploymentRef);
+      const releaseSnap = await transaction.get(releases.doc(assignment.release_id));
+      if (!deploymentSnap.exists || !releaseSnap.exists ||
+          TERMINAL_STATES.has(deploymentSnap.data().state)) {
+        return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
+      }
+      const release = releaseSnap.data();
+      fleet.requireRelease(assignment.release_id, release);
+      const deviceError = fleet.capabilityError({
+        ...device, device_id: deviceId, ota_capability: current.capability,
+      }, assignment.release_id);
+      if (deviceError) throw new OtaError('device_not_eligible', deviceError, 409);
+      const notBeforeAt = asDate(assignment.not_before);
+      if (!notBeforeAt) {
+        throw new OtaError('invalid_schedule', 'Assignment has no valid eligibility timestamp.', 409);
+      }
+      transaction.update(deploymentRef, { last_check_at: checkedAt });
+      if (notBeforeAt > checkedAt) {
+        return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
+      }
+      if (release.state !== 'published' || !release.hardware_ids?.includes(hardwareId)
+          || release.sha256 !== acceptedReleases[release.release_id]
+          || release.provenance?.signing_fingerprint !== PRODUCTION_FINGERPRINT) {
+        throw new OtaError('release_unavailable', 'Assigned OTA release is no longer available.', 409);
+      }
+      requireArtifactStore();
+      const artifactPath = issueDownloadToken(
+        transaction, assignment.deployment_id, deviceId, release
+      );
+      transaction.update(deploymentRef, { offered_at: checkedAt });
+      return {
+        update_available: true,
+        deployment_id: assignment.deployment_id,
+        release_id: release.release_id,
+        hardware_id: hardwareId,
+        version: release.version,
+        image_size: release.size_bytes,
+        sha256: release.sha256,
+        artifact_path: artifactPath,
+        next_check_at_utc_ms: nextCheckAtUtcMs,
+      };
+    });
   }
 
   async function reportUpdateEvent(deploymentId, deviceId, body) {
@@ -625,7 +628,7 @@ function createOtaService(db, {
       throw new OtaError('download_not_authorized', 'Assignment is no longer eligible for download.', 403);
     }
     const eligibility = await fleet.resolve(grant.device_id, (ref) => ref.get(), grant.release_id);
-    if (assignmentSnap.data().basis_hash !== eligibility.basis_hash) {
+    if (!fleet.assignmentBasisMatches(assignmentSnap.data(), eligibility)) {
       throw new OtaError('assignment_changed', 'Device eligibility changed after authorization.', 409);
     }
     if (!releaseSnap.exists || releaseSnap.data().state !== 'published'

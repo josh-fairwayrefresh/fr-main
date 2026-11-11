@@ -78,8 +78,12 @@ The protected confirmation sequence must be preserved during normal USB
 maintenance and OTA. Erasing Protected Storage after sequence-protected
 confirmation requires separately authorized engineering reconciliation:
 the backend must reject a reset/lower sequence rather than silently accepting
-stale firmware evidence. Neither a reflash nor reporting authorizes clearing
-an active OTA assignment or re-arming an already observed bootstrap check.
+stale firmware evidence. A clean reinstall restarts the sequence at 1; the
+backend accepts it only as a duplicate of identical recorded evidence, so a
+different version requires reconciliation. Neither a reflash nor reporting
+clears or changes an OTA assignment; the Admin may supersede an assignment
+through normal review. A clean bootstrap installation restarts the device's
+one-time check, while a storage-preserving reflash does not.
 Firmware behavior and publication gates remain owned by the Firmware
 Specification and Deployment Guide.
 

@@ -65,3 +65,24 @@ test('OTA collections including reviews and token grants remain server-only unde
   const matches = [...rules.matchAll(/match\s+(\S+)\s*\{/g)].map((match) => match[1]);
   assert.deepEqual(matches, ['/databases/{database}/documents', '/requests/{requestId}', '/{document=**}']);
 });
+
+test('current target and reported bootstrap check do not remove an authorized device from selection', () => {
+  const devices = [
+    { ...fleet.devices[0], current_assignment_id: 'old', pending: { release_id: 'OTA-0.1alt-r2' },
+      bootstrap_check_observed: true, confirmed_firmware_version: '0.1.0+4' },
+    { ...fleet.devices[1], current_assignment_id: 'installing', pending: { state: 'activation_pending' } },
+  ];
+  const tree = buildDeviceTree({ ...fleet, devices });
+  assert.deepEqual(tree[0].ids, ['1', '2']);
+  assert.deepEqual([...toggleDevices(new Set(), tree[0].ids, true)], ['1', '2']);
+});
+
+test('normal assignment review discloses supersession and one-time delivery limits without a separate clearing action', async () => {
+  const source = await readFile(new URL('../src/admin/OtaManagement.jsx', import.meta.url), 'utf8');
+  assert.match(source, /regardless of current firmware or earlier assignments/);
+  assert.match(source, /Supersedes \{device\.last_result\.release_id\}/);
+  assert.match(source, /superseding any listed prior targets/);
+  assert.match(source, /does not restart the device timer or create another check/);
+  assert.match(source, /does not interrupt an image already installing/);
+  assert.doesNotMatch(source, /disabled=\{[^}]*pending|disabled=\{[^}]*bootstrap_check_observed|Clear assignment|Replace pending update/);
+});

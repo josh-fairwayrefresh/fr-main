@@ -266,7 +266,8 @@ async function run() {
     await assert.rejects(ota.confirmAssignment(review.review_id, 'different-admin'),
       (error) => error.code === 'invalid_review');
     await ota.confirmAssignment(review.review_id, 'admin');
-    await assert.rejects(ota.prepareAssignment(body, 'admin'), (error) => error.code === 'active_or_consumed');
+    const next = await ota.prepareAssignment(body, 'admin');
+    assert.ok(next.devices[0].current_assignment_id);
   });
   await test('transaction failure creates no partial assignment for multiple devices', async () => {
     const { db, ota } = await setup();
@@ -300,7 +301,8 @@ async function run() {
       await assert.rejects(ota.getAuthorizedArtifact(offered.artifact_path.split('/').pop()),
         (error) => error.code === 'assignment_changed');
       const projected = (await ota.listFleet()).devices.find((item) => item.device_id === 'FRB-0005');
-      assert.match(projected.reason, /delivery is blocked/);
+      assert.equal(projected.eligible, true, 'old delivery restrictions do not block assigning a new target');
+      assert.match(projected.assignment_notice, /delivery is blocked/);
     }
   });
   await test('headquarters config absence blocks only Inventory/Maintenance, not deployed work', async () => {
@@ -391,7 +393,7 @@ async function run() {
     assert.equal(next.devices[0].next_window, '2026-03-08T08:30:00.000Z');
     assert.equal((await db.collection('devices').doc('FRB-0005').get()).data().ota_capability.schedule_mode, 'one_time');
   });
-  await test('corrected successor bootstrap stays exact-device and the next successor stays nightly', async () => {
+  await test('bootstrap may target any approved compatible successor without pretending it is already nightly', async () => {
     const { db, options } = await setup();
     const digest = 'b'.repeat(64);
     for (const [id, version] of [['OTA-0.1alt-r2', '0.1.0+3'], ['OTA-1.0-r2', '1.0.0+2']]) {
@@ -415,15 +417,185 @@ async function run() {
       release_id: 'OTA-0.1alt-r2', device_ids: ['FRB-0005'],
     }, 'admin');
     assert.equal(first.devices[0].schedule, 'bootstrap_900_seconds');
-    await assert.rejects(ota.prepareAssignment({
+    const direct = await ota.prepareAssignment({
       release_id: 'OTA-1.0-r2', device_ids: ['FRB-0005'],
-    }, 'admin'), (error) => error.code === 'device_not_eligible');
+    }, 'admin');
+    assert.equal(direct.devices[0].schedule, 'bootstrap_900_seconds');
     await db.collection('ota_device_status').doc('FRB-0005').set({ confirmed_schedule_mode: 'nightly' });
     const second = await ota.prepareAssignment({
       release_id: 'OTA-1.0-r2', device_ids: ['FRB-0005'],
     }, 'admin');
     assert.equal(second.devices[0].schedule, 'nightly_0030');
     assert.equal(second.devices[0].next_window, '2026-03-08T08:30:00.000Z');
+  });
+  await test('normal review supersedes every earlier lifecycle state without destroying installation evidence', async () => {
+    for (const state of ['assigned', 'downloading', 'verifying', 'staged', 'activation_pending',
+      'trial_boot', 'confirmed', 'failed', 'rolled_back']) {
+      const { db, ota } = await setup();
+      const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+      const firstReview = await ota.prepareAssignment(body, 'admin');
+      const first = await ota.confirmAssignment(firstReview.review_id, 'admin');
+      const oldId = first.assignments[0].deployment_id;
+      const oldRef = db.collection('ota_deployments').doc(oldId);
+      await oldRef.update({ state, reported_at: { [state]: new Date('2026-03-08T06:59:00Z') } });
+      await db.collection('ota_device_status').doc('FRB-0005').set({
+        last_check_at: new Date('2026-03-08T06:00:00Z'), confirmed_firmware_version: '0.1.0+4',
+      });
+      const fleetDevice = (await ota.listFleet()).devices.find((device) => device.device_id === 'FRB-0005');
+      assert.equal(fleetDevice.eligible, true);
+      assert.equal(fleetDevice.bootstrap_check_observed, true);
+      const review = await ota.prepareAssignment(body, 'admin');
+      assert.equal(review.devices[0].current_assignment_id, oldId);
+      assert.equal(review.devices[0].last_result.state, state);
+      const next = await ota.confirmAssignment(review.review_id, 'admin');
+      const newId = next.assignments[0].deployment_id;
+      assert.notEqual(newId, oldId);
+      assert.equal(next.assignments[0].replaces_deployment_id, oldId);
+      assert.equal((await db.collection('ota_assignments').doc('FRB-0005').get()).data().deployment_id, newId);
+      const old = (await oldRef.get()).data();
+      assert.equal(old.state, state);
+      assert.ok(old.reported_at[state]);
+      assert.equal(old.superseded_by, newId);
+      const event = (await oldRef.collection('events').doc('superseded').get()).data();
+      assert.equal(event.previous_state, state);
+      assert.equal(event.authorization_id, review.review_id);
+      await ota.confirmAssignment(firstReview.review_id, 'admin');
+      await ota.confirmAssignment(review.review_id, 'admin');
+      assert.equal((await db.collection('ota_assignments').doc('FRB-0005').get()).data().deployment_id, newId);
+      assert.equal((await db.collection('ota_deployments').get()).size, 2);
+      assert.equal((await db.collection('ota_device_status').doc('FRB-0005').get()).data()
+        .last_check_at.toISOString(), '2026-03-08T06:00:00.000Z', 'assignment never rearms or rewrites checks');
+      assert.equal((await db.collection('ota_device_status').doc('FRB-0005').get()).data()
+        .confirmed_firmware_version, '0.1.0+4', 'assignment is not evidence of running firmware');
+    }
+  });
+  await test('replacement invalidates old artifact grants but late old confirmation cannot clear the new target', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+    const first = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    const oldId = first.assignments[0].deployment_id;
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    const offered = await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID);
+    const next = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    const newId = next.assignments[0].deployment_id;
+    await assert.rejects(ota.getAuthorizedArtifact(offered.artifact_path.split('/').pop()),
+      (error) => error.code === 'download_not_authorized');
+    await ota.confirmRunningFirmware('FRB-0005', {
+      device_id: 'FRB-0005', firmware_version: '0.1.0+2', confirmation_sequence: 1, deployment_id: oldId,
+    });
+    assert.equal((await db.collection('ota_assignments').doc('FRB-0005').get()).data().deployment_id, newId);
+    assert.equal((await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID)).deployment_id, newId);
+    assert.equal((await db.collection('ota_deployments').doc(oldId).get()).data().superseded_by, newId);
+  });
+  await test('changed or completed prior target requires a fresh review rather than silently replacing a different target', async () => {
+    for (const change of ['reassigned', 'completed']) {
+      const { db, ota } = await setup();
+      const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+      await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+      const stale = await ota.prepareAssignment(body, 'admin');
+      if (change === 'reassigned') {
+        await ota.confirmAssignment((await ota.prepareAssignment(body, 'other-admin')).review_id, 'other-admin');
+      } else {
+        await ota.confirmRunningFirmware('FRB-0005', {
+          firmware_version: '0.1.0+2', confirmation_sequence: 1,
+          deployment_id: stale.devices[0].current_assignment_id,
+        });
+      }
+      await assert.rejects(ota.confirmAssignment(stale.review_id, 'admin'),
+        (error) => error.code === 'review_changed');
+    }
+  });
+  await test('failed replacement transaction preserves the old target and creates no supersession history', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+    const old = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    const oldId = old.assignments[0].deployment_id;
+    const review = await ota.prepareAssignment(body, 'admin');
+    db.failNextTransactionCommit = true;
+    await assert.rejects(ota.confirmAssignment(review.review_id, 'admin'), /Simulated/);
+    assert.equal((await db.collection('ota_assignments').doc('FRB-0005').get()).data().deployment_id, oldId);
+    const oldRef = db.collection('ota_deployments').doc(oldId);
+    assert.equal((await oldRef.get()).data().superseded_by, undefined);
+    assert.equal((await oldRef.collection('events').doc('superseded').get()).exists, false);
+    assert.equal((await db.collection('ota_deployments').get()).size, 1);
+  });
+  await test('delayed superseded reports cannot overwrite newer running evidence or the latest target', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+    const old = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    const oldId = old.assignments[0].deployment_id;
+    for (const state of ['downloading', 'verifying', 'staged', 'activation_pending', 'trial_boot']) {
+      await ota.reportUpdateEvent(oldId, 'FRB-0005', { state, firmware_version: '0.1.0+2' });
+    }
+    const next = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    const latest = (await db.collection('ota_assignments').doc('FRB-0005').get()).data();
+    await ota.confirmRunningFirmware('FRB-0005', {
+      firmware_version: '0.1.0+4', confirmation_sequence: 9,
+    });
+    const status = (await db.collection('ota_device_status').doc('FRB-0005').get()).data();
+    await assert.rejects(ota.confirmRunningFirmware('FRB-0005', {
+      firmware_version: '0.1.0+2', confirmation_sequence: 8, deployment_id: oldId,
+    }), (error) => error.code === 'stale_confirmation');
+    await ota.reportUpdateEvent(oldId, 'FRB-0005', {
+      state: 'confirmed', firmware_version: '0.1.0+2',
+    });
+    assert.deepEqual((await db.collection('ota_assignments').doc('FRB-0005').get()).data(), latest);
+    assert.deepEqual((await db.collection('ota_device_status').doc('FRB-0005').get()).data(), status);
+    assert.equal((await db.collection('ota_deployments').doc(oldId).get()).data().superseded_by,
+      next.assignments[0].deployment_id);
+  });
+  await test('pre-revision nightly assignments retain delivery authorization without weakening placement or trust checks', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+    await db.collection('ota_device_status').doc('FRB-0005').set({ confirmed_schedule_mode: 'nightly' });
+    const review = await ota.prepareAssignment(body, 'admin');
+    const result = await ota.confirmAssignment(review.review_id, 'admin');
+    const assignmentRef = db.collection('ota_assignments').doc('FRB-0005');
+    const old = (await assignmentRef.get()).data();
+    const current = review.devices[0];
+    const { basis_version, ...legacy } = old;
+    await assignmentRef.set({ ...legacy, basis_hash: current.legacy_basis_hash,
+      not_before: new Date('2026-03-08T06:00:00Z') });
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    assert.equal((await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID)).deployment_id,
+      result.assignments[0].deployment_id);
+  });
+  await test('discovery re-reads the latest target atomically before issuing an offer and token', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+    const first = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    const review = await ota.prepareAssignment(body, 'admin');
+    const runTransaction = db.runTransaction.bind(db);
+    let replaced = false;
+    let latest;
+    db.runTransaction = async (callback) => {
+      if (!replaced) {
+        replaced = true;
+        latest = await ota.confirmAssignment(review.review_id, 'admin');
+      }
+      return runTransaction(callback);
+    };
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    const offered = await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID);
+    assert.equal(replaced, true);
+    assert.notEqual(offered.deployment_id, first.assignments[0].deployment_id);
+    assert.equal(offered.deployment_id, latest.assignments[0].deployment_id);
+    const grants = (await db.collection('ota_download_tokens').get()).docs.map((doc) => doc.data());
+    assert.equal(grants.length, 1);
+    assert.equal(grants[0].deployment_id, offered.deployment_id);
+  });
+  await test('failed discovery transaction leaves no partial old offer or download authorization', async () => {
+    const { db, ota } = await setup();
+    const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
+    const assigned = await ota.confirmAssignment((await ota.prepareAssignment(body, 'admin')).review_id, 'admin');
+    db.failNextTransactionCommit = true;
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    await assert.rejects(ota.checkForUpdate('FRB-0005', device, HARDWARE_ID), /Simulated/);
+    assert.equal((await db.collection('ota_download_tokens').get()).size, 0);
+    assert.equal((await db.collection('ota_deployments').doc(assigned.assignments[0].deployment_id)
+      .get()).data().offered_at, null);
+    assert.equal((await db.collection('ota_assignments').doc('FRB-0005').get()).data().deployment_id,
+      assigned.assignments[0].deployment_id);
   });
   console.log(`${count} fleet/governance tests passed`);
 }

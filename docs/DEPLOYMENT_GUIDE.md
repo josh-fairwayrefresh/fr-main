@@ -14,13 +14,13 @@ the original accepted firmware artifacts remain unchanged.
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
-| Production Hosting | Production site `savvy-kit-496703-r5`; live version `5eb383e4a44c3d13` | Released `2026-11-10T23:28:13.852Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds last-confirmed-running version/time to the existing registry field. Prior versions retained; exact rollout evidence below. |
-| Production Admin / receiver | Admin `fairway-admin-ota-r3-c0d0720`; receiver `fairway-button-receiver-ota-r3-c0d0720`, both Ready, 100% | Verified `2026-11-11T00:09:32Z`; isolated source archive `c0d0720c6820659ac7dcd969438c76873cc766c518ab458af93cfea3f6cc3ad3`, backed source `a38172d159eda8d8344f63b750e0dbdc88b0571c`. Includes confirmed-success cleanup and exact accepted r3 catalog. Runtime identities/configuration unchanged. Prior revisions retained. |
-| OTA implementation | `OTA-0.1alt-r3` and `OTA-1.0-r3` published/approved for FRB-0005 only; both shown in the production Admin selector | Verified `2026-11-11T00:09:32Z` (November 10 Pacific). Old r2 releases are no longer selectable but their exact bytes/history remain intact. FRB-0005's unresolved old r2 assignment, observed bootstrap check and absent running confirmation remain unchanged. No new assignment or physical operation was performed. |
+| Production Hosting | Production site `savvy-kit-496703-r5`; live version `ba810bdc550d6501` | Released `2026-11-11T00:56:32.950Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds assignment supersession disclosure to Firmware OTA. Prior versions retained (`5eb383e4a44c3d13` previous). |
+| Production Admin / receiver | Admin `fairway-admin-ota-target-12cf730`; receiver `fairway-button-receiver-ota-target-12cf730`, both Ready, 100% | Promoted `2026-11-11T00:56Z`; isolated source archive `12cf730f9551f36e6ec14bcd8d9d07f4ec632e2f5f02acb8087cdffcd4a00721`. Adds the CPO-clarified non-locking assignment contract (below). Runtime identities/configuration unchanged; `*-ota-r3-c0d0720` retained as rollback. |
+| OTA implementation | `OTA-0.1alt-r3` and `OTA-1.0-r3` published/approved for FRB-0005 only; any authorized device may be reassigned at any time | Old r2 releases are not selectable; their bytes/history remain. CPO assigned `OTA-0.1alt-r3` to FRB-0005 at `2026-11-11T01:06:56Z`, superseding the old r2 target. Autonomous installation not yet observed. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
-| FRB-0005 commissioning | Recommissioned on 2026-11-10 with unchanged OTA 0.1; protected credential verified after reboot and matching backend rotation activated | One explicitly authorized PV8-assisted recovery established stable access. Full erase, verified commissioning-image flash, protected provisioning, and storage-preserving verified OTA 0.1 flash succeeded. CPO confirmed device-originated Cart delivery and normal device indication after COMPLETE. See physical evidence below; routine button-free recovery is not established. |
-| Production OTA prerequisites | Private GCS controls, production catalog and exact r3/r2 artifact bytes verified; delivery remains enabled; FRB-0005 physical capability retained | Governed r3 publication is complete. A fresh FRB-0005 attempt still requires explicitly scoped old-assignment/one-time-state reconciliation before flash. HQ remains `America/Los_Angeles`. No installation is inferred from publication. |
-| Production data | Publication created only the two approved release records/artifacts through the existing authenticated Admin engineering contract | No device, assignment, credential or customer/business records changed. Preflight reports PITR/delete protection disabled; code rollback is not data recovery. Naturally occurring production traffic was not stopped. |
+| FRB-0005 commissioning | Freshly reinstalled `OTA-0.1-r3` (`0.1.0+4`) at 17:06 Pacific to restart its one-time check; credential generation 5 active | Earlier 16:38 recovery verified running-version confirmation, real Cart request and device-acknowledged COMPLETE. The 17:06 reinstall verified provisioning, reboot persistence, read-back and activation; post-reinstall request not separately exercised. PV8 still required for service access. |
+| Production OTA prerequisites | Private GCS controls, production catalog and exact r3/r2 artifact bytes verified; delivery remains enabled; FRB-0005 physical capability retained | Assignment no longer requires reconciling earlier targets. HQ remains `America/Los_Angeles`. No installation is inferred from assignment or USB recovery. |
+| Production data | Publication created two release records/artifacts; authorized recoveries activated FRB-0005 credential generations 4 and 5; the CPO's Admin assignment superseded the old target | Permanent identity and placement verified unchanged; prior deployment history retained. No other devices were changed. Preflight reports PITR/delete protection disabled; code rollback is not data recovery. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
 The exact-Device in-inventory credential-recovery UI is included in this
@@ -117,9 +117,8 @@ side effect.
   download token or device confirmation was synthesized.
 - Read-only verification at `2026-11-11T00:09:32Z` confirms FRB-0005's old
   assignment/deployment/check status is unchanged. The production fleet still
-  correctly blocks a new assignment with `An active assignment already exists`.
-  A reflash does not itself reconcile that record or reset consumed PSA
-  schedule state. Do not start the new 900-second physical window yet.
+  blocked a new assignment with `An active assignment already exists`; that
+  lock was later removed by the assignment-contract correction below.
 - Source inventories, redacted before/staged/promoted runtime snapshots,
   immutable revision identities, build evidence and byte-level publication
   verification are retained under the session's `ota-publication-r3/`.
@@ -162,6 +161,129 @@ the cause of the failed download or whether its first write partially changed
 the primary slot; the new bootstrap is not installed/verified. No erase,
 new rotation, assignment change or blind programming retry was performed.
 Probe enumeration is therefore not sufficient evidence of programming access.
+
+#### Verified FRB-0005 OTA-0.1-r3 recovery and normal operation
+
+The CPO subsequently authorized the established local recovery, including
+erase only after identity/credential restoration prerequisites were secured,
+without firmware rebuild, architecture changes, assignment changes or Git
+commit/push/merge. Read-only preflight verified that the retained credential
+matched the active production verifier. Its old rotation was already
+activated, so it could not authorize the canonical clean-install path.
+The CPO explicitly authorized one FRB-0005-only prepared credential cutover.
+
+The existing production signing key was unlocked only at a visible Terminal's
+hidden prompt. Independent verification passed for the existing commissioner
+and exact accepted bootstrap bytes, with matching production trust, storage
+maps and byte-identical secure TF-M payloads. No artifact was rebuilt or
+changed. Through the established Admin-authenticated prepare route, operation
+`76ea6fed-cef4-484c-bf4b-c101593e6561` was prepared at
+`2026-11-11T00:37:17.022Z`; its one-time credential was secured in the existing
+owner-only, locally Git-excluded secret directory and validated before erase.
+The established host confirmed `prepared` and `can_activate: true`.
+
+The unchanged commissioning implementation then performed one exact-probe
+erase, complete verified commissioning HEX installation, protected identity/
+credential installation and verification, commissioner reboot and credential
+re-verification, followed by accepted bootstrap primary-only programming at
+`0x10000` with `--verify --restore-unwritten`. No second full erase occurred.
+Only after final-image verification did the matching rotation activate
+(`2026-11-11T00:38:52.144Z`, credential generation 4); normal reset and a
+post-install activated-status check succeeded. The recovery process exited
+zero. This established recovery resolved the observed access failure without
+claiming a separately proven cause for `DeviceEn bit not set`.
+
+Post-reset validation, not just flashing, established:
+
+- The backend accepted actual-running version `0.1.0+4`, confirmation
+  sequence 1, at `2026-11-11T00:39:09.969Z` (16:39:09 Pacific). No confirmation
+  had existed before erase; no backend sequence reset/reconciliation was
+  performed.
+- The new retained credential matches the active production verifier.
+  Permanent ID `FRB-0005`, deployed state, Customer/Course/location and the
+  old `OTA-0.1alt-r2` deployment
+  `18d1f946-f809-43b0-8a02-58925e630add` were verified unchanged. No new OTA
+  assignment was made.
+- The CPO pressed the physical request button. Real `nrf9151` request
+  `HfLSTqo3onSv638pMxHg`, attributed to FRB-0005 at its existing Hole 1
+  placement, reached production at `2026-11-11T00:39:43.030Z` and was completed
+  at `00:39:50.296Z`. The Cart UI showed the 16:39 completion.
+- The corresponding `complete__HfLSTqo3onSv638pMxHg` command was acknowledged
+  by the device at `2026-11-11T00:40:15.206Z`. The CPO confirmed normal
+  completion indication and return to idle.
+- The production Admin registry detail displayed firmware `0.1.0+4` and
+  `Last confirmed running: Nov 10, 2026, 4:39 PM`.
+
+Redacted recovery status/log and read-only before/after validation evidence
+remain in the current session's files directory. No plaintext credential or
+passphrase was printed. No source or release changes, backend/frontend
+rollout, commit, push or merge were performed for this recovery. Autonomous
+OTA qualification and permanent PV8-free access remain separate work.
+
+At its first 900-second check (`2026-11-11T00:54:02.421Z`), the device was
+offered the then-current old `OTA-0.1alt-r2` (`0.1.0+3`) target, older than
+its running `0.1.0+4`. No artifact request or lifecycle report followed; the
+cause was not investigated. The consumed one-time check required a fresh
+installation for a new attempt.
+
+#### OTA assignment-contract correction — 2026-11-10
+
+The CPO clarified that the Admin page must never lock a device against a new
+assignment. Implemented contract: any approved, compatible release may be
+assigned to any authorized device regardless of running firmware or earlier
+assignment state; confirmation supersedes the prior target atomically,
+records `superseded_by`/`superseded_at` and a `superseded` history event on
+the old deployment, and stores `replaces_deployment_id` on the new one.
+Discovery now re-reads the current target, issues the offer and download grant
+in one transaction, and grants only the latest deployment. Delayed old
+lifecycle or running reports cannot clear or complete the newer target, and
+the last confirmed running version still changes only through authenticated
+sequence-protected device confirmation. Assignment basis v2 hashes the stored
+capability, so a confirmed schedule promotion does not revoke the next target;
+pre-revision assignments retain their legacy basis check. Signing, accepted
+hashes, hardware, lifecycle, publication and release-authorization gates are
+unchanged; the per-release device authorization remains enforced, while the
+bootstrap-only release-name restriction was removed.
+
+Validation: 32 fleet/governance and 29 OTA API backend cases and 9 Admin
+model/source tests pass, including supersession from every lifecycle state,
+failed-commit rollback, stale reviews, latest-target-only offers/grants and
+delayed superseded reports. The production frontend build verified all 107
+Driving Range assets. Both services were staged at zero traffic as
+`*-ota-target-12cf730` (isolated 40-file archive SHA-256
+`12cf730f9551f36e6ec14bcd8d9d07f4ec632e2f5f02acb8087cdffcd4a00721`),
+verified Ready with unchanged runtime/identity fingerprints and serving
+traffic, denied unauthenticated Admin fleet (401) and well-formed device
+confirmation (401), and the staged authenticated fleet read showed FRB-0005
+selectable. Both were then promoted to 100%; `*-ota-r3-c0d0720` remain the
+rollback anchors. Hosting version `ba810bdc550d6501` (release time
+`2026-11-11T00:56:32.950Z`) was byte-verified on both origins (127 files).
+Production Admin showed FRB-0005 selectable for `OTA-0.1alt-r3`. The rollout
+created no assignment or publication.
+
+#### FRB-0005 fresh bootstrap reinstall and CPO assignment — 2026-11-10
+
+To restart the consumed one-time check, the CPO directed a fresh installation.
+After a PV8-held USB power application enumerated exact probe
+`E66550A147969135`, the same established recovery reused the identical
+verified artifacts (no rebuild) and one newly prepared FRB-0005 rotation
+`59033669-297d-41e1-a784-8d2af1f018fd`. It erased once, installed and
+reboot-verified the protected identity/credential, programmed and read-back
+verified `OTA-0.1-r3` (`0.1.0+4`), activated the rotation
+(`2026-11-11T01:06:07.449Z`, credential generation 5) and reset normally;
+the run exited zero at `01:06:08Z` (17:06:08 Pacific). Placement was
+unchanged. The external maintenance task references this operation and its
+owner-only credential file, without `--erase`.
+
+At `2026-11-11T01:06:56.576Z` the CPO assigned `OTA-0.1alt-r3` (`0.1.0+5`)
+through Admin as deployment `810915b0-af7c-4fe6-9267-7e4cc7e96930`
+(`bootstrap_900_seconds`, basis v2), superseding
+`18d1f946-f809-43b0-8a02-58925e630add`, whose `assigned` history and
+`superseded_by` marker are retained. The next autonomous check is expected
+about 900 seconds after the 17:06 boot. At record time no new check, offer,
+download, installation or `0.1.0+5` confirmation had occurred; the recorded
+running version remains `0.1.0+4` (sequence 1). A post-reinstall button
+request was not separately exercised.
 
 #### Verified application rollout and remaining release blockers
 
