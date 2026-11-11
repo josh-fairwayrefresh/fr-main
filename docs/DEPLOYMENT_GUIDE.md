@@ -18,7 +18,7 @@ the original accepted firmware artifacts remain unchanged.
 | Production Admin / receiver | Admin `fairway-admin-ota-r4-53cf494`; receiver `fairway-button-receiver-ota-r4-53cf494`, both Ready, 100% | Promoted `2026-11-11T01:52Z`; isolated source archive `53cf494291071d149cc727ddee1e6e9e68b1e78606f46b6d10fbc5714e32c85c` (source `e2d5db8`). Adds r4 acceptance, publication approval and r4 successor provenance. Runtime identities/configuration unchanged; `*-ota-target-12cf730` retained as rollback. |
 | OTA implementation | First autonomous OTA physically verified: FRB-0005 installed `OTA-0.1alt-r4` (`0.1.0+7`) and confirmed it at `2026-11-11T02:20:47.946Z` | `OTA-0.1alt-r4` and `OTA-1.0-r3` are selectable for FRB-0005; r3/r2 0.1alt are retained but not selectable. `OTA-1.0-r3` still contains the r3 discovery defect. Nightly recurrence is not yet observed. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
-| FRB-0005 commissioning | Running `0.1.0+7` (nightly) after clean USB install of `OTA-0.1-r4` (`0.1.0+6`) at 17:57 Pacific and OTA; credential generation 6 active | Authenticated running confirmation (sequence 2) and Admin registry display verified. A post-OTA button request was not separately exercised; the 16:38 recovery verified request/COMPLETE. PV8 still required for service access. |
+| FRB-0005 commissioning | Running `0.1.0+7` (nightly) after clean USB install of `OTA-0.1-r4` (`0.1.0+6`) at 17:57 Pacific and OTA; credential generation 6 active | Authenticated running confirmation (sequence 2), Admin registry display, and a post-OTA real request with device-acknowledged COMPLETE verified; CPO confirmed request UI and button behavior. PV8 still required for service access. |
 | Production OTA prerequisites | Private GCS controls verified; exact `OTA-0.1alt-r4` stored bytes verified; delivery enabled | Assignment never requires reconciling earlier targets. HQ remains `America/Los_Angeles`. Installation is shown only from authenticated device evidence. |
 | Production data | Publication created `OTA-0.1alt-r4`; authorized recoveries activated FRB-0005 credential generations 4–6; CPO assignments superseded earlier targets with retained history; the successful deployment cleared its assignment | Permanent identity and placement unchanged. No other devices were changed. Preflight reports PITR/delete protection disabled; code rollback is not data recovery. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
@@ -326,8 +326,14 @@ release, next window 12:30 AM Pacific, and the registry Firmware generation
 deployments retain `superseded_by` history. The external maintenance task
 references the active rotation and the r4 bootstrap without `--erase`.
 
-Not yet observed: a post-OTA button request/COMPLETE, a subsequent nightly
-check, and PV8-free service access. `OTA-1.0-r3` was not rebuilt.
+On `0.1.0+7`, the CPO pressed the physical button and confirmed request UI
+and button behavior. Real `nrf9151` request `lW9tI1TW3W1rtA7ezW3Y`
+(FRB-0005, Hole 1) was received at `2026-11-11T02:41:41.118Z` and completed
+at `02:42:25.320Z`; its `complete__lW9tI1TW3W1rtA7ezW3Y` command was
+acknowledged by the device at `02:42:54.657Z`.
+
+Not yet observed: a subsequent nightly check and PV8-free service access.
+`OTA-1.0-r3` was not rebuilt.
 
 #### OTA assignment-contract correction — 2026-11-10
 
