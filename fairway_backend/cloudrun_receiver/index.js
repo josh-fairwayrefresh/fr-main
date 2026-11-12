@@ -142,7 +142,7 @@ function availability(value, stale = false, unavailableAtAcquisition = false) {
   return 'available';
 }
 
-async function verifyFirebaseIdToken(token) {
+async function verifyFirebaseIdToken(token, { checkRevoked = false } = {}) {
   const { getApps, initializeApp } = require('firebase-admin/app');
   const { getAuth } = require('firebase-admin/auth');
 
@@ -152,9 +152,19 @@ async function verifyFirebaseIdToken(token) {
     });
   }
 
-  // checkRevoked also rejects disabled accounts, so Admin deactivation and
-  // password resets take effect on the next API request rather than at token expiry.
-  return getAuth().verifyIdToken(token, true);
+  return getAuth().verifyIdToken(token, checkRevoked);
+}
+
+/*
+ * The Admin service checks revocation (which also rejects disabled accounts), so
+ * deactivation and password resets take effect on its next request; its runtime
+ * identity holds Firebase Auth access. The receiver keeps signature/expiry
+ * verification: its identity has no Auth access, so a deactivated user's
+ * already-issued token remains usable there until expiry (at most one hour).
+ */
+function operatorTokenVerifier(serviceMode) {
+  const checkRevoked = serviceMode === 'admin';
+  return (token) => verifyFirebaseIdToken(token, { checkRevoked });
 }
 
 function toDate(value) {
@@ -2275,6 +2285,7 @@ const runtimeEnvironment = resolveRuntimeEnvironment();
 const handlers = createFairwayHandlers(new Firestore({
   projectId: runtimeEnvironment.projectId,
 }), {
+  verifyOperatorToken: operatorTokenVerifier(runtimeEnvironment.serviceMode),
   allowedAdminOrigins: runtimeEnvironment.allowedAdminOrigins,
   artifactStore: createGcsArtifactStore(process.env.FAIRWAY_OTA_BUCKET),
   artifactDeliveryEnabled: process.env.FAIRWAY_OTA_DELIVERY_ENABLED === 'true',
@@ -2286,4 +2297,6 @@ if (runtimeEnvironment.serviceMode === 'admin') {
   functions.http('fairwayButtonReceiver', handlers.fairwayButtonReceiver);
 }
 
-module.exports = { createFairwayHandlers, resolveProtectedSystemAdminUids, verifyFirebaseIdToken };
+module.exports = {
+  createFairwayHandlers, resolveProtectedSystemAdminUids, verifyFirebaseIdToken, operatorTokenVerifier,
+};

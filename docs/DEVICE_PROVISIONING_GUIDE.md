@@ -174,8 +174,8 @@ Customer/Course names are synchronized display copies from authoritative records
 ### OTA initialization evidence (local Prototype 4.0 extension)
 
 OTA-capable firmware must first be installed physically. OTA 0.1 is the
-USB-only bootstrap already commissioned on FRB-0005; it is never an assignable
-OTA image. An OTA-capability label alone is not proof of physical initialization
+USB-only bootstrap (commissioned on FRB-0005; FRB-0003 is being prepared); it
+is never an assignable OTA image. An OTA-capability label alone is not proof of physical initialization
 or bootloader trust. Before authorizing updates, engineering commissioning
 must record verified, non-secret evidence on the existing Device:
 
@@ -192,8 +192,12 @@ ota_capability: {
 This is not a credential, device inventory or firmware-version substitute.
 Only a separately authorized registry commissioning operation may establish
 it; the OTA dashboard cannot edit it. Missing/mismatched evidence fails closed.
-The release-specific publication catalog separately limits exact authorized
-device IDs. An authenticated successful confirmation of a matching nightly
+Release approval is release-level, not device-specific: once a Device has
+this verified capability, any approved compatible release may be assigned to
+it through Admin without backend changes, and the Admin assignment is the only
+per-device decision (CPO decision 2026-11-12; see the
+[Deployment Guide record](./DEPLOYMENT_GUIDE.md#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12)).
+An authenticated successful confirmation of a matching nightly
 release is recorded in OTA status and permits subsequent nightly scheduling
 without mutating the original physical-initialization record. Reported version
 is device-reported evidence, not independent boot attestation.

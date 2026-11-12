@@ -40,7 +40,7 @@ function createFleetAuthorization(db, {
     }
   }
 
-  function capabilityError(device, releaseId) {
+  function capabilityError(device) {
     if (!isDeviceCommunicationAllowed(device.state)) return 'Device lifecycle does not permit OTA.';
     const capability = device.ota_capability;
     if (capability?.verified !== true || !capability.evidence_record
@@ -48,9 +48,6 @@ function createFleetAuthorization(db, {
         || capability.signing_fingerprint !== fingerprint
         || !['one_time', 'nightly'].includes(capability.schedule_mode)) {
       return 'Verified physical OTA initialization and compatible trust anchor are required.';
-    }
-    if (releaseId && !approvals[releaseId]?.device_ids?.includes(device.device_id)) {
-      return 'This device is outside the release commissioning authorization.';
     }
     return null;
   }
@@ -70,7 +67,7 @@ function createFleetAuthorization(db, {
     throw new OtaError('release_superseded', `Choose ${replacementId}; the older release is retained for existing assignments and history.`, 409);
   }
 
-  async function resolve(deviceId, read, releaseId = null) {
+  async function resolve(deviceId, read) {
     const deviceSnap = await read(devices.doc(deviceId));
     if (!deviceSnap.exists) throw new OtaError('unknown_device', `Unknown device ${deviceId}.`, 404);
     const statusSnap = await read(db.collection('ota_device_status').doc(deviceId));
@@ -79,7 +76,7 @@ function createFleetAuthorization(db, {
     if (device.ota_capability && status.confirmed_schedule_mode === 'nightly') {
       device.ota_capability = { ...device.ota_capability, schedule_mode: 'nightly' };
     }
-    const reason = capabilityError(device, releaseId);
+    const reason = capabilityError(device);
     if (reason) throw new OtaError('device_not_eligible', `${deviceId}: ${reason}`, 409);
     let zone = headquartersTimeZone;
     let customerName = null;
@@ -201,7 +198,7 @@ function createFleetAuthorization(db, {
       await requireSelectableRelease(body.release_id, release, (ref) => tx.get(ref));
       const selected = [];
       for (const id of [...body.device_ids].sort()) {
-        const device = await resolve(id, (ref) => tx.get(ref), body.release_id);
+        const device = await resolve(id, (ref) => tx.get(ref));
         selected.push(device);
       }
       const id = crypto.randomUUID();
@@ -237,7 +234,7 @@ function createFleetAuthorization(db, {
       if (release.sha256 !== review.release_sha256) throw new OtaError('review_changed', 'Release changed.', 409);
       const verified = [];
       for (const previous of review.devices) {
-        const device = await resolve(previous.device_id, (ref) => tx.get(ref), review.release_id);
+        const device = await resolve(previous.device_id, (ref) => tx.get(ref));
         if (device.current_assignment_id !== previous.current_assignment_id
             || device.basis_hash !== previous.basis_hash
             || device.next_window !== previous.next_window) {

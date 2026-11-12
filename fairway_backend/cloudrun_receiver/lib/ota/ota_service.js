@@ -259,7 +259,6 @@ function createOtaService(db, {
       return {
         ...doc.data(), release_id: doc.id, assignable,
         approval_status: assignable ? 'Approved and published' : 'Release unavailable or publication prerequisites incomplete',
-        authorized_device_ids: publicationApprovals[doc.id]?.device_ids || [],
       };
     }));
   }
@@ -405,7 +404,7 @@ function createOtaService(db, {
       fleet.requireRelease(assignment.release_id, release);
       const deviceError = fleet.capabilityError({
         ...device, device_id: deviceId, ota_capability: current.capability,
-      }, assignment.release_id);
+      });
       if (deviceError) throw new OtaError('device_not_eligible', deviceError, 409);
       const notBeforeAt = asDate(assignment.not_before);
       if (!notBeforeAt) {
@@ -631,7 +630,7 @@ function createOtaService(db, {
         || !deploymentSnap.exists || TERMINAL_STATES.has(deploymentSnap.data().state)) {
       throw new OtaError('download_not_authorized', 'Assignment is no longer eligible for download.', 403);
     }
-    const eligibility = await fleet.resolve(grant.device_id, (ref) => ref.get(), grant.release_id);
+    const eligibility = await fleet.resolve(grant.device_id, (ref) => ref.get());
     if (!fleet.assignmentBasisMatches(assignmentSnap.data(), eligibility)) {
       throw new OtaError('assignment_changed', 'Device eligibility changed after authorization.', 409);
     }

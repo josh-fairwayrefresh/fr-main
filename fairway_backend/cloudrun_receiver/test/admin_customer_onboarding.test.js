@@ -2,7 +2,7 @@
 
 const assert = require('assert');
 const { FakeFirestore } = require('./fake_firestore');
-const { createFairwayHandlers, verifyFirebaseIdToken } = require('../index');
+const { createFairwayHandlers, operatorTokenVerifier } = require('../index');
 
 let passed = 0;
 let failed = 0;
@@ -183,7 +183,7 @@ async function captureConsole(fn) {
   }
 }
 
-test('revocation-checked Firebase verification is the single operator token authority', async () => {
+test('only the Admin service checks token revocation; the receiver keeps signature/expiry verification', async () => {
   const authPath = require.resolve('firebase-admin/auth');
   const appPath = require.resolve('firebase-admin/app');
   const saved = { auth: require.cache[authPath], app: require.cache[appPath] };
@@ -196,8 +196,9 @@ test('revocation-checked Firebase verification is the single operator token auth
       return { uid: token };
     } }) } };
   try {
-    assert.deepStrictEqual(await verifyFirebaseIdToken('operator-uid'), { uid: 'operator-uid' });
-    assert.deepStrictEqual(verifications, [true]);
+    assert.deepStrictEqual(await operatorTokenVerifier('admin')('operator-uid'), { uid: 'operator-uid' });
+    assert.deepStrictEqual(await operatorTokenVerifier('receiver')('operator-uid'), { uid: 'operator-uid' });
+    assert.deepStrictEqual(verifications, [true, false]);
   } finally {
     if (saved.auth) require.cache[authPath] = saved.auth; else delete require.cache[authPath];
     if (saved.app) require.cache[appPath] = saved.app; else delete require.cache[appPath];

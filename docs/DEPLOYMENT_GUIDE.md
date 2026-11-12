@@ -15,7 +15,7 @@ the original accepted firmware artifacts remain unchanged.
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `df13d7aedb96cc32` | Released `2026-11-12T18:13:56.180Z` (Customer Onboarding Increment 2, `main` `ada4001`). All 127 published files verified byte-for-byte on both origins; only JavaScript/CSS bundles and `index.html` changed, and all 107 accepted Driving Range assets are unchanged. Rollback target `ba810bdc550d6501`. See the [release record](#customer-onboarding--administration-increment-2-production-release-2026-11-12). |
-| Production Admin / receiver | Admin `fairway-admin-onboard-ada4001`; receiver `fairway-button-receiver-dedup-68ce31f`, both Ready, 100% | Admin promoted 2026-11-12 (source `main` `ada4001`; Increment 2 user lifecycle and revocation-checked tokens); rollback `fairway-admin-ota-10r4-2e0b5a9`. Receiver unchanged since its 2026-11-11 promotion (source `68ce31f`; rollback `fairway-button-receiver-ota-10r4-2e0b5a9`). Staged receiver `fairway-button-receiver-onboard-ada4001` is at 0% and **must not be promoted** until its runtime identity has Firebase Auth read access (see the [release record](#customer-onboarding--administration-increment-2-production-release-2026-11-12)). Runtime identities/configuration unchanged. |
+| Production Admin / receiver | Admin `fairway-admin-onboard-ada4001`; receiver `fairway-button-receiver-dedup-68ce31f`, both Ready, 100% | Admin promoted 2026-11-12 (source `main` `ada4001`; Increment 2 user lifecycle and revocation-checked tokens); rollback `fairway-admin-ota-10r4-2e0b5a9`. Receiver unchanged since its 2026-11-11 promotion (source `68ce31f`; rollback `fairway-button-receiver-ota-10r4-2e0b5a9`). Staged receiver `fairway-button-receiver-onboard-ada4001` is at 0% and **must never be promoted**; a [source correction](#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12) keeps receiver token verification unchanged so the receiver needs no Firebase Auth access. Runtime identities/configuration unchanged. |
 | OTA implementation | **Prototype 4.0 — CPO field-validated stable firmware baseline** (2026-11-11): FRB-0005 autonomously installed `OTA-1.0-r4` (`1.0.0+4`) in its 12:30 AM Pacific window and confirmed it at 12:32:45 AM | See the [Prototype 4.0 Alignment Register entry](#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11). Selectable releases: `OTA-1.0-r4`, `OTA-0.1alt-r4` (FRB-0005 only). Superseded r2/r3 releases retained, not selectable; r3 images carry the discovery defect. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | Running `1.0.0+4` (nightly) via autonomous OTA from `0.1.0+7`; credential generation 6 active | Clean USB install of `OTA-0.1-r4` (2026-11-10 17:57 Pacific), OTA to `0.1.0+7` with post-OTA request/COMPLETE, then nightly OTA to `1.0.0+4` (2026-11-11). Post-`1.0.0+4` request/COMPLETE not separately exercised. PV8 still required for USB service access. |
@@ -1171,8 +1171,10 @@ path. No separate mobile, release-management or firmware system is introduced.
 - `POST /api/v1/admin/ota/assignment-reviews` takes only `release_id` and
   1–50 unique explicit `device_ids`, never a group selector or arbitrary date.
   Server-side validation resolves each canonical device, verifies physical OTA
-  capability/trust, release-specific commissioning authorization, lifecycle,
-  Course/timezone and absence of an active assignment. The five-minute,
+  capability/trust, lifecycle, Course/timezone and absence of an active
+  assignment. Release approval carries no device list; the explicit Admin
+  assignment is the per-device decision (CPO decision 2026-11-12,
+  [record](#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12)). The five-minute,
   Admin-bound review records exact devices, local windows, UTC thresholds and
   eligibility basis. `POST /api/v1/admin/ota/assignment-reviews/{id}/confirm`
   revalidates everything transactionally before creating all deployments,
@@ -1578,6 +1580,93 @@ current live state. Current procedures begin under “Purpose and Operational
 Procedures” and the
 operational sections linked above. Preserve this history when updating the
 runbook.
+
+## Fleet-wide OTA release eligibility and FRB-0003 commissioning readiness (2026-11-12)
+
+**CPO architecture decision; source implemented and tested on local branch
+`feature/frb0003-ota-migration`, not committed, deployed or applied to any
+device.** An approved OTA release is reusable across every compatible,
+OTA-capable Device. The explicit Admin assignment is the sole per-device
+decision; publication never selects, authorizes or installs anything.
+
+- **One owner per responsibility.** Release approval
+  (`publication_policy.js`) is release-level: exact accepted hash, evidence
+  records, source/build identity and CPO publication authorization; it no
+  longer carries device IDs. Device capability is the existing registry
+  `ota_capability` record (verified, hardware ID, production signing
+  fingerprint, schedule mode, physical evidence). Which Device receives which
+  release, and when, is the Admin assignment. The read model no longer
+  returns `authorized_device_ids`, and Admin no longer applies a client-side
+  device filter. Historical approval records that say "FRB-0005 only" remain
+  unchanged as evidence; this decision supersedes their device scope.
+- **Unchanged enforcement.** The receiver still requires device
+  authentication, a live assignment whose eligibility basis is unchanged, an
+  approved published release with the accepted hash, matching hardware ID and
+  signing fingerprint, and a verified capability. A download grant is issued
+  only by a check against the current assignment. Tests cover multiple-device
+  eligibility, publication alone producing no offer, unassigned devices,
+  incompatible hardware, an untrusted fingerprint, unverified/missing
+  capability, retired Devices, superseded releases and a trust change after
+  assignment invalidating an issued grant. FRB-0005's state and eligibility
+  are unchanged.
+- **Receiver authentication separated.** Token revocation checking from
+  Increment 2 now applies only when `FAIRWAY_SERVICE_MODE` is `admin`, so the
+  receiver can be redeployed without new IAM permissions (see the
+  [`user_access` contract](#wp5-production-fleet-administration)). The staged
+  `fairway-button-receiver-onboard-ada4001` revision must still never be
+  promoted.
+- **Validation (local):** full backend suite (including 35 OTA fleet and
+  14 onboarding tests), 100 frontend unit tests and the production build pass.
+
+### Production rollout required (separately controlled, not performed)
+
+1. Commit, review and merge the branch; deploy from the merged `main`.
+2. Publish Hosting first: the new Admin no longer reads
+   `authorized_device_ids`, while the current Admin would fail on the new
+   backend's release list. Then stage Admin and receiver at 0%, smoke-test
+   (including an authenticated operator read on the tagged receiver), and
+   promote both. Versus production, the receiver changes only Increment 2
+   source (Admin-only routes; receiver token verification unchanged) and the
+   OTA eligibility files, so Monarch request, COMPLETE and operator flows are
+   unaffected; rollback targets are the current serving revisions.
+3. After FRB-0003's physical commissioning, record its `ota_capability`
+   (production registry mutation) through a conditional, field-only update
+   gated on its authenticated post-commissioning `0.1.0+6` confirmation and
+   unchanged placement.
+
+### FRB-0003 OTA 0.1 commissioning (2026-11-12)
+
+Prepared, not executed. FRB-0003 is deployed at `CUST-0001/COURSE-0001`
+(Tony Lema, Hole 12) with active credential generation 1 from the
+2026-10-17 recovery; it has no OTA capability, status or assignment. It runs a
+device-specific Pilot 1.1 image whose MCUboot trusts the NCS debug key, so the
+CPO authorized full-chip erase, bootloader replacement and credential
+rotation. The procedure is the established FRB-0005 clean installation:
+`provision_device_identity.commission` with `--erase`, the accepted
+commissioner (`usb-commissioning-20261110-r2`, signed `8e01f246…a475`) and
+the accepted `OTA-0.1-r4` bootstrap (`0.1.0+6`, signed `00a33f9f…17e1`),
+both production-signed (`sha256:be1c1257…88eb`) for
+`circuitdojo_feather_nrf9151@1/nrf9151/ns`, the same Prototype 3.3 board
+as FRB-0005. Engineering prepares exactly one rotation through the Admin
+credential lifecycle; its one-time credential goes only to an owner-only file
+in `.local-secrets/` and the device's TF-M Protected Storage, the rotation is
+activated only after verified installation (retiring generation 1), and the
+local file is removed after physical end-to-end validation. Identity and
+placement are preserved; nothing is allocated.
+
+**Timing requirement (source-confirmed).** OTA 0.1 makes exactly one update
+check, 900 seconds after its first normal boot (the final commissioning
+reset). The deadline is persisted, so a reboot does not restart it. The check
+is marked complete before discovery and is never retried, even when nothing is
+assigned or the network fails. Therefore, before flashing, the rollout above
+must be live. Within those 15 minutes, FRB-0003's authenticated `0.1.0+6`
+confirmation must arrive, its capability must be recorded, and the CPO must
+assign `OTA-0.1alt-r4` in Admin, with FRB-0003 powered and on LTE at the
+check. A missed check leaves FRB-0003 on OTA 0.1 until another clean
+installation. After it confirms `0.1.0+7` it is nightly, and the CPO can
+assign `OTA-1.0-r4` for the next local 00:30 window. Moving to field power uses
+the established Voltaic procedure; later USB service needs the PV8-assisted
+procedure.
 
 ## Customer Onboarding & Administration Increment 2 production release (2026-11-12)
 
@@ -7392,14 +7481,16 @@ owner:
   system-administrator UID, and cannot deactivate the last active Admin.
   Passwords are never stored, logged or returned; Auth failures are mapped to
   stable error codes and logged by code only.
-- Backend services running this source verify ID tokens with revocation
-  checking (`verifyIdToken(token, true)`), so disabled or revoked sessions are
-  rejected on their next request; this adds one Firebase Auth lookup per
-  authenticated request and requires the service's runtime identity to have
-  Firebase Auth read access. In production only the Admin service runs it;
-  the receiver (operator dashboard, request Confirm/Complete/Cancel, service
-  Suspend/Resume, push subscriptions) is not yet redeployed, so there an
-  already-issued token remains valid until it expires (at most one hour).
+- The Admin service verifies ID tokens with revocation checking
+  (`verifyIdToken(token, true)`), so disabled or revoked sessions are rejected
+  on its next request (one Firebase Auth lookup per request; its runtime
+  identity holds Firebase Auth access). The receiver (operator dashboard,
+  request Confirm/Complete/Cancel, service Suspend/Resume, push subscriptions)
+  deliberately keeps signature/expiry verification, selected by
+  `FAIRWAY_SERVICE_MODE`, so it needs no Firebase Auth permission; there an
+  already-issued token remains valid until it expires (at most one hour). The
+  CPO directed on 2026-11-12 that no separate infrastructure change be made
+  solely for receiver revocation.
   The Cart request list reads Firestore directly
   under Firestore Rules, which cannot check revocation: there a deactivated
   user's already-issued ID token keeps working until it expires (at most one

@@ -113,11 +113,7 @@ export default function OtaManagement({ user, apiBaseUrl }) {
 
   const available = releases.filter((release) => release.assignable && release.release_id !== 'OTA-0.1');
   const release = available.find((item) => item.release_id === releaseId);
-  const tree = buildDeviceTree({
-    ...fleet,
-    devices: fleet.devices.map((device) => release && !release.authorized_device_ids.includes(device.device_id)
-      ? { ...device, eligible: false, reason: 'Outside this release commissioning authorization.' } : device),
-  });
+  const tree = buildDeviceTree(fleet);
   return <section className="a-view" aria-labelledby="ota-title">
     <div className="a-heading">
       <div><p>FLEET MANAGEMENT</p><h2 id="ota-title">Firmware Updates</h2></div>
@@ -144,8 +140,8 @@ export default function OtaManagement({ user, apiBaseUrl }) {
         {loaded && available.length === 0 && <p>No published firmware currently satisfies all release-approval requirements.</p>}
         <p>Routine updates become eligible at the next 12:30 AM in each device&apos;s local time zone.
           Installation occurs only when the device subsequently checks autonomously.</p>
-        <p>FRB-0005&apos;s initial commissioning check remains a separate, one-time 900-second bootstrap.
-          Its review will show that exception, not a nightly installation promise.</p>
+        <p>A newly commissioned OTA 0.1 device checks only once, 900 seconds after its first normal boot, and never again.
+          Assign its first update before that check; its review shows this one-time exception, not a nightly installation promise.</p>
         <p>You may assign a new approved target regardless of current firmware or earlier assignments.
           Confirming supersedes the prior target and preserves its history; it does not interrupt an image already installing.</p>
         <p>Inventory and Maintenance use headquarters time: America/Los_Angeles (Pacific, including daylight saving time).</p>

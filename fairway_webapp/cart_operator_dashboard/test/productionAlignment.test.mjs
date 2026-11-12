@@ -14,7 +14,7 @@ test('production Hosting retains the site, SPA routing and versioned-asset cache
   ]);
 });
 
-test('OTA publication catalog contains only reviewed, exact-hash, FRB-0005 approvals and never USB-only images', async () => {
+test('OTA publication catalog contains only reviewed, exact-hash, release-level approvals and never USB-only images', async () => {
   const require = createRequire(import.meta.url);
   const otaDir = '../../../fairway_backend/cloudrun_receiver/lib/ota/';
   const { PUBLICATION_APPROVALS, publicationEligible } = require(`${otaDir}publication_policy.js`);
@@ -23,7 +23,7 @@ test('OTA publication catalog contains only reviewed, exact-hash, FRB-0005 appro
   assert.ok(approved.length > 0);
   for (const [releaseId, approval] of approved) {
     assert.equal(approval.sha256, ACCEPTED_RELEASES[releaseId], releaseId);
-    assert.deepEqual(approval.device_ids, ['FRB-0005'], releaseId);
+    assert.equal(Object.hasOwn(approval, 'device_ids'), false, releaseId);
     assert.match(approval.release_record_commit, /^[a-f0-9]{40}$/, releaseId);
     assert.equal(publicationEligible(releaseId, approval.sha256), true, releaseId);
   }
