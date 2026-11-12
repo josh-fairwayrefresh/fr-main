@@ -76,6 +76,11 @@ const OPERATOR_AUTH_HEADER = 'authorization';
 const COMPLETE_COMMAND_TYPE = 'complete';
 const MAX_ADMIN_DIRECTORY_ENTRIES = 10000;
 const MAX_ADMIN_DIRECTORY_RESPONSE_BYTES = 8 * 1024 * 1024;
+const MANAGED_USER_EMAIL_DOMAIN = 'fairwayrefresh.com';
+const MANAGED_USERNAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const MAX_MANAGED_USERNAME_LENGTH = 64;
+const MIN_MANAGED_PASSWORD_LENGTH = 12;
+const MAX_MANAGED_PASSWORD_LENGTH = 128;
 const PROTECTED_SYSTEM_ADMIN_UIDS = Object.freeze({
   'fairway-refresh-sandbox-260930': Object.freeze([
     'zY75qapxaIYe0Z35Ss8lOQwdUq72',
@@ -147,7 +152,9 @@ async function verifyFirebaseIdToken(token) {
     });
   }
 
-  return getAuth().verifyIdToken(token);
+  // checkRevoked also rejects disabled accounts, so Admin deactivation and
+  // password resets take effect on the next API request rather than at token expiry.
+  return getAuth().verifyIdToken(token, true);
 }
 
 function toDate(value) {
@@ -617,64 +624,57 @@ function createFairwayHandlers(db, {
     }
   }
 
-  async function updateAdminUserAccess(req, res, actingAdmin, uid) {
-    const body = req.body;
-    const allowedFields = ['admin', 'customer_id', 'course_ids'];
-    if (!body || typeof body !== 'object' || Array.isArray(body) ||
-        Object.keys(body).length !== allowedFields.length ||
-        Object.keys(body).some((field) => !allowedFields.includes(field)) ||
-        typeof body.admin !== 'boolean' ||
-        !Array.isArray(body.course_ids) ||
-        body.course_ids.some((courseId) => typeof courseId !== 'string' || !courseId) ||
-        new Set(body.course_ids).size !== body.course_ids.length) {
-      return res.status(400).json({ error: 'invalid_authorization' });
-    }
+  function isAuthorizationRequest(body) {
+    return typeof body.admin === 'boolean' &&
+      Array.isArray(body.course_ids) &&
+      body.course_ids.every((courseId) => typeof courseId === 'string' && courseId) &&
+      new Set(body.course_ids).size === body.course_ids.length;
+  }
 
-    let authUser;
-    try {
-      authUser = await authClient().getUser(uid);
-    } catch (error) {
-      if (error.code === 'auth/user-not-found') {
-        return res.status(404).json({ error: 'user_not_found' });
-      }
-      throw error;
-    }
-    const courseIds = body.admin ? [] : body.course_ids;
-    let customerId = null;
-    let canonicalCourses = [];
-    if (!body.admin) {
-      if (typeof body.customer_id !== 'string' || !body.customer_id) {
-        return res.status(400).json({ error: 'customer_required' });
-      }
-      customerId = body.customer_id;
-      canonicalCourses = await listCustomerCourses(db, customerId);
-      if (!canonicalCourses) return res.status(400).json({ error: 'customer_not_found' });
-      if (courseIds.some((courseId) => !canonicalCourses.some((course) => course.course_id === courseId))) {
-        return res.status(400).json({ error: 'course_not_in_customer' });
-      }
-    } else if (body.customer_id !== null || body.course_ids.length !== 0) {
-      return res.status(400).json({ error: 'admin_scope_must_be_global' });
-    }
+  function hasExactFields(body, fields) {
+    return Boolean(body) && typeof body === 'object' && !Array.isArray(body) &&
+      Object.keys(body).length === fields.length &&
+      Object.keys(body).every((field) => fields.includes(field));
+  }
 
-    if (!body.admin && protectedSystemAdminUids.includes(uid)) {
-      return res.status(403).json({ error: 'protected_system_admin' });
+  // Shared by access updates and user creation so both enforce one entitlement contract.
+  async function resolveRequestedAuthorization(body) {
+    if (body.admin) {
+      if (body.customer_id !== null || body.course_ids.length !== 0) {
+        return { error: 'admin_scope_must_be_global' };
+      }
+      return { admin: true, customerId: null, courseIds: [], canonicalCourses: [] };
     }
+    if (typeof body.customer_id !== 'string' || !body.customer_id) {
+      return { error: 'customer_required' };
+    }
+    const canonicalCourses = await listCustomerCourses(db, body.customer_id);
+    if (!canonicalCourses) return { error: 'customer_not_found' };
+    if (body.course_ids.some((courseId) => !canonicalCourses.some((course) => course.course_id === courseId))) {
+      return { error: 'course_not_in_customer' };
+    }
+    return {
+      admin: false,
+      customerId: body.customer_id,
+      courseIds: body.course_ids,
+      canonicalCourses,
+    };
+  }
 
-    const legacyCourses = body.admin
+  function accessRecord(authorization, actingUid) {
+    const legacyCourses = authorization.admin
       ? []
-      : courseIds.length
-        ? canonicalCourses.filter((course) => courseIds.includes(course.course_id))
-        : canonicalCourses;
-    const accessRef = db.collection('user_access').doc(uid);
-    const accessCollection = db.collection('user_access');
-    const record = {
+      : authorization.courseIds.length
+        ? authorization.canonicalCourses.filter((course) => authorization.courseIds.includes(course.course_id))
+        : authorization.canonicalCourses;
+    return {
       schema_version: AUTHORIZATION_SCHEMA_VERSION,
-      admin: body.admin,
-      customer_id: customerId,
-      course_ids: courseIds,
+      admin: authorization.admin,
+      customer_id: authorization.customerId,
+      course_ids: authorization.courseIds,
       updated_at: FieldValue.serverTimestamp(),
-      updated_by: actingAdmin.uid,
-      user_type: body.admin ? 'fairway_staff' : 'customer_staff',
+      updated_by: actingUid,
+      user_type: authorization.admin ? 'fairway_staff' : 'customer_staff',
       enabled: true,
       courses: legacyCourses.map((course) => ({
         customer_id: course.customer_id,
@@ -682,6 +682,69 @@ function createFairwayHandlers(db, {
         course_name: course.course_name,
       })),
     };
+  }
+
+  async function listActiveAuthUids() {
+    const active = new Set();
+    let token;
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      const page = await authClient().listUsers(1000, token);
+      page.users.filter((user) => !user.disabled).forEach((user) => active.add(user.uid));
+      token = page.pageToken;
+    } while (token);
+    return active;
+  }
+
+  async function getAuthUserOrNull(uid) {
+    try {
+      return await authClient().getUser(uid);
+    } catch (error) {
+      if (error.code === 'auth/user-not-found') return null;
+      throw error;
+    }
+  }
+
+  function managedPasswordError(password) {
+    if (typeof password !== 'string') return 'invalid_password';
+    if (password.length < MIN_MANAGED_PASSWORD_LENGTH || password.length > MAX_MANAGED_PASSWORD_LENGTH) {
+      return 'password_length';
+    }
+    return null;
+  }
+
+  // Firebase Auth errors are mapped to stable codes; request bodies (and so
+  // passwords) are never logged or echoed.
+  function sendAuthServiceError(res, error, operation) {
+    const code = typeof error?.code === 'string' ? error.code : 'unclassified';
+    if (code === 'auth/user-not-found') return res.status(404).json({ error: 'user_not_found' });
+    if (code === 'auth/email-already-exists') return res.status(409).json({ error: 'user_already_exists' });
+    if (code === 'auth/invalid-email') return res.status(400).json({ error: 'invalid_username' });
+    if (code === 'auth/invalid-password' || code === 'auth/password-does-not-meet-requirements') {
+      return res.status(400).json({ error: 'password_rejected' });
+    }
+    console.error(`Admin user ${operation} failed; ${code}`);
+    return res.status(502).json({ error: 'authentication_service_unavailable' });
+  }
+
+  async function updateAdminUserAccess(req, res, actingAdmin, uid) {
+    const body = req.body;
+    if (!hasExactFields(body, ['admin', 'customer_id', 'course_ids']) || !isAuthorizationRequest(body)) {
+      return res.status(400).json({ error: 'invalid_authorization' });
+    }
+
+    const authUser = await getAuthUserOrNull(uid);
+    if (!authUser) return res.status(404).json({ error: 'user_not_found' });
+    const authorization = await resolveRequestedAuthorization(body);
+    if (authorization.error) return res.status(400).json({ error: authorization.error });
+
+    if (!body.admin && protectedSystemAdminUids.includes(uid)) {
+      return res.status(403).json({ error: 'protected_system_admin' });
+    }
+
+    const accessRef = db.collection('user_access').doc(uid);
+    const accessCollection = db.collection('user_access');
+    const record = accessRecord(authorization, actingAdmin.uid);
 
     let activeAuthUsers = null;
     await db.runTransaction(async (transaction) => {
@@ -689,14 +752,7 @@ function createFairwayHandlers(db, {
       const current = records.docs.find((doc) => doc.id === uid);
       const currentAccess = current ? normalizeAccessRecord(current.data()) : null;
       if (currentAccess?.admin === true && body.admin === false && !activeAuthUsers) {
-        activeAuthUsers = new Set();
-        let token;
-        do {
-          // eslint-disable-next-line no-await-in-loop
-          const page = await authClient().listUsers(1000, token);
-          page.users.filter((user) => !user.disabled).forEach((user) => activeAuthUsers.add(user.uid));
-          token = page.pageToken;
-        } while (token);
+        activeAuthUsers = await listActiveAuthUids();
       }
       const adminCount = records.docs.filter((doc) => (
         normalizeAccessRecord(doc.data())?.admin &&
@@ -712,6 +768,139 @@ function createFairwayHandlers(db, {
 
     const saved = await getUserAccess(db, authUser.uid);
     return res.status(200).json({ uid, authorization: saved });
+  }
+
+  /*
+   * Creates a Firebase Auth account plus its user_access record. The account
+   * is created disabled and only enabled after its access record exists, so a
+   * partial failure never leaves an enabled account with undefined access.
+   */
+  async function createAdminUser(req, res, actingAdmin) {
+    const body = req.body;
+    if (!hasExactFields(body, ['username', 'password', 'admin', 'customer_id', 'course_ids']) ||
+        !isAuthorizationRequest(body)) {
+      return res.status(400).json({ error: 'invalid_user_request' });
+    }
+    if (typeof body.username !== 'string' ||
+        body.username.length > MAX_MANAGED_USERNAME_LENGTH ||
+        !MANAGED_USERNAME_PATTERN.test(body.username)) {
+      return res.status(400).json({ error: 'invalid_username' });
+    }
+    const passwordError = managedPasswordError(body.password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
+    const authorization = await resolveRequestedAuthorization(body);
+    if (authorization.error) return res.status(400).json({ error: authorization.error });
+
+    const email = `${body.username}@${MANAGED_USER_EMAIL_DOMAIN}`;
+    let created;
+    try {
+      created = await authClient().createUser({ email, password: body.password, disabled: true });
+    } catch (error) {
+      return sendAuthServiceError(res, error, 'creation');
+    }
+
+    try {
+      await db.collection('user_access').doc(created.uid).set(accessRecord(authorization, actingAdmin.uid));
+    } catch (accessError) {
+      console.error(`Admin user creation access write failed; ${accessError.code || 'unclassified'}`);
+      try {
+        await authClient().deleteUser(created.uid);
+      } catch (cleanupError) {
+        console.error(`Admin user creation compensation failed; ${cleanupError.code || 'unclassified'}`);
+        return res.status(500).json({
+          error: 'user_creation_incomplete',
+          uid: created.uid,
+          email,
+          disabled: true,
+        });
+      }
+      return res.status(500).json({ error: 'user_creation_failed' });
+    }
+
+    try {
+      await authClient().updateUser(created.uid, { disabled: false });
+    } catch (error) {
+      console.error(`Admin user creation activation failed; ${error.code || 'unclassified'}`);
+      return res.status(500).json({
+        error: 'user_activation_incomplete',
+        uid: created.uid,
+        email,
+        disabled: true,
+      });
+    }
+
+    return res.status(201).json({
+      uid: created.uid,
+      email,
+      disabled: false,
+      authorization: await getUserAccess(db, created.uid),
+    });
+  }
+
+  async function resetAdminUserPassword(req, res, actingAdmin, uid) {
+    if (!hasExactFields(req.body, ['password'])) {
+      return res.status(400).json({ error: 'invalid_password_request' });
+    }
+    const passwordError = managedPasswordError(req.body.password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
+    if (uid === actingAdmin.uid) return res.status(409).json({ error: 'cannot_modify_own_account' });
+    if (protectedSystemAdminUids.includes(uid)) {
+      return res.status(403).json({ error: 'protected_system_admin' });
+    }
+
+    try {
+      await authClient().updateUser(uid, { password: req.body.password });
+    } catch (error) {
+      return sendAuthServiceError(res, error, 'password reset');
+    }
+    try {
+      await authClient().revokeRefreshTokens(uid);
+    } catch (error) {
+      console.error(`Admin user password reset session revocation failed; ${error.code || 'unclassified'}`);
+      return res.status(500).json({ error: 'session_revocation_incomplete', uid, password_reset: true });
+    }
+    return res.status(200).json({ uid, password_reset: true, sessions_revoked: true });
+  }
+
+  async function setAdminUserStatus(req, res, actingAdmin, uid) {
+    if (!hasExactFields(req.body, ['disabled']) || typeof req.body.disabled !== 'boolean') {
+      return res.status(400).json({ error: 'invalid_status_request' });
+    }
+    const { disabled } = req.body;
+    const authUser = await getAuthUserOrNull(uid);
+    if (!authUser) return res.status(404).json({ error: 'user_not_found' });
+
+    if (disabled) {
+      if (uid === actingAdmin.uid) return res.status(409).json({ error: 'cannot_modify_own_account' });
+      if (protectedSystemAdminUids.includes(uid)) {
+        return res.status(403).json({ error: 'protected_system_admin' });
+      }
+      if ((await getUserAccess(db, uid))?.admin === true) {
+        const activeAuthUsers = await listActiveAuthUids();
+        const accessRecords = await db.collection('user_access').get();
+        const remainingAdmins = accessRecords.docs.filter((doc) => (
+          doc.id !== uid &&
+          activeAuthUsers.has(doc.id) &&
+          normalizeAccessRecord(doc.data())?.admin
+        )).length;
+        if (remainingAdmins === 0) return res.status(409).json({ error: 'last_admin_required' });
+      }
+    }
+
+    try {
+      await authClient().updateUser(uid, { disabled });
+    } catch (error) {
+      return sendAuthServiceError(res, error, disabled ? 'deactivation' : 'reactivation');
+    }
+    if (disabled) {
+      try {
+        await authClient().revokeRefreshTokens(uid);
+      } catch (error) {
+        console.error(`Admin user deactivation session revocation failed; ${error.code || 'unclassified'}`);
+        return res.status(500).json({ error: 'session_revocation_incomplete', uid, disabled: true });
+      }
+    }
+    return res.status(200).json({ uid, disabled });
   }
 
   async function getOperatorBootstrap(req, res) {
@@ -1170,6 +1359,9 @@ function createFairwayHandlers(db, {
   }
 
   async function patchAdminCourse(req, res, customerId, courseId) {
+    if (req.body && typeof req.body === 'object' && Object.hasOwn(req.body, 'operation_kind')) {
+      throw new Error('Invalid request: Course operation type is set at creation and cannot be changed');
+    }
     requireBodyFields(req.body, ['course_name', 'timezone', 'comments', 'course_location', 'service_schedule']);
     let courseLocation;
     if (req.body.course_location !== undefined) {
@@ -1361,11 +1553,22 @@ function createFairwayHandlers(db, {
       if (req.method === 'GET' && path === '/api/v1/admin/users') {
         return await listAdminUsers(req, res);
       }
+      if (req.method === 'POST' && path === '/api/v1/admin/users') {
+        return await createAdminUser(req, res, admin);
+      }
       const userAccessMatch = path.match(/^\/api\/v1\/admin\/users\/([^/]+)\/access$/);
       if (req.method === 'PUT' && userAccessMatch) {
         return await updateAdminUserAccess(
           req, res, admin, decodeURIComponent(userAccessMatch[1])
         );
+      }
+      const userPasswordMatch = path.match(/^\/api\/v1\/admin\/users\/([^/]+)\/password$/);
+      if (req.method === 'PUT' && userPasswordMatch) {
+        return await resetAdminUserPassword(req, res, admin, decodeURIComponent(userPasswordMatch[1]));
+      }
+      const userStatusMatch = path.match(/^\/api\/v1\/admin\/users\/([^/]+)\/status$/);
+      if (req.method === 'PUT' && userStatusMatch) {
+        return await setAdminUserStatus(req, res, admin, decodeURIComponent(userStatusMatch[1]));
       }
       if (req.method === 'GET' && path === '/api/v1/admin/fleet') {
         return await listAdminFleet(req, res);
@@ -2083,4 +2286,4 @@ if (runtimeEnvironment.serviceMode === 'admin') {
   functions.http('fairwayButtonReceiver', handlers.fairwayButtonReceiver);
 }
 
-module.exports = { createFairwayHandlers, resolveProtectedSystemAdminUids };
+module.exports = { createFairwayHandlers, resolveProtectedSystemAdminUids, verifyFirebaseIdToken };
