@@ -11,6 +11,7 @@ import OtaManagement from './OtaManagement';
 import CustomerStaff from './CustomerStaff';
 import ButtonActivityReport from './ButtonActivityReport';
 import { serviceCategories } from '../lib/serviceCategories.mjs';
+import { COURSE_OPERATION_KINDS, courseOperation, courseOperationLabel } from '../lib/courseOperation.mjs';
 import './admin.css';
 
 const NAVIGATION = [
@@ -135,6 +136,15 @@ export function DeviceDetail({ user, apiBaseUrl, device, customers, close, refre
 function SectionTitle({ eyebrow, title }) { return <div className="a-section-heading"><div><p>{eyebrow}</p><h3>{title}</h3></div></div>; }
 function PrimaryButton({ pending, text }) { return <button className="a-primary" disabled={pending}><Save size={16} />{pending ? 'Saving…' : text}</button>; }
 
+const COURSE_TIMEZONE_SUGGESTIONS = [
+  'America/Los_Angeles', 'America/Denver', 'America/Phoenix', 'America/Chicago',
+  'America/New_York', 'America/Anchorage', 'Pacific/Honolulu',
+];
+
+function isIanaTimezone(value) {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(); return true; } catch { return false; }
+}
+
 function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
   const isCourse = course !== null; const editing = Boolean(isCourse ? course?.course_id : customer?.customer_id);
   const [form, setForm] = useState(isCourse ? {
@@ -142,20 +152,47 @@ function CustomerModal({ user, apiBaseUrl, customer, course, close, refresh }) {
     timezone: course?.timezone || '',
     course_location: course?.course_location?.label || '',
     comments: course?.comments || '',
+    operation_kind: editing ? courseOperation(course).kind : 'cart',
   } : { customer_name: customer?.customer_name || '', comments: customer?.comments || '' });
   const [pending, setPending] = useState(false); const [error, setError] = useState('');
-  async function submit(event) { event.preventDefault(); setPending(true); setError(''); let path = '/api/v1/admin/customers'; if (isCourse) path = `${path}/${customer.customer_id}/courses${editing ? `/${course.course_id}` : ''}`; else if (editing) path += `/${customer.customer_id}`; const body = isCourse ? { course_name: form.course_name, timezone: form.timezone, course_location: form.course_location, comments: form.comments } : form; try { await adminRequest(user, apiBaseUrl, path, { method: editing ? 'PATCH' : 'POST', body }); await refresh(); close(); } catch (err) { setError(err.message); } finally { setPending(false); } }
-  return <div className="a-overlay"><div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><header><h2 id="customer-modal-title">{editing ? 'Edit' : 'Add'} {isCourse ? 'course' : 'customer'}</h2><button className="a-icon" type="button" onClick={close} aria-label="Close"><X size={20} /></button></header><form className="a-form" onSubmit={submit}><Notice error={error} />{isCourse ? <><label>Course name<input value={form.course_name} onChange={(event) => setForm({ ...form, course_name: event.target.value })} required /></label><label>Timezone<input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="America/Los_Angeles" required /></label><label>Location (City, ST)<input value={form.course_location} onChange={(event) => setForm({ ...form, course_location: event.target.value })} placeholder="San Leandro, CA" /><small>Used for the average temperature and rain in Cart Request Performance Reports.</small></label></> : <label>Customer name<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} required /></label>}<label>Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label><div className="a-modal-actions"><button type="button" onClick={close}>Cancel</button><PrimaryButton pending={pending} text="Save" /></div></form></div></div>;
+  async function submit(event) {
+    event.preventDefault(); setError('');
+    if (isCourse && !isIanaTimezone(form.timezone.trim())) {
+      setError('Timezone must be an IANA timezone name, for example America/Los_Angeles.');
+      return;
+    }
+    setPending(true);
+    let path = '/api/v1/admin/customers'; if (isCourse) path = `${path}/${customer.customer_id}/courses${editing ? `/${course.course_id}` : ''}`; else if (editing) path += `/${customer.customer_id}`;
+    const body = isCourse ? {
+      course_name: form.course_name, timezone: form.timezone.trim(), course_location: form.course_location, comments: form.comments,
+      ...(editing ? {} : { operation_kind: form.operation_kind }),
+    } : form;
+    try { await adminRequest(user, apiBaseUrl, path, { method: editing ? 'PATCH' : 'POST', body }); await refresh(); close(); } catch (err) { setError(err.message); } finally { setPending(false); }
+  }
+  const operationHelp = form.operation_kind === 'driving_range'
+    ? 'Driving Range Courses take QR bay requests, have no call buttons or Inventory, and start with service suspended until activated.'
+    : 'Cart service Courses use on-course call buttons, cart metrics, and Inventory.';
+  const courseFields = <>
+    <label>Course name<input value={form.course_name} onChange={(event) => setForm({ ...form, course_name: event.target.value })} required /></label>
+    {editing
+      ? <div className="a-readonly-field"><span>Operation type</span><strong>{courseOperationLabel(form.operation_kind)}</strong><small>Set when the Course was created; it cannot be changed.</small></div>
+      : <label>Operation type<select value={form.operation_kind} onChange={(event) => setForm({ ...form, operation_kind: event.target.value })} required>
+        {COURSE_OPERATION_KINDS.map((kind) => <option key={kind} value={kind}>{courseOperationLabel(kind)}</option>)}
+      </select><small>{operationHelp} The operation type cannot be changed after the Course is created.</small></label>}
+    <label>Timezone<input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="America/Los_Angeles" list="course-timezone-suggestions" autoComplete="off" required /><datalist id="course-timezone-suggestions">{COURSE_TIMEZONE_SUGGESTIONS.map((zone) => <option key={zone} value={zone} />)}</datalist><small>IANA timezone name used for the Course service day and reports, for example America/Los_Angeles.</small></label>
+    <label>Location (City, ST)<input value={form.course_location} onChange={(event) => setForm({ ...form, course_location: event.target.value })} placeholder="San Leandro, CA" /><small>Optional. Use “City, ST” (for example San Leandro, CA). Used for the average temperature and rain in Cart Request Performance Reports.</small></label>
+  </>;
+  return <div className="a-overlay"><div className="a-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><header><h2 id="customer-modal-title">{editing ? 'Edit' : 'Add'} {isCourse ? 'course' : 'customer'}</h2><button className="a-icon" type="button" onClick={close} aria-label="Close"><X size={20} /></button></header><form className="a-form" onSubmit={submit}><Notice error={error} />{isCourse ? <>{!editing && <p className="a-modal-context">Customer: <strong>{customer.customer_name}</strong> ({customer.customer_id})</p>}{courseFields}</> : <label>Customer name<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} required /></label>}<label>Comments<textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label><div className="a-modal-actions"><button type="button" onClick={close}>Cancel</button><PrimaryButton pending={pending} text="Save" /></div></form></div></div>;
 }
 function CustomersView({ user, apiBaseUrl, customers, refresh }) {
   const [editor, setEditor] = useState(null);
   return <section className="a-view">
     <PageHeading eyebrow="ACCOUNT STRUCTURE" title="Customers & Courses" id="customers-title"><button className="a-primary" type="button" onClick={() => setEditor({ customer: null, course: null })}><Plus size={16} />Add customer</button></PageHeading>
     <div className="a-customers">{customers.map(customer => <article key={customer.customer_id}>
-      <header><div><span>{customer.customer_id}</span><h3>{customer.customer_name}</h3><p>{valueOrStatus(customer.comments, customer.field_status?.comments)}</p><FieldStatus status={customer.field_status?.comments} /></div><div><button type="button" onClick={() => setEditor({ customer, course: {} })}><Plus size={16} />Course</button><button className="a-icon" type="button" onClick={() => setEditor({ customer, course: null })} aria-label={`Edit ${customer.customer_name}`}><Wrench size={16} /></button></div></header>
+      <header><div><span>{customer.customer_id}</span><h3>{customer.customer_name}</h3><p>{valueOrStatus(customer.comments, customer.field_status?.comments)}</p><FieldStatus status={customer.field_status?.comments} /></div><div><button type="button" className="a-add-course" onClick={() => setEditor({ customer, course: {} })} aria-label={`Add course to ${customer.customer_name}`}><Plus size={16} aria-hidden="true" />Add course</button><button className="a-icon" type="button" onClick={() => setEditor({ customer, course: null })} aria-label={`Edit ${customer.customer_name}`}><Wrench size={16} /></button></div></header>
       <CustomerStaff user={user} apiBaseUrl={apiBaseUrl} customer={customer} />
       <div className="a-courses">{(customer.courses || []).map(course => <div className="a-course-row" key={course.course_id}>
-        <button type="button" className="a-course-edit" onClick={() => setEditor({ customer, course })}><MapPin size={17} /><span><strong>{course.course_name}</strong><small>{course.course_id} · {valueOrStatus(course.timezone, course.field_status?.timezone)}</small><small>Location: {course.course_location ? `${course.course_location.label} (${course.course_location.latitude}, ${course.course_location.longitude})` : 'Not set'}</small><small>Comments: {valueOrStatus(course.comments, course.field_status?.comments)}</small></span><ChevronRight size={16} /></button>
+        <button type="button" className="a-course-edit" onClick={() => setEditor({ customer, course })}><MapPin size={17} /><span><strong>{course.course_name}</strong><small>{course.course_id} · {valueOrStatus(course.timezone, course.field_status?.timezone)}</small><small>Operation: {courseOperationLabel(courseOperation(course).kind)}</small><small>Location: {course.course_location ? `${course.course_location.label} (${course.course_location.latitude}, ${course.course_location.longitude})` : 'Not set'}</small><small>Comments: {valueOrStatus(course.comments, course.field_status?.comments)}</small></span><ChevronRight size={16} /></button>
         <button className="a-course-open-cart" type="button" onClick={() => { const query = new URLSearchParams({ customer_id: customer.customer_id, course_id: course.course_id }); window.location.assign(`/?${query}`); }}>Open Cart UI <ArrowUpRight size={15} /></button>
       </div>)}{customer.courses?.length === 0 && <p>No courses configured.</p>}</div>
     </article>)}{customers.length === 0 && <div className="a-empty">No customers are configured.</div>}</div>

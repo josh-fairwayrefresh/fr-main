@@ -7279,12 +7279,49 @@ authorization.
 
 The record is server-read and is neither browser-readable nor browser-writable
 under Firestore Rules. Admin User Management edits the authorization settings
-for existing Firebase Auth users. It does not create Auth accounts or manage
-passwords. Onboarding creates an Email/Password Auth account first, then an
-Admin uses **User Management** to assign Admin access or select a Customer and
-Courses. Until a valid version-2 record is saved, the account is denied.
-Disabling an Auth account and revoking tokens are enforced independently of
-the access record.
+for existing Firebase Auth users. In the deployed release it does not create
+Auth accounts or manage passwords: onboarding creates an Email/Password Auth
+account first, then an Admin uses **User Management** to assign Admin access
+or select a Customer and Courses. Until a valid version-2 record is saved, the
+account is denied. Disabling an Auth account and revoking tokens are enforced
+independently of the access record.
+
+Customer Onboarding Increment 2 (branch `feature/customer-onboarding`; source
+and automated tests only, under architectural review, **not merged or
+deployed**) adds Admin-managed account
+lifecycle, with Firebase Authentication remaining the sole owner of
+credentials and account status and `user_access/{uid}` the sole entitlement
+owner:
+
+- **Create** (`POST /api/v1/admin/users`, body exactly `username`, `password`,
+  `admin`, `customer_id`, `course_ids`): the username must match
+  `^[a-z0-9]+(?:[._-][a-z0-9]+)*$` (at most 64 characters) and becomes
+  `username@fairwayrefresh.com`; the password is 12–128 characters. The
+  entitlement is validated by the same server logic as the access-write
+  route (Customer must exist; every Course must belong to it; Admin scope is
+  global) before any Auth call. The Auth user is created **disabled**, the
+  version-2 record is written, and only then is the account enabled. A failed
+  record write deletes the new Auth user; if that compensation or the final
+  enable fails, the account remains disabled and the response says so
+  (`user_creation_incomplete` / `user_activation_incomplete`).
+- **Reset password** (`PUT /api/v1/admin/users/{uid}/password`, body exactly
+  `password`) sets the new password and revokes refresh tokens.
+- **Deactivate/Reactivate** (`PUT /api/v1/admin/users/{uid}/status`, body
+  exactly `disabled`) sets Firebase `disabled`; deactivation also revokes
+  refresh tokens. The access record is retained, so reactivation restores the
+  prior entitlement with a new sign-in.
+- Admins cannot reset or deactivate their own account or a protected
+  system-administrator UID, and cannot deactivate the last active Admin.
+  Passwords are never stored, logged or returned; Auth failures are mapped to
+  stable error codes and logged by code only.
+- The operator and Admin APIs verify ID tokens with revocation checking
+  (`verifyIdToken(token, true)`), so disabled or revoked sessions are rejected
+  on their next API request; this adds one Firebase Auth lookup per
+  authenticated API request. The Cart request list reads Firestore directly
+  under Firestore Rules, which cannot check revocation: there a deactivated
+  user's already-issued ID token keeps working until it expires (at most one
+  hour), after which the disabled account cannot refresh it. The CPO accepted
+  this residual window for the current pilot on 2026-11-11.
 
 Normal Admin User Management writes cannot set `admin: false` for the
 project-specific protected system-administrator UIDs. The receiver source
@@ -7630,7 +7667,7 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use Golfer-View Menu. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Transactionally reads current committed active On Cart products through the single public allowlist; no quantity or internal operational fields, no-store. |
 | `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
-| `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; it does not create Auth users or manage passwords. |
+| `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; in the deployed release it does not create Auth users or manage passwords. Undeployed Increment 2 adds `POST /api/v1/admin/users` and `PUT .../{uid}/password` and `PUT .../{uid}/status` (see the `user_access` contract above). |
 
 Data is owned by the existing nested Course. `inventory/state` stores a
 monotonic inventory revision and public slug. `inventory_products`
@@ -9573,7 +9610,9 @@ The Admin UI calls these backend routes with the current Firebase ID token. It d
 - `PUT /api/v1/admin/users/{uid}/access` remains the explicit access-write
   operation. It requires an existing Firebase Authentication UID and retains
   schema-v2, Customer/Course, protected-System-Administrator, and
-  last-administrator validation. It does not create an Authentication account.
+  last-administrator validation. It does not create an Authentication account;
+  account creation, password reset and deactivation are separate explicit
+  operations in undeployed Increment 2.
 - The complete-directory behavior is deployed to WP5 sandbox Admin revision
   `fairway-admin-sandbox-00012-zr2` and production Admin revision
   `fairway-admin-00016-fs9`; automated coverage passed. Production authenticated
