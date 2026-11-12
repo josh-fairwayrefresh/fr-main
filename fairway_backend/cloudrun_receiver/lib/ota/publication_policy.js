@@ -1,6 +1,9 @@
 'use strict';
 
 // Reviewed release evidence belongs in source control, never in an upload body.
+// Approval is release-level: an approved release may be assigned through Admin to any
+// compatible, verified OTA-capable device. The per-device decision is the Admin assignment
+// (CPO decision 2026-11-12); device scopes named in historical records below are superseded.
 const PUBLICATION_APPROVALS = Object.freeze({
   'OTA-1.0-r4': Object.freeze({
     sha256: 'cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e',
@@ -11,7 +14,6 @@ const PUBLICATION_APPROVALS = Object.freeze({
     release_record_commit: 'cc79c0213ebe736abb6b31cd4f98b8a273f7fedd',
     remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/cc79c0213ebe736abb6b31cd4f98b8a273f7fedd (review/frb0005-increment-1.0-source-checkpoint-20261105)',
     publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#ota-10-r4-correction--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
-    device_ids: Object.freeze(['FRB-0005']),
     build_base_commit: 'cfc98efde2db49e6190c769064c5e587c2076a10',
     build_source_sha256: '831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9',
   }),
@@ -24,7 +26,6 @@ const PUBLICATION_APPROVALS = Object.freeze({
     release_record_commit: 'bd1bc7bd3c103a4e8b1ba4f60edc26a10c683c87',
     remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/bd1bc7bd3c103a4e8b1ba4f60edc26a10c683c87 (review/frb0005-increment-1.0-source-checkpoint-20261105)',
     publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#r4-discovery-parsing-correction--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
-    device_ids: Object.freeze(['FRB-0005']),
     build_base_commit: 'a6350d738088557463909886c411775149fd5984',
     build_source_sha256: '831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9',
   }),
@@ -37,7 +38,6 @@ const PUBLICATION_APPROVALS = Object.freeze({
     release_record_commit: 'fd631ecf9d9479ada8f11c937e072093b80797a5',
     remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/fd631ecf9d9479ada8f11c937e072093b80797a5 (review/frb0005-increment-1.0-source-checkpoint-20261105)',
     publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#running-confirmation-successors--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
-    device_ids: Object.freeze(['FRB-0005']),
     build_base_commit: 'a99c45cf97de478c5c199381e48e6061d9de5fcd',
     build_source_sha256: '7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051',
   }),
@@ -50,7 +50,6 @@ const PUBLICATION_APPROVALS = Object.freeze({
     release_record_commit: 'fd631ecf9d9479ada8f11c937e072093b80797a5',
     remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/fd631ecf9d9479ada8f11c937e072093b80797a5 (review/frb0005-increment-1.0-source-checkpoint-20261105)',
     publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#running-confirmation-successors--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
-    device_ids: Object.freeze(['FRB-0005']),
     build_base_commit: '00530a1a5875c3217e1de7e0368cd8b323fe1173',
     build_source_sha256: '7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051',
   }),
@@ -63,7 +62,6 @@ const PUBLICATION_APPROVALS = Object.freeze({
     release_record_commit: 'f06cde9e441a3824a9acc6c63cffacf6f2dee5db',
     remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/f06cde9e441a3824a9acc6c63cffacf6f2dee5db (review/frb0005-increment-1.0-source-checkpoint-20261105)',
     publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#prototype-40-corrected-successors--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
-    device_ids: Object.freeze(['FRB-0005']),
     build_base_commit: '11213b4ad0607486df12f28d764f6d6abd90cdb6',
     build_source_sha256: '47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3',
   }),
@@ -76,7 +74,6 @@ const PUBLICATION_APPROVALS = Object.freeze({
     release_record_commit: 'f06cde9e441a3824a9acc6c63cffacf6f2dee5db',
     remote_backup_record: 'https://github.com/josh-fairwayrefresh/fr-main/commit/f06cde9e441a3824a9acc6c63cffacf6f2dee5db (review/frb0005-increment-1.0-source-checkpoint-20261105)',
     publication_authorization_record: 'docs/DEPLOYMENT_GUIDE.md#prototype-40-corrected-successors--cpo-acceptance-and-publication-authorization-2026-11-10; publication authorized for FRB-0005 only',
-    device_ids: Object.freeze(['FRB-0005']),
     build_base_commit: '11213b4ad0607486df12f28d764f6d6abd90cdb6',
     build_source_sha256: '47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3',
   }),
@@ -105,9 +102,7 @@ function publicationEligible(releaseId, digest, approvals = PUBLICATION_APPROVAL
       'publication_authorization_record'].every((field) => (
       typeof approval[field] === 'string' && approval[field].trim().length > 0
     )) && /^[a-f0-9]{40}$/.test(approval.source_commit)
-    && /^[a-f0-9]{40}$/.test(approval.release_record_commit)
-    && Array.isArray(approval.device_ids) && approval.device_ids.length > 0
-    && approval.device_ids.every((id) => /^FRB-\d{4}$/.test(id));
+    && /^[a-f0-9]{40}$/.test(approval.release_record_commit);
 }
 
 module.exports = { PUBLICATION_APPROVALS, RELEASE_BLOCKERS, RELEASE_REPLACEMENTS, publicationEligible };

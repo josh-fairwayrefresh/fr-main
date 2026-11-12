@@ -23,7 +23,7 @@ async function setup({ hq = 'America/Los_Angeles', approvals } = {}) {
       createReadStream() { assert.fail('These tests authorize grants without streaming fixture bytes.'); },
     },
     acceptedReleases: { [RELEASE]: DIGEST },
-    publicationApprovals: approvals || { [RELEASE]: approval(DIGEST, IDS) },
+    publicationApprovals: approvals || { [RELEASE]: approval(DIGEST) },
   };
   const ota = createOtaService(db, options);
   for (const [customer, zone] of [['CUST-0001', 'America/New_York'], ['CUST-0002', 'America/Los_Angeles']]) {
@@ -105,8 +105,8 @@ async function run() {
     const replacement = 'OTA-0.1alt-r3';
     const fixture = (await db.collection('ota_releases').doc(RELEASE).get()).data();
     const approvals = {
-      [old]: { ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
-      [replacement]: { ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
+      [old]: { ...approval(DIGEST), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
+      [replacement]: { ...approval(DIGEST), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
     };
     const ota = createOtaService(db, {
       ...options, publicationApprovals: approvals,
@@ -151,7 +151,7 @@ async function run() {
     const ota = createOtaService(db, {
       ...options,
       publicationApprovals: Object.fromEntries([old, replacement].map((id) => [id, {
-        ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40),
+        ...approval(DIGEST), build_base_commit: '1'.repeat(40),
         build_source_sha256: '2'.repeat(64),
       }])),
       acceptedReleases: { [old]: DIGEST, [replacement]: DIGEST },
@@ -195,7 +195,7 @@ async function run() {
     const ota = createOtaService(db, {
       ...options,
       publicationApprovals: Object.fromEntries(ids.map((id) => [id, {
-        ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
+        ...approval(DIGEST), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
       }])),
       acceptedReleases: Object.fromEntries(ids.map((id) => [id, DIGEST])),
     });
@@ -220,7 +220,7 @@ async function run() {
     const ota = createOtaService(db, {
       ...options,
       publicationApprovals: Object.fromEntries(ids.map((id) => [id, {
-        ...approval(DIGEST, IDS), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
+        ...approval(DIGEST), build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64),
       }])),
       acceptedReleases: Object.fromEntries(ids.map((id) => [id, DIGEST])),
     });
@@ -249,7 +249,7 @@ async function run() {
       assert.equal(ACCEPTED_RELEASES[releaseId], digest);
       assert.equal(publicationEligible(releaseId, digest), true);
       assert.equal(publicationEligible(releaseId, '0'.repeat(64)), false);
-      assert.deepEqual(PUBLICATION_APPROVALS[releaseId].device_ids, ['FRB-0005']);
+      assert.equal(Object.hasOwn(PUBLICATION_APPROVALS[releaseId], 'device_ids'), false);
       const base = releaseId === 'OTA-1.0-r4' ? 'cfc98efde2db49e6190c769064c5e587c2076a10'
         : releaseId === 'OTA-0.1alt-r4' ? 'a6350d738088557463909886c411775149fd5984'
         : releaseId === 'OTA-0.1alt-r3' ? 'a99c45cf97de478c5c199381e48e6061d9de5fcd'
@@ -382,16 +382,82 @@ async function run() {
     assert.equal(asset.eligible, true);
     assert.equal(asset.timezone, 'America/Los_Angeles');
   });
-  await test('missing capability, retired state, and release target restrictions cannot be bypassed', async () => {
+  await test('missing or incompatible capability and retired state cannot be bypassed', async () => {
     const { db, ota } = await setup();
     await db.collection('devices').doc('FRB-0012').update({ ota_capability: null });
-    for (const id of ['FRB-0012', 'FRB-0015']) {
+    await db.collection('devices').doc('FRB-0011').update({
+      ota_capability: { ...capability('nightly'), hardware_id: 'other_board@1/nrf9160/ns' },
+    });
+    await db.collection('devices').doc('FRB-0013').update({
+      ota_capability: { ...capability('nightly'), signing_fingerprint: `sha256:${'0'.repeat(64)}` },
+    });
+    await db.collection('devices').doc('FRB-0014').update({
+      ota_capability: { ...capability('nightly'), verified: false },
+    });
+    for (const id of ['FRB-0011', 'FRB-0012', 'FRB-0013', 'FRB-0014', 'FRB-0015']) {
       await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: [id] }, 'admin'),
-        (error) => error.code === 'device_not_eligible');
+        (error) => error.code === 'device_not_eligible', id);
     }
-    const restricted = await setup({ approvals: { [RELEASE]: approval(DIGEST, ['FRB-0005']) } });
-    await assert.rejects(restricted.ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0011'] }, 'admin'),
-      (error) => error.code === 'device_not_eligible');
+    const fleet = await ota.listFleet();
+    assert.deepEqual(fleet.devices.filter((device) => device.eligible).map((device) => device.device_id), ['FRB-0005']);
+  });
+  await test('approved production releases are assignable to any compatible OTA-capable device without code changes', async () => {
+    const { db, options, setTime } = await setup();
+    await db.collection('devices').doc('FRB-0003').set({
+      state: 'deployed', customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+      ota_capability: capability('one_time'), credential: { digest: 'DO-NOT-EXPOSE' },
+    });
+    for (const id of ['OTA-0.1alt-r3', 'OTA-0.1alt-r4', 'OTA-1.0-r4']) {
+      await db.collection('ota_releases').doc(id).set({
+        state: 'published', release_id: id, sha256: ACCEPTED_RELEASES[id], version_string: '0.1.0+7',
+        size_bytes: 512, object_path: `LOCAL-TEST-ONLY/${id}.bin`,
+        hardware_ids: [HARDWARE_ID], provenance: { signing_fingerprint: PRODUCTION_FINGERPRINT },
+      });
+    }
+    const ota = createOtaService(db, {
+      ...options, acceptedReleases: ACCEPTED_RELEASES, publicationApprovals: PUBLICATION_APPROVALS,
+    });
+    const releases = await ota.listReleases();
+    assert.deepEqual(releases.filter((item) => item.assignable).map((item) => item.release_id).sort(),
+      ['OTA-0.1alt-r4', 'OTA-1.0-r4']);
+    assert.ok(releases.every((item) => !Object.hasOwn(item, 'authorized_device_ids')));
+    const fleet = await ota.listFleet();
+    assert.deepEqual(fleet.devices.filter((device) => device.eligible).map((device) => device.device_id).sort(),
+      ['FRB-0003', 'FRB-0005', 'FRB-0011', 'FRB-0012', 'FRB-0013', 'FRB-0014']);
+    await assert.rejects(ota.prepareAssignment({ release_id: 'OTA-0.1alt-r3', device_ids: ['FRB-0003'] }, 'admin'),
+      (error) => error.code === 'release_superseded');
+
+    for (const id of ['FRB-0003', 'FRB-0011']) {
+      const device = (await db.collection('devices').doc(id).get()).data();
+      assert.deepEqual(await ota.checkForUpdate(id, device, HARDWARE_ID),
+        { update_available: false, next_check_at_utc_ms: await ota.getNextCheck(device) },
+        'publication alone never offers firmware');
+    }
+    const review = await ota.prepareAssignment({ release_id: 'OTA-0.1alt-r4', device_ids: ['FRB-0003', 'FRB-0011'] }, 'admin');
+    assert.deepEqual(review.devices.map((device) => [device.device_id, device.schedule]),
+      [['FRB-0003', 'bootstrap_900_seconds'], ['FRB-0011', 'nightly_0030']]);
+    await ota.confirmAssignment(review.review_id, 'admin');
+
+    setTime('2026-03-08T07:15:00Z');
+    const bootstrap = (await db.collection('devices').doc('FRB-0003').get()).data();
+    const offer = await ota.checkForUpdate('FRB-0003', bootstrap, HARDWARE_ID);
+    assert.equal(offer.update_available, true);
+    const token = offer.artifact_path.split('/').pop();
+    const grant = await ota.getAuthorizedArtifact(token);
+    assert.deepEqual([grant.grant.device_id, grant.grant.release_id], ['FRB-0003', 'OTA-0.1alt-r4']);
+
+    const unassigned = (await db.collection('devices').doc('FRB-0012').get()).data();
+    assert.equal((await ota.checkForUpdate('FRB-0012', unassigned, HARDWARE_ID)).update_available, false);
+    await assert.rejects(ota.checkForUpdate('FRB-0003', bootstrap, 'other_board@1/nrf9160/ns'),
+      (error) => error.code === 'unsupported_hardware');
+    await db.collection('devices').doc('FRB-0003').update({
+      ota_capability: { ...capability('one_time'), signing_fingerprint: `sha256:${'0'.repeat(64)}` },
+    });
+    await assert.rejects(ota.getAuthorizedArtifact(token),
+      (error) => ['device_not_eligible', 'assignment_changed'].includes(error.code),
+      'a trust change after assignment blocks the existing grant');
+    await assert.rejects(ota.getAuthorizedArtifact('unknown-token'),
+      (error) => error.status === 403 || error.status === 404);
   });
   await test('default governance blocks preexisting published records instead of trusting their existence', async () => {
     const { db, options } = await setup();
@@ -440,7 +506,7 @@ async function run() {
     });
     const nextOta = createOtaService(db, {
       ...options, acceptedReleases: { ...options.acceptedReleases, 'OTA-1.0': digest },
-      publicationApprovals: { ...options.publicationApprovals, 'OTA-1.0': approval(digest, ['FRB-0005']) },
+      publicationApprovals: { ...options.publicationApprovals, 'OTA-1.0': approval(digest) },
     });
     const next = await nextOta.prepareAssignment({ release_id: 'OTA-1.0', device_ids: ['FRB-0005'] }, 'admin');
     assert.equal(next.devices[0].schedule, 'nightly_0030');
@@ -461,9 +527,9 @@ async function run() {
       ...options,
       acceptedReleases: { 'OTA-0.1alt-r2': digest, 'OTA-1.0-r2': digest },
       publicationApprovals: {
-        'OTA-0.1alt-r2': { ...approval(digest, ['FRB-0005']),
+        'OTA-0.1alt-r2': { ...approval(digest),
           build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
-        'OTA-1.0-r2': { ...approval(digest, ['FRB-0005']),
+        'OTA-1.0-r2': { ...approval(digest),
           build_base_commit: '1'.repeat(40), build_source_sha256: '2'.repeat(64) },
       },
     });

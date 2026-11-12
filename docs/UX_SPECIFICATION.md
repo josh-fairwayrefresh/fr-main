@@ -1130,9 +1130,15 @@ verification performed.
 
 ## Admin Firmware OTA Management (Production, FRB-0005 authorized)
 
-The Admin capability is deployed (2026-11-09). Approved releases are published
-for FRB-0005 only; on 2026-11-10 FRB-0005 autonomously installed and
-confirmed `OTA-0.1alt-r4`. Exact production identities, release records,
+The Admin capability is deployed (2026-11-09). Approved releases were
+published for FRB-0005 only; on 2026-11-10 FRB-0005 autonomously installed and
+confirmed `OTA-0.1alt-r4`. The CPO decided on 2026-11-12 that an approved
+release is assignable to any compatible, OTA-capable device; the Admin
+assignment is the only per-device decision and publication never installs or
+authorizes anything by itself (source implemented, not yet deployed; see the
+[Deployment Guide record](./DEPLOYMENT_GUIDE.md#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12)). A newly
+commissioned OTA 0.1 device checks once, 900 seconds after its first normal
+boot; its first update must be assigned before that check. Exact production identities, release records,
 verification limits and remaining gates are owned by the
 [Deployment Guide](./DEPLOYMENT_GUIDE.md#ota-administration-production-deployment-2026-11-09).
 
