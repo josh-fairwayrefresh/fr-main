@@ -178,7 +178,7 @@ validation are recorded in the
   controls. Its persistent Resume/Suspend state is independent of other
   Courses. New Driving Range Courses start suspended until explicitly resumed.
   Suspension rejects new submissions; existing requests remain actionable.
-- Customer Onboarding (Increment 2; source only, not deployed): each Customer
+- Customer Onboarding (Increment 2; production since 2026-11-12): each Customer
   card in Admin **Customers & Courses** has a readable **Add course** action.
   The Add course form requires an **Operation type** — **Cart service** or
   **Driving Range** — chosen once at creation; editing shows it read-only and
@@ -413,13 +413,14 @@ The current implementation and deployment status are owned by
   access for an existing Authentication user. A successful Save refreshes the
   unified directory. If complete retrieval fails, User Management shows an
   error and retry action instead of presenting a partial list as synchronized.
-- Customer Onboarding (Increment 2; source only, not deployed): **New user**
+- Customer Onboarding (Increment 2; production since 2026-11-12): **New user**
   creates a `username@fairwayrefresh.com` sign-in with an Admin-set initial
   password (12–128 characters, entered twice) and its access in one action.
   For another account, an Admin can **Reset password** (signing out existing
   sessions) and **Deactivate**/**Reactivate** it. A deactivated account is
   listed as **Deactivated**, keeps its access settings, and is denied sign-in
-  and access. Admins cannot reset or deactivate their own or a protected
+  and access (an already-open session's residual windows are recorded in
+  the [release record](DEPLOYMENT_GUIDE.md#customer-onboarding--administration-increment-2-production-release-2026-11-12)). Admins cannot reset or deactivate their own or a protected
   system-administrator account, or deactivate the last active Admin. There
   are no email invitations or self-service recovery.
 - The CPO accepted production User Management reconciliation and the

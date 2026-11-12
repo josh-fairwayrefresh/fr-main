@@ -14,8 +14,8 @@ the original accepted firmware artifacts remain unchanged.
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
-| Production Hosting | Production site `savvy-kit-496703-r5`; live version `ba810bdc550d6501` | Released `2026-11-11T00:56:32.950Z`. All 127 published files verified byte-for-byte on both origins, including all 107 accepted Driving Range assets; cache policies unchanged. Adds assignment supersession disclosure to Firmware OTA. Prior versions retained (`5eb383e4a44c3d13` previous). |
-| Production Admin / receiver | Admin `fairway-admin-ota-10r4-2e0b5a9`; receiver `fairway-button-receiver-dedup-68ce31f`, both Ready, 100% | Receiver promoted 2026-11-11 (source `main` `68ce31f`, archive `bfd1f1f0e72348bf9f4a01366ec3c8e36a4ba9c155e046786295c184806b9b1a`): transactional duplicate suppression for service-suspended and active button requests; see the [release record](#receiver-service-suspended-duplicate-suppression-production-release-2026-11-11). Admin unchanged since `2026-11-11T02:52Z`. Runtime identities/configuration unchanged; receiver rollback `fairway-button-receiver-ota-10r4-2e0b5a9`. |
+| Production Hosting | Production site `savvy-kit-496703-r5`; live version `df13d7aedb96cc32` | Released `2026-11-12T18:13:56.180Z` (Customer Onboarding Increment 2, `main` `ada4001`). All 127 published files verified byte-for-byte on both origins; only JavaScript/CSS bundles and `index.html` changed, and all 107 accepted Driving Range assets are unchanged. Rollback target `ba810bdc550d6501`. See the [release record](#customer-onboarding--administration-increment-2-production-release-2026-11-12). |
+| Production Admin / receiver | Admin `fairway-admin-onboard-ada4001`; receiver `fairway-button-receiver-dedup-68ce31f`, both Ready, 100% | Admin promoted 2026-11-12 (source `main` `ada4001`; Increment 2 user lifecycle and revocation-checked tokens); rollback `fairway-admin-ota-10r4-2e0b5a9`. Receiver unchanged since its 2026-11-11 promotion (source `68ce31f`; rollback `fairway-button-receiver-ota-10r4-2e0b5a9`). Staged receiver `fairway-button-receiver-onboard-ada4001` is at 0% and **must not be promoted** until its runtime identity has Firebase Auth read access (see the [release record](#customer-onboarding--administration-increment-2-production-release-2026-11-12)). Runtime identities/configuration unchanged. |
 | OTA implementation | **Prototype 4.0 — CPO field-validated stable firmware baseline** (2026-11-11): FRB-0005 autonomously installed `OTA-1.0-r4` (`1.0.0+4`) in its 12:30 AM Pacific window and confirmed it at 12:32:45 AM | See the [Prototype 4.0 Alignment Register entry](#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11). Selectable releases: `OTA-1.0-r4`, `OTA-0.1alt-r4` (FRB-0005 only). Superseded r2/r3 releases retained, not selectable; r3 images carry the discovery defect. |
 | Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
 | FRB-0005 commissioning | Running `1.0.0+4` (nightly) via autonomous OTA from `0.1.0+7`; credential generation 6 active | Clean USB install of `OTA-0.1-r4` (2026-11-10 17:57 Pacific), OTA to `0.1.0+7` with post-OTA request/COMPLETE, then nightly OTA to `1.0.0+4` (2026-11-11). Post-`1.0.0+4` request/COMPLETE not separately exercised. PV8 still required for USB service access. |
@@ -1578,6 +1578,83 @@ current live state. Current procedures begin under “Purpose and Operational
 Procedures” and the
 operational sections linked above. Preserve this history when updating the
 runbook.
+
+## Customer Onboarding & Administration Increment 2 production release (2026-11-12)
+
+**CPO-authorized Admin and Hosting release with controlled live validation.**
+Source is `main` `ada40012d4d7e0eac19f8f99e2caf734e051f7b7` (reviewed commit
+`71e0917`, merge `83ed53b`; behavior owned by the UX Specification and the
+[`user_access` contract](#wp5-production-fleet-administration)). Firestore
+rules, indexes, firmware, device configuration, IAM and other services were
+unchanged; no production Customer, Course or existing account was modified.
+
+- Admin revision `fairway-admin-onboard-ada4001` (tag `onboard-ada4001`) at
+  100%; image
+  `sha256:8c7549a59f9d3cdd119cdd6b26493fb7552aaa6966b2d2e136a4f55fa3b36897`.
+  Rollback target `fairway-admin-ota-10r4-2e0b5a9` (image
+  `sha256:eee5f5fd…b4c1`). Hosting version `df13d7aedb96cc32`, release
+  `1794507236180000` (`2026-11-12T18:13:56.180Z`); rollback target
+  `ba810bdc550d6501`. The isolated 40-file source archive
+  (`2fdc6634c67c948346f46919f30bf17cae9302ad9187f15d91c34ff857abcd88`)
+  matched `ada4001`; versus the deployed receiver source only `index.js`
+  differs. Pre-release state matched this guide; runtime configuration,
+  environment fingerprints and service accounts were unchanged before and
+  after promotion. The Hosting build changed only bundles and `index.html`;
+  all 127 files were byte-verified on both origins.
+- **Receiver not promoted.** CPO-authorized during this release, the receiver
+  was staged from the same archive as `fairway-button-receiver-onboard-ada4001`
+  (tag `onboard-ada4001`, 0%). Before promotion, a valid Admin token received
+  200 from the serving receiver but 401 from the staged revision: the
+  receiver runs as the default compute service account
+  (`roles/datastore.user`, `roles/run.builder`), which lacks the Firebase Auth
+  read access revocation checking needs (the Admin account has
+  `roles/firebaseauth.admin`). Promotion would have rejected every operator.
+  The CPO chose to keep the receiver on `68ce31f` and decide IAM separately;
+  the staged revision must not be promoted until that is resolved and
+  re-verified. Automated tests inject the Auth client and could not detect
+  this IAM dependency.
+- Pre-promotion smoke checks on both tagged URLs: unauthenticated and
+  invalid-token Admin/operator requests 401, CORS preflight 204, unknown
+  device 404; staged Admin authenticated access bootstrap, complete user
+  directory and fleet reads returned 200 against live Firebase Auth. No
+  error logs on the promoted Admin revision or serving receiver afterward.
+- Production UI (read-only, forms cancelled): every Customer card shows a
+  readable **Add course** (ink `rgb(23,37,29)` on white, light scheme); the
+  create form offers Cart service / Driving Range (default Cart) with the
+  suspended-start note, rejects a non-IANA timezone before saving, and the
+  edit form shows the operation type read-only. Course rows show their
+  operation type. No Customer or Course was created.
+- Live lifecycle validation used the dedicated test identity
+  `test.onboarding-20261112@fairwayrefresh.com`, created through production
+  User Management and scoped to test Customer `CUST-0002` / `COURSE-0002`.
+  Passwords were generated in the browser and never displayed, logged or
+  retained. Results: initial-password sign-in succeeded; access bootstrap
+  returned exactly that scope; Admin users/fleet 403; own Inventory 200 and
+  Monarch Inventory 403; receiver bootstrap listed only `CUST-0002/COURSE-0002`
+  and the Monarch dashboard 403; Firestore Rules allowed own-Course requests
+  and denied Monarch requests. After a UI password reset the old password was
+  rejected, the new one worked, and the pre-reset token got 401 from the Admin
+  service. After deactivation sign-in returned `USER_DISABLED` and the existing
+  token got 401 from Admin access, Inventory and User Management; after
+  reactivation sign-in and the same scoped access were restored while the
+  earlier token stayed revoked. As expected for the unchanged receiver and
+  Firestore, pre-reset and pre-deactivation tokens still received 200 there.
+- **Test-account disposition:** left **deactivated** (sign-in
+  `USER_DISABLED`) with its `CUST-0002/COURSE-0002` access record retained for
+  audit; deleting it would create an orphaned record, whose cleanup is a
+  separate backlog item.
+- Monarch regression (reads only): Admin directory shows the three global
+  Admins and `monarch_fnb`/`monarch_cart` unchanged and active; operator
+  dashboards for COURSE-0001/0003/0004, Tony Lema Inventory, fleet (six
+  Devices, placements unchanged) and OTA status returned 200; the Cart UI and
+  History/Performance (day and month) rendered Monarch data with no page
+  errors. Tony Lema service state (OFF) was not changed. No device traffic
+  arrived during the validation window, so no live button request exercised
+  this release; the receiver handling it is unchanged.
+- Limitations: until the receiver is redeployed, a deactivated or
+  password-reset user's already-issued token keeps receiver operator access,
+  including request and service-state writes, for up to one hour; direct
+  Firestore reads keep the CPO-accepted one-hour window.
 
 ## Receiver service-suspended duplicate suppression production release (2026-11-11)
 
@@ -7279,15 +7356,17 @@ authorization.
 
 The record is server-read and is neither browser-readable nor browser-writable
 under Firestore Rules. Admin User Management edits the authorization settings
-for existing Firebase Auth users. In the deployed release it does not create
-Auth accounts or manage passwords: onboarding creates an Email/Password Auth
-account first, then an Admin uses **User Management** to assign Admin access
+for existing Firebase Auth users. Before Increment 2 it did not create Auth
+accounts or manage passwords: onboarding created an Email/Password Auth
+account first, then an Admin used **User Management** to assign Admin access
 or select a Customer and Courses. Until a valid version-2 record is saved, the
 account is denied. Disabling an Auth account and revoking tokens are enforced
 independently of the access record.
 
 Customer Onboarding Increment 2 (reviewed commit `71e0917`, merged into
-`main` by `83ed53b`; source and automated tests only, **not deployed**) adds Admin-managed account
+`main` by `83ed53b`; production Admin and Hosting since 2026-11-12, receiver
+not redeployed — see the
+[release record](#customer-onboarding--administration-increment-2-production-release-2026-11-12)) adds Admin-managed account
 lifecycle, with Firebase Authentication remaining the sole owner of
 credentials and account status and `user_access/{uid}` the sole entitlement
 owner:
@@ -7313,10 +7392,15 @@ owner:
   system-administrator UID, and cannot deactivate the last active Admin.
   Passwords are never stored, logged or returned; Auth failures are mapped to
   stable error codes and logged by code only.
-- The operator and Admin APIs verify ID tokens with revocation checking
-  (`verifyIdToken(token, true)`), so disabled or revoked sessions are rejected
-  on their next API request; this adds one Firebase Auth lookup per
-  authenticated API request. The Cart request list reads Firestore directly
+- Backend services running this source verify ID tokens with revocation
+  checking (`verifyIdToken(token, true)`), so disabled or revoked sessions are
+  rejected on their next request; this adds one Firebase Auth lookup per
+  authenticated request and requires the service's runtime identity to have
+  Firebase Auth read access. In production only the Admin service runs it;
+  the receiver (operator dashboard, request Confirm/Complete/Cancel, service
+  Suspend/Resume, push subscriptions) is not yet redeployed, so there an
+  already-issued token remains valid until it expires (at most one hour).
+  The Cart request list reads Firestore directly
   under Firestore Rules, which cannot check revocation: there a deactivated
   user's already-issued ID token keeps working until it expires (at most one
   hour), after which the disabled account cannot refresh it. The CPO accepted
@@ -7666,7 +7750,7 @@ Course, deny unversioned legacy records, and remain closed to browser writes.
 | `GET .../preview`; `POST .../publish` | Course member | Retired, returns `410 manual_publication_retired` without mutation; cached clients must refresh and use Golfer-View Menu. |
 | `GET /api/v1/public/menus/{slug}` | Public, read-only | Transactionally reads current committed active On Cart products through the single public allowlist; no quantity or internal operational fields, no-store. |
 | `PATCH /api/v1/admin/customers/{customerId}/courses/{courseId}/inventory-menu` | `admin: true` | Reserves the stable menu slug. |
-| `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; in the deployed release it does not create Auth users or manage passwords. Undeployed Increment 2 adds `POST /api/v1/admin/users` and `PUT .../{uid}/password` and `PUT .../{uid}/status` (see the `user_access` contract above). |
+| `GET /api/v1/admin/users` and `PUT /api/v1/admin/users/{uid}/access` | `admin: true` | Lists existing Firebase Auth accounts and manages their schema-v2 authorization; account creation, password reset and deactivation use `POST /api/v1/admin/users`, `PUT .../{uid}/password` and `PUT .../{uid}/status` (Increment 2; see the `user_access` contract above). |
 
 Data is owned by the existing nested Course. `inventory/state` stores a
 monotonic inventory revision and public slug. `inventory_products`
@@ -9611,7 +9695,7 @@ The Admin UI calls these backend routes with the current Firebase ID token. It d
   schema-v2, Customer/Course, protected-System-Administrator, and
   last-administrator validation. It does not create an Authentication account;
   account creation, password reset and deactivation are separate explicit
-  operations in undeployed Increment 2.
+  Increment 2 operations.
 - The complete-directory behavior is deployed to WP5 sandbox Admin revision
   `fairway-admin-sandbox-00012-zr2` and production Admin revision
   `fairway-admin-00016-fs9`; automated coverage passed. Production authenticated
