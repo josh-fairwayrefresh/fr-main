@@ -7286,9 +7286,8 @@ or select a Customer and Courses. Until a valid version-2 record is saved, the
 account is denied. Disabling an Auth account and revoking tokens are enforced
 independently of the access record.
 
-Customer Onboarding Increment 2 (branch `feature/customer-onboarding`; source
-and automated tests only, under architectural review, **not merged or
-deployed**) adds Admin-managed account
+Customer Onboarding Increment 2 (reviewed commit `71e0917`, merged into
+`main` by `83ed53b`; source and automated tests only, **not deployed**) adds Admin-managed account
 lifecycle, with Firebase Authentication remaining the sole owner of
 credentials and account status and `user_access/{uid}` the sole entitlement
 owner:
