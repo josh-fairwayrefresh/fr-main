@@ -67,6 +67,9 @@ async function run() {
   });
   await test('approved headquarters policy works by default without an environment override', async () => {
     const { db, options } = await setup();
+    for (const id of ['FRB-0013', 'FRB-0014']) {
+      await db.collection('ota_device_status').doc(id).set({ confirmed_schedule_mode: 'nightly' });
+    }
     delete options.headquartersTimeZone;
     const ota = createOtaService(db, options);
     const fleet = await ota.listFleet();
@@ -382,7 +385,7 @@ async function run() {
     assert.equal(asset.eligible, true);
     assert.equal(asset.timezone, 'America/Los_Angeles');
   });
-  await test('missing or incompatible capability and retired state cannot be bypassed', async () => {
+  await test('missing or invalid legacy capability fields do not block eligible devices', async () => {
     const { db, ota } = await setup();
     await db.collection('devices').doc('FRB-0012').update({ ota_capability: null });
     await db.collection('devices').doc('FRB-0011').update({
@@ -394,19 +397,45 @@ async function run() {
     await db.collection('devices').doc('FRB-0014').update({
       ota_capability: { ...capability('nightly'), verified: false },
     });
-    for (const id of ['FRB-0011', 'FRB-0012', 'FRB-0013', 'FRB-0014', 'FRB-0015']) {
-      await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: [id] }, 'admin'),
-        (error) => error.code === 'device_not_eligible', id);
+    await db.collection('ota_device_status').doc('FRB-0011').set({ confirmed_schedule_mode: 'nightly' });
+    for (const id of ['FRB-0011', 'FRB-0012', 'FRB-0013', 'FRB-0014']) {
+      const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: [id] }, 'admin');
+      assert.equal(review.devices[0].device_id, id);
     }
+    await assert.rejects(ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0015'] }, 'admin'),
+      (error) => error.code === 'device_not_eligible', 'retired state remains ineligible');
     const fleet = await ota.listFleet();
-    assert.deepEqual(fleet.devices.filter((device) => device.eligible).map((device) => device.device_id), ['FRB-0005']);
+    assert.deepEqual(fleet.devices.filter((device) => device.eligible).map((device) => device.device_id).sort(),
+      ['FRB-0005', 'FRB-0011', 'FRB-0012', 'FRB-0013', 'FRB-0014']);
   });
-  await test('approved production releases are assignable to any compatible OTA-capable device without code changes', async () => {
+  await test('legacy capability mutations do not invalidate active OTA assignments or download grants', async () => {
+    const { db, ota, setTime } = await setup();
+    await db.collection('ota_device_status').doc('FRB-0005').set({ confirmed_schedule_mode: 'nightly' });
+    await db.collection('devices').doc('FRB-0005').update({
+      ota_capability: { verified: false, hardware_id: 'wrong', signing_fingerprint: 'wrong' },
+    });
+    const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin');
+    await ota.confirmAssignment(review.review_id, 'admin');
+    setTime('2026-03-08T08:30:00Z');
+    const assigned = await db.collection('ota_assignments').doc('FRB-0005').get();
+    const device = (await db.collection('devices').doc('FRB-0005').get()).data();
+    const offer = await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID);
+    const token = offer.artifact_path.split('/').pop();
+    await ota.getAuthorizedArtifact(token);
+    await db.collection('devices').doc('FRB-0005').update({ ota_capability: null });
+    await ota.getAuthorizedArtifact(token);
+    assert.equal(assigned.data().basis_version, 3);
+    assert.equal((await ota.listFleet()).devices.find((item) => item.device_id === 'FRB-0005').eligible, true);
+    await assert.rejects(ota.checkForUpdate('FRB-0005', device, 'other_board@1/nrf9160/ns'),
+      (error) => error.code === 'unsupported_hardware');
+  });
+  await test('approved production releases retain release-level provenance and hardware checks', async () => {
     const { db, options, setTime } = await setup();
     await db.collection('devices').doc('FRB-0003').set({
       state: 'deployed', customer_id: 'CUST-0001', course_id: 'COURSE-0001',
       ota_capability: capability('one_time'), credential: { digest: 'DO-NOT-EXPOSE' },
     });
+    await db.collection('ota_device_status').doc('FRB-0011').set({ confirmed_schedule_mode: 'nightly' });
     for (const id of ['OTA-0.1alt-r3', 'OTA-0.1alt-r4', 'OTA-1.0-r4']) {
       await db.collection('ota_releases').doc(id).set({
         state: 'published', release_id: id, sha256: ACCEPTED_RELEASES[id], version_string: '0.1.0+7',
@@ -437,7 +466,6 @@ async function run() {
     assert.deepEqual(review.devices.map((device) => [device.device_id, device.schedule]),
       [['FRB-0003', 'bootstrap_900_seconds'], ['FRB-0011', 'nightly_0030']]);
     await ota.confirmAssignment(review.review_id, 'admin');
-
     setTime('2026-03-08T07:15:00Z');
     const bootstrap = (await db.collection('devices').doc('FRB-0003').get()).data();
     const offer = await ota.checkForUpdate('FRB-0003', bootstrap, HARDWARE_ID);
@@ -453,11 +481,7 @@ async function run() {
     await db.collection('devices').doc('FRB-0003').update({
       ota_capability: { ...capability('one_time'), signing_fingerprint: `sha256:${'0'.repeat(64)}` },
     });
-    await assert.rejects(ota.getAuthorizedArtifact(token),
-      (error) => ['device_not_eligible', 'assignment_changed'].includes(error.code),
-      'a trust change after assignment blocks the existing grant');
-    await assert.rejects(ota.getAuthorizedArtifact('unknown-token'),
-      (error) => error.status === 403 || error.status === 404);
+    await ota.getAuthorizedArtifact(token);
   });
   await test('default governance blocks preexisting published records instead of trusting their existence', async () => {
     const { db, options } = await setup();
@@ -468,6 +492,9 @@ async function run() {
   });
   await test('Inventory and Maintenance use HQ eligibility and unchanged discovery/download contracts', async () => {
     const { db, ota, setTime } = await setup();
+    for (const id of ['FRB-0013', 'FRB-0014']) {
+      await db.collection('ota_device_status').doc(id).set({ confirmed_schedule_mode: 'nightly' });
+    }
     const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0013', 'FRB-0014'] }, 'admin');
     await ota.confirmAssignment(review.review_id, 'admin');
     for (const id of ['FRB-0013', 'FRB-0014']) {
@@ -486,7 +513,7 @@ async function run() {
     }
     assert.deepEqual((await ota.listDeviceStatus()).map((item) => item.device_id).sort(), ['FRB-0013', 'FRB-0014']);
   });
-  await test('only matching successful confirmation promotes a physically initialized bootstrap to nightly', async () => {
+  await test('matching successful successor confirmation changes scheduling to nightly', async () => {
     const { db, ota, options } = await setup();
     const review = await ota.prepareAssignment({ release_id: RELEASE, device_ids: ['FRB-0005'] }, 'admin');
     const result = await ota.confirmAssignment(review.review_id, 'admin');
@@ -511,7 +538,8 @@ async function run() {
     const next = await nextOta.prepareAssignment({ release_id: 'OTA-1.0', device_ids: ['FRB-0005'] }, 'admin');
     assert.equal(next.devices[0].schedule, 'nightly_0030');
     assert.equal(next.devices[0].next_window, '2026-03-08T08:30:00.000Z');
-    assert.equal((await db.collection('devices').doc('FRB-0005').get()).data().ota_capability.schedule_mode, 'one_time');
+    assert.equal((await db.collection('ota_device_status').doc('FRB-0005').get())
+      .data().confirmed_schedule_mode, 'nightly');
   });
   await test('bootstrap may target any approved compatible successor without pretending it is already nightly', async () => {
     const { db, options } = await setup();
@@ -664,7 +692,7 @@ async function run() {
     assert.equal((await db.collection('ota_deployments').doc(oldId).get()).data().superseded_by,
       next.assignments[0].deployment_id);
   });
-  await test('pre-revision nightly assignments retain delivery authorization without weakening placement or trust checks', async () => {
+  await test('legacy capability-based assignments preserve placement checks without reading capability data', async () => {
     const { db, ota } = await setup();
     const body = { release_id: RELEASE, device_ids: ['FRB-0005'] };
     await db.collection('ota_device_status').doc('FRB-0005').set({ confirmed_schedule_mode: 'nightly' });
@@ -673,12 +701,23 @@ async function run() {
     const assignmentRef = db.collection('ota_assignments').doc('FRB-0005');
     const old = (await assignmentRef.get()).data();
     const current = review.devices[0];
-    const { basis_version, ...legacy } = old;
-    await assignmentRef.set({ ...legacy, basis_hash: current.legacy_basis_hash,
+    await db.collection('ota_authorization_reviews').doc(review.review_id).update({
+      devices: [{ ...current, capability: capability('nightly') }],
+    });
+    await assignmentRef.update({
+      basis_version: 2,
+      basis_hash: current.basis_hash,
       not_before: new Date('2026-03-08T06:00:00Z') });
+    await db.collection('devices').doc('FRB-0005').update({
+      ota_capability: { verified: false, hardware_id: 'wrong', signing_fingerprint: 'wrong' },
+    });
     const device = (await db.collection('devices').doc('FRB-0005').get()).data();
     assert.equal((await ota.checkForUpdate('FRB-0005', device, HARDWARE_ID)).deployment_id,
       result.assignments[0].deployment_id);
+    await db.collection('customers').doc('CUST-0002').collection('courses').doc('COURSE-0001')
+      .update({ timezone: 'Asia/Tokyo' });
+    await assert.rejects(ota.checkForUpdate('FRB-0005', device, HARDWARE_ID),
+      (error) => error.code === 'assignment_changed');
   });
   await test('discovery re-reads the latest target atomically before issuing an offer and token', async () => {
     const { db, ota } = await setup();

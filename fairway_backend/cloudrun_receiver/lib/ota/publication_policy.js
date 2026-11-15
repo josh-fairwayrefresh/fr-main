@@ -2,8 +2,8 @@
 
 // Reviewed release evidence belongs in source control, never in an upload body.
 // Approval is release-level: an approved release may be assigned through Admin to any
-// compatible, verified OTA-capable device. The per-device decision is the Admin assignment
-// (CPO decision 2026-11-12); device scopes named in historical records below are superseded.
+// lifecycle-eligible device compatible with that release. The per-device decision is the
+// Admin assignment (CPO decision 2026-11-12); device scopes named in historical records are superseded.
 const PUBLICATION_APPROVALS = Object.freeze({
   'OTA-1.0-r4': Object.freeze({
     sha256: 'cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e',

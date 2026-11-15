@@ -390,8 +390,8 @@ function createOtaService(db, {
         return { update_available: false, next_check_at_utc_ms: nextCheckAtUtcMs };
       }
       const assignment = assignmentSnap.data();
-      if (!fleet.assignmentBasisMatches(assignment, current)) {
-        throw new OtaError('assignment_changed', 'Device placement, trust or scheduling changed after authorization; engineering reconciliation is required.', 409);
+      if (!current.assignment_basis_matches) {
+        throw new OtaError('assignment_changed', 'Device placement changed after authorization; engineering reconciliation is required.', 409);
       }
       const deploymentRef = deployments.doc(assignment.deployment_id);
       const deploymentSnap = await transaction.get(deploymentRef);
@@ -402,9 +402,7 @@ function createOtaService(db, {
       }
       const release = releaseSnap.data();
       fleet.requireRelease(assignment.release_id, release);
-      const deviceError = fleet.capabilityError({
-        ...device, device_id: deviceId, ota_capability: current.capability,
-      });
+      const deviceError = fleet.deviceEligibilityError(current);
       if (deviceError) throw new OtaError('device_not_eligible', deviceError, 409);
       const notBeforeAt = asDate(assignment.not_before);
       if (!notBeforeAt) {
@@ -631,7 +629,7 @@ function createOtaService(db, {
       throw new OtaError('download_not_authorized', 'Assignment is no longer eligible for download.', 403);
     }
     const eligibility = await fleet.resolve(grant.device_id, (ref) => ref.get());
-    if (!fleet.assignmentBasisMatches(assignmentSnap.data(), eligibility)) {
+    if (!eligibility.assignment_basis_matches) {
       throw new OtaError('assignment_changed', 'Device eligibility changed after authorization.', 409);
     }
     if (!releaseSnap.exists || releaseSnap.data().state !== 'published'

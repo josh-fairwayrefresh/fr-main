@@ -170,7 +170,7 @@ export default function OtaManagement({ user, apiBaseUrl }) {
           {device.current_assignment_id && <p>Supersedes {device.last_result.release_id}
             {' '}({device.last_result.state}); earlier delivery and installation evidence will be retained.</p>}
           <p>{device.schedule === 'bootstrap_900_seconds'
-            ? 'Commissioning exception: eligible immediately for the existing one-time 900-second check. Whether it remains pending is unknown.'
+            ? 'One-time bootstrap schedule: eligible immediately for the existing 900-second check. Whether it remains pending is unknown.'
             : `Next local window: ${formatWindow(device.next_window, device.timezone)}`}</p>
           {device.bootstrap_check_observed && <p>A one-time check was previously reported.
             This assignment does not restart the device timer or create another check; delivery requires a subsequent autonomous check.</p>}

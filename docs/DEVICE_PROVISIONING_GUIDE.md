@@ -171,36 +171,24 @@ The canonical persisted Device `state` values are `in_inventory`, `deployed`, `m
 
 Customer/Course names are synchronized display copies from authoritative records. SIM identifiers, commissioning/service metadata, and administrative notes belong in the operational registry, not in canonical engineering documents.
 
-### OTA initialization evidence (local Prototype 4.0 extension)
+### OTA eligibility and legacy capability data
 
-OTA-capable firmware must first be installed physically. OTA 0.1 is the
-USB-only bootstrap (commissioned on FRB-0005; FRB-0003 is being prepared); it
-is never an assignable OTA image. An OTA-capability label alone is not proof of physical initialization
-or bootloader trust. Before authorizing updates, engineering commissioning
-must record verified, non-secret evidence on the existing Device:
+The CPO retired the per-device `ota_capability` eligibility mechanism on
+2026-11-15. It is not required for assignment, scheduling, discovery, or
+delivery; existing values are inert historical data and must not be used to
+authorize or block OTA operations. No replacement commissioning gate is
+introduced. The backend and Hosting change is live under the separately
+authorized [2026-11-15 deployment](DEPLOYMENT_GUIDE.md#ota-capability-gate-retirement-production-release-2026-11-15);
+all six production devices remain selectable.
 
-```
-ota_capability: {
-  verified: true,
-  hardware_id: "circuitdojo_feather_nrf9151@1/nrf9151/ns",
-  signing_fingerprint: "<verified public signing fingerprint>",
-  schedule_mode: "one_time" | "nightly",
-  evidence_record: "<physical initialization and trust verification reference>"
-}
-```
-
-This is not a credential, device inventory or firmware-version substitute.
-Only a separately authorized registry commissioning operation may establish
-it; the OTA dashboard cannot edit it. Missing/mismatched evidence fails closed.
-Release approval is release-level, not device-specific: once a Device has
-this verified capability, any approved compatible release may be assigned to
-it through Admin without backend changes, and the Admin assignment is the only
-per-device decision (CPO decision 2026-11-12; see the
-[Deployment Guide record](./DEPLOYMENT_GUIDE.md#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12)).
-An authenticated successful confirmation of a matching nightly
-release is recorded in OTA status and permits subsequent nightly scheduling
-without mutating the original physical-initialization record. Reported version
-is device-reported evidence, not independent boot attestation.
+OTA assignment continues to require an eligible device lifecycle, an explicit
+Admin assignment, and an approved compatible release. Device authentication,
+release digest/provenance checks, hardware compatibility, and MCUboot's
+on-device signature verification remain enforced. Firmware-version
+confirmation remains authenticated device-reported evidence, not independent
+boot attestation. Schedule presentation uses backend-confirmed OTA status;
+when no nightly confirmation exists, the existing one-time bootstrap schedule
+is used.
 
 Maintenance devices remain active and can communicate/test/update when capable.
 Their OTA schedule uses the headquarters IANA timezone, as does Inventory;
@@ -209,7 +197,7 @@ headquarters timezone is `America/Los_Angeles` (including DST), superseding the
 earlier unconfirmed Pacific assumption. The backend applies it by default.
 Legacy placement display copies on Maintenance do not create an OTA deployment
 or select its old Course timezone. No production capability, placement or
-headquarters configuration was changed in this local increment.
+headquarters configuration was changed in this increment or its deployment.
 
 ## Provisioning workflow
 

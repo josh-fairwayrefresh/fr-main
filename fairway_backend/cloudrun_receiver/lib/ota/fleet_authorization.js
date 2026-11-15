@@ -20,10 +20,18 @@ function createFleetAuthorization(db, {
   const releases = db.collection('ota_releases');
   const reviews = db.collection('ota_authorization_reviews');
 
-  function assignmentBasisMatches(assignment, device) {
+  function assignmentBasisMatches(assignment, device, reviewedDevice) {
+    if (assignment.basis_version === 3) {
+      return assignment.basis_hash === device.basis_hash;
+    }
     if (assignment.basis_version !== undefined && assignment.basis_version !== 2) return false;
-    return assignment.basis_hash === device.basis_hash
-      || (assignment.basis_version === undefined && assignment.basis_hash === device.legacy_basis_hash);
+    if (assignment.basis_hash === device.legacy_basis_hash) return true;
+    return reviewedDevice?.device_id === device.device_id
+      && reviewedDevice.basis_hash === assignment.basis_hash
+      && reviewedDevice.state === device.state
+      && reviewedDevice.customer_id === device.customer_id
+      && reviewedDevice.course_id === device.course_id
+      && reviewedDevice.timezone === device.timezone;
   }
 
   function requireRelease(releaseId, release) {
@@ -40,15 +48,8 @@ function createFleetAuthorization(db, {
     }
   }
 
-  function capabilityError(device) {
+  function deviceEligibilityError(device) {
     if (!isDeviceCommunicationAllowed(device.state)) return 'Device lifecycle does not permit OTA.';
-    const capability = device.ota_capability;
-    if (capability?.verified !== true || !capability.evidence_record
-        || capability.hardware_id !== hardwareId
-        || capability.signing_fingerprint !== fingerprint
-        || !['one_time', 'nightly'].includes(capability.schedule_mode)) {
-      return 'Verified physical OTA initialization and compatible trust anchor are required.';
-    }
     return null;
   }
 
@@ -73,10 +74,7 @@ function createFleetAuthorization(db, {
     const statusSnap = await read(db.collection('ota_device_status').doc(deviceId));
     const status = statusSnap.exists ? statusSnap.data() : {};
     const device = { ...deviceSnap.data(), device_id: deviceId };
-    if (device.ota_capability && status.confirmed_schedule_mode === 'nightly') {
-      device.ota_capability = { ...device.ota_capability, schedule_mode: 'nightly' };
-    }
-    const reason = capabilityError(device);
+    const reason = deviceEligibilityError(device);
     if (reason) throw new OtaError('device_not_eligible', `${deviceId}: ${reason}`, 409);
     let zone = headquartersTimeZone;
     let customerName = null;
@@ -102,6 +100,14 @@ function createFleetAuthorization(db, {
     const assignmentSnap = await read(assignments.doc(deviceId));
     let pending = null;
     let last = null;
+    let reviewedDevice = null;
+    if (assignmentSnap.exists && assignmentSnap.data().basis_version !== 3
+        && assignmentSnap.data().authorization_id) {
+      const reviewSnap = await read(reviews.doc(assignmentSnap.data().authorization_id));
+      reviewedDevice = reviewSnap.exists
+        ? reviewSnap.data().devices?.find((item) => item.device_id === deviceId) || null
+        : null;
+    }
     const lastDeploymentId = assignmentSnap.exists
       ? assignmentSnap.data().deployment_id : status.last_deployment_id;
     if (lastDeploymentId) {
@@ -110,19 +116,18 @@ function createFleetAuthorization(db, {
       last = { ...snap.data(), deployment_id: snap.id };
       if (assignmentSnap.exists && !TERMINAL.has(last.state)) pending = last;
     }
-    const bootstrap = device.ota_capability.schedule_mode === 'one_time';
+    const bootstrap = status.confirmed_schedule_mode !== 'nightly';
     const basis = {
       device_id: deviceId, state: device.state,
       customer_id: device.state === 'deployed' ? device.customer_id : null,
       course_id: device.state === 'deployed' ? device.course_id : null,
-      timezone: zone, capability: device.ota_capability,
+      timezone: zone,
     };
     return {
       ...basis, customer_name: customerName, course_name: courseName,
       // A reported running-image schedule change must not revoke the next authorized target.
-      basis_hash: crypto.createHash('sha256').update(JSON.stringify({
-        ...basis, capability: deviceSnap.data().ota_capability,
-      })).digest('hex'),
+      eligibility_basis: basis,
+      basis_hash: crypto.createHash('sha256').update(JSON.stringify(basis)).digest('hex'),
       legacy_basis_hash: crypto.createHash('sha256').update(JSON.stringify(basis)).digest('hex'),
       next_window: bootstrap ? null : nextWindow(zone, now()).toISOString(),
       schedule: bootstrap ? 'bootstrap_900_seconds' : 'nightly_0030',
@@ -131,6 +136,15 @@ function createFleetAuthorization(db, {
       confirmed_firmware_version: status.confirmed_firmware_version || null,
       last_check_at: status.last_check_at || null,
       bootstrap_check_observed: bootstrap && !!status.last_check_at,
+      assignment_basis_matches: !assignmentSnap.exists
+        || assignmentBasisMatches(assignmentSnap.data(), {
+          device_id: deviceId, state: device.state,
+          customer_id: device.state === 'deployed' ? device.customer_id : null,
+          course_id: device.state === 'deployed' ? device.course_id : null,
+          timezone: zone,
+          basis_hash: crypto.createHash('sha256').update(JSON.stringify(basis)).digest('hex'),
+          legacy_basis_hash: crypto.createHash('sha256').update(JSON.stringify(basis)).digest('hex'),
+        }, reviewedDevice),
     };
   }
 
@@ -154,10 +168,10 @@ function createFleetAuthorization(db, {
         };
         try {
           const value = await resolve(snap.id, (ref) => ref.get());
-          const { capability, basis_hash, legacy_basis_hash, ...safe } = value;
+          const { eligibility_basis, basis_hash, legacy_basis_hash, assignment_basis_matches, ...safe } = value;
           return { ...safe, eligible: true, reason: null,
-            assignment_notice: value.pending && !assignmentBasisMatches(value.pending, value)
-              ? 'Placement, trust or scheduling changed after authorization; delivery is blocked pending engineering reconciliation.'
+            assignment_notice: value.pending && !value.assignment_basis_matches
+              ? 'Placement changed after authorization; delivery is blocked pending engineering reconciliation.'
               : null };
         } catch (error) {
           if (!(error instanceof OtaError)) throw error;
@@ -251,8 +265,9 @@ function createFleetAuthorization(db, {
           deployment_id: ref.id, device_id: device.device_id, release_id: review.release_id,
           assigned_by: uid, assigned_at: assignedAt, not_before: notBefore,
           timezone: device.timezone, schedule: device.schedule, authorization_id: reviewId,
+          eligibility_basis: device.eligibility_basis,
           basis_hash: device.basis_hash,
-          basis_version: 2,
+            basis_version: 3,
           replaces_deployment_id: device.current_assignment_id,
         };
         if (device.current_assignment_id) {
@@ -283,7 +298,7 @@ function createFleetAuthorization(db, {
     });
   }
 
-  return { listFleet, prepare, confirm, requireRelease, requireSelectableRelease, resolve, capabilityError,
+  return { listFleet, prepare, confirm, requireRelease, requireSelectableRelease, resolve, deviceEligibilityError,
     assignmentBasisMatches };
 }
 

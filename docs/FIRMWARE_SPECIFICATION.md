@@ -151,13 +151,17 @@ described above.
 ## OTA delivery implementation
 
 The source implements the production OTA path for the Circuit Dojo nRF9151
-Feather using the existing MCUboot manager. It is deployed and authorized for
-FRB-0005 only; on 2026-11-10 FRB-0005 autonomously downloaded, installed and
-confirmed `OTA-0.1alt-r4` (see the r4 correction above and the Deployment
-Guide). It does not change the accepted Pilot 1.1 image on other devices or
-establish what they run, and rollback/interrupted-download recovery has not
-been physically exercised. The subsections below retain the dated release
-lineage; earlier releases are history, not selectable updates.
+Feather using the existing MCUboot manager. The CPO confirmed OTA 0.1 USB
+installation on FRB-0001 through FRB-0006; production status confirms
+`0.1.0+6` on FRB-0001 through FRB-0004 and FRB-0006, while FRB-0005 has
+confirmed `1.0.0+4`. FRB-0005 autonomously installed and confirmed
+`OTA-0.1alt-r4` and `OTA-1.0-r4` (see the r4 correction above and the
+Deployment Guide). The 2026-11-15 removal of the per-device capability gate is
+deployed in production backend and Hosting; see the
+[verified release record](DEPLOYMENT_GUIDE.md#ota-capability-gate-retirement-production-release-2026-11-15).
+No firmware was changed or installed by that deployment. Rollback/interrupted-download
+recovery has not been physically exercised. The subsections below retain the
+dated release lineage; earlier releases are history, not selectable updates.
 
 The accepted immutable commissioning artifacts are:
 
@@ -167,11 +171,15 @@ The accepted immutable commissioning artifacts are:
 | OTA 0.1alt | `0.1.0+2` | Configured nightly at local 00:30; accepted worker has recurrence defects described below |
 | OTA 1.0 | `1.0.0+1` | Configured nightly at local 00:30; accepted worker has the same recurrence defects |
 
-A physical USB/debug installation is required to initialize OTA capability.
-OTA 0.1 is already installed on FRB-0005 and must never be treated as an
-OTA-distributed release. OTA 0.1alt proves the first autonomous transition;
-OTA 1.0 proves a subsequent transition. This is the current validation sequence,
-not a mandatory three-release chain for every future device.
+OTA 0.1 is the USB-only bootstrap and must never be treated as an
+OTA-distributed release. The CPO retired the per-device `ota_capability`
+eligibility mechanism on 2026-11-15; no registry capability record is required
+for assignment, scheduling, or delivery. Approved-release integrity,
+hardware compatibility, device authentication, lifecycle checks, and
+MCUboot's on-device signature verification remain enforced. OTA 0.1alt proves
+the first autonomous transition; OTA 1.0 proves a subsequent transition.
+This is the current validation sequence, not a mandatory three-release chain
+for every future device.
 
 The one-time deadline is derived from the captured first-boot uptime and the
 first trusted UTC time, then persisted; a later reboot does not restart the
@@ -399,14 +407,11 @@ evidence, production revisions, and GCS object checks are owned by the
 No assignment or device download has occurred; publication does not establish
 physical installation or OTA success.
 
-The current production Fleet view rejects FRB-0005 because verified physical
-OTA initialization and matching trust-anchor evidence is not present in the
-authorization record, although this specification records the earlier USB
-OTA 0.1 installation. The existing physical-install note is not a substitute
-for the required Device `ota_capability` evidence. Resolve this discrepancy
-through the separately authorized canonical commissioning operation before
-assigning either release. Do not infer the persisted one-time timer state from
-the absent backend check-in.
+At the historical r2 publication checkpoint, production Fleet rejected
+FRB-0005 because the then-required physical-initialization capability record
+was absent. That gate was retired by CPO decision on 2026-11-15 and the
+historical rejection is not current eligibility guidance. Existing capability
+records are inert; OTA eligibility no longer depends on them.
 
 The current release builder requires an explicitly supplied Fairway
 ECDSA-P256 signing key and configures the same key for the application image
@@ -445,9 +450,10 @@ validates MCUboot header magic/version, exact firmware metadata, hardware
 target, slot size, SHA-256, the accepted-image digest catalog and original
 production provenance. MCUboot verifies the actual image signature
 on the Device during boot. The server requires reviewed publication evidence,
-release-specific exact-device authorization and verified canonical physical
-OTA capability/trust. FRB-0005 retains its narrow one-time bootstrap exception;
-fleet selection is not hardcoded to that device. Download authorization is a 30-minute
+release-specific exact-device authorization, device authentication, lifecycle
+eligibility, and a compatible hardware target. The retired `ota_capability`
+record is not consulted. Devices without a backend-confirmed nightly schedule
+use the existing one-time bootstrap schedule. Download authorization is a 30-minute
 random-token grant stored by hash; it is not a permanent public artifact URL.
 `fairway_backend/cloudrun_receiver/lib/ota/` owns release, assignment,
 authorization, storage, and lifecycle rules. The Admin OTA surface is in

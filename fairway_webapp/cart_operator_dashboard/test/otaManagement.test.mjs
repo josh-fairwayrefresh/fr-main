@@ -77,8 +77,17 @@ test('current target and reported bootstrap check do not remove an authorized de
   assert.deepEqual([...toggleDevices(new Set(), tree[0].ids, true)], ['1', '2']);
 });
 
+test('legacy OTA capability data does not filter backend-eligible devices', () => {
+  const devices = [
+    { ...fleet.devices[0], ota_capability: { verified: false, hardware_id: 'wrong', signing_fingerprint: 'wrong' } },
+  ];
+  const tree = buildDeviceTree({ ...fleet, devices });
+  assert.deepEqual(tree[0].ids, ['1']);
+});
+
 test('normal assignment review discloses supersession and one-time delivery limits without a separate clearing action', async () => {
   const source = await readFile(new URL('../src/admin/OtaManagement.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /ota_capability|Verified physical OTA initialization|compatible trust anchor/);
   assert.match(source, /regardless of current firmware or earlier assignments/);
   assert.match(source, /Supersedes \{device\.last_result\.release_id\}/);
   assert.match(source, /superseding any listed prior targets/);

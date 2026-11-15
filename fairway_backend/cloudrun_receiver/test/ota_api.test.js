@@ -221,10 +221,12 @@ test('bound running confirmation atomically records completion, clears only its 
   });
   assert.strictEqual(duplicate.duplicate, true);
   assert.strictEqual((await deploymentRef.collection('events').get()).size, initialEvents + 1);
-  await db.collection('devices').doc(DEVICE_ID).update({ ota_capability: null });
-  const blocked = (await ota.listFleet()).devices.find((item) => item.device_id === DEVICE_ID);
-  assert.strictEqual(blocked.eligible, false);
-  assert.strictEqual(blocked.last_result.deployment_id, assigned.deployment_id);
+  await db.collection('devices').doc(DEVICE_ID).update({
+    ota_capability: { verified: false, hardware_id: 'wrong', signing_fingerprint: 'wrong' },
+  });
+  const stillEligible = (await ota.listFleet()).devices.find((item) => item.device_id === DEVICE_ID);
+  assert.strictEqual(stillEligible.eligible, true);
+  assert.strictEqual(stillEligible.last_result.deployment_id, assigned.deployment_id);
 });
 
 test('unbound or mismatched running evidence never guesses which assignment to complete', async () => {
@@ -707,7 +709,7 @@ test('publication requires matching original production provenance and never ass
 
 test('fixed nightly assignment gates discovery until exact UTC eligibility and records check evidence', async () => {
   const { db, ota, setTime } = await setUp();
-  await db.collection('devices').doc(DEVICE_ID).update({ ota_capability: capability('nightly') });
+  await db.collection('ota_device_status').doc(DEVICE_ID).set({ confirmed_schedule_mode: 'nightly' });
   await ota.registerRelease(createReleaseBody(), 'admin-1');
   const scheduled = '2026-03-08T08:30:00.000Z';
   const assigned = await ota.assignRelease(DEVICE_ID, RELEASE_ID, 'admin-1', scheduled);
@@ -737,7 +739,6 @@ test('review rejects attempts to supply arbitrary schedule timestamps', async ()
 
 test('no assignment offers no update and a different/ineligible device cannot discover it', async () => {
   const { db, ota } = await setUp();
-  await db.collection('devices').doc(DEVICE_ID).update({ ota_capability: capability('nightly') });
   const device = (await db.collection('devices').doc(DEVICE_ID).get()).data();
   assert.strictEqual((await ota.checkForUpdate(DEVICE_ID, device, HARDWARE_ID)).update_available, false);
   await ota.registerRelease(createReleaseBody(), 'admin-1');
