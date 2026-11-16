@@ -1908,11 +1908,41 @@ and no production auto-run:
    authoritative backups/recovery points and reconcile intervening activity,
    never replay the pre-cutover legacy plan over live Customer records.
 
-Remaining production prerequisites are explicit authorization, reviewed exact
-source/build identities, verified backup/recovery evidence, reviewed migration
-fingerprint/access changes, drained writers, index readiness, coordinated
-data/rules/client cutover and operational acceptance. None was executed or
-claimed by the local correction.
+At source-review publication, remaining production prerequisites were explicit
+authorization, reviewed exact source/build identities, verified backup/recovery
+evidence, reviewed migration fingerprint/access changes, drained writers,
+index readiness, coordinated data/rules/client cutover and operational
+acceptance. None was executed or claimed by the local correction.
+
+#### Production promotion authorization and preparation — 2026-11-16
+
+The CPO authorized resuming the previously accepted Customer-ownership
+production promotion from release preparation on 2026-11-16. The approved
+candidate is based on `c0ea75c` and includes the sandbox-accepted
+Customer-aware service-dashboard and environment-bound public-menu-origin
+corrections. Recovery implementation commits and unrelated local work are
+excluded. Candidate commit `673f9b5` is published on
+`feature/customer-ownership-production-20261116` in
+[PR #37](https://github.com/josh-fairwayrefresh/fr-main/pull/37).
+
+Candidate validation passed the backend suite, all 105 frontend tests, and the
+production frontend build, including verification of all 107 accepted Driving
+Range assets. These are release-preparation results, not production
+verification.
+
+Read-only production preflight reconfirmed the `(default)` database in `nam5`,
+seven-day PITR, the daily 30-day backup schedule, and READY backup
+`243d89d7-e6ad-4229-82d9-bd9a69994ea4` for that database. Receiver and Admin
+each route 100% to their existing `nogate-1115-1222` revision; notifier remains
+100% on `00009-seg`. No production data, service, traffic, rule, index,
+identity, or device was changed during release preparation.
+
+The current production composite-index inventory does not include the
+Customer-service request indexes required by the candidate. They must be
+created from the reviewed candidate and reach READY before the coordinated
+cutover. The migration plan is being prepared read-only; its exact fingerprints
+and access conversions, writer quiescence, index readiness, and post-cutover
+acceptance remain required before production writes or traffic promotion.
 
 #### Local correction verification
 
