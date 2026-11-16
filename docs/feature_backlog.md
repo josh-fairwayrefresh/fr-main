@@ -37,6 +37,7 @@ physical print/laminated-sign scan acceptance.
 
 | Item | Status / boundary |
 |---|---|
+| Digital Recovery Readiness | Independent daily Firestore/Auth exports active with private 30-day storage and native alert incidents. Independent import matched 4,486 historical records; six Auth identities retained UID/access/password material. All 11 OTA packages downloaded and signature-verified; three serving images/build sources and critical-secret custody protected independently. Architect/CPO acceptance pending; full application/login failover, human email receipt and second custodian remain limits. See [one initiative](#digital-recovery-readiness) and the [sole runbook](RECOVERY_GUIDE.md#digital-recovery-readiness-implementation). |
 | Customer assets and menu register | Menu source published for Architect review at `5d7692f`. Local operational correction moves authoritative inventory to Customer assets and service state/history to Customer services, preserving accepted cart/menu behavior. Reviewed operational migration, production import/deployment and account-grant changes remain separately authorized; verify backup/recovery and drain writers before cutover. The CPO approved the full 24-item restaurant transcription. See [product scope](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu) and [operational cutover](DEPLOYMENT_GUIDE.md#customer-operational-ownership-correction). |
 | Administrator request reporting exclusion | CPO-tested in the QR sandbox and deployed to production on 2026-11-02 (see the Deployment Guide release record). Remaining: production use by a global Admin; no production request has been excluded by engineering. |
 | Cart Operator mobile acceptance | The responsive-layout release is live. Complete authenticated physical-phone/Safari checks at representative small and large phone widths and obtain CPO acceptance. Do not infer acceptance from build checks or unauthenticated route smoke tests. Preserve the accepted iPad and desktop experience. |
@@ -56,6 +57,33 @@ physical print/laminated-sign scan acceptance.
 | NCS 3.4 migration evaluation | FRB-0001 through FRB-0005 have CPO-confirmed physical validation; FRB-0006 reliability remains unresolved, so the full-fleet field-operation gate is not met. Evaluate migration from NCS 3.1.1 only as a separately authorized task; assess Errata 36/AP-protect and power-policy implications before changing the accepted build baseline. |
 | Branch protection and CI | October 21 PR #2 inspection found no required checks/protections; no tracked GitHub Actions workflow. Protection/CI design and setup need a separately authorized increment. [Details](#review-enforcement-gap). |
 | Provisioning policy and automation | Transactional allocation and prepared rotations exist; manufacturing, compromise/revocation, secret delivery, and end-to-end automation remain incomplete. [Details](#provisioning-policy-and-automation). |
+
+## Digital Recovery Readiness
+
+One initiative covers independent recovery of operational history, Auth/UID
+relationships, critical credentials, essential infrastructure and accepted
+OTA artifacts. Existing daily managed Firestore backups/PITR remain unchanged.
+Policy: daily independent Firestore/Auth exports, 30 days, approximately
+24-hour catastrophe RPO; accepted OTA bytes retained for supported lifetime.
+The [Recovery Guide](RECOVERY_GUIDE.md#digital-recovery-readiness-implementation)
+owns procedures, measured verification, custody, cost and limitations.
+
+Completed under explicit execution authority: recovery project/billing and
+restricted export-only cross-project IAM; private expiring/lifetime storage;
+daily jobs and Scheduler invocation; real Auth/hash and three application-secret
+custody; native failure/stale-success incidents; independent Firestore historical
+comparison and six real isolated UID/attribute/hash recoveries; all 11 accepted
+OTA download/signature checks; exact serving-image/build-source custody and
+live rules/Hosting inventory. Existing native restore evidence was reused.
+
+Remaining: Architect review/CPO acceptance of measured scope; human email receipt,
+full 26-hour detection timing, actual password login, connected application
+reconstruction/failover, second independent custodian and external DNS/account
+custody. One historical orphan access record is preserved for incident-specific
+reconciliation, not silently repaired. Source promotion, Customer migration,
+production identity/data import, deletion, traffic cutover and device work
+remain outside this increment. Do not reopen completed preparation or native
+restore testing without material new evidence.
 
 ## Material readiness items
 

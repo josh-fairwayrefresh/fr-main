@@ -1,0 +1,1557 @@
+{
+  "verifiedAt": "2026-11-16T20:09:59.985973+00:00",
+  "recoveryProject": "fairway-refresh-recovery",
+  "recoveryProjectNumber": "883080774039",
+  "productionDataWrites": 0,
+  "temporaryBuilderSourceImageReadGrantsRemovedAfterVerifiedCopy": true,
+  "resourceDeletion": 0,
+  "jobs": {
+    "firestore": {
+      "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore",
+      "generation": "3",
+      "observedGeneration": "3",
+      "conditions": null,
+      "template": {
+        "parallelism": 1,
+        "taskCount": 1,
+        "template": {
+          "containers": [
+            {
+              "image": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/exports@sha256:8ac47603012c092b0e51f4eba1c48499695a5b57a271d5fbdf788e26acb1d489",
+              "env": [
+                {
+                  "name": "RECOVERY_ACTION",
+                  "value": "firestore"
+                },
+                {
+                  "name": "RECOVERY_CONFIG_JSON",
+                  "value": "{\"allowCloudOperations\": true, \"authorizeProductionFirestoreExport\": true, \"authorizeProductionAuthExport\": false, \"sourceProject\": \"savvy-kit-496703-r5\", \"recoveryProject\": \"fairway-refresh-recovery\", \"recoveryProjectNumber\": \"883080774039\", \"bucket\": \"fairway-refresh-recovery-exports\"}"
+                }
+              ],
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "512Mi"
+                }
+              }
+            }
+          ],
+          "maxRetries": 1,
+          "timeout": "14400s",
+          "serviceAccount": "digital-recovery@fairway-refresh-recovery.iam.gserviceaccount.com",
+          "executionEnvironment": "EXECUTION_ENVIRONMENT_GEN2",
+          "sandboxes": {}
+        },
+        "client": "gcloud",
+        "clientVersion": "585.0.0"
+      },
+      "latestCreatedExecution": {
+        "name": "digital-recovery-firestore-kf9kg",
+        "createTime": "2026-11-16T20:07:19.440665Z",
+        "completionTime": "2026-11-16T20:09:30.496475Z",
+        "completionStatus": "EXECUTION_SUCCEEDED"
+      }
+    },
+    "auth": {
+      "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth",
+      "generation": "6",
+      "observedGeneration": "6",
+      "conditions": null,
+      "template": {
+        "parallelism": 1,
+        "taskCount": 1,
+        "template": {
+          "containers": [
+            {
+              "image": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/exports@sha256:8ac47603012c092b0e51f4eba1c48499695a5b57a271d5fbdf788e26acb1d489",
+              "env": [
+                {
+                  "name": "RECOVERY_ACTION",
+                  "value": "auth"
+                },
+                {
+                  "name": "RECOVERY_CONFIG_JSON",
+                  "value": "{\"allowCloudOperations\": true, \"authorizeProductionFirestoreExport\": false, \"authorizeProductionAuthExport\": true, \"sourceProject\": \"savvy-kit-496703-r5\", \"recoveryProject\": \"fairway-refresh-recovery\", \"recoveryProjectNumber\": \"883080774039\", \"bucket\": \"fairway-refresh-recovery-exports\", \"sourceProjectNumber\": \"936892386735\"}"
+                },
+                {
+                  "name": "RECOVERY_AUTH_HASH_CONFIG_FILE",
+                  "value": "/recovery-secrets/hash-config.json"
+                }
+              ],
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "512Mi"
+                }
+              },
+              "volumeMounts": [
+                {
+                  "name": "recovery-auth-scrypt-qez-nem",
+                  "mountPath": "/recovery-secrets"
+                }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "recovery-auth-scrypt-qez-nem",
+              "secret": {
+                "secret": "recovery-auth-scrypt",
+                "items": [
+                  {
+                    "path": "hash-config.json",
+                    "version": "1"
+                  }
+                ]
+              }
+            }
+          ],
+          "maxRetries": 1,
+          "timeout": "14400s",
+          "serviceAccount": "digital-recovery@fairway-refresh-recovery.iam.gserviceaccount.com",
+          "executionEnvironment": "EXECUTION_ENVIRONMENT_GEN2",
+          "sandboxes": {}
+        },
+        "client": "gcloud",
+        "clientVersion": "585.0.0"
+      },
+      "latestCreatedExecution": {
+        "name": "digital-recovery-auth-t5ztq",
+        "createTime": "2026-11-16T20:07:19.427424Z",
+        "completionTime": "2026-11-16T20:09:26.601642Z",
+        "completionStatus": "EXECUTION_SUCCEEDED"
+      }
+    }
+  },
+  "schedules": {
+    "firestore": {
+      "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore-daily",
+      "httpTarget": {
+        "uri": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore:run",
+        "httpMethod": "POST",
+        "headers": {
+          "User-Agent": "Google-Cloud-Scheduler",
+          "Content-Type": "application/json"
+        },
+        "body": "e30=",
+        "oauthToken": {
+          "serviceAccountEmail": "recovery-scheduler@fairway-refresh-recovery.iam.gserviceaccount.com",
+          "scope": "https://www.googleapis.com/auth/cloud-platform"
+        }
+      },
+      "userUpdateTime": "2026-11-16T20:02:58.492422Z",
+      "state": "ENABLED",
+      "status": {},
+      "scheduleTime": "2026-11-17T09:00:02.369539Z",
+      "lastAttemptTime": "2026-11-16T20:07:19.358339Z",
+      "retryConfig": {
+        "retryCount": 3,
+        "maxRetryDuration": "0s",
+        "minBackoffDuration": "60s",
+        "maxBackoffDuration": "300s",
+        "maxDoublings": 5
+      },
+      "schedule": "0 9 * * *",
+      "timeZone": "Etc/UTC",
+      "attemptDeadline": "180s"
+    },
+    "auth": {
+      "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth-daily",
+      "httpTarget": {
+        "uri": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth:run",
+        "httpMethod": "POST",
+        "headers": {
+          "User-Agent": "Google-Cloud-Scheduler",
+          "Content-Type": "application/json"
+        },
+        "body": "e30=",
+        "oauthToken": {
+          "serviceAccountEmail": "recovery-scheduler@fairway-refresh-recovery.iam.gserviceaccount.com",
+          "scope": "https://www.googleapis.com/auth/cloud-platform"
+        }
+      },
+      "userUpdateTime": "2026-11-16T20:02:59.724372Z",
+      "state": "ENABLED",
+      "status": {},
+      "scheduleTime": "2026-11-17T09:00:01.712887Z",
+      "lastAttemptTime": "2026-11-16T20:07:19.350575Z",
+      "retryConfig": {
+        "retryCount": 3,
+        "maxRetryDuration": "0s",
+        "minBackoffDuration": "60s",
+        "maxBackoffDuration": "300s",
+        "maxDoublings": 5
+      },
+      "schedule": "0 9 * * *",
+      "timeZone": "Etc/UTC",
+      "attemptDeadline": "180s"
+    }
+  },
+  "executions": {
+    "firestore": [
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore/executions/digital-recovery-firestore-kf9kg",
+        "createTime": "2026-11-16T20:07:19.440665Z",
+        "startTime": "2026-11-16T20:07:37.846205Z",
+        "completionTime": "2026-11-16T20:09:30.496475Z",
+        "succeededCount": 1,
+        "failedCount": null,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 1m52.37s.",
+            "lastTransitionTime": "2026-11-16T20:09:18.595387Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Execution completed successfully in 1m52.65s.",
+            "lastTransitionTime": "2026-11-16T20:09:30.496475Z"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 6.67s.",
+            "lastTransitionTime": "2026-11-16T20:07:26.112782Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T20:07:26.215806Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore/executions/digital-recovery-firestore-j5mhr",
+        "createTime": "2026-11-16T20:04:11.532622Z",
+        "startTime": "2026-11-16T20:04:20.104898Z",
+        "completionTime": "2026-11-16T20:06:07.456082Z",
+        "succeededCount": 1,
+        "failedCount": null,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 1m46.73s.",
+            "lastTransitionTime": "2026-11-16T20:05:59.191620Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Execution completed successfully in 1m47.35s.",
+            "lastTransitionTime": "2026-11-16T20:06:07.456082Z"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image.",
+            "lastTransitionTime": "2026-11-16T20:04:12.341280Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T20:04:12.453294Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore/executions/digital-recovery-firestore-c4k9z",
+        "createTime": "2026-11-16T19:38:47.610407Z",
+        "startTime": "2026-11-16T19:39:05.946500Z",
+        "completionTime": "2026-11-16T19:39:29.367078Z",
+        "succeededCount": 1,
+        "failedCount": null,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 24.03s.",
+            "lastTransitionTime": "2026-11-16T19:39:16.054978Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Execution completed successfully in 23.42s.",
+            "lastTransitionTime": "2026-11-16T19:39:29.367078Z"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 4.3s.",
+            "lastTransitionTime": "2026-11-16T19:38:51.916726Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T19:38:52.022213Z"
+          }
+        ]
+      }
+    ],
+    "auth": [
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth/executions/digital-recovery-auth-t5ztq",
+        "createTime": "2026-11-16T20:07:19.427424Z",
+        "startTime": "2026-11-16T20:07:37.846224Z",
+        "completionTime": "2026-11-16T20:09:26.601642Z",
+        "succeededCount": 1,
+        "failedCount": null,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 1m52.37s.",
+            "lastTransitionTime": "2026-11-16T20:09:18.599430Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Execution completed successfully in 1m48.75s.",
+            "lastTransitionTime": "2026-11-16T20:09:26.601642Z"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 6.69s.",
+            "lastTransitionTime": "2026-11-16T20:07:26.111876Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T20:07:26.228974Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth/executions/digital-recovery-auth-llbs9",
+        "createTime": "2026-11-16T20:04:11.497170Z",
+        "startTime": "2026-11-16T20:04:20.104918Z",
+        "completionTime": "2026-11-16T20:06:07.438231Z",
+        "succeededCount": 1,
+        "failedCount": null,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 1m46.36s.",
+            "lastTransitionTime": "2026-11-16T20:05:59.231673Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Execution completed successfully in 1m47.33s.",
+            "lastTransitionTime": "2026-11-16T20:06:07.438231Z"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 1.14s.",
+            "lastTransitionTime": "2026-11-16T20:04:12.635126Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T20:04:12.866719Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth/executions/digital-recovery-auth-5jr8j",
+        "createTime": "2026-11-16T19:53:09.475150Z",
+        "startTime": "2026-11-16T19:53:21.105800Z",
+        "completionTime": "2026-11-16T19:54:30.078896Z",
+        "succeededCount": 1,
+        "failedCount": null,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 1m8.3s.",
+            "lastTransitionTime": "2026-11-16T19:54:22.301694Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Execution completed successfully in 1m8.97s.",
+            "lastTransitionTime": "2026-11-16T19:54:30.078896Z"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 4.42s.",
+            "lastTransitionTime": "2026-11-16T19:53:13.892144Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T19:53:13.996051Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth/executions/digital-recovery-auth-p46wq",
+        "createTime": "2026-11-16T19:50:08.847139Z",
+        "startTime": "2026-11-16T19:50:21.195224Z",
+        "completionTime": "2026-11-16T19:51:04.235760Z",
+        "succeededCount": null,
+        "failedCount": 1,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 44.65s.",
+            "lastTransitionTime": "2026-11-16T19:50:58.016704Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_FAILED",
+            "message": "Task digital-recovery-auth-p46wq-task0 failed with exit code: 1 and message: The container exited with an error.",
+            "lastTransitionTime": "2026-11-16T19:51:04.235760Z",
+            "executionReason": "NON_ZERO_EXIT_CODE"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 4.42s.",
+            "lastTransitionTime": "2026-11-16T19:50:13.264468Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T19:50:13.365661Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth/executions/digital-recovery-auth-gkgqm",
+        "createTime": "2026-11-16T19:46:36.072409Z",
+        "startTime": "2026-11-16T19:46:43.410193Z",
+        "completionTime": "2026-11-16T19:47:43.932502Z",
+        "succeededCount": null,
+        "failedCount": 1,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 58.91s.",
+            "lastTransitionTime": "2026-11-16T19:47:39.430993Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_FAILED",
+            "message": "Task digital-recovery-auth-gkgqm-task0 failed with exit code: 1 and message: The container exited with an error.",
+            "lastTransitionTime": "2026-11-16T19:47:43.932502Z",
+            "executionReason": "NON_ZERO_EXIT_CODE"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 4.34s.",
+            "lastTransitionTime": "2026-11-16T19:46:40.415406Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T19:46:40.514165Z"
+          }
+        ]
+      },
+      {
+        "name": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth/executions/digital-recovery-auth-8mmhc",
+        "createTime": "2026-11-16T19:42:16.655576Z",
+        "startTime": "2026-11-16T19:42:24.074875Z",
+        "completionTime": "2026-11-16T19:44:28.268751Z",
+        "succeededCount": null,
+        "failedCount": 1,
+        "conditions": [
+          {
+            "type": "Started",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Started deployed execution in 17.4s.",
+            "lastTransitionTime": "2026-11-16T19:42:38.565804Z"
+          },
+          {
+            "type": "Completed",
+            "state": "CONDITION_FAILED",
+            "message": "Task digital-recovery-auth-8mmhc-task0 failed with exit code: 1 and message: The container exited with an error.",
+            "lastTransitionTime": "2026-11-16T19:44:28.268751Z",
+            "executionReason": "NON_ZERO_EXIT_CODE"
+          },
+          {
+            "type": "ContainerReady",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Imported container image in 4.4s.",
+            "lastTransitionTime": "2026-11-16T19:42:21.058103Z"
+          },
+          {
+            "type": "ResourcesAvailable",
+            "state": "CONDITION_SUCCEEDED",
+            "message": "Provisioned imported containers.",
+            "lastTransitionTime": "2026-11-16T19:42:21.160181Z"
+          }
+        ]
+      }
+    ]
+  },
+  "storage": {
+    "fairway-refresh-recovery-exports": {
+      "name": "fairway-refresh-recovery-exports",
+      "projectNumber": "883080774039",
+      "location": "US",
+      "storageClass": "STANDARD",
+      "iamConfiguration": {
+        "bucketPolicyOnly": {
+          "enabled": true,
+          "lockedTime": "2027-02-14T19:27:56.071Z"
+        },
+        "uniformBucketLevelAccess": {
+          "enabled": true,
+          "lockedTime": "2027-02-14T19:27:56.071Z"
+        },
+        "publicAccessPrevention": "enforced"
+      },
+      "lifecycle": {
+        "rule": [
+          {
+            "action": {
+              "type": "Delete"
+            },
+            "condition": {
+              "age": 30
+            }
+          }
+        ]
+      },
+      "retentionPolicy": null,
+      "softDeletePolicy": {
+        "retentionDurationSeconds": "604800",
+        "effectiveTime": "2026-11-16T19:27:56.071Z"
+      },
+      "encryption": null,
+      "iam": {
+        "kind": "storage#policy",
+        "resourceId": "projects/_/buckets/fairway-refresh-recovery-exports",
+        "version": 1,
+        "etag": "CAQ=",
+        "bindings": [
+          {
+            "role": "projects/fairway-refresh-recovery/roles/nativeFirestoreRecoveryWriter_withcond_fbaf7aebca6a917a5936",
+            "members": [
+              "serviceAccount:service-936892386735@gcp-sa-firestore.iam.gserviceaccount.com"
+            ]
+          },
+          {
+            "role": "projects/fairway-refresh-recovery/roles/recoveryObjectWriter",
+            "members": [
+              "serviceAccount:digital-recovery@fairway-refresh-recovery.iam.gserviceaccount.com"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyBucketOwner",
+            "members": [
+              "projectEditor:fairway-refresh-recovery",
+              "projectOwner:fairway-refresh-recovery"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyBucketReader",
+            "members": [
+              "projectViewer:fairway-refresh-recovery"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyObjectOwner",
+            "members": [
+              "projectEditor:fairway-refresh-recovery",
+              "projectOwner:fairway-refresh-recovery"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyObjectReader",
+            "members": [
+              "projectViewer:fairway-refresh-recovery"
+            ]
+          }
+        ]
+      }
+    },
+    "fairway-refresh-recovery-accepted-artifacts": {
+      "name": "fairway-refresh-recovery-accepted-artifacts",
+      "projectNumber": "883080774039",
+      "location": "US",
+      "storageClass": "STANDARD",
+      "iamConfiguration": {
+        "bucketPolicyOnly": {
+          "enabled": true,
+          "lockedTime": "2027-02-14T19:27:57.212Z"
+        },
+        "uniformBucketLevelAccess": {
+          "enabled": true,
+          "lockedTime": "2027-02-14T19:27:57.212Z"
+        },
+        "publicAccessPrevention": "enforced"
+      },
+      "lifecycle": null,
+      "retentionPolicy": null,
+      "softDeletePolicy": {
+        "retentionDurationSeconds": "604800",
+        "effectiveTime": "2026-11-16T19:27:57.212Z"
+      },
+      "encryption": null,
+      "iam": {
+        "kind": "storage#policy",
+        "resourceId": "projects/_/buckets/fairway-refresh-recovery-accepted-artifacts",
+        "version": 1,
+        "etag": "CAE=",
+        "bindings": [
+          {
+            "role": "roles/storage.legacyBucketOwner",
+            "members": [
+              "projectEditor:fairway-refresh-recovery",
+              "projectOwner:fairway-refresh-recovery"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyBucketReader",
+            "members": [
+              "projectViewer:fairway-refresh-recovery"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyObjectOwner",
+            "members": [
+              "projectEditor:fairway-refresh-recovery",
+              "projectOwner:fairway-refresh-recovery"
+            ]
+          },
+          {
+            "role": "roles/storage.legacyObjectReader",
+            "members": [
+              "projectViewer:fairway-refresh-recovery"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "alertPolicies": [
+    {
+      "name": "projects/fairway-refresh-recovery/alertPolicies/11514975805709007987",
+      "displayName": "Digital recovery daily success missing",
+      "combiner": "OR",
+      "creationRecord": {
+        "mutateTime": "2026-11-16T19:35:31.879470096Z",
+        "mutatedBy": "josh@fairwayrefresh.com"
+      },
+      "mutationRecord": {
+        "mutateTime": "2026-11-16T19:35:31.879470096Z",
+        "mutatedBy": "josh@fairwayrefresh.com"
+      },
+      "conditions": [
+        {
+          "conditionThreshold": {
+            "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"digital-recovery-firestore\" AND metric.type=\"logging.googleapis.com/user/digital_recovery_success\"",
+            "comparison": "COMPARISON_LT",
+            "thresholdValue": 1,
+            "duration": "3600s",
+            "aggregations": [
+              {
+                "alignmentPeriod": "90000s",
+                "perSeriesAligner": "ALIGN_SUM"
+              }
+            ],
+            "evaluationMissingData": "EVALUATION_MISSING_DATA_ACTIVE"
+          },
+          "displayName": "No successful firestore recovery in 26 hours",
+          "name": "projects/fairway-refresh-recovery/alertPolicies/11514975805709007987/conditions/11514975805709006850"
+        },
+        {
+          "conditionThreshold": {
+            "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"digital-recovery-auth\" AND metric.type=\"logging.googleapis.com/user/digital_recovery_success\"",
+            "comparison": "COMPARISON_LT",
+            "thresholdValue": 1,
+            "duration": "3600s",
+            "aggregations": [
+              {
+                "alignmentPeriod": "90000s",
+                "perSeriesAligner": "ALIGN_SUM"
+              }
+            ],
+            "evaluationMissingData": "EVALUATION_MISSING_DATA_ACTIVE"
+          },
+          "displayName": "No successful auth recovery in 26 hours",
+          "name": "projects/fairway-refresh-recovery/alertPolicies/11514975805709007987/conditions/11514975805709006471"
+        }
+      ],
+      "notificationChannels": [
+        "projects/fairway-refresh-recovery/notificationChannels/1512102899617742614"
+      ],
+      "enabled": true
+    },
+    {
+      "name": "projects/fairway-refresh-recovery/alertPolicies/16303074341184205900",
+      "displayName": "Digital recovery export failure",
+      "combiner": "OR",
+      "creationRecord": {
+        "mutateTime": "2026-11-16T19:35:27.653462584Z",
+        "mutatedBy": "josh@fairwayrefresh.com"
+      },
+      "mutationRecord": {
+        "mutateTime": "2026-11-16T19:35:27.653462584Z",
+        "mutatedBy": "josh@fairwayrefresh.com"
+      },
+      "conditions": [
+        {
+          "displayName": "Recovery job error",
+          "name": "projects/fairway-refresh-recovery/alertPolicies/16303074341184205900/conditions/16303074341184205199",
+          "conditionMatchedLog": {
+            "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=~\"^digital-recovery-(firestore|auth)$\" AND severity>=ERROR"
+          }
+        }
+      ],
+      "notificationChannels": [
+        "projects/fairway-refresh-recovery/notificationChannels/1512102899617742614"
+      ],
+      "enabled": true,
+      "alertStrategy": {
+        "notificationRateLimit": {
+          "period": "3600s"
+        },
+        "autoClose": "604800s"
+      }
+    }
+  ],
+  "emailChannel": {
+    "type": "email",
+    "displayName": "Fairway recovery operations \u2014 CPO",
+    "labels": {
+      "email_address": "josh@fairwayrefresh.com"
+    },
+    "name": "projects/fairway-refresh-recovery/notificationChannels/1512102899617742614",
+    "enabled": true,
+    "creationRecord": {
+      "mutateTime": "2026-11-16T19:30:13.590258437Z"
+    },
+    "mutationRecords": [
+      {
+        "mutateTime": "2026-11-16T19:30:13.590258437Z"
+      }
+    ]
+  },
+  "emailReceiptVerified": false,
+  "alertIncidents": [
+    {
+      "insertId": "1jjluqaf90wcg2",
+      "labels": {
+        "activity_type_name": "ViolationAutoResolveEventv1",
+        "policy_display_name": "Digital recovery daily success missing",
+        "policy_id": "11514975805709007987",
+        "resolved_at": "1794859076",
+        "resource_id": "",
+        "resource_name": "fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-auth, location=us-central1}",
+        "terse_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-auth, location=us-central1} with metric labels {log=run.googleapis.com/stdout} returned to normal with a value of 1.000.",
+        "verbose_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-auth, location=us-central1} with metric labels {log=run.googleapis.com/stdout} returned to normal with a value of 1.000.",
+        "violation_id": "0.of3b1xyb8exo"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/monitoring.googleapis.com%2FViolationAutoResolveEventv1",
+      "receiveTimestamp": "2026-11-16T19:57:56.846614558Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:57:56Z"
+    },
+    {
+      "insertId": "1x3szpee281ad",
+      "labels": {
+        "activity_type_name": "ViolationOpenEventv1",
+        "policy_display_name": "Digital recovery daily success missing",
+        "policy_id": "11514975805709007987",
+        "resource_id": "",
+        "resource_name": "fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-auth, location=us-central1}",
+        "started_at": "1794859015",
+        "terse_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-auth, location=us-central1} with metric labels {log=run.googleapis.com/stdout} is below the threshold of 1.000 with a value of 0.000.",
+        "verbose_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-auth, location=us-central1} with metric labels {log=run.googleapis.com/stdout} is below the threshold of 1.000 with a value of 0.000.",
+        "violation_id": "0.of3b1xyb8exo"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/monitoring.googleapis.com%2FViolationOpenEventv1",
+      "receiveTimestamp": "2026-11-16T19:56:56.136545560Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:56:55Z"
+    },
+    {
+      "insertId": "1bgyy53fdos7lv",
+      "labels": {
+        "activity_type_name": "ViolationAutoResolveEventv1",
+        "policy_display_name": "Digital recovery daily success missing",
+        "policy_id": "11514975805709007987",
+        "resolved_at": "1794858221",
+        "resource_id": "",
+        "resource_name": "fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-firestore, location=us-central1}",
+        "terse_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-firestore, location=us-central1} with metric labels {log=run.googleapis.com/stdout} returned to normal with a value of 1.000.",
+        "verbose_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-firestore, location=us-central1} with metric labels {log=run.googleapis.com/stdout} returned to normal with a value of 1.000.",
+        "violation_id": "0.of3aptwhca9x"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/monitoring.googleapis.com%2FViolationAutoResolveEventv1",
+      "receiveTimestamp": "2026-11-16T19:43:41.236314215Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-firestore",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:43:41Z"
+    },
+    {
+      "insertId": "1j7rvrvfkpj4as",
+      "labels": {
+        "activity_type_name": "ViolationOpenEventv1",
+        "policy_display_name": "Digital recovery daily success missing",
+        "policy_id": "11514975805709007987",
+        "resource_id": "",
+        "resource_name": "fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-firestore, location=us-central1}",
+        "started_at": "1794858131",
+        "terse_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-firestore, location=us-central1} with metric labels {log=run.googleapis.com/stdout} is below the threshold of 1.000 with a value of 0.000.",
+        "verbose_message": "logging/user/digital_recovery_success for fairway-refresh-recovery Cloud Run Job labels {project_id=fairway-refresh-recovery, job_name=digital-recovery-firestore, location=us-central1} with metric labels {log=run.googleapis.com/stdout} is below the threshold of 1.000 with a value of 0.000.",
+        "violation_id": "0.of3aptwhca9x"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/monitoring.googleapis.com%2FViolationOpenEventv1",
+      "receiveTimestamp": "2026-11-16T19:42:11.289513124Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-firestore",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:42:11Z"
+    },
+    {
+      "insertId": "96nn61e144j3",
+      "labels": {
+        "activity_type_name": "ViolationOpenEventv1",
+        "policy_display_name": "Digital recovery export failure",
+        "policy_id": "16303074341184205900",
+        "resource_id": "",
+        "resource_name": "Cloud Run Job labels {job_name=digital-recovery-auth, location=us-central1, project_id=fairway-refresh-recovery}",
+        "started_at": "1794857977",
+        "terse_message": "Log match condition fired for Cloud Run Job with {job_name=digital-recovery-auth, location=us-central1, project_id=fairway-refresh-recovery}.",
+        "verbose_message": "Log match condition fired for Cloud Run Job with {job_name=digital-recovery-auth, location=us-central1, project_id=fairway-refresh-recovery}.",
+        "violation_id": "0.of3anpxsi6b8"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/monitoring.googleapis.com%2FViolationOpenEventv1",
+      "receiveTimestamp": "2026-11-16T19:39:37.674827214Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:39:37Z"
+    },
+    {
+      "insertId": "198qt0ze8zrhi",
+      "labels": {
+        "activity_type_name": "ViolationOpenEventv1",
+        "policy_display_name": "Digital recovery export failure",
+        "policy_id": "16303074341184205900",
+        "resource_id": "",
+        "resource_name": "Cloud Run Job labels {job_name=digital-recovery-auth, location=us-central1, project_id=fairway-refresh-recovery}",
+        "started_at": "1794857977",
+        "terse_message": "Log match condition fired for Cloud Run Job with {job_name=digital-recovery-auth, location=us-central1, project_id=fairway-refresh-recovery}.",
+        "verbose_message": "Log match condition fired for Cloud Run Job with {job_name=digital-recovery-auth, location=us-central1, project_id=fairway-refresh-recovery}.",
+        "violation_id": "0.of3anpxsi6b8"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/monitoring.googleapis.com%2FViolationOpenEventv1",
+      "receiveTimestamp": "2026-11-16T19:39:37.557658505Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:39:37Z"
+    }
+  ],
+  "schedulerAttempts": [
+    {
+      "insertId": "1dop49qf78i4vz",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptStarted",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth-daily",
+        "scheduledTime": "2026-11-16T20:07:19.350575Z",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:07:26.555909071Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-auth-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:07:26.555909071Z"
+    },
+    {
+      "httpRequest": {
+        "status": 200
+      },
+      "insertId": "1hvtk5rf97g6a9",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished",
+        "debugInfo": "URL_CRAWLED. Original HTTP response code number = 200",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth-daily",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:07:26.498278163Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-auth-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:07:26.498278163Z"
+    },
+    {
+      "insertId": "1ra71gtf5ot6o4",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptStarted",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore-daily",
+        "scheduledTime": "2026-11-16T20:07:19.358339Z",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:07:21.049992556Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-firestore-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:07:21.049992556Z"
+    },
+    {
+      "httpRequest": {
+        "status": 200
+      },
+      "insertId": "153s0ckfjdzsc5",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished",
+        "debugInfo": "URL_CRAWLED. Original HTTP response code number = 200",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore-daily",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:07:21.014723437Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-firestore-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:07:21.014723437Z"
+    },
+    {
+      "insertId": "1awbxvff3zuw03",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptStarted",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth-daily",
+        "scheduledTime": "2026-11-16T20:04:11.399659Z",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:04:13.542842601Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-auth-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:04:13.542842601Z"
+    },
+    {
+      "insertId": "1e9o7ayfgo47lq",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptStarted",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore-daily",
+        "scheduledTime": "2026-11-16T20:04:11.455754Z",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:04:13.540418128Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-firestore-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:04:13.540418128Z"
+    },
+    {
+      "httpRequest": {
+        "status": 200
+      },
+      "insertId": "fal8z2f6m06on",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished",
+        "debugInfo": "URL_CRAWLED. Original HTTP response code number = 200",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth-daily",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-auth:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:04:13.512505841Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-auth-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:04:13.512505841Z"
+    },
+    {
+      "httpRequest": {
+        "status": 200
+      },
+      "insertId": "1fcg999fkbggbi",
+      "jsonPayload": {
+        "@type": "type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished",
+        "debugInfo": "URL_CRAWLED. Original HTTP response code number = 200",
+        "jobName": "projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore-daily",
+        "targetType": "HTTP",
+        "url": "https://run.googleapis.com/v2/projects/fairway-refresh-recovery/locations/us-central1/jobs/digital-recovery-firestore:run"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/cloudscheduler.googleapis.com%2Fexecutions",
+      "receiveTimestamp": "2026-11-16T20:04:13.500582115Z",
+      "resource": {
+        "labels": {
+          "job_id": "digital-recovery-firestore-daily",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_scheduler_job"
+      },
+      "severity": "INFO",
+      "timestamp": "2026-11-16T20:04:13.500582115Z"
+    }
+  ],
+  "successHeartbeats": [
+    {
+      "insertId": "6afb62f5000e8a6755fd8605",
+      "jsonPayload": {
+        "action": "firestore",
+        "event": "recovery_succeeded",
+        "restorationVerified": false,
+        "status": "managed_export_completed"
+      },
+      "labels": {
+        "instanceId": "00e8a408bd9ac08d31ece33ac4df0aec0589cc1046740bad59d726e4011645bce359952451add2d2bc8e9d980bb79a01d55085fa83b76a4695138c5afc4e6736fb108cc4c00d3ce5bd0f06f5eb43ca422f7c94e24cf5a1fe6bdcf2",
+        "run.googleapis.com/execution_name": "digital-recovery-firestore-kf9kg",
+        "run.googleapis.com/task_attempt": "0",
+        "run.googleapis.com/task_index": "0"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/run.googleapis.com%2Fstdout",
+      "receiveTimestamp": "2026-11-16T20:09:25.961238515Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-firestore",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T20:09:25.952935Z"
+    },
+    {
+      "insertId": "6afb62f10003b45c8b7d4536",
+      "jsonPayload": {
+        "action": "auth",
+        "event": "recovery_succeeded",
+        "restorationVerified": false,
+        "status": "auth_export_completed"
+      },
+      "labels": {
+        "instanceId": "00e8a408bd30448a77f451c595aba6935a6e7ddab3c018c9407d3011f322517f75f88d29be9295e135a5d80fc20506749f09168026cdb874326896433e6f7619781098a41d37ea708f6d80652d3033638278b5f2c574cfdc551015",
+        "run.googleapis.com/execution_name": "digital-recovery-auth-t5ztq",
+        "run.googleapis.com/task_attempt": "0",
+        "run.googleapis.com/task_index": "0"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/run.googleapis.com%2Fstdout",
+      "receiveTimestamp": "2026-11-16T20:09:21.250938617Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T20:09:21.242780Z"
+    },
+    {
+      "insertId": "6afb622c000583e371f949a9",
+      "jsonPayload": {
+        "action": "firestore",
+        "event": "recovery_succeeded",
+        "restorationVerified": false,
+        "status": "managed_export_completed"
+      },
+      "labels": {
+        "instanceId": "00e8a408bd6727c0c7598a89e1a1d1b072ae979291a48aa7e391fde2e4e67287d53590cb0099b24414ae6bd55810f23980057914052e7a35ddc4dc6a4d1fae39075028526c2c5ff162c07c02541949e209c051e45d0de2de7066d8",
+        "run.googleapis.com/execution_name": "digital-recovery-firestore-j5mhr",
+        "run.googleapis.com/task_attempt": "0",
+        "run.googleapis.com/task_index": "0"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/run.googleapis.com%2Fstdout",
+      "receiveTimestamp": "2026-11-16T20:06:04.369749491Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-firestore",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T20:06:04.361443Z"
+    },
+    {
+      "insertId": "6afb62290009f90d771997a3",
+      "jsonPayload": {
+        "action": "auth",
+        "event": "recovery_succeeded",
+        "restorationVerified": false,
+        "status": "auth_export_completed"
+      },
+      "labels": {
+        "instanceId": "00e8a408bdb2f8cbfd3f15b3edd137a946ca8dde9fd70ba9c44f810f9a255d209caa804b0e94dec2874e41909995f46aa9006db8656b5fb520700df4fdd9c4ad15e893d6d0d4a10c911592846568dda0d154aeb1f616e90d452dc7",
+        "run.googleapis.com/execution_name": "digital-recovery-auth-llbs9",
+        "run.googleapis.com/task_attempt": "0",
+        "run.googleapis.com/task_index": "0"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/run.googleapis.com%2Fstdout",
+      "receiveTimestamp": "2026-11-16T20:06:01.663999963Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T20:06:01.653581Z"
+    },
+    {
+      "insertId": "6afb5f70000e46b4b4d82279",
+      "jsonPayload": {
+        "action": "auth",
+        "event": "recovery_succeeded",
+        "restorationVerified": false,
+        "status": "auth_export_completed"
+      },
+      "labels": {
+        "instanceId": "00e8a408bd624146c60b8f62b85639534d8b35f36c084bebce13a148a5f04305bd6ee7e5b40de461c650a208c078674da2c19d373027b8ce9e3fe64ea40a22fb730cb5d76afadf59f2f7a44ed9c8e1b27b1ca5967505ce00daee",
+        "run.googleapis.com/execution_name": "digital-recovery-auth-5jr8j",
+        "run.googleapis.com/task_attempt": "0",
+        "run.googleapis.com/task_index": "0"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/run.googleapis.com%2Fstdout",
+      "receiveTimestamp": "2026-11-16T19:54:24.945654134Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-auth",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:54:24.935604Z"
+    },
+    {
+      "insertId": "6afb5beb00085bcafda4ff94",
+      "jsonPayload": {
+        "action": "firestore",
+        "event": "recovery_succeeded",
+        "restorationVerified": false,
+        "status": "managed_export_completed"
+      },
+      "labels": {
+        "instanceId": "00e8a408bd1a890125119505dc5860aee014c6c3c6245a54b0f928f136cf8541cfc104eaa4cf066b8440434f2df06e54647b23f06731ff048ad675588eb0c45825a8d7b56bf35788931a31c432844f373ed72500f194a8b1ee99fde4b7ff84",
+        "run.googleapis.com/execution_name": "digital-recovery-firestore-c4k9z",
+        "run.googleapis.com/task_attempt": "0",
+        "run.googleapis.com/task_index": "0"
+      },
+      "logName": "projects/fairway-refresh-recovery/logs/run.googleapis.com%2Fstdout",
+      "receiveTimestamp": "2026-11-16T19:39:23.555266293Z",
+      "resource": {
+        "labels": {
+          "job_name": "digital-recovery-firestore",
+          "location": "us-central1",
+          "project_id": "fairway-refresh-recovery"
+        },
+        "type": "cloud_run_job"
+      },
+      "timestamp": "2026-11-16T19:39:23.547786Z"
+    }
+  ],
+  "productionFirestore": {
+    "name": "projects/savvy-kit-496703-r5/databases/(default)",
+    "uid": "0abf014d-fcda-4bf7-b75c-59faa1f0b4b3",
+    "locationId": "nam5",
+    "pointInTimeRecoveryEnablement": "POINT_IN_TIME_RECOVERY_ENABLED",
+    "versionRetentionPeriod": "604800s",
+    "deleteProtectionState": "DELETE_PROTECTION_DISABLED"
+  },
+  "productionBackupSchedules": {
+    "backupSchedules": [
+      {
+        "name": "projects/savvy-kit-496703-r5/databases/(default)/backupSchedules/f99a3226-e90e-4de3-939a-0e254c4287de",
+        "createTime": "2026-11-16T16:36:13.489140Z",
+        "retention": "2592000s",
+        "dailyRecurrence": {},
+        "updateTime": "2026-11-16T16:36:13.489140Z"
+      }
+    ]
+  },
+  "productionTraffic": {
+    "fairway-admin": [
+      {
+        "revisionName": "fairway-admin-00062-zuv",
+        "tag": "ota-delivery-enable-20261110",
+        "url": "https://ota-delivery-enable-20261110---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-cartperf-35e7c6c",
+        "tag": "cartperf-release",
+        "url": "https://cartperf-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-excl-cf7d885",
+        "tag": "excl-release",
+        "url": "https://excl-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-fleetota-5214515",
+        "tag": "fleetota-5214515",
+        "url": "https://fleetota-5214515---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-hours-26b6201",
+        "tag": "hours-release",
+        "url": "https://hours-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-layout-c66b99f",
+        "tag": "layout-release",
+        "url": "https://layout-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "percent": 100,
+        "revisionName": "fairway-admin-nogate-1115-1222",
+        "tag": "nogate-1115",
+        "url": "https://nogate-1115---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-onboard-ada4001",
+        "tag": "onboard-ada4001",
+        "url": "https://onboard-ada4001---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-10r4-2e0b5a9",
+        "tag": "ota-10r4-2e0b5a9",
+        "url": "https://ota-10r4-2e0b5a9---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-admin-59f81b5",
+        "tag": "ota-admin-release",
+        "url": "https://ota-admin-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-complete-abf92e9",
+        "tag": "ota-complete-abf92e9",
+        "url": "https://ota-complete-abf92e9---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-confirm-12eed29",
+        "tag": "ota-confirm-release",
+        "url": "https://ota-confirm-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-delivery-43b4da0",
+        "tag": "ota-delivery-release",
+        "url": "https://ota-delivery-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-r2-cb02",
+        "tag": "ota-r2-cb02",
+        "url": "https://ota-r2-cb02---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-r3-c0d0720",
+        "tag": "ota-r3-c0d0720",
+        "url": "https://ota-r3-c0d0720---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-r4-53cf494",
+        "tag": "ota-r4-53cf494",
+        "url": "https://ota-r4-53cf494---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-r4-8bac296",
+        "tag": "ota-r4-8bac296",
+        "url": "https://ota-r4-8bac296---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-ota-target-12cf730",
+        "tag": "ota-target-12cf730",
+        "url": "https://ota-target-12cf730---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-qr-db9001e",
+        "tag": "qr-release",
+        "url": "https://qr-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-report-5396b69",
+        "tag": "button-report-release",
+        "url": "https://button-report-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-rptexcl-7ec07b8",
+        "tag": "rptexcl-release",
+        "url": "https://rptexcl-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-sales-12f60f0",
+        "tag": "sales-release",
+        "url": "https://sales-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-admin-svchours-19f7f29",
+        "tag": "svchours-release",
+        "url": "https://svchours-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+      }
+    ],
+    "fairway-button-receiver": [
+      {
+        "revisionName": "fairway-button-receiver-00031-5mx",
+        "tag": "qr-release",
+        "url": "https://qr-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-00051-dad",
+        "tag": "ota-enable-1110",
+        "url": "https://ota-enable-1110---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-dedup-68ce31f",
+        "tag": "dedup-68ce31f",
+        "url": "https://dedup-68ce31f---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-excl-cf7d885",
+        "tag": "excl-release",
+        "url": "https://excl-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-fleetota-5214515",
+        "tag": "fleetota-5214515",
+        "url": "https://fleetota-5214515---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "percent": 100,
+        "revisionName": "fairway-button-receiver-nogate-1115-1222",
+        "tag": "nogate-1115",
+        "url": "https://nogate-1115---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-onboard-ada4001",
+        "tag": "onboard-ada4001",
+        "url": "https://onboard-ada4001---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-10r4-2e0b5a9",
+        "tag": "ota-10r4-2e0b5a9",
+        "url": "https://ota-10r4-2e0b5a9---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-admin-59f81b5",
+        "tag": "ota-admin-release",
+        "url": "https://ota-admin-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-complete-abf92e9",
+        "tag": "ota-complete-abf92e9",
+        "url": "https://ota-complete-abf92e9---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-confirm-12eed29",
+        "tag": "ota-confirm-release",
+        "url": "https://ota-confirm-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-delivery-43b4da0",
+        "tag": "ota-delivery-release",
+        "url": "https://ota-delivery-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-r2-cb02",
+        "tag": "ota-r2-cb02",
+        "url": "https://ota-r2-cb02---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-r3-c0d0720",
+        "tag": "ota-r3-c0d0720",
+        "url": "https://ota-r3-c0d0720---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-r4-53cf494",
+        "tag": "ota-r4-53cf494",
+        "url": "https://ota-r4-53cf494---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-r4-8bac296",
+        "tag": "ota-r4-8bac296",
+        "url": "https://ota-r4-8bac296---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-ota-target-12cf730",
+        "tag": "ota-target-12cf730",
+        "url": "https://ota-target-12cf730---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "revisionName": "fairway-button-receiver-roll-26b6201",
+        "tag": "roll-release",
+        "url": "https://roll-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+      }
+    ],
+    "fairway-request-notifier": [
+      {
+        "revisionName": "fairway-request-notifier-00007-yes",
+        "tag": "qr-release",
+        "url": "https://qr-release---fairway-request-notifier-6m5kxocxxa-uc.a.run.app"
+      },
+      {
+        "percent": 100,
+        "revisionName": "fairway-request-notifier-00009-seg"
+      }
+    ]
+  },
+  "productionEventarc": [],
+  "custody": {
+    "versions": [
+      "recovery-auth-scrypt:1",
+      "recovery-auth-project-config:1",
+      "custody-fairway-qr-rate-key:1",
+      "custody-fairway-vapid-private-key:1",
+      "custody-fairway-vapid-public-key:1"
+    ],
+    "sourceEqualityVerifiedInMemory": true,
+    "privateSigningKeyAccessed": false
+  },
+  "independentServingImages": [
+    {
+      "source": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:fb4cd12954b27c7a1befd8a7a394b24b5e2d9fd0e184407f1c92b240ea689ddd",
+      "recovered": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/fairway-admin@sha256:fb4cd12954b27c7a1befd8a7a394b24b5e2d9fd0e184407f1c92b240ea689ddd",
+      "digestVerified": true
+    },
+    {
+      "source": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-button-receiver@sha256:0367d5e992d37c649bf7863199477f4d9be5dd8306907e27f6b0b2c2d53bac2c",
+      "recovered": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/fairway-button-receiver@sha256:0367d5e992d37c649bf7863199477f4d9be5dd8306907e27f6b0b2c2d53bac2c",
+      "digestVerified": true
+    },
+    {
+      "source": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/gcf-artifacts/savvy--kit--496703--r5__us--central1__fairway--request--notifier@sha256:b7538283dcd23891f7af8af9b2f7d10b4f7af90390e31a06b1e22f6541c00b45",
+      "recovered": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/fairway-request-notifier@sha256:b7538283dcd23891f7af8af9b2f7d10b4f7af90390e31a06b1e22f6541c00b45",
+      "digestVerified": true
+    }
+  ],
+  "sourceAuthConfigurationUnchanged": true,
+  "anonymousRecoveryFirestoreReadHTTP": 403,
+  "allRecoveryBucketsPrivacy": [
+    {
+      "name": "883080774039-us-central1-cloudbuild-logs",
+      "uniformAccess": true,
+      "publicAccessPrevention": "enforced",
+      "publicIAM": false
+    },
+    {
+      "name": "fairway-refresh-recovery-accepted-artifacts",
+      "uniformAccess": true,
+      "publicAccessPrevention": "enforced",
+      "publicIAM": false
+    },
+    {
+      "name": "fairway-refresh-recovery-exports",
+      "uniformAccess": true,
+      "publicAccessPrevention": "enforced",
+      "publicIAM": false
+    },
+    {
+      "name": "fairway-refresh-recovery_cloudbuild",
+      "uniformAccess": true,
+      "publicAccessPrevention": "enforced",
+      "publicIAM": false
+    },
+    {
+      "name": "fairway-refresh-recovery_us-central1_cloudbuild",
+      "uniformAccess": true,
+      "publicAccessPrevention": "enforced",
+      "publicIAM": false
+    }
+  ]
+}

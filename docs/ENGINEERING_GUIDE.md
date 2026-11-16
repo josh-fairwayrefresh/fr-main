@@ -113,7 +113,9 @@ copy and explicit activation establish a single serving owner. Customer-mode
 operations never fall back to Course storage, including when an owner is
 missing. The explicit legacy runtime is a pre-cutover bridge only, and refuses
 Customers already transitioned. See the deployment owner's controlled
-migration and forward-recovery procedure.
+migration procedure. The [Recovery Guide](RECOVERY_GUIDE.md) owns operational
+recovery and data-restoration decisions; deployment rollback and coordinated
+migration execution remain with the deployment owner.
 `user_access/{uid}` remains the single account-entitlement owner. Explicit
 Customer-owned service-asset grants preserve each user's existing operational
 access; Customer membership must not silently grant all services. Menu grants
@@ -132,6 +134,10 @@ remains in force until a separately authorized, verified cutover.
 
 - Firmware, backend, web applications, build configuration, and canonical documents are in the `nfed` repository. The official Nordic SDK and matching toolchain are installed separately; build and deployment procedures are owned by `docs/DEPLOYMENT_GUIDE.md`.
 - Device provisioning, registry lifecycle, and authentication requirements are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
+- Digital-system operational recovery, verified capabilities and recovery gaps
+  are owned by the [Recovery Guide](RECOVERY_GUIDE.md). Production change safety,
+  release verification and deployment rollback remain with the
+  [Deployment Guide](DEPLOYMENT_GUIDE.md).
 - Externally observable behavior is owned by `docs/UX_SPECIFICATION.md`.
 - Current parts and physical wiring are owned by `docs/HARDWARE_BOM.md` and `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 - Open, deferred work is listed in `docs/feature_backlog.md`. Superseded milestones and abandoned work are summarized, non-authoritatively, in `docs/archive.md`.
@@ -249,7 +255,9 @@ The CPO accepted release preparation and authorized production publication on
 PR #12 is merged and its stock-aware Admin and production Hosting are released.
 The [Deployment Guide](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26)
 owns source/publication identities, full product-ID/field/column preservation,
-authorization evidence and compatible recovery. No migration or
+authorization evidence and deployment rollback constraints. The
+[Recovery Guide](RECOVERY_GUIDE.md#cloud-run-backend-services) owns operational
+restoration using those constraints. No migration or
 quantity-initialization write was performed. The public menu's On Cart filter
 does not synchronize/prune operator inventory or archived records. After new
 records exist, recovery must retain the stock-aware transaction/idempotency
@@ -512,8 +520,10 @@ validation, exact source/configuration/artifact/environment traceability,
 independent architectural review at the published commit, updated owner
 documentation, residual risks, and CPO acceptance. Merge and operational
 authorization remain separate. Release-specific rollout, observation, stop
-conditions, and compatible recovery are owned by
+conditions, and compatible deployment rollback are owned by
 [the Deployment Guide](DEPLOYMENT_GUIDE.md#field-safe-release-readiness).
+Operational recovery across services and their data is owned by the
+[Recovery Guide](RECOVERY_GUIDE.md).
 
 Before recommending a production deployment, the Lead Architect independently
 assesses the complete proposed production effect, not merely the source diff or

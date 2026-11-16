@@ -1,0 +1,1190 @@
+{
+  "backup_schedules": [
+    {
+      "createTime": "2026-11-16T16:36:13.489140Z",
+      "dailyRecurrence": {},
+      "name": "projects/savvy-kit-496703-r5/databases/(default)/backupSchedules/f99a3226-e90e-4de3-939a-0e254c4287de",
+      "retention": "2592000s",
+      "updateTime": "2026-11-16T16:36:13.489140Z"
+    }
+  ],
+  "captured_at": "2026-11-16T18:26:27.047136+00:00",
+  "cloud_run": {
+    "fairway-admin": {
+      "configuration": {
+        "metadata": {
+          "annotations": {
+            "run.googleapis.com/build-base-image": "us-central1-docker.pkg.dev/serverless-runtimes/google-22/runtimes/nodejs22",
+            "run.googleapis.com/build-enable-automatic-updates": "false",
+            "run.googleapis.com/build-function-target": "fairwayAdmin",
+            "run.googleapis.com/build-id": "2d765f39-b4d9-45d3-8f51-73d8bc5b4877",
+            "run.googleapis.com/build-image-uri": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin",
+            "run.googleapis.com/build-name": "projects/936892386735/locations/us-central1/builds/2d765f39-b4d9-45d3-8f51-73d8bc5b4877",
+            "run.googleapis.com/build-source-location": "gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-admin/1794774372.773276-48566f80675b4102ad3e2e0dc9fadfdf.zip#1794774373083666",
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "585.0.0",
+            "run.googleapis.com/ingress": "all",
+            "run.googleapis.com/ingress-status": "all",
+            "run.googleapis.com/invoker-iam-disabled": "true",
+            "run.googleapis.com/maxScale": "20",
+            "run.googleapis.com/operation-id": "05c27cb1-5de6-4b4d-866a-423416459614",
+            "run.googleapis.com/urls": "[\"https://fairway-admin-936892386735.us-central1.run.app\",\"https://fairway-admin-6m5kxocxxa-uc.a.run.app\"]",
+            "serving.knative.dev/creator": "josh@fairwayrefresh.com",
+            "serving.knative.dev/lastModifier": "josh@fairwayrefresh.com"
+          },
+          "name": "fairway-admin"
+        },
+        "spec": {
+          "template": {
+            "metadata": {
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "20",
+                "run.googleapis.com/client-name": "gcloud",
+                "run.googleapis.com/client-version": "585.0.0",
+                "run.googleapis.com/startup-cpu-boost": "true"
+              },
+              "name": "fairway-admin-nogate-1115-1222"
+            },
+            "spec": {
+              "containerConcurrency": 80,
+              "containers": [
+                {
+                  "env": [
+                    {
+                      "name": "FAIRWAY_ENV"
+                    },
+                    {
+                      "name": "FAIRWAY_SERVICE_MODE"
+                    },
+                    {
+                      "name": "FAIRWAY_GCP_PROJECT"
+                    },
+                    {
+                      "name": "GOOGLE_CLOUD_PROJECT"
+                    },
+                    {
+                      "name": "FAIRWAY_ALLOWED_ORIGIN"
+                    },
+                    {
+                      "name": "DEPLOY_TIMESTAMP"
+                    },
+                    {
+                      "name": "FAIRWAY_OTA_BUCKET"
+                    },
+                    {
+                      "name": "FAIRWAY_OTA_DELIVERY_ENABLED"
+                    }
+                  ],
+                  "image": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:fb4cd12954b27c7a1befd8a7a394b24b5e2d9fd0e184407f1c92b240ea689ddd",
+                  "ports": [
+                    {
+                      "containerPort": 8080,
+                      "name": "http1"
+                    }
+                  ],
+                  "resources": {
+                    "limits": {
+                      "cpu": "1",
+                      "memory": "512Mi"
+                    }
+                  }
+                }
+              ],
+              "serviceAccountName": "fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com",
+              "timeoutSeconds": 300
+            }
+          }
+        },
+        "status": {
+          "traffic": [
+            {
+              "revisionName": "fairway-admin-00062-zuv",
+              "tag": "ota-delivery-enable-20261110",
+              "url": "https://ota-delivery-enable-20261110---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-cartperf-35e7c6c",
+              "tag": "cartperf-release",
+              "url": "https://cartperf-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-excl-cf7d885",
+              "tag": "excl-release",
+              "url": "https://excl-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-fleetota-5214515",
+              "tag": "fleetota-5214515",
+              "url": "https://fleetota-5214515---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-hours-26b6201",
+              "tag": "hours-release",
+              "url": "https://hours-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-layout-c66b99f",
+              "tag": "layout-release",
+              "url": "https://layout-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "percent": 100,
+              "revisionName": "fairway-admin-nogate-1115-1222",
+              "tag": "nogate-1115",
+              "url": "https://nogate-1115---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-onboard-ada4001",
+              "tag": "onboard-ada4001",
+              "url": "https://onboard-ada4001---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-10r4-2e0b5a9",
+              "tag": "ota-10r4-2e0b5a9",
+              "url": "https://ota-10r4-2e0b5a9---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-admin-59f81b5",
+              "tag": "ota-admin-release",
+              "url": "https://ota-admin-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-complete-abf92e9",
+              "tag": "ota-complete-abf92e9",
+              "url": "https://ota-complete-abf92e9---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-confirm-12eed29",
+              "tag": "ota-confirm-release",
+              "url": "https://ota-confirm-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-delivery-43b4da0",
+              "tag": "ota-delivery-release",
+              "url": "https://ota-delivery-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-r2-cb02",
+              "tag": "ota-r2-cb02",
+              "url": "https://ota-r2-cb02---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-r3-c0d0720",
+              "tag": "ota-r3-c0d0720",
+              "url": "https://ota-r3-c0d0720---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-r4-53cf494",
+              "tag": "ota-r4-53cf494",
+              "url": "https://ota-r4-53cf494---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-r4-8bac296",
+              "tag": "ota-r4-8bac296",
+              "url": "https://ota-r4-8bac296---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-ota-target-12cf730",
+              "tag": "ota-target-12cf730",
+              "url": "https://ota-target-12cf730---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-qr-db9001e",
+              "tag": "qr-release",
+              "url": "https://qr-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-report-5396b69",
+              "tag": "button-report-release",
+              "url": "https://button-report-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-rptexcl-7ec07b8",
+              "tag": "rptexcl-release",
+              "url": "https://rptexcl-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-sales-12f60f0",
+              "tag": "sales-release",
+              "url": "https://sales-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-admin-svchours-19f7f29",
+              "tag": "svchours-release",
+              "url": "https://svchours-release---fairway-admin-6m5kxocxxa-uc.a.run.app"
+            }
+          ],
+          "url": "https://fairway-admin-6m5kxocxxa-uc.a.run.app"
+        }
+      },
+      "environment_plan": {
+        "nonsecret_value_names": [
+          "DEPLOY_TIMESTAMP",
+          "FAIRWAY_ALLOWED_ORIGIN",
+          "FAIRWAY_ENV",
+          "FAIRWAY_GCP_PROJECT",
+          "FAIRWAY_OTA_BUCKET",
+          "FAIRWAY_OTA_DELIVERY_ENABLED",
+          "FAIRWAY_SERVICE_MODE",
+          "GOOGLE_CLOUD_PROJECT"
+        ],
+        "secret_references": {},
+        "unresolved_custody_names": []
+      },
+      "invoker_policy": {
+        "etag": "ACAB"
+      },
+      "nonsecret_environment": {
+        "DEPLOY_TIMESTAMP": "1791835802",
+        "FAIRWAY_ALLOWED_ORIGIN": "https://savvy-kit-496703-r5.web.app,https://app.fairwayrefresh.com",
+        "FAIRWAY_ENV": "production",
+        "FAIRWAY_GCP_PROJECT": "savvy-kit-496703-r5",
+        "FAIRWAY_OTA_BUCKET": "savvy-kit-496703-r5-ota-artifacts",
+        "FAIRWAY_OTA_DELIVERY_ENABLED": "true",
+        "FAIRWAY_SERVICE_MODE": "admin",
+        "GOOGLE_CLOUD_PROJECT": "savvy-kit-496703-r5"
+      }
+    },
+    "fairway-button-receiver": {
+      "configuration": {
+        "metadata": {
+          "annotations": {
+            "run.googleapis.com/build-base-image": "us-central1-docker.pkg.dev/serverless-runtimes/google-22/runtimes/nodejs22",
+            "run.googleapis.com/build-enable-automatic-updates": "true",
+            "run.googleapis.com/build-function-target": "fairwayButtonReceiver",
+            "run.googleapis.com/build-id": "5a29624e-1b85-47be-b3e9-9420734c693d",
+            "run.googleapis.com/build-image-uri": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-button-receiver",
+            "run.googleapis.com/build-name": "projects/936892386735/locations/us-central1/builds/5a29624e-1b85-47be-b3e9-9420734c693d",
+            "run.googleapis.com/build-source-location": "gs://run-sources-savvy-kit-496703-r5-us-central1/services/fairway-button-receiver/1794774372.570029-a8207e4e939d4d249b1df192ca86bc50.zip#1794774372895416",
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "585.0.0",
+            "run.googleapis.com/ingress": "all",
+            "run.googleapis.com/ingress-status": "all",
+            "run.googleapis.com/invoker-iam-disabled": "true",
+            "run.googleapis.com/maxScale": "3",
+            "run.googleapis.com/operation-id": "ce0e7b1f-4f8f-4532-a85e-9ccddd4d2be3",
+            "run.googleapis.com/urls": "[\"https://fairway-button-receiver-936892386735.us-central1.run.app\",\"https://fairway-button-receiver-6m5kxocxxa-uc.a.run.app\"]",
+            "serving.knative.dev/creator": "josh@fairwayrefresh.com",
+            "serving.knative.dev/lastModifier": "josh@fairwayrefresh.com"
+          },
+          "name": "fairway-button-receiver"
+        },
+        "spec": {
+          "template": {
+            "metadata": {
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "3",
+                "run.googleapis.com/base-images": "{\"fairway-button-receiver-1\":\"us-central1-docker.pkg.dev/serverless-runtimes/google-22/runtimes/nodejs22\"}",
+                "run.googleapis.com/client-name": "gcloud",
+                "run.googleapis.com/client-version": "585.0.0",
+                "run.googleapis.com/startup-cpu-boost": "true"
+              },
+              "name": "fairway-button-receiver-nogate-1115-1222"
+            },
+            "spec": {
+              "containerConcurrency": 80,
+              "containers": [
+                {
+                  "env": [
+                    {
+                      "name": "FAIRWAY_ENV"
+                    },
+                    {
+                      "name": "FAIRWAY_SERVICE_MODE"
+                    },
+                    {
+                      "name": "FAIRWAY_GCP_PROJECT"
+                    },
+                    {
+                      "name": "GOOGLE_CLOUD_PROJECT"
+                    },
+                    {
+                      "name": "FAIRWAY_VAPID_PUBLIC_KEY"
+                    },
+                    {
+                      "name": "FAIRWAY_VAPID_KEY_VERSION"
+                    },
+                    {
+                      "name": "DEPLOY_TIMESTAMP"
+                    },
+                    {
+                      "name": "FAIRWAY_QR_ENABLED"
+                    },
+                    {
+                      "name": "FAIRWAY_QR_RATE_KEY",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "1",
+                          "name": "fairway-qr-rate-key"
+                        }
+                      }
+                    },
+                    {
+                      "name": "FAIRWAY_OTA_BUCKET"
+                    },
+                    {
+                      "name": "FAIRWAY_OTA_DELIVERY_ENABLED"
+                    }
+                  ],
+                  "image": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-button-receiver@sha256:0367d5e992d37c649bf7863199477f4d9be5dd8306907e27f6b0b2c2d53bac2c",
+                  "ports": [
+                    {
+                      "containerPort": 8080,
+                      "name": "http1"
+                    }
+                  ],
+                  "resources": {
+                    "limits": {
+                      "cpu": "1000m",
+                      "memory": "512Mi"
+                    }
+                  }
+                }
+              ],
+              "serviceAccountName": "936892386735-compute@developer.gserviceaccount.com",
+              "timeoutSeconds": 300
+            }
+          }
+        },
+        "status": {
+          "traffic": [
+            {
+              "revisionName": "fairway-button-receiver-00031-5mx",
+              "tag": "qr-release",
+              "url": "https://qr-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-00051-dad",
+              "tag": "ota-enable-1110",
+              "url": "https://ota-enable-1110---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-dedup-68ce31f",
+              "tag": "dedup-68ce31f",
+              "url": "https://dedup-68ce31f---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-excl-cf7d885",
+              "tag": "excl-release",
+              "url": "https://excl-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-fleetota-5214515",
+              "tag": "fleetota-5214515",
+              "url": "https://fleetota-5214515---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "percent": 100,
+              "revisionName": "fairway-button-receiver-nogate-1115-1222",
+              "tag": "nogate-1115",
+              "url": "https://nogate-1115---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-onboard-ada4001",
+              "tag": "onboard-ada4001",
+              "url": "https://onboard-ada4001---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-10r4-2e0b5a9",
+              "tag": "ota-10r4-2e0b5a9",
+              "url": "https://ota-10r4-2e0b5a9---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-admin-59f81b5",
+              "tag": "ota-admin-release",
+              "url": "https://ota-admin-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-complete-abf92e9",
+              "tag": "ota-complete-abf92e9",
+              "url": "https://ota-complete-abf92e9---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-confirm-12eed29",
+              "tag": "ota-confirm-release",
+              "url": "https://ota-confirm-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-delivery-43b4da0",
+              "tag": "ota-delivery-release",
+              "url": "https://ota-delivery-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-r2-cb02",
+              "tag": "ota-r2-cb02",
+              "url": "https://ota-r2-cb02---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-r3-c0d0720",
+              "tag": "ota-r3-c0d0720",
+              "url": "https://ota-r3-c0d0720---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-r4-53cf494",
+              "tag": "ota-r4-53cf494",
+              "url": "https://ota-r4-53cf494---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-r4-8bac296",
+              "tag": "ota-r4-8bac296",
+              "url": "https://ota-r4-8bac296---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-ota-target-12cf730",
+              "tag": "ota-target-12cf730",
+              "url": "https://ota-target-12cf730---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "revisionName": "fairway-button-receiver-roll-26b6201",
+              "tag": "roll-release",
+              "url": "https://roll-release---fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+            }
+          ],
+          "url": "https://fairway-button-receiver-6m5kxocxxa-uc.a.run.app"
+        }
+      },
+      "environment_plan": {
+        "nonsecret_value_names": [
+          "DEPLOY_TIMESTAMP",
+          "FAIRWAY_ENV",
+          "FAIRWAY_GCP_PROJECT",
+          "FAIRWAY_OTA_BUCKET",
+          "FAIRWAY_OTA_DELIVERY_ENABLED",
+          "FAIRWAY_QR_ENABLED",
+          "FAIRWAY_SERVICE_MODE",
+          "FAIRWAY_VAPID_KEY_VERSION",
+          "FAIRWAY_VAPID_PUBLIC_KEY",
+          "GOOGLE_CLOUD_PROJECT"
+        ],
+        "secret_references": {
+          "FAIRWAY_QR_RATE_KEY": {
+            "secretKeyRef": {
+              "key": "1",
+              "name": "fairway-qr-rate-key"
+            }
+          }
+        },
+        "unresolved_custody_names": []
+      },
+      "invoker_policy": {
+        "etag": "ACAB"
+      },
+      "nonsecret_environment": {
+        "DEPLOY_TIMESTAMP": "1791835872",
+        "FAIRWAY_ENV": "production",
+        "FAIRWAY_GCP_PROJECT": "savvy-kit-496703-r5",
+        "FAIRWAY_OTA_BUCKET": "savvy-kit-496703-r5-ota-artifacts",
+        "FAIRWAY_OTA_DELIVERY_ENABLED": "true",
+        "FAIRWAY_QR_ENABLED": "true",
+        "FAIRWAY_SERVICE_MODE": "receiver",
+        "FAIRWAY_VAPID_KEY_VERSION": "v1",
+        "FAIRWAY_VAPID_PUBLIC_KEY": "BCiB3484YBheyEzznbtOauAKE89WTKrzmrvD7Z1VjmyHuoBuWmyaxhtTvBTui9yabRT2OODffU8bc__mS3drPbY",
+        "GOOGLE_CLOUD_PROJECT": "savvy-kit-496703-r5"
+      }
+    },
+    "fairway-request-notifier": {
+      "configuration": {
+        "metadata": {
+          "annotations": {
+            "cloudfunctions.googleapis.com/function-id": "fairway-request-notifier",
+            "run.googleapis.com/build-base-image": "us-central1-docker.pkg.dev/serverless-runtimes/google-22-full/runtimes/nodejs22",
+            "run.googleapis.com/build-enable-automatic-updates": "true",
+            "run.googleapis.com/build-function-target": "fairwayRequestNotifier",
+            "run.googleapis.com/build-id": "b2ec4bae-72e0-4392-901f-7f75549083df",
+            "run.googleapis.com/build-image-uri": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/gcf-artifacts/savvy--kit--496703--r5__us--central1__fairway--request--notifier:version_1",
+            "run.googleapis.com/build-name": "projects/936892386735/locations/us-central1/builds/f40a1fad-fc39-4279-b6b1-cd0921cd65c9",
+            "run.googleapis.com/build-service-account": "projects/savvy-kit-496703-r5/serviceAccounts/936892386735-compute@developer.gserviceaccount.com",
+            "run.googleapis.com/build-source-location": "gs://gcf-v2-sources-936892386735-us-central1/fairway-request-notifier/function-source.zip#1793392763887877",
+            "run.googleapis.com/client-name": "gcloud",
+            "run.googleapis.com/client-version": "585.0.0",
+            "run.googleapis.com/custom-audiences": "[\"https://us-central1-savvy-kit-496703-r5.cloudfunctions.net/fairway-request-notifier\"]",
+            "run.googleapis.com/ingress": "all",
+            "run.googleapis.com/ingress-status": "all",
+            "run.googleapis.com/maxScale": "100",
+            "run.googleapis.com/operation-id": "f9c8d1fc-3d03-4082-8814-6a6f937e20f5",
+            "run.googleapis.com/urls": "[\"https://fairway-request-notifier-936892386735.us-central1.run.app\",\"https://us-central1-savvy-kit-496703-r5.cloudfunctions.net/fairway-request-notifier\",\"https://fairway-request-notifier-6m5kxocxxa-uc.a.run.app\"]",
+            "serving.knative.dev/creator": "service-936892386735@gcf-admin-robot.iam.gserviceaccount.com",
+            "serving.knative.dev/lastModifier": "josh@fairwayrefresh.com"
+          },
+          "name": "fairway-request-notifier"
+        },
+        "spec": {
+          "template": {
+            "metadata": {
+              "annotations": {
+                "autoscaling.knative.dev/maxScale": "100",
+                "cloudfunctions.googleapis.com/trigger-type": "google.cloud.firestore.document.v1.created",
+                "run.googleapis.com/base-images": "{\"worker\":\"us-central1-docker.pkg.dev/serverless-runtimes/google-22-full/runtimes/nodejs22\"}",
+                "run.googleapis.com/client-name": "gcloud",
+                "run.googleapis.com/client-version": "585.0.0",
+                "run.googleapis.com/secrets": "secret-3614ed46-0652-36a6-b5f5-56e26d60899b:projects/936892386735/secrets/fairway-vapid-private-key",
+                "run.googleapis.com/startup-cpu-boost": "true"
+              },
+              "name": "fairway-request-notifier-00009-seg"
+            },
+            "spec": {
+              "containerConcurrency": 1,
+              "containers": [
+                {
+                  "env": [
+                    {
+                      "name": "FAIRWAY_ENV"
+                    },
+                    {
+                      "name": "FAIRWAY_GCP_PROJECT"
+                    },
+                    {
+                      "name": "FAIRWAY_SERVICE_MODE"
+                    },
+                    {
+                      "name": "FAIRWAY_VAPID_PUBLIC_KEY"
+                    },
+                    {
+                      "name": "FAIRWAY_VAPID_SUBJECT"
+                    },
+                    {
+                      "name": "GOOGLE_CLOUD_PROJECT"
+                    },
+                    {
+                      "name": "LOG_EXECUTION_ID"
+                    },
+                    {
+                      "name": "FAIRWAY_VAPID_PRIVATE_KEY",
+                      "valueFrom": {
+                        "secretKeyRef": {
+                          "key": "latest",
+                          "name": "secret-3614ed46-0652-36a6-b5f5-56e26d60899b"
+                        }
+                      }
+                    }
+                  ],
+                  "image": "us-central1-docker.pkg.dev/savvy-kit-496703-r5/gcf-artifacts/savvy--kit--496703--r5__us--central1__fairway--request--notifier@sha256:b7538283dcd23891f7af8af9b2f7d10b4f7af90390e31a06b1e22f6541c00b45",
+                  "ports": [
+                    {
+                      "containerPort": 8080,
+                      "name": "http1"
+                    }
+                  ],
+                  "resources": {
+                    "limits": {
+                      "cpu": "0.1666",
+                      "memory": "256M"
+                    }
+                  }
+                }
+              ],
+              "serviceAccountName": "fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com",
+              "timeoutSeconds": 60
+            }
+          }
+        },
+        "status": {
+          "traffic": [
+            {
+              "revisionName": "fairway-request-notifier-00007-yes",
+              "tag": "qr-release",
+              "url": "https://qr-release---fairway-request-notifier-6m5kxocxxa-uc.a.run.app"
+            },
+            {
+              "percent": 100,
+              "revisionName": "fairway-request-notifier-00009-seg"
+            }
+          ],
+          "url": "https://fairway-request-notifier-6m5kxocxxa-uc.a.run.app"
+        }
+      },
+      "environment_plan": {
+        "nonsecret_value_names": [
+          "FAIRWAY_ENV",
+          "FAIRWAY_GCP_PROJECT",
+          "FAIRWAY_SERVICE_MODE",
+          "FAIRWAY_VAPID_PUBLIC_KEY",
+          "FAIRWAY_VAPID_SUBJECT",
+          "GOOGLE_CLOUD_PROJECT",
+          "LOG_EXECUTION_ID"
+        ],
+        "secret_references": {
+          "FAIRWAY_VAPID_PRIVATE_KEY": {
+            "secretKeyRef": {
+              "key": "latest",
+              "name": "secret-3614ed46-0652-36a6-b5f5-56e26d60899b"
+            }
+          }
+        },
+        "unresolved_custody_names": []
+      },
+      "invoker_policy": {
+        "bindings": [
+          {
+            "members": [
+              "serviceAccount:fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com"
+            ],
+            "role": "roles/run.invoker"
+          }
+        ],
+        "etag": "BwZcwlFi4r4=",
+        "version": 1
+      },
+      "nonsecret_environment": {
+        "FAIRWAY_ENV": "production",
+        "FAIRWAY_GCP_PROJECT": "savvy-kit-496703-r5",
+        "FAIRWAY_SERVICE_MODE": "receiver",
+        "FAIRWAY_VAPID_PUBLIC_KEY": "BCiB3484YBheyEzznbtOauAKE89WTKrzmrvD7Z1VjmyHuoBuWmyaxhtTvBTui9yabRT2OODffU8bc__mS3drPbY",
+        "FAIRWAY_VAPID_SUBJECT": "https://savvy-kit-496703-r5.web.app",
+        "GOOGLE_CLOUD_PROJECT": "savvy-kit-496703-r5",
+        "LOG_EXECUTION_ID": "true"
+      }
+    }
+  },
+  "enabled_apis": [
+    {
+      "config": {
+        "name": "analyticshub.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "appengine.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "artifactregistry.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigquery.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigqueryconnection.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigquerydatapolicy.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigquerydatatransfer.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigquerymigration.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigqueryreservation.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "bigquerystorage.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "cloudapis.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "cloudbuild.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "cloudfunctions.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "cloudresourcemanager.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "cloudtrace.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "containerregistry.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "dataform.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "dataplex.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "datastore.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "eventarc.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "fcm.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "fcmregistrations.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebase.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebaseappdistribution.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebasehosting.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebaseinstallations.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebaseremoteconfig.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebaseremoteconfigrealtime.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firebaserules.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "firestore.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "iam.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "iamcredentials.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "identitytoolkit.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "logging.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "monitoring.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "pubsub.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "run.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "runtimeconfig.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "secretmanager.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "securetoken.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "servicemanagement.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "serviceusage.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "source.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "sql-component.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "storage-api.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "storage-component.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "storage.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "telemetry.googleapis.com"
+      }
+    },
+    {
+      "config": {
+        "name": "testing.googleapis.com"
+      }
+    }
+  ],
+  "eventarc": [
+    {
+      "createTime": "2026-10-01T06:24:35.224067621Z",
+      "destination": {
+        "cloudFunction": "projects/savvy-kit-496703-r5/locations/us-central1/functions/fairway-request-notifier"
+      },
+      "eventDataContentType": "application/protobuf",
+      "eventFilters": [
+        {
+          "attribute": "type",
+          "value": "google.cloud.firestore.document.v1.created"
+        },
+        {
+          "attribute": "database",
+          "value": "(default)"
+        },
+        {
+          "attribute": "document",
+          "operator": "match-path-pattern",
+          "value": "requests/{requestId}"
+        }
+      ],
+      "labels": {
+        "goog-managed-by": "cloudfunctions"
+      },
+      "name": "projects/savvy-kit-496703-r5/locations/nam5/triggers/fairway-request-notifier-108760",
+      "serviceAccount": "fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com",
+      "transport": {
+        "pubsub": {
+          "subscription": "projects/savvy-kit-496703-r5/subscriptions/eventarc-nam5-fairway-request-notifier-108760-sub-456",
+          "topic": "projects/savvy-kit-496703-r5/topics/eventarc-nam5-fairway-request-notifier-108760-245"
+        }
+      },
+      "uid": "7b69a0b0-6a9a-4ec0-b486-c2793f9cee75",
+      "updateTime": "2026-10-01T06:24:43.921139736Z"
+    }
+  ],
+  "firestore": {
+    "appEngineIntegrationMode": "DISABLED",
+    "backupConfig": {
+      "backupSchedulesEnabled": true
+    },
+    "concurrencyMode": "PESSIMISTIC",
+    "createTime": "2026-05-18T19:30:15.475526Z",
+    "databaseEdition": "STANDARD",
+    "deleteProtectionState": "DELETE_PROTECTION_DISABLED",
+    "earliestVersionTime": "2026-11-16T15:37:00Z",
+    "etag": "IInYo9eOjZgDMLrBn4L2jJgD",
+    "freeTier": true,
+    "keyPrefix": "s",
+    "locationId": "nam5",
+    "name": "projects/savvy-kit-496703-r5/databases/(default)",
+    "pointInTimeRecoveryEnablement": "POINT_IN_TIME_RECOVERY_ENABLED",
+    "realtimeUpdatesMode": "REALTIME_UPDATES_MODE_ENABLED",
+    "type": "FIRESTORE_NATIVE",
+    "uid": "0abf014d-fcda-4bf7-b75c-59faa1f0b4b3",
+    "updateTime": "2026-11-16T16:36:13.452643Z",
+    "versionRetentionPeriod": "604800s"
+  },
+  "not_captured": [
+    "Secret values and Firebase Auth/hash configuration (separate authorization)",
+    "Firebase provider/domain console settings and DNS registrar custody",
+    "Live Firestore Security Rules source versus tracked candidate must be reconciled",
+    "Exact Hosting artifact, release config and build source archives need independent custody",
+    "Custom IAM role definitions and service-account impersonation policies need reconciliation"
+  ],
+  "ota_storage": {
+    "creation_time": "2026-11-10T01:34:56+0000",
+    "default_storage_class": "STANDARD",
+    "generation": 1794274496687560184,
+    "location": "US-CENTRAL1",
+    "location_type": "region",
+    "metageneration": 5,
+    "name": "savvy-kit-496703-r5-ota-artifacts",
+    "public_access_prevention": "enforced",
+    "soft_delete_policy": {
+      "effectiveTime": "2026-11-10T01:34:56.812000+00:00",
+      "retentionDurationSeconds": "604800"
+    },
+    "storage_url": "gs://savvy-kit-496703-r5-ota-artifacts/",
+    "uniform_bucket_level_access": true,
+    "update_time": "2026-11-10T01:35:47+0000"
+  },
+  "ota_storage_iam": {
+    "bindings": [
+      {
+        "members": [
+          "serviceAccount:fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "projects/savvy-kit-496703-r5/roles/fairwayOtaArtifactPublisher"
+      },
+      {
+        "members": [
+          "serviceAccount:936892386735-compute@developer.gserviceaccount.com"
+        ],
+        "role": "projects/savvy-kit-496703-r5/roles/fairwayOtaArtifactReader"
+      },
+      {
+        "members": [
+          "projectEditor:savvy-kit-496703-r5",
+          "projectOwner:savvy-kit-496703-r5"
+        ],
+        "role": "roles/storage.legacyBucketOwner"
+      },
+      {
+        "members": [
+          "projectEditor:savvy-kit-496703-r5",
+          "projectOwner:savvy-kit-496703-r5"
+        ],
+        "role": "roles/storage.legacyObjectOwner"
+      }
+    ],
+    "etag": "CAU="
+  },
+  "project_iam": {
+    "bindings": [
+      {
+        "condition": {
+          "expression": "resource.name == 'projects/savvy-kit-496703-r5/locations/global/buckets/_Default'",
+          "title": "button-report-default-retention"
+        },
+        "members": [
+          "serviceAccount:fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "projects/savvy-kit-496703-r5/roles/buttonReportRetentionReader"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcp-sa-artifactregistry.iam.gserviceaccount.com"
+        ],
+        "role": "roles/artifactregistry.serviceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:936892386735@cloudbuild.gserviceaccount.com"
+        ],
+        "role": "roles/cloudbuild.builds.builder"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+        ],
+        "role": "roles/cloudbuild.serviceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcf-admin-robot.iam.gserviceaccount.com"
+        ],
+        "role": "roles/cloudfunctions.standardServiceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@containerregistry.iam.gserviceaccount.com"
+        ],
+        "role": "roles/containerregistry.ServiceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:936892386735-compute@developer.gserviceaccount.com",
+          "serviceAccount:fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com",
+          "serviceAccount:fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "roles/datastore.user"
+      },
+      {
+        "members": [
+          "serviceAccount:fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "roles/eventarc.eventReceiver"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcp-sa-eventarc.iam.gserviceaccount.com"
+        ],
+        "role": "roles/eventarc.serviceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcp-sa-firebase.iam.gserviceaccount.com"
+        ],
+        "role": "roles/firebase.managementServiceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:firebase-adminsdk-fbsvc@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "roles/firebase.sdkAdminServiceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com",
+          "serviceAccount:firebase-adminsdk-fbsvc@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "roles/firebaseauth.admin"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@firebase-rules.iam.gserviceaccount.com"
+        ],
+        "role": "roles/firebaserules.system"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcp-sa-firestore.iam.gserviceaccount.com"
+        ],
+        "role": "roles/firestore.serviceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:firebase-adminsdk-fbsvc@savvy-kit-496703-r5.iam.gserviceaccount.com"
+        ],
+        "role": "roles/iam.serviceAccountTokenCreator"
+      },
+      {
+        "members": [
+          "user:josh@fairwayrefresh.com"
+        ],
+        "role": "roles/owner"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@gcp-sa-pubsub.iam.gserviceaccount.com"
+        ],
+        "role": "roles/pubsub.serviceAgent"
+      },
+      {
+        "members": [
+          "serviceAccount:936892386735-compute@developer.gserviceaccount.com"
+        ],
+        "role": "roles/run.builder"
+      },
+      {
+        "members": [
+          "serviceAccount:service-936892386735@serverless-robot-prod.iam.gserviceaccount.com"
+        ],
+        "role": "roles/run.serviceAgent"
+      }
+    ],
+    "etag": "BwZe77C38eQ=",
+    "version": 3
+  },
+  "region": "us-central1",
+  "schema_version": 1,
+  "secret_metadata_only": [
+    {
+      "name": "projects/936892386735/secrets/fairway-qr-rate-key",
+      "replication": {
+        "automatic": {}
+      }
+    },
+    {
+      "name": "projects/936892386735/secrets/fairway-vapid-private-key",
+      "replication": {
+        "automatic": {}
+      }
+    },
+    {
+      "name": "projects/936892386735/secrets/fairway-vapid-public-key",
+      "replication": {
+        "automatic": {}
+      }
+    }
+  ],
+  "service_accounts": [
+    {
+      "disabled": false,
+      "displayName": "firebase-adminsdk",
+      "email": "firebase-adminsdk-fbsvc@savvy-kit-496703-r5.iam.gserviceaccount.com"
+    },
+    {
+      "disabled": false,
+      "displayName": "Default compute service account",
+      "email": "936892386735-compute@developer.gserviceaccount.com"
+    },
+    {
+      "disabled": false,
+      "displayName": "Fairway production Admin API",
+      "email": "fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com"
+    },
+    {
+      "disabled": false,
+      "displayName": "Fairway notification event trigger",
+      "email": "fairway-notifier-trigger@savvy-kit-496703-r5.iam.gserviceaccount.com"
+    },
+    {
+      "disabled": false,
+      "displayName": "App Engine default service account",
+      "email": "savvy-kit-496703-r5@appspot.gserviceaccount.com"
+    },
+    {
+      "disabled": false,
+      "displayName": "Fairway Web Push sender",
+      "email": "fairway-notifier-prod@savvy-kit-496703-r5.iam.gserviceaccount.com"
+    }
+  ],
+  "source_head": "c0ea75ce04c79633ecd553cba421d28620d6a244",
+  "source_project": "savvy-kit-496703-r5",
+  "tracked_file_sha256": {
+    "fairway_backend/cloudrun_receiver/package-lock.json": "af041a5869ecb403316b14dab3312791ddefe9fae3f6ddef64908befeb1ef1ef",
+    "fairway_webapp/cart_operator_dashboard/firebase.json": "1114e547d41d18adb162a0cb6cd42345661724c45867932beac894ce09714f95",
+    "fairway_webapp/cart_operator_dashboard/firestore.indexes.json": "81b344f91e739aac9fcfe9085686b293dee2f587ab949c8c4c0087bf0249172b",
+    "fairway_webapp/cart_operator_dashboard/firestore.rules": "b5d6a2a78577aef8c53c3f5092b8c4d14fdb3b0959b26d8ef35ca8766653d2b0",
+    "fairway_webapp/cart_operator_dashboard/package-lock.json": "90a2f6a07104f502ea6ffba6607157d882dbc937dd90b6314b4a0dca24e7fc27"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "rules_releases": {
+    "releases": [
+      {
+        "name": "projects/savvy-kit-496703-r5/releases/cloud.firestore",
+        "rulesetName": "projects/savvy-kit-496703-r5/rulesets/eca5305d-dd18-437b-9215-ca1d12e4b43c",
+        "createTime": "2026-05-18T19:30:16.832750Z",
+        "updateTime": "2026-10-12T20:09:03.961166Z"
+      }
+    ]
+  },
+  "rulesets": {
+    "projects/savvy-kit-496703-r5/rulesets/eca5305d-dd18-437b-9215-ca1d12e4b43c": {
+      "name": "projects/savvy-kit-496703-r5/rulesets/eca5305d-dd18-437b-9215-ca1d12e4b43c",
+      "source": {
+        "files": [
+          {
+            "content": "rules_version = '2';\n\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    function hasV2Access() {\n      return request.auth != null\n        && exists(/databases/$(database)/documents/user_access/$(request.auth.uid))\n        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.schema_version == 2\n        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin is bool\n        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids is list\n        && (\n          (\n            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true\n            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == null\n            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids.size() == 0\n          )\n          || (\n            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false\n            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id is string\n          )\n        );\n    }\n\n    match /requests/{requestId} {\n      allow read: if hasV2Access() && (\n          get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true\n          || (\n            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false\n            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == resource.data.customer_id\n            && (\n              get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids.size() == 0\n              || resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids\n            )\n          )\n        );\n      allow write: if false;\n    }\n\n    match /{document=**} {\n      allow read, write: if false;\n    }\n  }\n}",
+            "name": "firestore.rules"
+          }
+        ]
+      },
+      "createTime": "2026-10-12T20:09:03.012239Z",
+      "metadata": {
+        "services": [
+          "cloud.firestore"
+        ]
+      }
+    }
+  },
+  "custom_roles": {
+    "roles": [
+      {
+        "name": "projects/savvy-kit-496703-r5/roles/buttonReportRetentionReader",
+        "title": "Button report retention metadata reader",
+        "description": "Read only the configured report log bucket retention metadata",
+        "includedPermissions": [
+          "logging.buckets.get"
+        ],
+        "stage": "GA",
+        "etag": "BwZe77CfgyI="
+      },
+      {
+        "name": "projects/savvy-kit-496703-r5/roles/digitalRecoveryAuthExport",
+        "title": "Digital Recovery Auth Export",
+        "includedPermissions": [
+          "firebaseauth.configs.get",
+          "firebaseauth.configs.getHashConfig",
+          "firebaseauth.users.get",
+          "identitytoolkit.tenants.list"
+        ],
+        "stage": "GA",
+        "etag": "BwZgaeaffIw="
+      },
+      {
+        "name": "projects/savvy-kit-496703-r5/roles/digitalRecoveryExport",
+        "title": "Digital Recovery Export",
+        "includedPermissions": [
+          "datastore.databases.export",
+          "datastore.databases.getMetadata",
+          "datastore.operations.get"
+        ],
+        "stage": "GA",
+        "etag": "BwZgacir4Is="
+      },
+      {
+        "name": "projects/savvy-kit-496703-r5/roles/fairwayOtaArtifactPublisher",
+        "title": "Fairway OTA immutable artifact publisher",
+        "description": "Bucket-scoped OTA create and exact-retry metadata retrieval; no list/delete/public access.",
+        "includedPermissions": [
+          "storage.objects.create",
+          "storage.objects.get"
+        ],
+        "stage": "GA",
+        "etag": "BwZf4hbhnmU="
+      },
+      {
+        "name": "projects/savvy-kit-496703-r5/roles/fairwayOtaArtifactReader",
+        "title": "Fairway OTA artifact reader",
+        "description": "Bucket-scoped OTA artifact retrieval only.",
+        "includedPermissions": [
+          "storage.objects.get"
+        ],
+        "stage": "GA",
+        "etag": "BwZf4hewSU0="
+      }
+    ]
+  },
+  "hosting_sites": {
+    "sites": [
+      {
+        "name": "projects/savvy-kit-496703-r5/sites/savvy-kit-496703-r5",
+        "defaultUrl": "https://savvy-kit-496703-r5.web.app",
+        "type": "DEFAULT_SITE"
+      }
+    ]
+  }
+}

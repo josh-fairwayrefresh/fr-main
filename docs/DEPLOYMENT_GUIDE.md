@@ -41,7 +41,9 @@ owns the latest CPO-reported fleet runtime validation limits.
 | Approved firmware / qualification | `OTA-0.1-r4` (`0.1.0+6`) is the USB bootstrap; `OTA-0.1alt-r4` (`0.1.0+7`) and `OTA-1.0-r4` (`1.0.0+4`) are approved successor identities | r4 acceptance/publication and FRB-0005 autonomous transitions are recorded in dated release evidence. Earlier r3 builds are superseded lineage, not current unaccepted candidates. No physical rollback/interrupted-download recovery qualification is inferred. |
 | FRB-0005 commissioning | Running `1.0.0+4` (nightly) via autonomous OTA from `0.1.0+7`; credential generation 6 active | Clean USB install of `OTA-0.1-r4` (2026-11-10 17:57 Pacific), OTA to `0.1.0+7` with post-OTA request/COMPLETE, then nightly OTA to `1.0.0+4` (2026-11-11). Post-`1.0.0+4` request/COMPLETE not separately exercised. PV8 still required for USB service access. |
 | Production OTA prerequisites | Private GCS controls verified; exact `OTA-0.1alt-r4` stored bytes verified; delivery enabled | Assignment never requires reconciling earlier targets. HQ remains `America/Los_Angeles`. Installation is shown only from authenticated device evidence. |
-| Production data preservation | The 2026-11-15 deployment changed no device, credential, assignment, release or deployment records; before/after fingerprints matched | Earlier publications, recoveries and CPO assignments remain historical operations, not a current fleet-wide no-change claim. Existing FRB-0002 assignment placement mismatch remains untouched. Recorded preflight reports PITR/delete protection disabled; code rollback is not data recovery. |
+| Production data preservation | The 2026-11-15 deployment changed no device, credential, assignment, release or deployment records; before/after fingerprints matched | Earlier publications, recoveries and CPO assignments remain historical operations, not a current fleet-wide no-change claim. Existing FRB-0002 assignment placement mismatch remains untouched. Delete protection remains disabled; code rollback is not data recovery. |
+| Production Firestore recovery | Native daily backups with 30-day retention and seven-day PITR enabled on `(default)` in `nam5` | First backup restored successfully in isolation on 2026-11-16; 4,485 scoped records matched across 26 collection paths. PITR clone/production reconnection remain untested. The [Recovery Guide](RECOVERY_GUIDE.md#firestore-database-and-historical-records) owns procedure, evidence and review limitations. |
+| Independent digital recovery | Daily Firestore/Auth exports active in `fairway-refresh-recovery`, private 30-day storage and native failure detection | Independent import verified 4,486 scoped historical records; six real isolated Auth identities retained UID/access/password material; all 11 accepted OTA packages independently recovered. Production serving revisions unchanged. The [Recovery Guide](RECOVERY_GUIDE.md#digital-recovery-readiness-implementation) owns resource identities, procedures and remaining failover limits. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
 Current deployment and OTA procedures are linked under
@@ -1692,7 +1694,8 @@ currently deployed on the accepted Pilot 1.1 fleet.
 - [Web application deployment](#web-application-deployment)
 - [Firestore configuration and deployment boundary](#firestore-configuration)
 - [Operational verification](#operational-verification)
-- [Rollback and recovery](#rollback-procedure)
+- [Deployment rollback](#rollback-procedure)
+- [Operational recovery and data restoration](RECOVERY_GUIDE.md)
 - [Device identity and credential procedures](./DEVICE_PROVISIONING_GUIDE.md)
 - [Current firmware implementation and OTA limitations](./FIRMWARE_SPECIFICATION.md)
 - [Installed hardware and power configuration](./HARDWARE_BOM.md)
@@ -1712,12 +1715,13 @@ administrative operation that can create, modify, migrate, or delete Firestore
 records, device identity/credentials, user access, or historical operational
 data, the release owner must verify the configured production
 backup/recovery capability, its recovery point and retention, and the
-applicable restore procedure with the responsible platform owner. This
-repository contains no verified backup, restore, export, or point-in-time
-recovery procedure or current recovery-point evidence. Until that capability
-is independently established, do not claim production data is recoverable or
-proceed with a data-affecting operation; obtain CPO and Lead Architect
-direction. Do not use code rollback as a substitute for data restoration.
+applicable restore procedure with the responsible platform owner. The
+[Recovery Guide](RECOVERY_GUIDE.md#firestore-database-and-historical-records)
+documents the configured protection and reproducible recovery procedure;
+the first backup's isolated restore and scoped historical comparisons passed.
+Until that capability is independently established, do not claim production
+data is recoverable or proceed with a data-affecting operation; obtain CPO and
+Lead Architect direction. Do not use code rollback as a substitute for data restoration.
 This deployment gate does not replace routine application workflows or
 read-only operational checks.
 
@@ -1728,6 +1732,42 @@ unreviewed dirty worktree or include unrelated OTA or provisioning changes
 without explicit scope approval. Recheck live service traffic, revision/image
 identity, Hosting release, environment target, and data/rules compatibility
 immediately before changing production.
+
+## Native Production Firestore Backup and Recovery (2026-11-16)
+
+**Configuration execution record, not a second recovery runbook.** The CPO
+authorized native daily backups with 30-day retention and seven-day PITR on
+production `(default)` in `nam5`, plus a later isolated verification restore.
+The [Recovery Guide](RECOVERY_GUIDE.md#firestore-database-and-historical-records)
+owns configuration readback, backup availability, recovery-point selection,
+restore/PITR procedures, historical-record verification, costs and gaps.
+
+```sh
+gcloud firestore backups schedules create \
+  --project=savvy-kit-496703-r5 --database='(default)' \
+  --recurrence=daily --retention=30d
+gcloud firestore databases update \
+  --project=savvy-kit-496703-r5 --database='(default)' --enable-pitr
+```
+
+These commands completed on November 16 at 08:36 Pacific; they are retained
+evidence, not instructions to create a duplicate schedule. Both settings were
+read back. Source database identity and all production documents were preserved;
+Admin `fairway-admin-nogate-1115-1222`, receiver
+`fairway-button-receiver-nogate-1115-1222`, and notifier
+`fairway-request-notifier-00009-seg` remained at 100% serving traffic.
+
+The first backup subsequently reached `READY`. Under the separate Digital
+Recovery Readiness authorization, a native isolated restore into the named
+database `recovery-verify-20261116` was started at `2026-11-16T18:15:08.720355Z`;
+the [Recovery Guide](RECOVERY_GUIDE.md#configured-protection-and-recovery-evidence)
+owns its operation identity and historical-data evidence. The operation completed
+successfully at `2026-11-16T18:29:14.791620Z` (14m 6s); 4,485 scoped records
+matched across 26 collection paths, with no mismatches.
+No backup or database was deleted. This scope did not resume Customer migration,
+source promotion, deployment, IAM or physical-device work. The production
+recovery evidence is ready for Architect/CPO review; this is not approval for
+production data reconnection or the paused Customer ownership cutover.
 
 ## Customer Assets and Menu Register Cutover
 
@@ -1907,6 +1947,9 @@ and no production auto-run:
    with Customer ownership. Any disaster restore must use verified current
    authoritative backups/recovery points and reconcile intervening activity,
    never replay the pre-cutover legacy plan over live Customer records.
+   The [Recovery Guide](RECOVERY_GUIDE.md#firestore-database-and-historical-records)
+   owns disaster-data recovery; this sequence owns the migration mechanism
+   and coordinated deployment, not a second restore procedure.
 
 Remaining production prerequisites are explicit authorization, reviewed exact
 source/build identities, verified backup/recovery evidence, reviewed migration
@@ -9225,13 +9268,10 @@ or crash dumps may leave recoverable plaintext on disk or in memory. Keep the
 workstation access restricted during signing and do not treat the temporary
 file as safely erased after cleanup.
 
-Loss of every private-key copy prevents future OTA images from authenticating
-to devices using that trust anchor. The current bootloader configuration has
-no remote key-rotation path; recovery would require a separately authorized
-physical USB recovery that installs a replacement MCUboot trust anchor and
-firmware. Treat total key loss as a fleet-recovery event. Do not assume that
-reflashing preserves TF-M identity data without separately verifying the
-recovery procedure.
+For lost-key incident handling and the total-key-loss limitation, use the
+[Recovery Guide](RECOVERY_GUIDE.md#signing-key-and-device-credentials).
+This section retains signing configuration and custody, not a separate
+operational recovery path.
 
 On 2026-11-07, following explicit CPO authorization and the local-agent
 delegation above, the encrypted production ECDSA-P256 key and separate
@@ -10728,31 +10768,12 @@ Related planning reference:
 
 ### Existing-Device Credential Recovery
 
-Device identity is the permanent `FRB-XXXX` ID and its existing
-`devices/{FRB-XXXX}` record. When a provisioning response leaves the outcome
-uncertain, inspect the authoritative Device registry before retrying creation.
-If the Device exists, recover that Device; do not delete and recreate it.
-Credential recovery retains the same FRB ID and its associations; the
-established lifecycle invalidates the superseded credential when replacement
-activation commits.
-
-The recovery implementation is scoped to the existing Device and credential
-lifecycle records. It does not update historical requests, inventory or
-service records, Customer/Course records, or user access. Recovery is distinct
-from creating a new Device and from firmware build/deployment. The detailed
-eligibility, authorization, response-loss behavior, and operator procedure
-are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
-
-For active-credential recovery, the backend prepares and activates in
-separate Firestore transactions. While a rotation is pending, the
-device-level rotation route can return the pending operation ID, which can
-then be checked or cancelled through the authorized API. The combined Admin
-UI does not expose that operation ID or pending-operation controls. If
-activation committed but its response was lost, and the operation ID was not
-retained, the device-level pending query cannot establish the completed
-operation's result or recover its one-time plaintext credential. Do not retry
-Device creation; keep the device offline and follow the provisioning owner's
-recovery guidance.
+Start with the [Recovery Guide's connectivity path](RECOVERY_GUIDE.md#backend-to-device-connectivity).
+The [provisioning owner](DEVICE_PROVISIONING_GUIDE.md#prepared-credential-rotation--backend-increment-1)
+retains eligibility, prepare/install/activate APIs and response-loss contracts.
+Do not delete/recreate an existing permanent Device or infer that code rollback
+recovers a credential. These are credential lifecycle operations, not deployment
+rollback; device-specific authorization remains required.
 
 ---
 
@@ -10791,6 +10812,11 @@ request or visible notification. The original request remained actionable.
 ---
 
 ## Rollback Procedure
+
+This section owns deployment rollback, including retained Hosting releases,
+Cloud Run traffic restoration and release-specific compatibility constraints.
+For incident selection, data/identity recovery, integrations and end-to-end
+restoration, start with the [Recovery Guide](RECOVERY_GUIDE.md).
 
 Hosting rollback restores web content only, and Cloud Run traffic restoration
 selects a backend revision only. Neither operation restores device firmware or
@@ -10973,6 +10999,7 @@ Ownership boundaries:
 - Firmware: docs/FIRMWARE_SPECIFICATION.md
 - UX: docs/UX_SPECIFICATION.md
 - Device Provisioning: docs/DEVICE_PROVISIONING_GUIDE.md
+- Operational Recovery: [docs/RECOVERY_GUIDE.md](RECOVERY_GUIDE.md)
 - Engineering: docs/ENGINEERING_GUIDE.md
 - Feature Backlog: docs/feature_backlog.md
 
