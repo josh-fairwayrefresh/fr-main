@@ -472,6 +472,24 @@ test('the last active Admin cannot be deactivated by another Admin', async () =>
   assert.strictEqual(solo.auth.users.get('target-admin').disabled, false);
 });
 
+test('legacy authorization updates cannot downgrade a v3 account', async () => {
+  const { db, request } = await createHarness({
+    users: [{ uid: 'target-uid', email: 'target@fairwayrefresh.com' }],
+  });
+  const access = {
+    schema_version: 3, admin: false, customer_id: 'CUST-0001', menu_ids: [], service_ids: [],
+  };
+  await db.collection('user_access').doc('target-uid').set(access);
+  const response = await request({
+    method: 'PUT',
+    path: '/api/v1/admin/users/target-uid/access',
+    body: { admin: false, customer_id: 'CUST-0001', course_ids: [] },
+  });
+  assert.strictEqual(response.statusCode, 409);
+  assert.strictEqual(response.body.error, 'schema3_update_required');
+  assert.deepStrictEqual((await db.collection('user_access').doc('target-uid').get()).data(), access);
+});
+
 test('Customer users cannot manage users', async () => {
   const { auth, request } = await createHarness({ users: [{ uid: 'customer-uid', email: 'pro.shop@fairwayrefresh.com' }] });
   const token = auth.tokenFor('customer-uid');
@@ -485,6 +503,24 @@ test('Customer users cannot manage users', async () => {
     assert.strictEqual(response.statusCode, 403, path);
   }
   assert.deepStrictEqual(auth.calls, []);
+});
+
+test('fleet exposes only validated Customer-owned service registry entries', async () => {
+  const { db, request } = await createHarness();
+  const customer = db.collection('customers').doc('CUST-0001');
+  let response = await request({ path: '/api/v1/admin/fleet' });
+  assert.strictEqual(response.body.customers.find((item) => item.customer_id === customer.id).services, undefined);
+  await customer.collection('services').doc('COURSE-0001').set({
+    course_id: 'COURSE-0001', name: 'Cart service',
+  });
+  response = await request({ path: '/api/v1/admin/fleet' });
+  assert.deepStrictEqual(response.body.customers.find((item) => item.customer_id === customer.id).services, [{
+    service_id: 'COURSE-0001', course_id: 'COURSE-0001', name: 'Cart service',
+    course_name: 'Tony Lema', timezone: 'America/Los_Angeles',
+  }]);
+  await customer.collection('services').doc('invalid').set({ course_id: 'foreign' });
+  response = await request({ path: '/api/v1/admin/fleet' });
+  assert.strictEqual(response.body.customers.find((item) => item.customer_id === customer.id).services, undefined);
 });
 
 test('Course operation type is chosen at creation, propagates to the fleet, and is immutable afterwards', async () => {

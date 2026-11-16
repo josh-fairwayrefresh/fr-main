@@ -3,7 +3,7 @@
 const { FieldValue } = require('@google-cloud/firestore');
 const { coursesCollection } = require('./fleet/courses');
 const { courseOperation } = require('./course_operation');
-const { resolveCourseServiceState } = require('./course_service');
+const { resolveCourseServiceState, serviceRef, requireService } = require('./course_service');
 const { resolveCourseLocalDateHour } = require('./fleet/hierarchy');
 const { RequestError } = require('./request_lifecycle');
 
@@ -21,9 +21,12 @@ function validateBayMappings(bays) {
 async function provisionQrBays(db, customerId, courseId, bays) {
   validateBayMappings(bays);
   return db.runTransaction(async (transaction) => {
-    const course = await transaction.get(coursesCollection(db, customerId).doc(courseId));
+    const [course, service] = await Promise.all([
+      transaction.get(coursesCollection(db, customerId).doc(courseId)),
+      transaction.get(serviceRef(db, customerId, courseId)),
+    ]);
     if (!course.exists || courseOperation(course.data()).kind !== 'driving_range' ||
-        resolveCourseServiceState(course.data()).active) {
+        !service.exists || resolveCourseServiceState(service.data()).active) {
       throw new Error('Provisioning requires the owning Driving Range Course to be suspended');
     }
     const existing = await transaction.get(db.collection('qr_bays').where('course_id', '==', courseId));
@@ -70,11 +73,12 @@ async function publicBay(db, id) {
   const bay = snapshot.data();
   const course = await coursesCollection(db, bay.customer_id).doc(bay.course_id).get();
   validateBay(bay, course.exists ? course.data() : null);
+  const service = await requireService(db, bay.customer_id, bay.course_id);
   return {
     bay_number: bay.bay_number,
     ...(bay.bay_side ? { bay_side: bay.bay_side } : {}),
     course_name: course.data().course_name,
-    available: resolveCourseServiceState(course.data()).active,
+    available: resolveCourseServiceState(service).active,
   };
 }
 
@@ -92,15 +96,19 @@ async function acceptQrRequest(db, id, operationId, networkId, now = new Date())
     const baySnapshot = await transaction.get(ref);
     if (!baySnapshot.exists) throw new RequestError(404, 'Bay not found');
     const bay = baySnapshot.data();
-    const [courseSnapshot, receipt] = await Promise.all([
+    const [courseSnapshot, serviceSnapshot, receipt] = await Promise.all([
       transaction.get(coursesCollection(db, bay.customer_id).doc(bay.course_id)),
+      transaction.get(serviceRef(db, bay.customer_id, bay.course_id)),
       transaction.get(receiptRef),
     ]);
     const course = courseSnapshot.exists ? courseSnapshot.data() : null;
     validateBay(bay, course);
     // A lost response remains the same submission even after suspension or completion.
     if (receipt.exists) return { status: 'accepted' };
-    if (!resolveCourseServiceState(course).active) {
+    if (!serviceSnapshot.exists) {
+      throw new RequestError(503, 'Customer service storage context is unavailable');
+    }
+    if (!resolveCourseServiceState(serviceSnapshot.data()).active) {
       throw new RequestError(409, 'Server requests are currently unavailable. Please visit the restaurant.');
     }
     const window = Math.floor(now.getTime() / 60000);

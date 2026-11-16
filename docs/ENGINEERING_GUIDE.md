@@ -81,6 +81,42 @@ identity or command path; operator access still requires normal authentication.
 
 ## Current System Boundaries
 
+### Customer ownership decision (2026-11-15)
+
+The CPO/Architect approved Customer as the sole authoritative ownership
+boundary for data, assets, users, permissions and operations. Courses are
+contextual attributes, not independent owners. This decision supersedes the
+earlier Course-owned inventory and Course-entitlement architecture described
+in dated implementation/release sections.
+
+The authorized coherent increment provides Customer-owned menu and service
+assets, moves cart inventory into that ownership boundary without changing
+its accepted operational behavior, and adds an isolated restaurant menu.
+The CPO clarified that the cart migration is administrative/governance only:
+do not redevelop cart operations, redesign its dashboard or refactor its
+operational workflows to accommodate the restaurant. Retain the established
+cart implementation; limit cart changes to necessary ownership references,
+register recognition and entitlement wiring.
+Existing Customer-nested cart storage paths and stable contextual IDs are
+retained; their historical `courses` path segment does not confer ownership
+or permissions. The Customer asset/menu register governs migrated access,
+without relocating or reimplementing cart operational data.
+`user_access/{uid}` remains the single account-entitlement owner. Explicit
+Customer-owned service-asset grants preserve each user's existing operational
+access; Customer membership must not silently grant all services. Menu grants
+are separate: a cart-menu grant permits its full existing inventory system;
+a restaurant-menu grant permits its isolated menu dashboard. Course location,
+timezone and historical attribution may remain context without determining
+ownership or granting access.
+
+The [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
+defines the approved product behavior. Implementation and local verification
+do not establish deployment or authorize production migration, account writes,
+restaurant import, commits or pushes. The
+[deployment owner](DEPLOYMENT_GUIDE.md#production-change-safety) retains the
+verified-backup and production-change gates. Existing production behavior
+remains in force until a separately authorized, verified cutover.
+
 - Firmware, backend, web applications, build configuration, and canonical documents are in the `nfed` repository. The official Nordic SDK and matching toolchain are installed separately; build and deployment procedures are owned by `docs/DEPLOYMENT_GUIDE.md`.
 - Device provisioning, registry lifecycle, and authentication requirements are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
 - Externally observable behavior is owned by `docs/UX_SPECIFICATION.md`.

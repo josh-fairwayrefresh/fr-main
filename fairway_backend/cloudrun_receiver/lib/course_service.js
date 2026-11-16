@@ -5,6 +5,20 @@ const SERVICE_GROUPS = Object.freeze(Object.fromEntries(
   Object.entries(categories).map(([key, category]) => [key, category.id]),
 ));
 
+function serviceRef(db, customerId, courseId) {
+  return db.collection('customers').doc(customerId).collection('courses').doc(courseId);
+}
+
+async function requireService(db, customerId, courseId) {
+  const service = await serviceRef(db, customerId, courseId).get();
+  if (!service.exists) {
+    const error = new Error('Customer service storage context is unavailable');
+    error.code = 'service_context_required';
+    throw error;
+  }
+  return service.data();
+}
+
 function resolveServiceGroup(value = SERVICE_GROUPS.ON_COURSE) {
   if (!Object.values(SERVICE_GROUPS).includes(value)) throw new Error('Invalid service group');
   return value;
@@ -21,6 +35,8 @@ function resolveCourseServiceState(course, group = SERVICE_GROUPS.ON_COURSE) {
 
 module.exports = {
   SERVICE_GROUPS,
+  requireService,
+  serviceRef,
   resolveServiceGroup,
   resolveCourseServiceState,
 };

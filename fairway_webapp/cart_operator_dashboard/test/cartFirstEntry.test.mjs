@@ -27,7 +27,10 @@ test('the marker is consumed (removed) on every auth-state transition, including
   assert.match(signedOutBranch, /window\.sessionStorage\.removeItem\(FRESH_SIGN_IN_STORAGE_KEY\)/);
 });
 
-test('main.jsx still renders InventoryApp for an authorized Inventory entry (no regression to the existing route)', () => {
+test('authorized Inventory entry uses the menu workspace and retains cart inventory', async () => {
   assert.match(mainSource, /entry === 'inventory'/);
-  assert.match(mainSource, /<InventoryApp /);
+  assert.match(mainSource, /<MenuWorkspace /);
+  const workspace = await readFile(new URL('../src/MenuWorkspace.jsx', import.meta.url), 'utf8');
+  assert.match(workspace, /<InventoryApp /);
+  assert.match(workspace, /<RestaurantMenuApp /);
 });

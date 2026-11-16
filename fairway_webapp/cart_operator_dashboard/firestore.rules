@@ -17,12 +17,34 @@ service cloud.firestore {
           || (
             get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
             && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id is string
+            && (
+              !exists(/databases/$(database)/documents/customers/$(get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id))
+              || !('authorization_schema_version' in get(/databases/$(database)/documents/customers/$(get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id)).data)
+              || get(/databases/$(database)/documents/customers/$(get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id)).data.authorization_schema_version != 3
+            )
           )
         );
     }
 
+    function hasV3Access() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/user_access/$(request.auth.uid))
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.schema_version == 3
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin is bool
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.menu_ids is list
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids is list
+        && (
+          (get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == null
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.menu_ids.size() == 0
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids.size() == 0)
+          || (get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id is string)
+        );
+    }
+
     match /requests/{requestId} {
-      allow read: if hasV2Access() && (
+      allow read: if (hasV2Access() && (
           get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
           || (
             get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
@@ -32,7 +54,15 @@ service cloud.firestore {
               || resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids
             )
           )
-        );
+        )) || (hasV3Access() && (
+          get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
+          || (
+            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == resource.data.customer_id
+            && resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids
+            && exists(/databases/$(database)/documents/customers/$(resource.data.customer_id)/services/$(resource.data.course_id))
+            && get(/databases/$(database)/documents/customers/$(resource.data.customer_id)/services/$(resource.data.course_id)).data.course_id == resource.data.course_id
+          )
+        ));
       allow write: if false;
     }
 

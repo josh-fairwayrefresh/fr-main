@@ -27,7 +27,7 @@ test('public menu retains links, starts all categories collapsed and loads only 
     const { send, evaluate } = browser;
     const url = `http://127.0.0.1:${server.httpServer.address().port}/__public-test`;
     const menu = name => ({
-      course_name: 'Public Test Course', timezone: 'America/Los_Angeles',
+      name: 'Public Test Menu', customer_name: 'Public Test Course', title: 'Today’s Menu', timezone: 'America/Los_Angeles',
       updated_at: '2026-10-24T10:00:00Z', products: [{
         product_id: 'one', name, category: 'Custom Category', state: 'on_cart',
         price: { amount_minor: 250, currency_code: 'USD' }, description: 'Saved description',
@@ -75,8 +75,8 @@ test('public menu retains links, starts all categories collapsed and loads only 
     await until(() => evaluate('document.querySelector("[role=alert]")?.textContent.includes("Connectivity unavailable")'));
     await evaluate('globalThis.menuRequests = null');
     await send('Page.navigate', { url: `${url}?slug=monarchbay_tony_lema_course` });
-    await until(() => evaluate('globalThis.menuRequests?.[0]?.url.endsWith("/api/v1/public/menus/monarch-bay")'));
-    await evaluate(`menuRequests[0].finish(${JSON.stringify(menu('Legacy link'))})`);
+    await until(() => evaluate('globalThis.menuRequests?.[0]?.url.endsWith("/api/v1/public/menus/monarchbay_tony_lema_course")'));
+    await evaluate(`menuRequests[0].finish(${JSON.stringify({ ...menu('Legacy link'), branding: { logo_url: '/logo.svg' } })})`);
     await until(() => evaluate('document.querySelectorAll("button[aria-expanded]").length === 2'));
     await evaluate('[...document.querySelectorAll("button[aria-expanded]")].find(button=>button.textContent.includes("Custom Category")).click()');
     await until(() => evaluate('document.querySelector(".pm-product strong")?.textContent === "Legacy link"'));

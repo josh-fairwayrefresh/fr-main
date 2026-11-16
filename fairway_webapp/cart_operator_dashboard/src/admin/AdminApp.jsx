@@ -9,6 +9,7 @@ import { adminRequest, downloadBlob } from './adminApi';
 import AdminUserManagement from './AdminUserManagement';
 import OtaManagement from './OtaManagement';
 import CustomerStaff from './CustomerStaff';
+import CustomerMenus from './CustomerMenus';
 import ButtonActivityReport from './ButtonActivityReport';
 import { serviceCategories } from '../lib/serviceCategories.mjs';
 import { COURSE_OPERATION_KINDS, courseOperation, courseOperationLabel } from '../lib/courseOperation.mjs';
@@ -190,6 +191,7 @@ function CustomersView({ user, apiBaseUrl, customers, refresh }) {
     <PageHeading eyebrow="ACCOUNT STRUCTURE" title="Customers & Courses" id="customers-title"><button className="a-primary" type="button" onClick={() => setEditor({ customer: null, course: null })}><Plus size={16} />Add customer</button></PageHeading>
     <div className="a-customers">{customers.map(customer => <article key={customer.customer_id}>
       <header><div><span>{customer.customer_id}</span><h3>{customer.customer_name}</h3><p>{valueOrStatus(customer.comments, customer.field_status?.comments)}</p><FieldStatus status={customer.field_status?.comments} /></div><div><button type="button" className="a-add-course" onClick={() => setEditor({ customer, course: {} })} aria-label={`Add course to ${customer.customer_name}`}><Plus size={16} aria-hidden="true" />Add course</button><button className="a-icon" type="button" onClick={() => setEditor({ customer, course: null })} aria-label={`Edit ${customer.customer_name}`}><Wrench size={16} /></button></div></header>
+      <CustomerMenus user={user} apiBaseUrl={apiBaseUrl} customer={customer} />
       <CustomerStaff user={user} apiBaseUrl={apiBaseUrl} customer={customer} />
       <div className="a-courses">{(customer.courses || []).map(course => <div className="a-course-row" key={course.course_id}>
         <button type="button" className="a-course-edit" onClick={() => setEditor({ customer, course })}><MapPin size={17} /><span><strong>{course.course_name}</strong><small>{course.course_id} · {valueOrStatus(course.timezone, course.field_status?.timezone)}</small><small>Operation: {courseOperationLabel(courseOperation(course).kind)}</small><small>Location: {course.course_location ? `${course.course_location.label} (${course.course_location.latitude}, ${course.course_location.longitude})` : 'Not set'}</small><small>Comments: {valueOrStatus(course.comments, course.field_status?.comments)}</small></span><ChevronRight size={16} /></button>

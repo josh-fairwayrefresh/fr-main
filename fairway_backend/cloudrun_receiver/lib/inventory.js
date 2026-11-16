@@ -79,24 +79,24 @@ function productIdentityKey(product) {
 }
 
 function inventoryStateRef(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId)
+  return courseRef(db, customerId, courseId)
     .collection(INVENTORY_COLLECTION).doc(INVENTORY_STATE_DOC);
 }
 
 function productsCollection(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId).collection(PRODUCTS_COLLECTION);
+  return courseRef(db, customerId, courseId).collection(PRODUCTS_COLLECTION);
 }
 
 function categoriesCollection(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId).collection(CATEGORIES_COLLECTION);
+  return courseRef(db, customerId, courseId).collection(CATEGORIES_COLLECTION);
 }
 
 function identityKeysCollection(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId).collection('inventory_product_keys');
+  return courseRef(db, customerId, courseId).collection('inventory_product_keys');
 }
 
 function eventsCollection(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId).collection(EVENTS_COLLECTION);
+  return courseRef(db, customerId, courseId).collection(EVENTS_COLLECTION);
 }
 
 function courseRef(db, customerId, courseId) {
@@ -116,24 +116,61 @@ async function getCustomerCourses(db, uid) {
 }
 
 async function requireCourseAccess(db, uid, customerId, courseId) {
-  const courses = await getCustomerCourses(db, uid);
-  const hasAccess = courses.some((entry) => (
-    entry.customer_id === customerId && entry.course_id === courseId
-  ));
-  if (!hasAccess) {
-    fail(403, 'customer_course_access_denied', 'Access is not authorized for this Course');
-  }
-
+  const { getUserAccess, resolveAuthorizedCourses } = require('./user_access');
+  const access = await getUserAccess(db, uid);
+  if (!access) fail(403, 'customer_course_access_denied', 'Access denied');
   const ref = courseRef(db, customerId, courseId);
-  const snapshot = await ref.get();
-  if (!snapshot.exists) {
-    fail(404, 'course_not_found', 'Course not found');
+  const [snapshot, menus] = await Promise.all([
+    db.collection('customers').doc(customerId).collection('assets').doc(courseId).get(),
+    db.collection('customers').doc(customerId).collection('menus').get(),
+  ]);
+  if (!snapshot.exists && access.schema_version === 2) {
+    const courses = await resolveAuthorizedCourses(db, access);
+    if (!courses.some((course) => course.customer_id === customerId && course.course_id === courseId &&
+        courseOperation(course).inventory)) {
+      fail(403, 'customer_course_access_denied', 'Access is not authorized for this Course');
+    }
+    const legacy = await ref.get();
+    if (!legacy.exists) fail(404, 'course_not_found', 'Course not found');
+    return { ref, data: legacy.data() };
   }
-  return { ref, data: snapshot.data() };
+  if (!snapshot.exists || snapshot.data().type !== 'cart' || snapshot.data().course_id !== courseId) {
+    fail(409, 'migration_required', 'Customer-owned cart asset is not available');
+  }
+  if (!access.admin) {
+    if (access.customer_id !== customerId) fail(403, 'customer_course_access_denied', 'Access denied');
+    const activeMenus = menus.docs.filter((doc) => doc.data().state === 'active' &&
+      doc.data().type === 'cart' && doc.data().asset_id === courseId);
+    if (access.schema_version === 3) {
+      if (!activeMenus.some((menu) => access.menu_ids.includes(menu.id))) {
+        fail(403, 'customer_course_access_denied', 'Cart menu grant required');
+      }
+    } else {
+      const courses = await resolveAuthorizedCourses(db, access);
+      if (!activeMenus.length || !courses.some((course) => course.course_id === courseId)) {
+        fail(403, 'customer_course_access_denied', 'Access denied');
+      }
+    }
+  }
+  const context = await ref.get();
+  if (!context.exists) fail(409, 'cart_context_required', 'Registered cart storage context is unavailable');
+  return { ref, data: context.data() };
 }
 
 async function getInventoryBootstrap(db, uid) {
-  const assignments = await getCustomerCourses(db, uid);
+  const { getUserAccess } = require('./user_access');
+  const access = await getUserAccess(db, uid);
+  if (!access) fail(403, 'customer_course_access_denied', 'Assigned customer access required');
+  let assignments;
+  if (access.schema_version === 3) {
+    const { bootstrap } = require('./customer_menus');
+    const directory = await bootstrap(db, uid);
+    assignments = directory.customers.flatMap((customer) => customer.menus
+      .filter((menu) => menu.type === 'cart')
+      .map((menu) => ({ customer_id: customer.customer_id, course_id: menu.asset_id })));
+  } else {
+    assignments = await getCustomerCourses(db, uid);
+  }
   const courses = await Promise.all(assignments.map(async (assignment) => {
     const [snapshot, customer] = await Promise.all([
       courseRef(db, assignment.customer_id, assignment.course_id).get(),
@@ -214,6 +251,7 @@ async function listInventory(db, customerId, courseId) {
 
   return {
     customer_id: customerId,
+    asset_id: courseId,
     course_id: courseId,
     customer_name: customerSnapshot.data()?.customer_name || null,
     course_name: courseSnapshot.data().course_name || null,
@@ -246,11 +284,13 @@ async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid
   const nextSlugRef = db.collection(PUBLIC_MENU_SLUGS).doc(slug);
 
   return db.runTransaction(async (transaction) => {
-    const [courseSnapshot, stateSnapshot, nextSlugSnapshot] = await Promise.all([
+    const [courseSnapshot, stateSnapshot, nextSlugSnapshot, asset] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
       transaction.get(nextSlugRef),
+      transaction.get(db.collection('customers').doc(customerId).collection('assets').doc(courseId)),
     ]);
+    if (asset.exists) fail(410, 'menu_register_required', 'Manage registered menu URLs through the Customer menu register');
     if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
     const nextSlug = nextSlugSnapshot.exists ? nextSlugSnapshot.data() : null;
     if (nextSlug && (nextSlug.customer_id !== customerId || nextSlug.course_id !== courseId)) {
@@ -1206,6 +1246,12 @@ module.exports = {
   closeShift,
   InventoryError,
   INVENTORY_STATES,
+  normalizeLabel,
+  optionalText,
+  normalizedKey,
+  validatePrice,
+  publicProduct,
+  toPublicMenu,
   getInventoryBootstrap,
   requireCourseAccess,
   listInventory,

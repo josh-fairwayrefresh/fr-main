@@ -2,6 +2,14 @@
 
 ## Current Deployment and OTA Readiness
 
+The Customer-assets/menu-register increment is authorized for local
+implementation only. Its
+[ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
+supersedes the previous Course-owned architecture; it has not changed this
+production snapshot. Use the
+[Customer asset cutover boundary](#customer-assets-and-menu-register-cutover)
+before proposing any data migration or release.
+
 This snapshot records the 2026-11-15 capability-gate removal deployment and
 latest CPO fleet handoff, with earlier release evidence retained separately.
 “Last verified” means the date of the evidence,
@@ -1720,6 +1728,150 @@ unreviewed dirty worktree or include unrelated OTA or provisioning changes
 without explicit scope approval. Recheck live service traffic, revision/image
 identity, Hosting release, environment target, and data/rules compatibility
 immediately before changing production.
+
+## Customer Assets and Menu Register Cutover
+
+**CPO/Architect-approved coherent increment, 2026-11-15.** Implementation and
+local tests/builds are authorized. No production migration, user-access
+mutation, restaurant import, deployment, commit, push or device operation is
+authorized by that approval. The
+[UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
+defines product requirements; the
+[Engineering Guide](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
+defines Customer-only ownership.
+
+Migration must preserve the complete existing cart inventory, product/category
+IDs and prices, stock revisions, operational records, staff attribution,
+idempotency receipts, history and each user's effective access. Courses may
+remain historical/location/timezone context, never the active ownership or
+entitlement boundary. The Customer register must recognize the existing cart
+menu without copying its content into a competing menu catalog.
+The cart migration is administrative/governance only. Register the existing
+cart as a Customer asset using its stable context ID; keep its operational
+collections at their existing Customer-nested paths. The `courses` path segment
+is retained storage/location context, not an independent ownership or permission
+authority. Do not relocate balances, sessions, histories or idempotency receipts.
+Schema-2 accounts retain the established access path before conversion;
+schema-3 cart access requires an explicit registered menu grant and never
+falls back to a service or Course grant.
+
+The existing Monarch public URL
+`https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course` remains
+permanent. Its former backend alias `monarch-bay` must resolve to that same
+menu identity. Current menu URLs are derived from Customer ID and menu name;
+renaming atomically reserves the previous URL as an alias to the same menu.
+The original Monarch URL remains a permanent alias. Menu QR destinations derive from the registered current URL,
+not an independently mutable URL field. Preserve existing Driving Range
+request mappings, installed signs, firmware and OTA assignments.
+
+The CPO-supplied restaurant source is `Restaurant menu.docx`, SHA-256
+`da2583425ae805a9a5bb7b0100c29f699d9d4d15fa22ebaccc9986b9df464ed0`.
+The CPO approved the corrected full transcription: 24 priced products, five
+ordered categories and all source notes. The local approved import package
+is content evidence, not production publication or data-write authorization.
+No guessed products or demonstration entries may become restaurant content.
+
+Before a separately authorized production cutover:
+
+1. Verify the production backup/recovery capability, current recovery point
+   and restore procedure under Production Change Safety. Retaining source
+   records or a migration plan is not a verified backup.
+2. Review the exact migration scope and source fingerprints, including
+   nested operational collections, public aliases, user grants and contextual
+   service mappings. Account email names never determine grants. Preserve
+   existing cart access; new restaurant grants start disabled.
+3. Establish the bounded write-quiescence/maintenance boundary needed to
+   prevent losing concurrent inventory, service or entitlement changes.
+   Recheck the reviewed source state immediately before applying. Stop on
+   conflicts, incomplete traversal, unmapped assets or divergent data; do
+   not choose a source silently or merge independent balances.
+4. Apply only the reviewed Customer-asset migration with the approved tool
+   and evidence. Verify identities, document counts, values, nested histories
+   and old/new effective permission boundaries. There must be one active
+   serving owner, not dual writes or silent legacy fallback.
+   After every reviewed Customer account has explicit schema-3 grants, set
+   that Customer's `authorization_schema_version` to `3` as the final
+   authorization cutover marker. Backend access, Admin writes and Firestore
+   reads then refuse legacy Customer Course authorization; old clients cannot
+   recreate it. Do not set this marker before grant conversion is verified.
+5. Stage the exact compatible Admin/receiver and Hosting artifacts under
+   existing release gates. Coordinate the data/rules/client contracts and
+   old cached-client behavior in the reviewed cutover order. Code rollback
+   alone must not re-enable a stale inventory writer.
+6. Verify unchanged cart operation, Customer isolation, explicit menu/service
+   grants, correct public-only product filtering, preserved permanent URL
+   and aliases, and decoded menu QR destinations. Verify restaurant content
+   against the approved transcription. Keep physical sign use and CPO
+   operational acceptance distinct from local tests or generated QR images.
+
+Stop if any operation requires unapproved production writes or cannot preserve
+data and authorization. Do not deploy a partial ownership migration as a
+workaround. The current deployed schema/behavior remains authoritative for
+production until an explicitly authorized and verified cutover.
+
+### Local increment verification (2026-11-15)
+
+The scoped implementation retains the accepted cart editor, category controls,
+product tiles and board byte-for-byte; cart stock, sale, audit, shift, close-out,
+session and idempotency algorithms and their storage paths remain unchanged.
+Customer asset/service records are administrative references to that existing
+context. The cart uses its existing public-product allowlist, not restaurant
+catalog logic.
+
+Local verification passed the backend regression suite, 105 frontend unit
+tests, the public-menu browser regression, and isolated Firestore-emulator
+rules checks for explicit service grants, Customer isolation, legacy access
+and backend-only writes. Focused register/import tests cover preserved
+operational records, unique names, reserved aliases, archive behavior,
+menu/service separation, QR decoding and atomic non-overwriting imports.
+The approved restaurant package was checked through an in-memory import and
+public read: all 24 names, prices and descriptions, five ordered categories,
+notes, heading and footer matched. Fictional browser checks confirmed
+restaurant changes only use restaurant endpoints and preserve cart staff,
+quantity and stored session identity when returning to the cart.
+
+The CPO approved name-derived current URLs with all previous URLs retained
+as permanent aliases. Name and URL changes are one register transaction;
+old printed QR destinations continue to resolve to the same menu identity.
+
+The production-mode frontend build is local validation only; it is not a
+deployment. The existing large-chunk build warnings remain advisory. No
+production registration, grant conversion, restaurant import, deployment,
+device operation, commit or push has occurred. The access-conversion preview
+is explicitly non-executable; production backup/recovery evidence, exact
+source/grant review and authorized coordinated cutover remain required.
+The isolated rules regression is
+[`customerAssetsRules.emulator.mjs`](../fairway_webapp/cart_operator_dashboard/test/customerAssetsRules.emulator.mjs),
+run with project `fairway-refresh-sandbox-customer-assets` and
+`FIRESTORE_EMULATOR_HOST=127.0.0.1:8799`; it refuses a different target.
+From the frontend application directory, with the existing Firebase CLI and
+JDK on `PATH`, run:
+
+```sh
+GOOGLE_CLOUD_PROJECT=fairway-refresh-sandbox-customer-assets \
+firebase emulators:exec --only firestore \
+  --project fairway-refresh-sandbox-customer-assets \
+  --config firebase.customer-assets-test.json \
+  'node test/customerAssetsRules.emulator.mjs'
+```
+
+This uses mocked Firebase identities and a localhost-only fixture; it does
+not require production authentication or access production data.
+
+### Architect source-review publication (2026-11-15)
+
+The CPO separately authorized committing and pushing the validated Customer
+Menu increment on `feature/customer-assets-menu-register-20261115` to
+`josh-fairwayrefresh/fr-main` for independent Lead Architect source review.
+The baseline is `a2510bc8176b55b59bea44b5f6a0a16355e48981`; the review commit
+and its exact file set are recorded in Git on that feature branch.
+
+Publication includes implementation, canonical documentation, automated tests
+and synthetic test fixtures only. Credentials, environment files, generated
+build outputs, emulator logs, local operational data and the session-only
+approved restaurant content package are excluded. Completed validation is
+retained; source-review publication does not authorize merging into `main`,
+deployment, production migration, permission changes or device operations.
 
 ## Current OTA Administration Procedure
 

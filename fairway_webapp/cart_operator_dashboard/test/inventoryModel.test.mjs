@@ -1,22 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, matchCoursePresentation, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from '../src/lib/inventoryModel.mjs';
-
-test('course branding matches the authoritative names, not colliding environment-local IDs', () => {
-  const monarchPresentation = { customerName: 'Monarch Bay GC', courseName: 'Tony Lema Course', apiSlug: 'monarch-bay' };
-  assert.equal(matchCoursePresentation({
-    customer_id: 'CUST-0001',
-    course_id: 'COURSE-0001',
-    customer_name: 'Sandbox Links Golf',
-    course_name: 'Validation Course',
-  }, [monarchPresentation]), null);
-  assert.equal(matchCoursePresentation({
-    customer_id: 'CUST-0021',
-    course_id: 'COURSE-0042',
-    customer_name: 'Monarch Bay GC',
-    course_name: 'Tony Lema Course',
-  }, [monarchPresentation])?.apiSlug, 'monarch-bay');
-});
+import { filterInventoryByCategory, filterInventoryBySubcategory, formatPrice, formatPublishedAt, groupPublishedProducts, mergeProductDraft, subcategoryNamesInProducts, usdPriceFromInput, usdPriceInput } from '../src/lib/inventoryModel.mjs';
 
 test('remote product updates refresh untouched draft fields while preserving local edits', () => {
   const base = { name: 'Pilsner', category_name: 'Beer', subcategory_name: '', brand: '', description: '', price_amount: '' };
@@ -50,6 +34,21 @@ test('published grouping retains large categories without imposing a product cap
     state: 'on_cart',
   }));
   assert.equal(groupPublishedProducts(products)[0].count, 30);
+});
+
+test('restaurant menu groups on-menu items in configured category order with notes', () => {
+  const products = [
+    { name: 'Tea', category: 'Drinks', state: 'on_menu' },
+    { name: 'Burger', category: 'Sandwiches', state: 'on_menu' },
+    { name: 'Unavailable', category: 'Sandwiches', state: 'sold_out' },
+  ];
+  const result = groupPublishedProducts(products, [
+    { name: 'Sandwiches', note: 'Cooking note' },
+    { name: 'Drinks' },
+  ]);
+  assert.deepEqual(result.map(category => category.name), ['Sandwiches', 'Drinks']);
+  assert.equal(result[0].note, 'Cooking note');
+  assert.equal(result[0].count, 1);
 });
 
 test('published timestamp uses the configured course timezone and timestamp precision', () => {

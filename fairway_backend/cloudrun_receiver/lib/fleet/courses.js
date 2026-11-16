@@ -90,7 +90,21 @@ async function createCourse(db, {
     updated_at: now,
   };
 
-  await coursesCollection(db, customerId).doc(courseId).set(courseDoc);
+  const batch = db.batch();
+  batch.set(coursesCollection(db, customerId).doc(courseId), courseDoc);
+  batch.set(db.collection(CUSTOMERS_COLLECTION).doc(customerId).collection('services').doc(courseId), {
+    course_id: courseId,
+    name: courseName,
+    created_at: now,
+    updated_at: now,
+  });
+  if (operation.inventory) {
+    batch.set(db.collection(CUSTOMERS_COLLECTION).doc(customerId).collection('assets').doc(courseId), {
+      type: 'cart', course_id: courseId, course_name: courseName, timezone,
+      created_at: now, updated_at: now,
+    });
+  }
+  await batch.commit();
 
   return { course_id: courseId, customer_id: customerId, ...courseDoc };
 }

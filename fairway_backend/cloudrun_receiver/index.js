@@ -5,7 +5,7 @@ require('./notifier');
 const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/environment');
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
-const { resolveCourseServiceState, resolveServiceGroup } = require('./lib/course_service');
+const { resolveCourseServiceState, resolveServiceGroup, requireService, serviceRef } = require('./lib/course_service');
 const {
   aggregateCourseReports,
   historyRequestsInRange,
@@ -45,6 +45,8 @@ const { resolveDeviceHierarchy, resolveCourseLocalDateHour } = require('./lib/fl
 const { createOtaService, OtaError, HARDWARE_ID } = require('./lib/ota/ota_service');
 const { createGcsArtifactStore } = require('./lib/ota/gcs_artifact_store');
 const inventory = require('./lib/inventory');
+const customerMenus = require('./lib/customer_menus');
+const restaurantCatalog = require('./lib/restaurant_catalog');
 const crypto = require('crypto');
 const { courseOperation } = require('./lib/course_operation');
 const { RequestError, transitionRequest, completeCommandId } = require('./lib/request_lifecycle');
@@ -68,6 +70,7 @@ const {
   getUserAccess,
   listCustomerCourses,
   normalizeAccessRecord,
+  resolveAuthorizedCourses,
   validateAccessRecord,
 } = require('./lib/user_access');
 
@@ -635,6 +638,9 @@ function createFairwayHandlers(db, {
   }
 
   function isAuthorizationRequest(body) {
+    if (body.schema_version === 3) {
+      return Boolean(normalizeAccessRecord(body));
+    }
     return typeof body.admin === 'boolean' &&
       Array.isArray(body.course_ids) &&
       body.course_ids.every((courseId) => typeof courseId === 'string' && courseId) &&
@@ -649,6 +655,11 @@ function createFairwayHandlers(db, {
 
   // Shared by access updates and user creation so both enforce one entitlement contract.
   async function resolveRequestedAuthorization(body) {
+    if (body.schema_version === 3) {
+      const access = await validateAccessRecord(db, body);
+      if (!access) return { error: 'invalid_authorization' };
+      return { v3: access, admin: access.admin };
+    }
     if (body.admin) {
       if (body.customer_id !== null || body.course_ids.length !== 0) {
         return { error: 'admin_scope_must_be_global' };
@@ -658,6 +669,8 @@ function createFairwayHandlers(db, {
     if (typeof body.customer_id !== 'string' || !body.customer_id) {
       return { error: 'customer_required' };
     }
+    const customer = await db.collection('customers').doc(body.customer_id).get();
+    if (customer.data()?.authorization_schema_version === 3) return { error: 'schema3_update_required' };
     const canonicalCourses = await listCustomerCourses(db, body.customer_id);
     if (!canonicalCourses) return { error: 'customer_not_found' };
     if (body.course_ids.some((courseId) => !canonicalCourses.some((course) => course.course_id === courseId))) {
@@ -672,6 +685,12 @@ function createFairwayHandlers(db, {
   }
 
   function accessRecord(authorization, actingUid) {
+    if (authorization.v3) return {
+      ...authorization.v3,
+      updated_at: FieldValue.serverTimestamp(),
+      updated_by: actingUid,
+      enabled: true,
+    };
     const legacyCourses = authorization.admin
       ? []
       : authorization.courseIds.length
@@ -739,7 +758,10 @@ function createFairwayHandlers(db, {
 
   async function updateAdminUserAccess(req, res, actingAdmin, uid) {
     const body = req.body;
-    if (!hasExactFields(body, ['admin', 'customer_id', 'course_ids']) || !isAuthorizationRequest(body)) {
+    const fields = body?.schema_version === 3
+      ? ['schema_version', 'admin', 'customer_id', 'menu_ids', 'service_ids']
+      : ['admin', 'customer_id', 'course_ids'];
+    if (!hasExactFields(body, fields) || !isAuthorizationRequest(body)) {
       return res.status(400).json({ error: 'invalid_authorization' });
     }
 
@@ -761,6 +783,11 @@ function createFairwayHandlers(db, {
       const records = await transaction.get(accessCollection);
       const current = records.docs.find((doc) => doc.id === uid);
       const currentAccess = current ? normalizeAccessRecord(current.data()) : null;
+      if (current?.data()?.schema_version === 3 && body.schema_version !== 3) {
+        const error = new Error('Legacy access updates cannot modify v3 authorization');
+        error.code = 'schema3_update_required';
+        throw error;
+      }
       if (currentAccess?.admin === true && body.admin === false && !activeAuthUsers) {
         activeAuthUsers = await listActiveAuthUids();
       }
@@ -787,8 +814,14 @@ function createFairwayHandlers(db, {
    */
   async function createAdminUser(req, res, actingAdmin) {
     const body = req.body;
-    if (!hasExactFields(body, ['username', 'password', 'admin', 'customer_id', 'course_ids']) ||
-        !isAuthorizationRequest(body)) {
+    const authorizationBody = body?.schema_version === 3
+      ? { schema_version: body.schema_version, admin: body.admin, customer_id: body.customer_id,
+        menu_ids: body.menu_ids, service_ids: body.service_ids }
+      : body;
+    const userFields = body?.schema_version === 3
+      ? ['username', 'password', 'schema_version', 'admin', 'customer_id', 'menu_ids', 'service_ids']
+      : ['username', 'password', 'admin', 'customer_id', 'course_ids'];
+    if (!hasExactFields(body, userFields) || !isAuthorizationRequest(authorizationBody)) {
       return res.status(400).json({ error: 'invalid_user_request' });
     }
     if (typeof body.username !== 'string' ||
@@ -798,7 +831,7 @@ function createFairwayHandlers(db, {
     }
     const passwordError = managedPasswordError(body.password);
     if (passwordError) return res.status(400).json({ error: passwordError });
-    const authorization = await resolveRequestedAuthorization(body);
+    const authorization = await resolveRequestedAuthorization(authorizationBody);
     if (authorization.error) return res.status(400).json({ error: authorization.error });
 
     const email = `${body.username}@${MANAGED_USER_EMAIL_DOMAIN}`;
@@ -993,17 +1026,19 @@ function createFairwayHandlers(db, {
   }
 
   async function courseServiceReadModel(course) {
-    const assignedDevices = await db.collection('devices')
-      .where('customer_id', '==', course.customer_id)
-      .where('course_id', '==', course.course_id).get();
+    const [assignedDevices, service] = await Promise.all([
+      db.collection('devices').where('customer_id', '==', course.customer_id)
+        .where('course_id', '==', course.course_id).get(),
+      requireService(db, course.customer_id, course.course_id),
+    ]);
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
       course_name: course.course_name,
       timezone: course.timezone,
       operation_kind: courseOperation(course).kind,
-      service_state: resolveCourseServiceState(course),
-      on_premise_service_state: resolveCourseServiceState(course, 'on_premise'),
+      service_state: resolveCourseServiceState(service),
+      on_premise_service_state: resolveCourseServiceState(service, 'on_premise'),
       has_on_premise_devices: assignedDevices.docs.some((document) => (
         document.data().service_group === 'on_premise'
       )),
@@ -1020,7 +1055,7 @@ function createFairwayHandlers(db, {
     const summaryRangeStart = bounds.weekly.start < bounds.monthly.start
       ? bounds.weekly.start
       : bounds.monthly.start;
-    const serviceEvents = coursesCollection(db, course.customer_id).doc(course.course_id)
+    const serviceEvents = serviceRef(db, course.customer_id, course.course_id)
       .collection('service_events');
     const [priorEventSnapshot, periodEventSnapshot, completedRequestSnapshot] = await Promise.all([
       serviceEvents.where('recorded_at', '<', summaryRangeStart)
@@ -1129,7 +1164,7 @@ function createFairwayHandlers(db, {
       return res.status(400).send('This Course has one service control\n');
     }
     const requestTime = now();
-    const courseRef = coursesCollection(db, course.customer_id).doc(course.course_id);
+    const courseRef = serviceRef(db, course.customer_id, course.course_id);
     const suspended = action === 'suspend';
     const eventRef = courseRef.collection(group === 'on_course' ? 'service_events' : 'on_premise_service_events').doc();
     await db.runTransaction(async (transaction) => {
@@ -1284,7 +1319,11 @@ function createFairwayHandlers(db, {
     const coursesByPath = new Map();
     const customers = await Promise.all(customersSnap.docs.map(async (customerSnap) => {
       const source = customerSnap.data();
-      const coursesSnap = await customerSnap.ref.collection('courses').limit(500).get();
+      const [coursesSnap, servicesSnap] = await Promise.all([
+        customerSnap.ref.collection('courses').limit(500).get(),
+        customerSnap.ref.collection('services').limit(501).get(),
+      ]);
+      const serviceById = new Map(servicesSnap.docs.map((doc) => [doc.id, doc.data()]));
       const courses = coursesSnap.docs.map((courseSnap) => {
         const courseSource = courseSnap.data();
         const course = {
@@ -1301,6 +1340,25 @@ function createFairwayHandlers(db, {
         coursesByPath.set(`${customerSnap.id}/${courseSnap.id}`, course);
         return course;
       });
+      const courseById = new Map(courses.map((course) => [course.course_id, course]));
+      // Absence or invalid entries are not an empty entitlement directory.
+      // Until migration establishes the registry, leave this field unavailable.
+      let services;
+      if (servicesSnap.size > 0 && servicesSnap.size <= 500 &&
+          servicesSnap.docs.every((doc) => (
+            doc.data().course_id === doc.id && courseById.has(doc.id)
+          ))) {
+        services = servicesSnap.docs.map((doc) => {
+          const course = courseById.get(doc.id);
+          return {
+            service_id: doc.id,
+            course_id: doc.id,
+            name: doc.data().name ?? course.course_name,
+            course_name: course.course_name,
+            timezone: course.timezone,
+          };
+        });
+      }
       const customer = {
         customer_id: customerSnap.id,
         customer_name: source.customer_name ?? null,
@@ -1310,6 +1368,7 @@ function createFairwayHandlers(db, {
           comments: availability(source.comments),
         },
         courses,
+        ...(services ? { services } : {}),
       };
       customersById.set(customerSnap.id, customer);
       return customer;
@@ -1547,6 +1606,29 @@ function createFairwayHandlers(db, {
         res.set('Content-Disposition', `attachment; filename="cart-request-performance-${req.body.start_date}-${req.body.end_date}.pdf"`);
         return res.status(200).send(pdf);
       }
+      const menuAdminMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/menus(?:\/([^/]+))?(?:\/(qr))?$/);
+      if (menuAdminMatch) {
+        const customerId = decodeURIComponent(menuAdminMatch[1]);
+        const menuId = menuAdminMatch[2] ? decodeURIComponent(menuAdminMatch[2]) : null;
+        if (req.method === 'GET' && !menuId) return res.status(200).json(await customerMenus.listMenus(db, customerId));
+        if (req.method === 'POST' && !menuId) return res.status(201).json(await customerMenus.saveMenu(db, customerId, null, req.body, admin.uid));
+        if (req.method === 'PATCH' && menuId && !menuAdminMatch[3]) return res.status(200).json(await customerMenus.saveMenu(db, customerId, menuId, req.body, admin.uid));
+        if (req.method === 'GET' && menuId && menuAdminMatch[3]) {
+          const image = await customerMenus.qr(db, customerId, menuId, req.query?.format);
+          res.set('Content-Type', image.type);
+          return res.status(200).send(image.data);
+        }
+      }
+      const assetsMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/assets$/);
+      if (req.method === 'GET' && assetsMatch) {
+        const customer = customerMenus.customerRef(db, decodeURIComponent(assetsMatch[1]));
+        if (!(await customer.get()).exists) return res.status(404).json({ error: 'customer_not_found' });
+        const assets = await customer.collection('assets').get();
+        return res.status(200).json({ assets: assets.docs.map((doc) => ({
+          asset_id: doc.id, type: doc.data().type, course_id: doc.data().course_id,
+          course_name: doc.data().course_name, timezone: doc.data().timezone,
+        })) });
+      }
       const staffMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/staff(?:\/([^/]+))?$/);
       if (staffMatch) {
         const customerId = decodeURIComponent(staffMatch[1]);
@@ -1610,11 +1692,14 @@ function createFairwayHandlers(db, {
 
       const menuSlugMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/courses\/([^/]+)\/inventory-menu$/);
       if (req.method === 'PATCH' && menuSlugMatch) {
+        const customerId = decodeURIComponent(menuSlugMatch[1]);
+        const courseId = decodeURIComponent(menuSlugMatch[2]);
+        const asset = await customerMenus.assetRef(db, customerId, courseId).get();
+        if (asset.exists) return res.status(410).json({ error: 'menu_register_required' });
         requireBodyFields(req.body, ['public_menu_slug']);
-        const configured = await inventory.configurePublicMenuSlug(
-          db, menuSlugMatch[1], menuSlugMatch[2], req.body.public_menu_slug, admin.uid
-        );
-        return res.status(200).json(configured);
+        return res.status(200).json(await inventory.configurePublicMenuSlug(
+          db, customerId, courseId, req.body.public_menu_slug, admin.uid
+        ));
       }
 
       const deviceActionMatch = path.match(/^\/api\/v1\/admin\/devices\/([^/]+)\/(assignment|state|metadata|service|commission)$/);
@@ -1704,6 +1789,10 @@ function createFairwayHandlers(db, {
       if (error.code === 'last_admin') {
         return res.status(409).json({ error: 'last_admin_required' });
       }
+      if (error.code === 'schema3_update_required') {
+        return res.status(409).json({ error: 'schema3_update_required' });
+      }
+      if (error instanceof inventory.InventoryError) return sendInventoryError(res, error);
       return sendAdminError(res, error);
     }
   }
@@ -2135,10 +2224,18 @@ function createFairwayHandlers(db, {
       try {
         const access = await getUserAccess(db, identity.uid);
         if (!access) return res.status(403).json({ error: 'user_access_required' });
+        const courseIds = access.schema_version === 3 && !access.admin
+          ? (await resolveAuthorizedCourses(db, access)).map((course) => course.course_id)
+          : access.course_ids || [];
         return res.status(200).json({
           admin: access.admin,
           customer_id: access.customer_id,
-          course_ids: access.course_ids,
+          course_ids: courseIds,
+          ...(access.schema_version === 3 ? {
+            schema_version: 3,
+            menu_ids: access.menu_ids,
+            service_ids: access.service_ids,
+          } : {}),
           user_type: access.admin ? 'fairway_staff' : 'customer_staff',
         });
       } catch (error) {
@@ -2149,12 +2246,15 @@ function createFairwayHandlers(db, {
     if (path.startsWith('/api/v1/inventory/')) {
       return handleInventoryRequest(req, res, path);
     }
+    if (path.startsWith('/api/v1/menus/')) {
+      return handleMenusRequest(req, res, path);
+    }
     if (path.startsWith('/api/v1/public/menus/')) {
       if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
       try {
         const match = path.match(/^\/api\/v1\/public\/menus\/([^/]+)$/);
         if (!match) return res.status(404).json({ error: 'menu_not_found' });
-        return res.status(200).json(await inventory.getPublicMenu(db, decodeURIComponent(match[1])));
+        return res.status(200).json(await restaurantCatalog.publicMenu(db, decodeURIComponent(match[1])));
       } catch (error) {
         return sendInventoryError(res, error);
       }
@@ -2163,6 +2263,41 @@ function createFairwayHandlers(db, {
       return res.status(404).send('Not Found\n');
     }
     return handleAdminRequest(req, res, path);
+  }
+
+  async function handleMenusRequest(req, res, path) {
+    const identity = await authenticateOperator(req, res);
+    if (!identity) return res;
+    try {
+      if (req.method === 'GET' && path === '/api/v1/menus/bootstrap') {
+        return res.status(200).json(await customerMenus.bootstrap(db, identity.uid));
+      }
+      const match = path.match(/^\/api\/v1\/menus\/customers\/([^/]+)\/([^/]+)(?:\/(.*))?$/);
+      if (!match) return res.status(404).json({ error: 'not_found' });
+      const customerId = decodeURIComponent(match[1]);
+      const menuId = decodeURIComponent(match[2]);
+      const suffix = match[3] || '';
+      if (req.method === 'GET' && (suffix === '' || suffix === 'products')) {
+        return res.status(200).json(await restaurantCatalog.catalog(db, identity.uid, customerId, menuId));
+      }
+      if (req.method === 'POST' && suffix === 'categories') {
+        return res.status(201).json(await restaurantCatalog.mutate(db, identity.uid, customerId, menuId, 'category_create', null, req.body));
+      }
+      const category = suffix.match(/^categories\/([^/]+)$/);
+      if (req.method === 'DELETE' && category) {
+        return res.status(200).json(await restaurantCatalog.mutate(db, identity.uid, customerId, menuId, 'category_delete', decodeURIComponent(category[1]), req.body));
+      }
+      if (req.method === 'POST' && suffix === 'products') {
+        return res.status(201).json(await restaurantCatalog.mutate(db, identity.uid, customerId, menuId, 'product_create', null, req.body));
+      }
+      const product = suffix.match(/^products\/([^/]+)$/);
+      if (req.method === 'PATCH' && product) {
+        return res.status(200).json(await restaurantCatalog.mutate(db, identity.uid, customerId, menuId, 'product_update', decodeURIComponent(product[1]), req.body));
+      }
+      return res.status(404).json({ error: 'not_found' });
+    } catch (error) {
+      return sendInventoryError(res, error);
+    }
   }
 
   async function handleInventoryRequest(req, res, path) {
@@ -2174,7 +2309,7 @@ function createFairwayHandlers(db, {
         return res.status(200).json(await inventory.getInventoryBootstrap(db, identity.uid));
       }
 
-      const match = path.match(/^\/api\/v1\/inventory\/courses\/([^/]+)\/([^/]+)(?:\/(.*))?$/);
+      const match = path.match(/^\/api\/v1\/inventory\/(?:courses|customers)\/([^/]+)\/([^/]+)(?:\/(.*))?$/);
       if (!match) return res.status(404).json({ error: 'not_found' });
       const customerId = decodeURIComponent(match[1]);
       const courseId = decodeURIComponent(match[2]);

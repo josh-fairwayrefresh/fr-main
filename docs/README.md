@@ -8,6 +8,16 @@ them by assumption.
 
 ## Current State
 
+The CPO/Architect approved the
+[Customer-only asset ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
+and coherent menu-register increment. Courses are contextual attributes, not
+owners of inventory, menus, users or permissions. The
+[UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
+defines the Customer menu register, preserved cart behavior, isolated restaurant
+dashboard, explicit menu/service grants, permanent URLs and shared template.
+This is authorized local implementation, not a claim of production migration
+or deployment.
+
 The OTA capability-gate removal is committed and deployed. FRB-0001 through
 FRB-0006 are selectable OTA targets; release approval, authentication,
 lifecycle, hardware compatibility and MCUboot signature controls remain.

@@ -1128,6 +1128,80 @@ route checks. Authenticated use and CPO acceptance on physical phone-sized
 screens remain pending; the deployment record is authoritative for the exact
 verification performed.
 
+## Customer Menu Register and Restaurant Menu
+
+**CPO/Architect decision, 2026-11-15; authorized local implementation, not
+production deployment.** Customer owns menus, inventory, user entitlements and
+service assets. Course is location/operation context only. This supersedes
+earlier Course-owned inventory and Course-dependent permission descriptions;
+those describe the prior implementation and retained production evidence.
+
+- Each Customer owns a menu register. Names such as `cart_menu` and
+  `restaurant_menu` are unique within that Customer, not globally unique
+  account or permission names. Permanent menu identity is distinct from name.
+  The register owns type, content reference, permanent URL, alternate names,
+  URL aliases and active/archive status. Routing indexes only resolve aliases;
+  they are not a second editable menu-name or content authority.
+  The CPO clarified that the current public URL is name-derived:
+  `/cartmenus/{lowercase_customer_id}_{menu_name}`. Menu names use lowercase
+  letters, numbers, underscores and hyphens. A rename updates the current URL
+  and reserves every previous URL as an alias to the same permanent menu ID.
+  There is no independently editable current URL slug.
+- Monarch Bay's current cart URL remains its permanent registered URL. New
+  menus reuse the existing public route pattern. Printed QR destinations and
+  aliases must survive migration and name changes. Monarch's original URL is
+  retained as a permanent alias, not replaced or reassigned. Archived menus preserve
+  identity, reserved URLs and QR history, displaying a clear unavailable page;
+  their URLs are never reassigned to another menu.
+- The `cart_menu` composes the existing cart inventory capability, moved to
+  Customer ownership while preserving products, quantities, sales, staff,
+  shifts, audits, close-out, histories and accepted behavior. Its public view
+  remains the saved active On Cart products. No duplicate cart catalog,
+  synchronized second balance or restaurant dependency is permitted.
+  The CPO clarified that this is an administrative/governance migration,
+  not cart redevelopment. Keep the existing cart dashboard, product editing,
+  drag/drop, transaction and session implementation intact. Restaurant reuse
+  must not require redesigning or replacing cart operational components.
+- The restaurant has an independent product catalog. Its dashboard reuses
+  product tiles, categories, prices, descriptions, editing and availability
+  interactions, with On Menu, Sold Out and In Inventory columns. It has no
+  stock quantities, sales, shifts, audits or close-out. Restaurant edits do
+  not mutate cart data. Public restaurant pages include only active On Menu
+  products; omitted descriptions or prices are not invented.
+- Global Admin creates/archives register entries and manages names and URL
+  aliases. Existing Customer users are granted one or more menu dashboards
+  through explicit menu checkboxes in User Management. A cart-menu checkbox
+  grants full use of its existing inventory system; a restaurant checkbox
+  grants the restaurant dashboard. Global Admin retains global access. Email
+  names such as a Customer's `_cart` or `_fnb` account are not authorization.
+- Customer-owned service-asset checkboxes preserve existing request/service
+  access boundaries separately from menu grants. No automatic all-services
+  entitlement is inferred from Customer membership. Existing cart access is
+  preserved during migration; restaurant access starts disabled until an
+  authorized Admin explicitly grants it.
+- One shared golfer-menu template file serves cart and restaurant menus and
+  future Customers. Identity, branding and content are supplied as data, not
+  Customer-specific template forks or hardcoded URL translations. A reviewed
+  template update takes effect across menus through normal deployment.
+  Categories initially collapse; saved content is read on open/reload, without
+  polling or a separate Publish step. Ordering and checkout remain excluded.
+- The restaurant source is the CPO-supplied `Restaurant menu.docx`. The CPO
+  approved its complete corrected transcription: 24 priced items in five
+  ordered categories, the restaurant heading, burger-cooking note, Poutine
+  add-on and footer. Preserve the explicit CPO wording, including
+  "lemon all flour tortilla"; do not silently spell-correct it. All approved
+  items initially enter On Menu. Content approval permits preparing the local
+  import package, not an unapproved production write.
+- Menu QR records refer to permanent menu identity. The destination is
+  derived from its registered current URL, not a separately editable copy.
+  Every previous QR destination remains a reserved alias to the same menu.
+  Provide downloadable verified QR images without changing Driving Range
+  request QR destinations or designing/replacing installed signs.
+
+The deployment owner records local verification, migration boundaries and
+production gates. No implementation test substitutes for a production backup,
+approved cutover, physical sign validation or CPO product acceptance.
+
 ## Admin Firmware OTA Management (Production, fleet-wide eligibility)
 
 The Admin capability and fleet-wide eligibility are deployed. The 2026-11-15

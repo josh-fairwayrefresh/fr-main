@@ -119,9 +119,9 @@ export function useInventoryDrag({ scope, disabled, onMove }) {
   };
 }
 
-export function InventoryDragFeedback({ drag }) {
+export function InventoryDragFeedback({ drag, labels = INVENTORY_STATE_LABELS }) {
   if (!drag) return null;
-  const text = `Moving ${drag.product.name}. ${drag.target ? `Release in ${INVENTORY_STATE_LABELS[drag.target]}.` : 'Drag to an availability column.'} Escape cancels.`;
+  const text = `Moving ${drag.product.name}. ${drag.target ? `Release in ${labels[drag.target]}.` : 'Drag to an availability column.'} Escape cancels.`;
   return <>
     <span className="inv-drag-announcement" role="status">{text}</span>
     {!drag.keyboard && <div className="inv-drag-preview" aria-hidden="true" style={{

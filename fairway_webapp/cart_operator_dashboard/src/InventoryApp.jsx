@@ -15,7 +15,8 @@ import { publicMenuPath } from './lib/courseMenuConfig';
 import './inventory.css';
 
 function coursePath(course, suffix = '') {
-  return `/api/v1/inventory/courses/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.course_id)}${suffix}`;
+  const kind = course.asset_id ? 'customers' : 'courses';
+  return `/api/v1/inventory/${kind}/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.asset_id || course.course_id)}${suffix}`;
 }
 
 function buildProductBody(draft, state, preservedPrice = null) {
@@ -274,7 +275,7 @@ function InventoryColumn({ state, products, busyId, onStateChange, onEdit, onArc
   </section>;
 }
 
-export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = false, onOpenAdmin, onSignOut }) {
+export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = false, onOpenAdmin, onSignOut, onSelectMenu }) {
   const [selectedKey, setSelectedKey] = useState(() => {
     const selected = selectedCourseFromLocation(courses, window.location.search);
     return selected ? courseKey(selected) : '';
@@ -324,7 +325,8 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     if (product.subcategory_name) counts[product.subcategory_name] = (counts[product.subcategory_name] || 0) + 1;
     return counts;
   }, {}), [categoryFilteredProducts]);
-  const hasCurrentInventory = inventory?.customer_id === course?.customer_id && inventory?.course_id === course?.course_id;
+  const hasCurrentInventory = inventory?.customer_id === course?.customer_id &&
+    (course?.asset_id ? inventory?.asset_id === course.asset_id : inventory?.course_id === course?.course_id);
   const canExport = hasCurrentInventory
     && loadStatus === 'ready' && !session.unresolved && !session.submitting && !busyId;
   const exportSignature = JSON.stringify([selectedKey, inventory?.inventory_revision, inventory?.daily_sales, selectedCategory, selectedSubcategory, showArchived, session.shift?.staff_name]);
@@ -490,6 +492,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       </div>
       <div className="inv-header-context">
         <div className="inv-course-identity"><span>{displayNames.customer}</span><strong>{displayNames.course}</strong></div>
+        {onSelectMenu && <button className="inv-secondary" type="button" disabled={Boolean(session.submitting || session.unresolved || busyId || editor || categoryEditor || categoryManager || stockAction || auditing || sessionEditing || session.choosing || movement.drag)} onClick={onSelectMenu}>Select menu</button>}
         {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={courseKey(course)} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
         <div className="inv-header-tools">
           <span className="inv-user-label">{user.email}</span>
@@ -523,7 +526,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
           <button className="inv-category-manage-trigger" type="button" onClick={() => setCategoryManager(category)} title={`Manage ${category.name}`} aria-label={`Manage ${category.name} category`}><Settings size={13} /></button>
         </div>)}
       </nav><div className="inv-audit-action">
-        {hasCurrentInventory && inventory?.public_menu_slug
+        {hasCurrentInventory && (course.public_url || inventory?.public_menu_slug)
           ? <button className="inv-secondary inv-menu-link" type="button" ref={menuOpenButtonRef} onClick={() => setMenuViewerOpen(true)}>Golfer-View Menu</button>
           : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">Public menu link not configured for this Course. Contact Admin.</span>}
       </div></div>}
@@ -554,9 +557,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
     />}
     {stockAction && <StockDialog action={stockAction} session={session} onSaved={() => refreshInventory(true)} onRefresh={() => refreshInventory(true)} onClose={() => setStockAction(null)} />}
     {auditing && <AuditDialog inventory={inventory} session={session} onSaved={() => refreshInventory(true)} onClose={() => setAuditing(false)} />}
-    {menuViewerOpen && inventory?.public_menu_slug && <section className="inv-menu-viewer" role="dialog" aria-modal="true" aria-label="Golfer-View Menu">
+    {menuViewerOpen && (course.public_url || inventory?.public_menu_slug) && <section className="inv-menu-viewer" role="dialog" aria-modal="true" aria-label="Golfer-View Menu">
       <button className="inv-menu-viewer-close" type="button" ref={menuCloseButtonRef} onClick={() => setMenuViewerOpen(false)} aria-label="Close golfer-view menu and return to Inventory"><X size={30} strokeWidth={2.5} /></button>
-      <iframe title="Golfer-View Menu" src={publicMenuPath(inventory.public_menu_slug)} />
+      <iframe title="Golfer-View Menu" src={course.public_url || publicMenuPath(inventory.public_menu_slug)} />
     </section>}
   </main>;
 }
