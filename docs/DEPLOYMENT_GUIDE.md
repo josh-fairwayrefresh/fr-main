@@ -2921,6 +2921,8 @@ The accepted reporting baseline and verified remote main are
 `3ec5a8df4a0da4c992f850be567839b95c21f32e`. Local isolated branch
 `fix/inventory-owned-operator` starts there. Abandoned PR #23 was not merged,
 cherry-picked or incorporated wholesale; its branch/history are preserved.
+PR #23 was closed without merging on 2026-11-15 under CPO housekeeping
+authorization; its remote branch and committed evidence remain retained.
 
 - Inventory alone owns operator selection/change and shift closeout. Requests
   displays its scoped name read-only and remains actionable without selection
@@ -4967,9 +4969,11 @@ confirmed completed Lead Architect review of documentation commit
 documentation finalization and normal merge of PR #2 only.
 The [detailed evidence and provenance](https://github.com/josh-fairwayrefresh/fr-main/tree/af5bd53304a8d42c7859c282891ec1b99ac642d6/docs/evidence/2026-10-20-pilot-cleanup)
 and one-time scripts remain branch-only historical review artifacts in
-[draft PR #1](https://github.com/josh-fairwayrefresh/fr-main/pull/1), not
+[historical PR #1](https://github.com/josh-fairwayrefresh/fr-main/pull/1), not
 material intended for main or reusable production tooling. This record does
 not authorize rerun, deployment, device operations, or infrastructure changes.
+PR #1 was closed without merging on 2026-11-15 under CPO housekeeping
+authorization; its remote branch and committed evidence remain retained.
 
 ## Read-only Production Alignment Check — 2026-10-17
 
