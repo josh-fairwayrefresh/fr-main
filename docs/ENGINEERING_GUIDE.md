@@ -1,7 +1,7 @@
 # Fairway Refresh Engineering Guide
 
 ## Document Status
-- Status: Current Pilot 1.1 engineering overview
+- Status: Current engineering overview with retained Pilot 1.1 provenance
 - The current engineering truth is owned by the subsystem documents listed in `docs/README.md`.
 - Pilot 1.1 is an integrated product milestone, not a new firmware generation.
 
@@ -75,8 +75,8 @@ identity or command path; operator access still requires normal authentication.
 - Nordic NCS: 3.1.1; board: `circuitdojo_feather_nrf9151@1/nrf9151/ns`; application configuration: `prj_a.conf`.
 - Firmware architecture: MCUboot + TF-M + non-secure application on the Circuit Dojo nRF9151 Feather.
 - Current field-power design: regulated Voltaic V25/V50/V75 output to the Feather VBUS input, with the three-indicator button circuit. Current wiring and qualification boundaries are owned by the hardware documents.
-- The CPO confirms products are in the field and FRB-0001 through FRB-0005 passed firmware programming, credential activation, and physical end-to-end testing. FRB-0006's authorized firmware recovery and credential replacement completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Registry eligibility is not physical deployment proof; do not infer individual assignments from this summary.
-- Prototype 4.0 — CPO field-validated stable firmware baseline (2026-11-11): common credential-free images with PSA-protected identity, production-signed autonomous OTA through the global Admin Firmware OTA page, and authenticated running-version confirmation. FRB-0005 autonomously installed and confirmed `OTA-1.0-r4` (`1.0.0+4`); source rollback reference is tag `prototype-4.0-field-validated`. Validated on FRB-0005 only; other units remain on Pilot 1.1 images without verified OTA capability. See the [Alignment Register entry](DEPLOYMENT_GUIDE.md#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11); firmware behavior is owned by the [Firmware Specification](FIRMWARE_SPECIFICATION.md).
+- Historical Pilot 1.1 programming, credential activation and functional acceptance remain dated evidence, not current installed-image or runtime claims. The [current fleet handoff](DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15) owns the latest CPO physical observations and validation gaps. Registry eligibility is not physical deployment proof.
+- Prototype 4.0 uses common credential-free images with PSA-protected identity, production-signed autonomous OTA and authenticated running-version confirmation. FRB-0005 remains the operational `OTA-1.0-r4` (`1.0.0+4`) reference; source reference is tag `prototype-4.0-field-validated`. The capability-gate removal is deployed and all six devices are selectable, without implying uniform runtime validation. Version 6A for FRB-0001 is READY but suspended; it preserves credentials and requires no commissioning. See the [current deployment snapshot](DEPLOYMENT_GUIDE.md#current-deployment-and-ota-readiness); firmware behavior is owned by the [Firmware Specification](FIRMWARE_SPECIFICATION.md).
 - The responsive Cart Operator release is live. The production deployment record does not establish authenticated physical-phone/Safari acceptance; that acceptance remains pending.
 
 ## Current System Boundaries

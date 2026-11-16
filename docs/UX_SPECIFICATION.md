@@ -1128,19 +1128,20 @@ route checks. Authenticated use and CPO acceptance on physical phone-sized
 screens remain pending; the deployment record is authoritative for the exact
 verification performed.
 
-## Admin Firmware OTA Management (Production, FRB-0005 authorized)
+## Admin Firmware OTA Management (Production, fleet-wide eligibility)
 
-The Admin capability is deployed (2026-11-09). Approved releases were
-published for FRB-0005 only; on 2026-11-10 FRB-0005 autonomously installed and
-confirmed `OTA-0.1alt-r4`. The CPO decided on 2026-11-12 that an approved
-release is assignable to any compatible, OTA-capable device; the Admin
-assignment is the only per-device decision and publication never installs or
-authorizes anything by itself (source implemented, not yet deployed; see the
-[Deployment Guide record](./DEPLOYMENT_GUIDE.md#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12)). A newly
+The Admin capability and fleet-wide eligibility are deployed. The 2026-11-15
+capability-gate removal leaves FRB-0001 through FRB-0006 selectable; legacy
+`ota_capability` values neither authorize nor block assignment or delivery.
+An approved release is reusable across compatible authorized devices; explicit
+Admin assignment is the sole per-device decision. Publication never installs
+or authorizes a device by itself. Earlier FRB-0005-only release approvals remain
+historical evidence, superseded in device scope by the fleet-wide decision.
+A newly
 commissioned OTA 0.1 device checks once, 900 seconds after its first normal
 boot; its first update must be assigned before that check. Exact production identities, release records,
 verification limits and remaining gates are owned by the
-[Deployment Guide](./DEPLOYMENT_GUIDE.md#ota-administration-production-deployment-2026-11-09).
+[Deployment Guide](./DEPLOYMENT_GUIDE.md#current-deployment-and-ota-readiness).
 
 - Firmware OTA is part of the existing global Admin application. Customer/Cart
   authorization does not grant release-management access.
@@ -1195,8 +1196,8 @@ verification limits and remaining gates are owned by the
   This fixed policy is not a user preference. Scheduling does not wake, reset
   or force-install a device; installation follows its autonomous check.
 - OTA 0.1 is USB-only initialization, never a dropdown update. Its already
-  installed FRB-0005 bootstrap performs a single persisted 900-second check.
-  A review for the first OTA 0.1alt transition explicitly shows immediate
+  installed bootstrap performs a single persisted 900-second check.
+  A review for a bootstrap device's first successor explicitly shows immediate
   bootstrap eligibility with unknown remaining check time, not a nightly
   installation promise. A previously reported bootstrap check no longer blocks
   assignment, but Admin cannot rearm the device's consumed one-time check;

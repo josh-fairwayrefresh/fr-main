@@ -1,10 +1,19 @@
-# Device Provisioning Guide — Fairway Refresh Pilot 1.1
+# Device Provisioning Guide — Fairway Refresh
 
 ## Purpose and current fleet status
 
 This document owns device identity, authentication, registry lifecycle, and commissioning requirements. Firmware build/flash procedures are owned by `docs/DEPLOYMENT_GUIDE.md`; current firmware behavior is owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
-The CPO confirms products are now in the field. FRB-0001 through FRB-0005 passed firmware programming, credential activation, and physical end-to-end testing. FRB-0006's authorized firmware recovery and credential replacement completed on 2026-10-17. Subsequent field testing demonstrated a successful button request and COMPLETE rearm, but intermittent LTE/HTTPS failures remain unresolved; sustained reliability acceptance is pending. Admin `deployed` is a software eligibility state, not independent confirmation of physical deployment. The production device registry remains the authority for individual assignments and state; no individual deployment assignments are inferred here.
+The latest CPO report records OTA 0.1 installed on field units FRB-0001,
+FRB-0002, FRB-0003, FRB-0004 and FRB-0006; FRB-0005 alone runs operational
+OTA 1.0 on the CPO's workbench. FRB-0001 and FRB-0006 lack demonstrated
+900-second commissioning check-ins; their runtime is unvalidated, not
+demonstrated failed. Earlier programming, credential activation and functional
+acceptance remain historical evidence. The
+[current fleet handoff](DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15)
+owns physical observations and suspended Version 6A execution. Admin `deployed`
+is a software state, not independent physical evidence. The production
+registry remains the authority for individual assignments and state.
 
 The dated recovery summaries below preserve execution provenance, not standing
 authorization. Their one-time erase-all, debug-key, and offline-SIM exceptions
@@ -13,7 +22,7 @@ superseded by this fleet summary and the commissioning section; do not rerun
 those procedures. Future releases require their own compatible artifact,
 signing, recovery, and operational authorization.
 
-## Current FRB-0001 recovery status — 2026-10-17
+## Historical FRB-0001 recovery status — 2026-10-17
 
 The CPO-authorized complete firmware replacement and credential activation
 completed. The full MCUboot + TF-M + application image was read-back verified;
@@ -27,7 +36,7 @@ subsequently completed for physical validation.
 The CPO subsequently confirmed FRB-0001 passed physical button, LED, cellular,
 and Cart Operator request-delivery validation.
 
-## Current FRB-0002 recovery status — 2026-10-17
+## Historical FRB-0002 recovery status — 2026-10-17
 
 The CPO-authorized full erase-all and firmware replacement completed. The
 fresh MCUboot + TF-M + application image was read-back verified, and after
@@ -39,7 +48,7 @@ remain intact. The CPO later confirmed the same SIM was reinstalled and FRB-0002
 passed physical button, LED, cellular, and Cart Operator request-delivery
 testing using its replacement credential.
 
-## Current FRB-0003 recovery status — 2026-10-17
+## Historical FRB-0003 recovery status — 2026-10-17
 
 The CPO-authorized full firmware replacement completed. The complete MCUboot +
 TF-M + application image was programmed and read-back verified; after reset,
@@ -53,7 +62,7 @@ delivery validation using its replacement credential; see the execution
 evidence below and the deployment record. Do not reconnect the prior firmware
 or attempt to restore the replaced credential.
 
-## Current FRB-0004 recovery status — 2026-10-16
+## Historical FRB-0004 recovery status — 2026-10-16
 
 The CPO-authorized full firmware replacement and credential activation
 completed. The complete MCUboot + TF-M + application image was programmed and
@@ -68,7 +77,7 @@ subsequently completed for physical validation.
 The CPO subsequently confirmed on 2026-10-17 that FRB-0004 passed physical
 button, LED, cellular, and Cart Operator request-delivery testing.
 
-## Current FRB-0005 recovery status — 2026-10-16
+## Historical FRB-0005 recovery status — 2026-10-16
 
 The CPO-authorized full firmware replacement and credential activation
 completed. The complete MCUboot + TF-M + application image was programmed and
@@ -83,7 +92,7 @@ completed. The CPO subsequently
 confirmed on 2026-10-17 that FRB-0005 passed physical button, LED, cellular,
 and Cart Operator request-delivery testing.
 
-## Current FRB-0006 recovery status — 2026-10-17
+## Historical FRB-0006 recovery status — 2026-10-17
 
 The CPO-authorized full firmware replacement and credential activation
 completed. The complete MCUboot + TF-M + application image was programmed and
@@ -252,6 +261,14 @@ embedded in firmware. The generated nRF9151 configuration and partition map
 are recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### USB-only commissioning
+
+**Scope:** this section owns credential commissioning and recovery, not
+Version 6A. The reviewed
+[Version 6A restart procedure](./DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15)
+installs `OTA-1.0-r4` on FRB-0001 while preserving existing Protected Storage.
+It uses no commissioner, credential extraction, rotation, provisioning,
+activation or Admin interaction. An erase-and-reprovision fallback requires
+separate CPO authorization; do not invoke it automatically.
 
 The replacement commissioning workflow uses the existing single USB cable:
 CMSIS-DAP for flashing and its CDC-ACM interface for serial provisioning.

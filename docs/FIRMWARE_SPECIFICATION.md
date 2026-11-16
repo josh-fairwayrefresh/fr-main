@@ -1,4 +1,4 @@
-# Firmware Specification — Fairway Refresh Pilot 1.1
+# Firmware Specification — Fairway Refresh
 
 ## Purpose and current baseline
 
@@ -9,7 +9,7 @@ This document describes the accepted firmware implementation. Pilot 1.1 is an in
 - Board: `circuitdojo_feather_nrf9151@1/nrf9151/ns`.
 - Configuration: `prj_a.conf`.
 - Image architecture: MCUboot + TF-M + non-secure application.
-- Prototype 4.0 field-validated baseline (FRB-0005 only, 2026-11-11): `OTA-1.0-r4` (`1.0.0+4`), source tag `prototype-4.0-field-validated`. Pilot 1.1 remains the fleet image on other units. Exact identity and limitations are in the [Deployment Guide Alignment Register](./DEPLOYMENT_GUIDE.md#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11).
+- Prototype 4.0 field-validated baseline (FRB-0005, 2026-11-11): `OTA-1.0-r4` (`1.0.0+4`), source tag `prototype-4.0-field-validated`. The latest CPO report records OTA 0.1 on the five field units and OTA 1.0 on workbench FRB-0005. Installed-image reports, earlier authenticated confirmations and current runtime-validation gaps are distinct; see the [current fleet handoff](./DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15).
 - Current OTA images are common signed images and contain no device identity or credential. Device identity and credential are provisioned separately into TF-M PSA Protected Storage; never commit or document plaintext credentials.
 
 The firmware build, flashing, and deployment procedure is owned by `docs/DEPLOYMENT_GUIDE.md`. Device provisioning and commissioning evidence is owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
@@ -62,6 +62,10 @@ The application is intentionally modular. In `samples/fairway_power_sandbox/src/
 The board device tree and current source define the pins consumed by the implementation. Physical pin mappings are owned by `docs/HARDWARE_ASSEMBLY_GUIDE.md`.
 
 ## Running-image confirmation revision — published, USB bootstrap physically verified (2026-11-10)
+
+**Historical r3 release lineage:** r4 superseded these identities. The original
+FRB-0005-only publication scope below is not current assignment policy; use
+the current OTA delivery section and deployment owner.
 
 The revised USB-only bootstrap is `OTA-0.1-r3` (`0.1.0+4`); its matching
 nightly successor is `OTA-0.1alt-r3` (`0.1.0+5`). The CPO subsequently requested
@@ -151,10 +155,19 @@ described above.
 ## OTA delivery implementation
 
 The source implements the production OTA path for the Circuit Dojo nRF9151
-Feather using the existing MCUboot manager. The CPO confirmed OTA 0.1 USB
-installation on FRB-0001 through FRB-0006; production status confirms
-`0.1.0+6` on FRB-0001 through FRB-0004 and FRB-0006, while FRB-0005 has
-confirmed `1.0.0+4`. FRB-0005 autonomously installed and confirmed
+Feather using the existing MCUboot manager. Earlier production status recorded
+`0.1.0+6` on FRB-0001 through FRB-0004 and FRB-0006, and `1.0.0+4` on
+FRB-0005. These authenticated reports are dated evidence, not uniform current
+runtime validation. The latest CPO report places FRB-0001, FRB-0002, FRB-0003,
+FRB-0004 and FRB-0006 on OTA 0.1 in the field; FRB-0001 and FRB-0006 have not
+demonstrated their expected 900-second check-ins. Runtime is unvalidated, not
+demonstrated failed. FRB-0004 retains a prior OTA failure of `-140`, without a
+new investigation conclusion. FRB-0005 is the only operational `1.0.0+4`
+reference and remains on the CPO's workbench. The
+[latest fleet handoff](DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15)
+owns these physical observations and the suspended, validated Version 6A
+installation of `OTA-1.0-r4` on FRB-0001 without credential commissioning.
+FRB-0005 autonomously installed and confirmed
 `OTA-0.1alt-r4` and `OTA-1.0-r4` (see the r4 correction above and the
 Deployment Guide). The 2026-11-15 removal of the per-device capability gate is
 deployed in production backend and Hosting; see the
@@ -163,7 +176,8 @@ No firmware was changed or installed by that deployment. Rollback/interrupted-do
 recovery has not been physically exercised. The subsections below retain the
 dated release lineage; earlier releases are history, not selectable updates.
 
-The accepted immutable commissioning artifacts are:
+**Original approved artifacts (2026-11-09 lineage, not current release
+selection):** retain these immutable identities and their original limitations.
 
 | Release | MCUboot/application version | Schedule |
 |---|---|---|

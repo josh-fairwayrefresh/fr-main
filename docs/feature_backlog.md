@@ -1,4 +1,4 @@
-# Feature Backlog — Fairway Refresh Pilot 1.1
+# Feature Backlog — Fairway Refresh
 
 This document lists open or explicitly deferred work only. Completed behavior is
 owned by its subsystem document; superseded and abandoned work is summarized in
@@ -41,12 +41,12 @@ physical print/laminated-sign scan acceptance.
 | Cart Operator mobile acceptance | The responsive-layout release is live. Complete authenticated physical-phone/Safari checks at representative small and large phone widths and obtain CPO acceptance. Do not infer acceptance from build checks or unauthenticated route smoke tests. Preserve the accepted iPad and desktop experience. |
 | Repeat-press transport and persistence | Firmware-local repeat behavior exists; transporting repeat events and persisting `repeat_press_count`/`last_repeat_press_at` against the originating accepted request is deferred. Keep one authoritative service request per demand window. |
 | Production signing and artifact provenance | OTA releases now use the CPO-custodied encrypted production ECDSA-P256 key (fingerprint `sha256:be1c1257…f88eb`), independent verification, exact-hash CPO acceptance and remote-backed release records; see the Deployment Guide. Remaining: per-device installed trust-anchor records beyond FRB-0005, and reconciliation of completed fleet recoveries that used NCS's insecure debug key. Completed one-time exceptions are not standing permission. See [details](#signing-and-provenance). |
-| OTA beyond the Prototype 4.0 baseline | Prototype 4.0 is CPO field-validated on FRB-0005 (`OTA-1.0-r4`, nightly install 2026-11-11). Fleet-wide release eligibility (Admin assignment as the sole per-device decision) and FRB-0003 commissioning are implemented and prepared, not deployed ([record](DEPLOYMENT_GUIDE.md#fleet-wide-ota-release-eligibility-and-frb-0003-commissioning-readiness-2026-11-12)). Open: production rollout, FRB-0003 commissioning, capability records for other units (none verified), rollback and interrupted-download recovery, and a post-`1.0.0+4` request/COMPLETE check. Superseded r3 images retain the 32-bit discovery defect and must not be reassigned. See the [Alignment Register entry](DEPLOYMENT_GUIDE.md#prototype-40--cpo-field-validated-stable-firmware-baseline-2026-11-11). |
+| OTA beyond the Prototype 4.0 baseline | Fleet-wide eligibility and capability-gate removal are deployed; all six devices are selectable. Production rollout and registry capability registration are not open prerequisites. The CPO reports OTA 0.1 installed on all five field units; FRB-0001 and FRB-0006 need validation of their expected 900-second check-ins, not classification as firmware failures. FRB-0004 retains its prior `-140` result. FRB-0005 is the operational `OTA-1.0-r4` nightly reference on the CPO's workbench. Open: suspended Version 6A installation on FRB-0001, CPO runtime validation, rollback/interrupted-download recovery evidence and a separately observed post-`1.0.0+4` request/COMPLETE check. Do not repeat completed 6A readiness review or initiate an unrequested failure investigation. Superseded r3 images must not be reassigned. See the [current handoff](DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15). |
 | Routine PV8-free USB service access | CPO requirement (2026-11-10): USB maintenance must not require PV8. Current low-power firmware powers down the debugger in normal mode; each FRB-0005 service session required a PV8-held USB power application. Needs a CPO-approved hardware/firmware design that preserves field low-power behavior and protected storage. See the [Firmware Specification](FIRMWARE_SPECIFICATION.md#unresolved-routine-usb-debugger-access). |
 | Confirmation sequence after clean reinstall | A clean USB install restarts the protected running-image sequence at 1; the backend rejects that report (409) if sequence 1 already identifies different firmware, until a higher sequence arrives. Define an authorized reconciliation for clean reinstalls; the stale-evidence guard is unchanged. |
 | Customer Onboarding & Administration (Increment 2) — acceptance | Admin and Hosting deployed 2026-11-12 and validated with a dedicated test identity ([release record](DEPLOYMENT_GUIDE.md#customer-onboarding--administration-increment-2-production-release-2026-11-12)); awaiting CPO acceptance. Per the CPO's 2026-11-12 direction, the receiver keeps signature/expiry token verification: a deactivated or password-reset user's already-issued token remains usable there, and for direct Firestore reads (accepted 2026-11-11), for up to one hour. Staged `fairway-button-receiver-onboard-ada4001` must never be promoted. Test identity `test.onboarding-20261112@fairwayrefresh.com` is left deactivated. Excluded: Customer/Course archival, QR bay UI, `service_days` UI, email invitations, self-service recovery. |
 | Orphaned user-access cleanup | Nonblocking post-pilot maintenance. Provide an explicit, auditable administrator-controlled way to review and remove an Auth-orphaned `user_access/{uid}` record without affecting valid users. |
-| Idle-power correction and solar/pack autonomy | Fleet Pilot 1.1 units still run the retained VBUS service-awake policy. The FRB-0005 low-power development line (carried by the OTA images) removes the unconditional awake hold and powers down the debugger in normal mode; it is not a fleet baseline. Measure consumption and runtime before autonomy or solar-sufficiency claims; preserve service access and power isolation. See [details](#power-and-autonomy). |
+| Field consumption and solar/pack autonomy | The installed OTA image line removes the unconditional VBUS awake hold and powers down the debugger in normal mode. The CPO reports OTA 0.1 on the five field units and OTA 1.0 on FRB-0005; this is not measured consumption or autonomy evidence. Measure consumption and runtime before autonomy or solar-sufficiency claims; preserve service access and power isolation. See [details](#power-and-autonomy). |
 | COMPLETE polling cadence review | Reevaluate the active-window polling period using field evidence. FRB-0006's intermittent TLS timeouts occurred during 15-second polling, but later COMPLETE delivery and acknowledgement succeeded without firmware/configuration changes; cadence causality is unproven. No cadence change is authorized by this entry. |
 | Request/network reliability review | FRB-0006 showed LTE registration status `90` then `2` then `5`, TLS connect/handshake timeouts `-116`, and later successful button/COMPLETE operation without intervening changes. Correlate registration, signal, TLS-stage, HTTP, and LED-state evidence before selecting a fix; a shared modem/network transport issue is plausible but unconfirmed. Preserve the accepted 15-second transaction budget unless the CPO approves a change. See `docs/DEPLOYMENT_GUIDE.md`. |
 | Watchdog and reset diagnostics | Evaluate fault recovery and reset-reason diagnostics without changing current runtime behavior until scoped and approved. |
@@ -104,16 +104,17 @@ whole-product shutdown.
   keeper and disabled requested PSM when VBUS is present, and current field
   supply also enters VBUS. The current
   [power_policy.c](../samples/fairway_power_sandbox/src/power_policy.c)
-  (FRB-0005 development line) removes that unconditional hold and selects PV8
-  service mode explicitly; see the Firmware Specification. The legacy policy does not
+  (installed OTA image line) removes that unconditional hold and selects PV8
+  service mode explicitly; see the Firmware Specification. The legacy policy did not
   distinguish field VBUS from USB service power. Actual field idle consumption,
   pack runtime, and solar energy balance have not been measured.
 - **Impact/blocking:** Prevents claims of qualified low-power field operation,
   autonomous runtime, or demonstrated solar sufficiency; solar charging is
   only the operating assumption. It is not proof of a particular field outage.
-- **Durable outcome/dependencies/acceptance:** Separately scope field-idle
-  correction with Errata-36/debug-service safety and electrical qualification,
-  then measure idle/transaction/COMPLETE behavior at explicit supply boundaries.
+- **Durable outcome/dependencies/acceptance:** Measure idle/transaction/COMPLETE
+  behavior at explicit supply boundaries. Preserve the implemented power policy;
+  any further correction needs separately scoped authorization and
+  Errata-36/debug-service safety review.
   Assess V25/V50/V75 energy budget with realistic solar/exposure assumptions,
   loading, losses, and service patterns. Preserve 15-second UX, request/COMPLETE
   contracts, and mutually exclusive USB/field power; require compatible recovery

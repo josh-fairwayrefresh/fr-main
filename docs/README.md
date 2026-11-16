@@ -6,6 +6,35 @@ for its engineering domain. CPO-confirmed physical and production evidence is
 valid validation evidence. Surface material conflicts instead of resolving
 them by assumption.
 
+## Current State
+
+The OTA capability-gate removal is committed and deployed. FRB-0001 through
+FRB-0006 are selectable OTA targets; release approval, authentication,
+lifecycle, hardware compatibility and MCUboot signature controls remain.
+OTA 0.1 is USB-only, not a selectable update.
+
+The latest CPO fleet report records OTA 0.1 on field units FRB-0001, FRB-0002,
+FRB-0003, FRB-0004 and FRB-0006. FRB-0001 and FRB-0006 have not demonstrated
+their expected 900-second check-ins; runtime is unvalidated, not demonstrated
+failed. FRB-0005 is the only operational OTA 1.0 (`1.0.0+4`) device and remains
+on the CPO's workbench. The
+[current deployment snapshot](DEPLOYMENT_GUIDE.md#current-deployment-and-ota-readiness)
+owns production identities and the dated fleet evidence.
+
+Version 6A for FRB-0001 is READY but suspended for insufficient field-visit
+battery power. No 6A flash occurred. Resume the validated non-erasing
+`OTA-1.0-r4` installation with interactive PV8 guidance; do not repeat readiness
+review or invoke credential commissioning. The
+[restart handoff](DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15)
+owns the unchanged procedure and execution boundaries.
+
+## Historical Release Summaries
+
+The following summaries describe their recorded release dates, not current
+source heads, live revisions, installed firmware or standing authorizations.
+Detailed evidence is retained in the linked deployment records. Current state
+is owned by the snapshot above, not by a superseded release's "live" wording.
+
 The notification backend baseline remains accepted source
 `79940e63c03b0ef5bc3c55173607032e050289e7`; the current frontend source is
 `9b325fb6122cddafc0ff1ea14745c84d0a5d1efe` on `main`. The CPO reported on
@@ -77,7 +106,7 @@ recovery; notification/operator workflows, backend identities, operational data,
 permanent signs and unrelated local work remain unchanged. Older Hosting
 identities below are historical.
 
-## Current Milestone
+## Historical Pilot 1.1 Milestone
 
 Fairway Refresh is a fielded product operating at the CPO-accepted **Pilot 1.1** milestone.
 Pilot 1.1 is an integrated product milestone, not a new firmware generation.
@@ -97,9 +126,14 @@ course or marker-location assignments are recorded in engineering SoTs.
 ## Reading status correctly
 
 Current accepted source describes implementation, not proof of deployment.
-Use the Deployment Guide's latest verified production alignment for dated
+Use the Deployment Guide's Current Deployment and OTA Readiness for dated
 runtime evidence; older release records are historical, not competing current
 states or standing authorizations.
+### Earlier accepted product releases
+
+These summaries retain accepted product behavior and dated release evidence.
+They do not identify today's serving revisions.
+
 The CPO-authorized Driving Range release is now merged through PR #13 and
 published from `db9001ecba79b88f6584a6d407de355dc0c63d75`, integrated with the
 current stock-aware and Course-assigned staff owners. Monarch's independent

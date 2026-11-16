@@ -2,14 +2,14 @@
 
 ## Current Deployment and OTA Readiness
 
-This snapshot includes the CPO-authorized 2026-11-09 empty-catalog Admin
-deployment and subsequent private-delivery infrastructure/firmware qualification.
+This snapshot records the 2026-11-15 capability-gate removal deployment and
+latest CPO fleet handoff, with earlier release evidence retained separately.
 “Last verified” means the date of the evidence,
 not continuous production monitoring. Confirm actual
 serving state and obtain release-specific authorization before production
-changes. OTA rows and the readiness subsection below include subsequent
-FRB-0005 commissioning evidence and the local Prototype 4.0 readiness increment;
-the original accepted firmware artifacts remain unchanged.
+changes. Historical builds, approvals and deployment records do not override
+this snapshot or authorize another operation. Immutable firmware artifacts
+and release identities remain unchanged.
 
 On 2026-11-15, the CPO retired `ota_capability` as an OTA eligibility,
 scheduling, and delivery input. The separately authorized backend and Hosting
@@ -26,22 +26,20 @@ owns the latest CPO-reported fleet runtime validation limits.
 
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
-| Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
+| Current fleet firmware / runtime | CPO reports OTA 0.1 installed on field units FRB-0001, FRB-0002, FRB-0003, FRB-0004 and FRB-0006; FRB-0005 alone runs OTA 1.0 (`1.0.0+4`) on the CPO's workbench | Latest CPO report 2026-11-15. FRB-0001 and FRB-0006 lack demonstrated 900-second commissioning check-ins; runtime is unvalidated, not demonstrated failed. FRB-0004 retains prior OTA error `-140`. Earlier authenticated confirmations remain dated evidence. |
 | Production Hosting | Production site `savvy-kit-496703-r5`; live version `a2c3d800ffd65cde`, release `1794774526953000` | Released `2026-11-15T20:28:46.953Z`. All 127 application files verified byte-for-byte on both origins; all 107 accepted Driving Range assets and both Firebase-generated initialization resources are unchanged. Rollback version `d22f383b5ebc0755`. See the [release record](#ota-capability-gate-retirement-production-release-2026-11-15). |
 | Production Admin / receiver | Admin `fairway-admin-nogate-1115-1222`; receiver `fairway-button-receiver-nogate-1115-1222`, both Ready, 100% | OTA capability-gate retirement deployed 2026-11-15 from reviewed `5214515` base plus authorized local OTA edits. Runtime identities/configuration unchanged. Immediate rollback revisions are `fairway-admin-fleetota-5214515` and `fairway-button-receiver-fleetota-5214515`. The unrelated staged receiver `fairway-button-receiver-onboard-ada4001` remains at 0% and must not be promoted. |
 | OTA implementation | **Prototype 4.0 — CPO field-validated stable firmware baseline** (2026-11-11); per-device capability eligibility is retired in production (2026-11-15) | Published releases, immutable artifacts, device records and assignments are unchanged by this deployment. All six devices are selectable. FRB-0002 retains a pre-existing active-assignment Course mismatch, separate from capability eligibility; see the [release record](#ota-capability-gate-retirement-production-release-2026-11-15). |
-| Local OTA validation | Final `OTA-0.1-r3` / `OTA-0.1alt-r3` signed packages built and independently verified, including exact-deployment completion and the registration handoff fix; 42 host cases pass in each schedule mode, both revised wire/ack configurations pass, and concurrent registration/reconnect regression passes | Final local output suffix `production-20261110-r3`; exact hashes below. Current firmware source matches both manifests. Existing commissioning helper pairing and secure payload verified. No new exact hashes accepted or published. Autonomous physical transitions remain unvalidated. |
+| Approved firmware / qualification | `OTA-0.1-r4` (`0.1.0+6`) is the USB bootstrap; `OTA-0.1alt-r4` (`0.1.0+7`) and `OTA-1.0-r4` (`1.0.0+4`) are approved successor identities | r4 acceptance/publication and FRB-0005 autonomous transitions are recorded in dated release evidence. Earlier r3 builds are superseded lineage, not current unaccepted candidates. No physical rollback/interrupted-download recovery qualification is inferred. |
 | FRB-0005 commissioning | Running `1.0.0+4` (nightly) via autonomous OTA from `0.1.0+7`; credential generation 6 active | Clean USB install of `OTA-0.1-r4` (2026-11-10 17:57 Pacific), OTA to `0.1.0+7` with post-OTA request/COMPLETE, then nightly OTA to `1.0.0+4` (2026-11-11). Post-`1.0.0+4` request/COMPLETE not separately exercised. PV8 still required for USB service access. |
 | Production OTA prerequisites | Private GCS controls verified; exact `OTA-0.1alt-r4` stored bytes verified; delivery enabled | Assignment never requires reconciling earlier targets. HQ remains `America/Los_Angeles`. Installation is shown only from authenticated device evidence. |
-| Production data | Publication created `OTA-0.1alt-r4`; authorized recoveries activated FRB-0005 credential generations 4–6; CPO assignments superseded earlier targets with retained history; the successful deployment cleared its assignment | Permanent identity and placement unchanged. No other devices were changed. Preflight reports PITR/delete protection disabled; code rollback is not data recovery. |
+| Production data preservation | The 2026-11-15 deployment changed no device, credential, assignment, release or deployment records; before/after fingerprints matched | Earlier publications, recoveries and CPO assignments remain historical operations, not a current fleet-wide no-change claim. Existing FRB-0002 assignment placement mismatch remains untouched. Recorded preflight reports PITR/delete protection disabled; code rollback is not data recovery. |
 | Current hardware | Prototype 3.3 uses CPO-designated Voltaic V25/V50/V75 regulated supplies; FRB-0003 operation was validated with V75 | V25/V50 voltage under load and pack autonomy were not separately verified. See the Hardware BOM and Assembly Guide. |
 
-The exact-Device in-inventory credential-recovery UI is included in this
-Hosting release, preserving the existing local protections. The
-credential-lifecycle backend was originally deployed on 2026-10-17;
-this rollout performed no credential operation or authenticated lifecycle
-request. See
-`docs/DEVICE_PROVISIONING_GUIDE.md`.
+Current deployment and OTA procedures are linked under
+[Operational entry points](#operational-entry-points). The
+[Device Provisioning Guide](./DEVICE_PROVISIONING_GUIDE.md) owns credential
+lifecycle and commissioning, distinct from Version 6A.
 
 ### Version 6A field deployment suspension and restart (2026-11-15)
 
@@ -201,6 +199,17 @@ each prior service revision to 100% using the established traffic update
 procedure. Recovery targets were verified without performing rollback. Code
 rollback reinstates the previous capability behavior; it does not restore or
 mutate operational data or reverse firmware installations.
+
+## Historical OTA Readiness and Release Evidence
+
+The following November 9-10 records preserve original source, artifacts,
+tests, approvals, restrictions and observations at their recorded checkpoints.
+Their present-tense wording is historical, not current operating guidance.
+The current snapshot, Version 6A handoff and
+[current OTA administration procedure](#current-ota-administration-procedure)
+supersede former FRB-0005-only, capability-registration, bootstrap-assignment
+lock and local-only restrictions. Do not execute an old proposed increment or
+reopen a resolved blocker from these records.
 
 ### Running-image confirmation revision — implementation and release boundary (2026-11-10)
 
@@ -1669,6 +1678,7 @@ currently deployed on the accepted Pilot 1.1 fleet.
 
 - [Environment, service identities, and targets](#current-environment)
 - [Production release and change-safety gates](#production-change-safety)
+- [Current OTA administration procedure](#current-ota-administration-procedure)
 - [Firmware build and physical flashing](#firmware-deployment)
 - [Backend deployment](#backend-deployment)
 - [Web application deployment](#web-application-deployment)
@@ -1710,6 +1720,45 @@ unreviewed dirty worktree or include unrelated OTA or provisioning changes
 without explicit scope approval. Recheck live service traffic, revision/image
 identity, Hosting release, environment target, and data/rules compatibility
 immediately before changing production.
+
+## Current OTA Administration Procedure
+
+Release publication and device assignment are separate authorized operations.
+VSC publishes only accepted immutable successor bytes through the existing
+Admin API after exact-hash approval, verification, Alignment Register
+recognition, source/release-record commits, designated-remote backup and CPO
+publication authorization. Never overwrite an old release identity or artifact.
+OTA 0.1 is USB-only and is not an update-dropdown release.
+
+An authorized Admin selects a published compatible release, then 1-50 explicit
+managed devices through the canonical Customer/Course/Device or headquarters
+tree. FRB-0001 through FRB-0006 are selectable following the deployed
+capability-gate removal. `ota_capability` records are inert; do not create,
+repair or require them for assignment, scheduling or delivery.
+
+Review and explicit confirmation revalidate the exact devices, lifecycle,
+placement/timezone basis, release and scheduling window. Existing assignments
+do not lock a device: a newly confirmed review atomically supersedes the prior
+target, preserving history. A changed target or expired/stale review requires
+a fresh review. Only the latest assignment receives offers and valid grants;
+late reports cannot clear a newer assignment. This procedure does not authorize
+changing the existing FRB-0002 placement-mismatched assignment.
+
+Scheduling uses backend-confirmed OTA status, not registry capability. Nightly
+updates use next local 00:30 with the Course IANA timezone; headquarters uses
+`America/Los_Angeles`. Devices without confirmed nightly status retain
+bootstrap scheduling. Immediate bootstrap eligibility is not a new device
+timer: its single persisted 900-second check cannot be rearmed by publication
+or assignment. Missing check evidence means unknown, not guaranteed delivery
+or demonstrated firmware failure. No polling or synthetic device traffic is
+part of this procedure.
+
+Admin shows check-in, offer, artifact request and authenticated lifecycle/
+running-version reports separately. Assignment, requested bytes, confirmed
+running version and CPO functional validation are distinct evidence states.
+Device authentication, accepted hashes/provenance, release trust/hardware,
+lifecycle and reviewed placement remain enforced. Historical firmware and
+reporting records are retained; a deployment alone changes none of them.
 
 ## Pilot 1.1 Operating State (as recorded through 2026-11-03)
 
@@ -1755,6 +1804,12 @@ operational sections linked above. Preserve this history when updating the
 runbook.
 
 ## Fleet-wide OTA release eligibility and FRB-0003 commissioning readiness (2026-11-12)
+
+**Historical November 12 preparation checkpoint, superseded by the
+[November 15 production release](#ota-capability-gate-retirement-production-release-2026-11-15)
+and latest fleet handoff.** Its capability-registration instructions and
+prepared/not-deployed statements are not current prerequisites. The original
+evidence below remains unchanged.
 
 **CPO architecture decision; source implemented and tested on local branch
 `feature/frb0003-ota-migration`, not committed, deployed or applied to any
@@ -7455,7 +7510,13 @@ The documented deployment architecture consists of:
 - A Firestore document-created Eventarc trigger that invokes a dedicated Web
   Push sender for authorized course subscriptions.
 
-Current source-defined Device API scope is `button_press` plus correlated COMPLETE poll/ack. Battery-health checks/reporting and Device Health ingestion are abandoned: stable firmware emits no Health reports and current receiver source does not ingest them. Existing Firestore Health records remain historical. Active restored Admin/Hosting still includes a legacy Health-history reader, a source/deployment divergence described below, not current monitoring functionality. FRB-0003 Prototype 3.3 operational validation is recorded in `docs/DEVICE_PROVISIONING_GUIDE.md`; it introduced no backend deployment or API change.
+Current source-defined Device API scope includes `button_press`, correlated
+COMPLETE poll/ack, authenticated OTA schedule/discovery/artifact delivery,
+lifecycle events and running-firmware confirmation. Battery-health reporting
+and Device Health ingestion are abandoned; existing Health records are
+historical. Earlier restored Admin Health-reader divergence is dated evidence,
+not a current API or monitoring function. Firmware and provisioning owners
+define device behavior; deployment does not establish physical validation.
 
 Context references:
 
@@ -7566,8 +7627,8 @@ the browser.
 | Primary Application Origin | `https://app.fairwayrefresh.com` |
 | Firebase Hosting | `https://savvy-kit-496703-r5.web.app` |
 | Cloud Run Admin Service | `fairway-admin` |
-| Latest recorded Admin Revision | `fairway-admin-00017-dvk` (Ready, 100% traffic as of 2026-10-17; credential-lifecycle capability) |
-| Latest recorded Receiver Revision | `fairway-button-receiver-00026-kg5` (100% traffic as of 2026-10-17) |
+| Historical Admin Revision (2026-10-17) | `fairway-admin-00017-dvk` (then Ready, 100%; credential-lifecycle capability) |
+| Historical Receiver Revision (2026-10-17) | `fairway-button-receiver-00026-kg5` (then 100% traffic) |
 | Admin API URL | `https://fairway-admin-936892386735.us-central1.run.app` |
 | Runtime Identity | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime IAM | `roles/datastore.user`, `roles/firebaseauth.admin` |
@@ -7581,10 +7642,10 @@ explicit supported `FAIRWAY_SERVICE_MODE`, and both project variables equal to
 origin allowlist (Firebase Hosting and `app.fairwayrefresh.com`); receiver mode
 rejects any Admin browser origin. The Admin target exposes only
 `/api/v1/admin/*`, and the receiver returns `404` for that surface.
-**Latest recorded production authorization state (2026-10-17):** Admin revision
+**Historical production authorization checkpoint (2026-10-17):** Admin revision
 `fairway-admin-00017-dvk` and receiver revision
 `fairway-button-receiver-00026-kg5` were recorded serving 100% of traffic.
-This is not a live check. Admin and Cart
+This is not current serving state; use the opening snapshot. Admin and Cart
 authorization use the shared Firestore user-access record; legacy
 `admin:true` claims and separate Operator/Inventory collections are not
 runtime authorization sources. The old Admin-claim and separate-assignment
@@ -7964,17 +8025,18 @@ component of **Fairway Refresh Stable Pilot Baseline 1.0**:
   deployment. Receiver correlation logging is retained; later undeployed
   demand-window source introduced in `62a2122` is excluded from the baseline.
 
-**Pin scope and source progression:** the Pilot 1.0 pin identifies the
-production revision and source archive that must remain available as the
-known-good rollback target. It governs which revision receives production
-traffic; it does not freeze repository source or prevent authorized source
-changes, builds, tests, or commits. The user-authorization deployment on
+**Historical pin scope and source progression:** the Pilot 1.0 pin identifies
+an accepted receiver/source correspondence, not a currently qualified rollback
+target or a restriction on today's traffic. Preserve its provenance; revalidate
+security and data compatibility before proposing it for recovery. It does not
+freeze repository source or prevent authorized changes, builds, tests or
+commits. The user-authorization deployment on
 2026-10-12 moved receiver traffic from the Pilot 1.0 revision
 `fairway-button-receiver-00022-wxk` to
 `fairway-button-receiver-00024-659` under explicit CPO authorization. The
-baseline revision, image, build, and source archive above remain identified
-and retained. Restoring traffic to it is possible, but requires explicit CPO
-deployment authorization; no rollback was performed as part of the subsequent
+baseline revision, image, build, and source archive above remain identified.
+Restoration requires verified availability, current compatibility and explicit
+CPO deployment authorization; no rollback was performed as part of the subsequent
 pin clarification.
 
 This baseline record verifies receiver source correspondence only. The
@@ -8736,12 +8798,12 @@ Current deployment depends on:
 
 | Item | Source | Status | Notes |
 |------|--------|--------|-------|
-| Per-device ID and credential | Local provisioning material | Required | `FAIRWAY_DEVICE_ID` and the per-device `FAIRWAY_DEVICE_KEY` macro are supplied by the local gitignored provisioning header; values are intentionally omitted. |
+| Per-device ID and credential | TF-M PSA Protected Storage | Required for authenticated device operation | Current OTA images are credential-free. The established commissioner installs identity and credential in protected storage. Legacy per-device provisioning headers are historical recovery inputs, not a current firmware-build requirement. |
 | Hardware/firmware system identity | Historical Device Health build contract | Not emitted by stable baseline | Firmware `6a19f83` does not define or transmit `FAIRWAY_HARDWARE_REVISION` / `FAIRWAY_FIRMWARE_GENERATION`. Previously stored identity values and the legacy Admin display are historical/deployment evidence, not a runtime prerequisite or current telemetry path. |
 | Firebase web configuration | Repository | Repository-managed | Web app configuration is maintained in source; this guide does not duplicate values. |
 | TLS CA chain certificates | Repository | Repository-managed | Firmware trust material is maintained in the firmware certificate directory. |
-| Cloud Run service account IAM | Historical Working State | Pending Live Verification | Historical source reports Firestore write role assignment; exact service account identity is not recorded in current repository-controlled artifacts. |
-| Secrets management system of record | Live Verification Required | Not Documented | Secrets system of record, ownership, and rotation workflow are not documented in current repository-controlled deployment artifacts. |
+| Cloud Run service account IAM | Recorded deployment evidence | Recheck before an authorized change | Admin uses `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com`; receiver uses its retained compute identity. Verify target-specific permissions and configuration without displaying secret values; dated releases record preservation evidence. |
+| Credential and signing custody | Provisioning and firmware deployment owners | Documented controls, not a universal secret-inventory claim | Device credentials use the established prepare/install/activate lifecycle and PSA storage; production signing custody is defined below. VAPID uses Secret Manager. Do not infer a fleet-wide shared key or complete enterprise secrets inventory. |
 
 The backend has no fleet-wide `FAIRWAY_DEVICE_KEY` requirement. Button-event
 authentication uses the claimed Device's own Firestore-stored verifier, and
@@ -9806,7 +9868,7 @@ Current Backend Deployment Facts:
 - Supported request routes:
   - POST /
   - POST /api/v1/button-events
-  - POST /api/v1/requests/{requestId}/confirm
+  - POST /api/v1/requests/{requestId}/confirm (retained compatibility route; no current Cart UI CONFIRM step)
   - POST /api/v1/requests/{requestId}/complete
   - POST /api/v1/device-commands/poll
   - POST /api/v1/device-commands/{commandId}/ack
@@ -9816,6 +9878,17 @@ Current Backend Deployment Facts:
   - GET /api/v1/operator/dashboard
   - POST /api/v1/operator/service/suspend
   - POST /api/v1/operator/service/resume
+  - POST /api/v1/requests/{requestId}/clear-rejected
+  - POST /api/v1/device-ota/schedule
+  - POST /api/v1/device-ota/check
+  - GET /api/v1/device-ota/artifacts/{token}
+  - POST /api/v1/device-ota/confirmation
+  - POST /api/v1/device-ota/deployments/{deploymentId}/events
+
+This is the device/operator/OTA route summary, not an exhaustive inventory or
+authorization grant. Dedicated Admin routes remain isolated from the receiver;
+their fleet, account, inventory, reporting and OTA contracts are described in
+the applicable owner sections and current tracked backend.
 
 ### Backend release procedure
 
@@ -9832,23 +9905,38 @@ npm --prefix fairway_backend/cloudrun_receiver test
 The repository package defines tests but no deployment script. The established
 Cloud Run deployment commands below explicitly name each service, project,
 region, source directory, and function target; run them from the repository
-root only after independent review and separate authorization:
+root only after independent review and separate authorization. Substitute the
+reviewed unique revision suffix/tag; stage with no traffic before promotion:
 
 ```sh
 gcloud run deploy fairway-button-receiver --project=savvy-kit-496703-r5 \
   --region=us-central1 --source=fairway_backend/cloudrun_receiver \
-  --function=fairwayButtonReceiver --quiet
+  --function=fairwayButtonReceiver --no-traffic \
+  --revision-suffix=<reviewed-suffix> --tag=<reviewed-tag> --quiet
 gcloud run deploy fairway-admin --project=savvy-kit-496703-r5 \
   --region=us-central1 --source=fairway_backend/cloudrun_receiver \
-  --function=fairwayAdmin --quiet
+  --function=fairwayAdmin --no-traffic \
+  --revision-suffix=<reviewed-suffix> --tag=<reviewed-tag> --quiet
 ```
 
 Deploy only the service in the approved scope. Admin-only changes must not
 redeploy the receiver; receiver-only changes must not redeploy Admin. After
-deployment, verify the new revision is Ready, the intended revision receives
-the approved traffic share, the image digest and non-secret configuration
-match the release record, and service-specific health/authentication checks
-pass. Use designated test identities and avoid creating production requests,
+staging, verify Ready status, unchanged serving traffic, reviewed image/source,
+runtime identity and configuration fingerprints. Check authentication,
+authorization and relevant read-only contracts on the tagged revision,
+including an authenticated operator read when the receiver changes. Promote
+only after the release-specific checks pass:
+
+```sh
+gcloud run services update-traffic <approved-service> \
+  --project=savvy-kit-496703-r5 --region=us-central1 \
+  --to-revisions=<verified-ready-revision>=100
+```
+
+Use only the service and revision in the approved plan, preserving retained
+tags and compatible rollback targets. Recheck live traffic, immutable image
+identity and release-specific behavior afterward. Use designated test
+identities and avoid creating production requests,
 credentials, or device traffic as smoke tests. Stop if a service target,
 runtime identity, traffic allocation, or behavior differs from the approved
 plan.
@@ -9862,7 +9950,8 @@ explicit Course-local `service_schedule` covering Sunday through Saturday,
 mask; the normalized non-schedule Course fingerprint remained
 `078fe6c87dc2e8532fd169d5edc184a20304d600130d57775a2c04647e6d7d19`.
 
-The validated backend production deployment commands are:
+Historical direct-promotion commands used by the October 1 release follow.
+They are retained evidence, not the current staged release procedure:
 
 ```sh
 gcloud run deploy fairway-button-receiver --project=savvy-kit-496703-r5 \
@@ -9915,27 +10004,37 @@ destination.
     even while its stored push endpoint remains active. Existing active
     subscriptions without a preference retain their prior enabled behavior
     until the user changes the choice. These checks are covered by backend
-    tests; the production notifier remains on its earlier deployed revision and
-    does not yet enforce the new preference behavior.
+    tests and the accepted production notifier release. PR #13 closed the
+    earlier source/deployment divergence; see the
+    [Driving Range release](#driving-range-production-integration-and-controlled-release--2026-10-26)
+    and subsequent [notification recovery baseline](#notification-recovery-production-baseline-2026-10-30).
   - Push delivery runs asynchronously from request creation; delivery failure
     does not affect Cart request persistence or operator access.
-  - The existing notifier function is production-only and validates the
-    production project ID. Sandbox has no notifier/VAPID delivery deployment;
-    delivery-time preference and entitlement filtering is therefore validated
-    by backend tests, not by a sandbox Web Push delivery.
+  - Use the configured notifier and credentials for the explicitly authorized
+    environment. The later Driving Range release records a separate sandbox
+    notifier; the original absence of sandbox delivery is historical. Mocked
+    tests or recorded infrastructure alone do not establish new physical
+    notification delivery.
 - Firestore document events are delivered as `application/protobuf`; the sender
   obtains the request document path from the CloudEvent `subject` envelope.
 
-WP5 admin routes (implemented, test-verified, and deployed to the isolated sandbox and dedicated production Admin service):
+Current Admin fleet route summary (account, inventory, reporting and OTA
+contracts are described separately):
 
 - `GET /api/v1/admin/fleet`
-- `GET /api/v1/admin/devices/{deviceId}/health-history`
 - `GET /api/v1/admin/export/device-sim`
 - `POST|PATCH /api/v1/admin/customers...` for Customer/Course creation and configuration
 - `POST /api/v1/admin/devices` for permanent-ID allocation and one-time credential issuance; this retains the established request contract and has no automatic provisioning-request idempotency or duplicate prevention. If the outcome is uncertain, inspect the authoritative Device registry before another provisioning request.
 - `POST /api/v1/admin/devices/{deviceId}/credential-recovery` to issue or replace the credential on that exact in-inventory Device record without changing its permanent ID, assignment, or history
 - `PATCH /api/v1/admin/devices/{deviceId}/{assignment|state|metadata}`; metadata permits only SIM association and comments after provisioning
 - `POST /api/v1/admin/devices/{deviceId}/{service|commission}`
+- `GET /api/v1/admin/ota/fleet`
+- `GET|POST /api/v1/admin/ota/releases`
+- `POST /api/v1/admin/ota/assignment-reviews`
+- `POST /api/v1/admin/ota/assignment-reviews/{reviewId}/confirm`
+
+The historical Device Health reader is not a current supported route. Existing
+Health records are retained; no cleanup or monitoring feature is implied.
 
 The Admin UI calls these backend routes with the current Firebase ID token. It does not read or write fleet collections directly, and the repository Firestore rules continue to deny browser access to those collections. Admin responses redact credential verifier digests; new-device provisioning returns the plaintext credential only in the one successful creation response.
 
@@ -10079,8 +10178,8 @@ or altered asset set fails the build before deployment. Live comparison remains
 a secondary drift and preservation check only. Passing this build check does
 not itself authorize deployment or replace independent Lead Architect review,
 separate CPO authorization, exact-artifact deployment, and post-deployment
-verification. The documented Hosting command remains the deployment
-mechanism, not evidence of authorization.
+verification. The documented CLI command and authenticated REST procedure below are release
+mechanisms, not evidence of authorization.
 
 ### Hosting release procedure
 
@@ -10103,6 +10202,10 @@ npx firebase-tools deploy --config firebase.json --only hosting \
   --project savvy-kit-496703-r5 --non-interactive
 ```
 
+If CLI authentication is unavailable, use the established authenticated REST
+workflow below for the same reviewed artifact; do not rebuild, copy live assets
+into the candidate or weaken authentication.
+
 For sandbox, substitute `firebase.sandbox.json` and
 `fairway-refresh-sandbox-260930`; never omit explicit config, project, or
 resource selector. Do not deploy Firestore rules/indexes or backend services
@@ -10114,7 +10217,46 @@ authenticated workflow acceptance or physical-phone usability. The latest
 mobile release evidence and its unperformed authenticated phone/Safari checks
 are recorded at the top and in the Alignment Register.
 
-Deployment process status:
+### Authenticated Hosting REST release and recovery
+
+This is the established exact-snapshot alternative used for the November
+10 and November 15 releases, not a new deployment authorization. Use the
+authorized Google Cloud principal, explicit site `savvy-kit-496703-r5`, and
+quota header `X-Goog-User-Project: savvy-kit-496703-r5`. Keep OAuth access
+tokens in process memory only; never paste them into chat, command arguments,
+logs or stored evidence. Verify TLS using the installed trusted CA bundle
+(the recorded macOS Python path used `/etc/ssl/cert.pem`); never disable TLS
+verification.
+
+Under `https://firebasehosting.googleapis.com/v1beta1`:
+
+1. Capture and retain the current release and its version. Verify the rollback
+   version exists and is FINALIZED before creating a candidate.
+2. `POST /sites/{site}/versions` with the reviewed Hosting configuration.
+   Inventory the complete reviewed artifact by URL path and SHA-256 of its
+   gzip-upload bytes; retain ordinary-file hashes for served-byte verification.
+3. `POST /sites/{site}/versions/{version}:populateFiles` with that complete
+   file map. Upload only the required gzip blobs to the returned upload URL
+   using their declared hashes. Check every API/upload response; stop on a
+   failed or incomplete upload.
+4. `PATCH /sites/{site}/versions/{version}?updateMask=status` with
+   `status: FINALIZED`. Verify finalization before publishing.
+5. `POST /sites/{site}/releases?versionName=sites/{site}/versions/{version}`
+   to publish the exact finalized version. Record the returned release,
+   version and time.
+6. Confirm the live release references that version and verify all reviewed
+   application files, cache policies and unrelated Firebase-managed resources
+   on both production origins. Run only the authorized read-only workflow
+   checks; no synthetic production records or device activity.
+
+For authorized recovery, verify the retained compatible FINALIZED version and
+create a new release referencing it using Step 5, or use the supported Console
+rollback. Do not upload/reconstruct an old version or treat `hosting:clone`
+as an arbitrary-version rollback. Follow the release-specific Hosting/Cloud
+Run recovery order and recheck the resulting active identities. Content
+recovery does not restore Firestore records, credentials or device firmware.
+
+Historical web deployment process status (2026-10-13 to 2026-10-15):
 
 Repository-controlled artifacts define web build behavior and the production
 Hosting config/targeting was validated on 2026-10-13. A production
@@ -10220,7 +10362,14 @@ Collection schema is owned by the backend implementation.
 Indexes:
 
 - `fairway_webapp/cart_operator_dashboard/firestore.indexes.json` defines the deployed `requests` composite index required by demand-window-aware duplicate suppression (`device_id`, `status`, and `demand_window_expires_at`).
-- The CPO_stats_fix branch adds a `requests` composite index on `customer_id`, `course_id`, and `completed_at` for the bounded course-local reporting query. It is deployed and READY in the CPO review sandbox as index `CICAgJim14AK` in `fairway-refresh-sandbox-260930`. This is an additive query index only; it does not migrate or modify records. Verify READY in any separately authorized target environment before deployment.
+- The accepted CPO_stats_fix reporting work includes the `requests` composite
+  index on `customer_id`, `course_id` and `completed_at`; it is not pending
+  branch-only work. The later Driving Range production release records all
+  five request indexes READY. The tracked index file also defines
+  Customer/Course received-time and active-status/received-time queries.
+  These are query indexes, not record migrations. Recheck READY in the
+  authorized target before a release that depends on them; old sandbox IDs
+  are historical evidence, not production identifiers.
 
 Firestore rules and indexes are separate production resources. The production
 `firebase.json` declares both, but a Hosting-only deploy does not publish
