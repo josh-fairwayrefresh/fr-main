@@ -43,6 +43,26 @@ service cloud.firestore {
         );
     }
 
+    function customerOperationsActive(customerId) {
+      return exists(/databases/$(database)/documents/customers/$(customerId))
+        && 'operational_storage' in get(/databases/$(database)/documents/customers/$(customerId)).data
+        && get(/databases/$(database)/documents/customers/$(customerId)).data.operational_storage.state == 'customer';
+    }
+
+    function requestServiceId() {
+      return 'service_id' in resource.data ? resource.data.service_id : resource.data.course_id;
+    }
+
+    function validServiceReference() {
+      let customerId = resource.data.customer_id;
+      let serviceId = requestServiceId();
+      let servicePath = /databases/$(database)/documents/customers/$(customerId)/services/$(serviceId);
+      return exists(servicePath)
+        && (customerOperationsActive(customerId)
+          ? ('service_id' in resource.data && get(servicePath).data.service_id == serviceId)
+          : get(servicePath).data.course_id == serviceId);
+    }
+
     match /requests/{requestId} {
       allow read: if (hasV2Access() && (
           get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
@@ -58,9 +78,8 @@ service cloud.firestore {
           get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
           || (
             get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == resource.data.customer_id
-            && resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids
-            && exists(/databases/$(database)/documents/customers/$(resource.data.customer_id)/services/$(resource.data.course_id))
-            && get(/databases/$(database)/documents/customers/$(resource.data.customer_id)/services/$(resource.data.course_id)).data.course_id == resource.data.course_id
+            && requestServiceId() in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids
+            && validServiceReference()
           )
         ));
       allow write: if false;

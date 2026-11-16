@@ -1158,6 +1158,10 @@ those describe the prior implementation and retained production evidence.
   shifts, audits, close-out, histories and accepted behavior. Its public view
   remains the saved active On Cart products. No duplicate cart catalog,
   synchronized second balance or restaurant dependency is permitted.
+  The authoritative cart collections are under the Customer asset and
+  service state/history under the Customer service. Historical Course data
+  is not an active second owner. Cutover requires a separately authorized
+  maintenance boundary and verification; no cart interaction is redesigned.
   The CPO clarified that this is an administrative/governance migration,
   not cart redevelopment. Keep the existing cart dashboard, product editing,
   drag/drop, transaction and session implementation intact. Restaurant reuse

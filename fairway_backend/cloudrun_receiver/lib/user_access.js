@@ -3,6 +3,7 @@
 const USER_ACCESS_COLLECTION = 'user_access';
 const AUTHORIZATION_SCHEMA_VERSION = 2;
 const CUSTOMER_ASSET_SCHEMA_VERSION = 3;
+const storage = require('./operational_storage');
 const INVENTORY_STAFF_ROLES = Object.freeze(['cart_operator', 'fnb_management']);
 
 // Staff attribution is deliberately independent of account authorization.
@@ -139,7 +140,9 @@ async function validateAccessRecord(db, value, customerCoursesCache = new Map())
     ]);
     if (!customerSnapshot.exists || grants.some((grant) => !grant.exists)) return null;
     const services = grants.slice(access.menu_ids.length);
-    if (services.some((service) => service.data().course_id !== service.id)) return null;
+    if (services.some((service) => storage.mode() === 'customer'
+      ? service.data().service_id !== service.id
+      : service.data().course_id !== service.id)) return null;
     return access;
   }
 
@@ -160,6 +163,28 @@ async function validateAccessRecord(db, value, customerCoursesCache = new Map())
 
 async function resolveAuthorizedCourses(db, access) {
   if (!access) return [];
+  if (storage.mode() === 'customer') {
+    const customers = access.admin ? (await db.collection('customers').get()).docs
+      : [await db.collection('customers').doc(access.customer_id).get()];
+    const results = [];
+    for (const customer of customers) {
+      if (!customer.exists) continue;
+      await storage.assertOwner(db, customer.id);
+      const services = await customer.ref.collection('services').get();
+      for (const service of services.docs) {
+        if (!access.admin && !access.service_ids?.includes(service.id)) continue;
+        const data = service.data();
+        if (data.service_id !== service.id) throw new Error('Invalid Customer service identity');
+        results.push({
+          ...data, customer_id: customer.id, customer_name: customer.data().customer_name,
+          service_id: service.id, course_id: service.id,
+          context_course_id: data.course_id || null,
+          course_name: data.course_name || data.name,
+        });
+      }
+    }
+    return results;
+  }
   if (access.admin) return listAllCourses(db);
   const courses = await listCustomerCourses(db, access.customer_id);
   if (!courses) return [];

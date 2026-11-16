@@ -1,12 +1,13 @@
 'use strict';
 
-// Total Sales Register: customers/{c}/courses/{k}/sales_days/{YYYY-MM-DD} holds
+// Total Sales Register: the Customer cart asset's sales_days/{YYYY-MM-DD} holds
 // each Course-local day's total sales in cents. Days come from operator shift
 // close-outs (inventory_shift_closures, summed per day) or from reviewed manual
 // entries (prior paper records and corrections). Manual entries are never
 // overwritten by close-out sync.
 
 const SALES_SUBCOLLECTION = 'sales_days';
+const { assertOwner, inventoryRef } = require('./operational_storage');
 const CLOSEOUT_SOURCE = 'closeout';
 const MANUAL_SOURCES = new Set(['paper_record', 'reviewed_correction']);
 
@@ -35,7 +36,7 @@ function closeoutTotalsByDay(closures, timezone) {
 }
 
 function salesRegister(db, customerId, courseId) {
-  return db.collection('customers').doc(customerId).collection('courses').doc(courseId).collection(SALES_SUBCOLLECTION);
+  return inventoryRef(db, customerId, courseId).collection(SALES_SUBCOLLECTION);
 }
 
 // Syncs close-out days in [start, end) into the register and returns Map(day -> total_minor).
@@ -43,34 +44,29 @@ async function readCourseSales(db, { customerId, courseId, course, days, today, 
   const wanted = days.filter(day => day <= today);
   if (!wanted.length) return new Map();
   const register = salesRegister(db, customerId, courseId);
-  const [docs, closures] = await Promise.all([
-    Promise.all(wanted.map(day => register.doc(day).get())),
-    db.collection('customers').doc(customerId).collection('courses').doc(courseId)
-      .collection('inventory_shift_closures').where('closed_at', '>=', start).where('closed_at', '<', end).get(),
-  ]);
-  const stored = new Map();
-  docs.forEach((doc, index) => { if (doc.exists) stored.set(wanted[index], doc.data()); });
-  const closeouts = closeoutTotalsByDay(closures.docs.map(doc => doc.data()), course.timezone || 'UTC');
-  const batch = db.batch();
-  let writes = 0;
-  for (const day of wanted) {
-    const closeout = closeouts.get(day);
-    const row = stored.get(day);
-    if (!closeout || MANUAL_SOURCES.has(row?.source)) continue;
-    if (row?.source === CLOSEOUT_SOURCE && row.total_minor === closeout.total_minor && row.closeout_count === closeout.count) continue;
-    const next = { day, total_minor: closeout.total_minor, currency_code: 'USD', source: CLOSEOUT_SOURCE,
-      closeout_count: closeout.count, closeout_total_minor: closeout.total_minor, updated_at: now };
-    stored.set(day, next);
-    batch.set(register.doc(day), next);
-    writes += 1;
-  }
-  if (writes) {
-    await batch.commit().catch(error => {
-      console.error('Total sales register sync failed:', { courseId, message: error.message });
-    });
-  }
-  return new Map(wanted.filter(day => Number.isSafeInteger(stored.get(day)?.total_minor))
-    .map(day => [day, stored.get(day).total_minor]));
+  return db.runTransaction(async transaction => {
+    await assertOwner(db, customerId, transaction);
+    const [docs, closures] = await Promise.all([
+      Promise.all(wanted.map(day => transaction.get(register.doc(day)))),
+      transaction.get(inventoryRef(db, customerId, courseId)
+        .collection('inventory_shift_closures').where('closed_at', '>=', start).where('closed_at', '<', end)),
+    ]);
+    const stored = new Map();
+    docs.forEach((doc, index) => { if (doc.exists) stored.set(wanted[index], doc.data()); });
+    const closeouts = closeoutTotalsByDay(closures.docs.map(doc => doc.data()), course.timezone || 'UTC');
+    for (const day of wanted) {
+      const closeout = closeouts.get(day);
+      const row = stored.get(day);
+      if (!closeout || MANUAL_SOURCES.has(row?.source)) continue;
+      if (row?.source === CLOSEOUT_SOURCE && row.total_minor === closeout.total_minor && row.closeout_count === closeout.count) continue;
+      const next = { day, total_minor: closeout.total_minor, currency_code: 'USD', source: CLOSEOUT_SOURCE,
+        closeout_count: closeout.count, closeout_total_minor: closeout.total_minor, updated_at: now };
+      stored.set(day, next);
+      transaction.set(register.doc(day), next);
+    }
+    return new Map(wanted.filter(day => Number.isSafeInteger(stored.get(day)?.total_minor))
+      .map(day => [day, stored.get(day).total_minor]));
+  });
 }
 
 module.exports = { SALES_SUBCOLLECTION, MANUAL_SOURCES, closeoutTotalsByDay, readCourseSales, localDay };

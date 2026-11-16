@@ -2,6 +2,7 @@
 
 const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
+const { mode } = require('../operational_storage');
 
 const CUSTOMERS_COLLECTION = 'customers';
 
@@ -31,6 +32,8 @@ async function createCustomer(db, { customerName, comments = null } = {}) {
   const now = new Date();
 
   const customerDoc = {
+    operational_storage: { state: mode() },
+    ...(mode() === 'customer' ? { authorization_schema_version: 3 } : {}),
     customer_name: customerName,
     comments,
     created_at: now,

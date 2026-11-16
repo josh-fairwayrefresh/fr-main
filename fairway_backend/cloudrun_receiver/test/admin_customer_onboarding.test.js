@@ -304,20 +304,17 @@ test('Admin user creation reports an existing username without changing access r
 
 test('Admin user creation compensates a failed access write and never logs or echoes the password', async () => {
   const { db, auth, request } = await createHarness();
-  const originalCollection = db.collection.bind(db);
-  db.collection = (name) => {
-    const collection = originalCollection(name);
-    if (name !== 'user_access') return collection;
-    const originalDoc = collection.doc.bind(collection);
-    collection.doc = (id) => {
-      const ref = originalDoc(id);
-      if (String(id).startsWith('created-')) {
-        ref.set = async () => { throw Object.assign(new Error(`write rejected ${PASSWORD}`), { code: 'unavailable' }); };
+  const originalTransaction = db.runTransaction.bind(db);
+  db.runTransaction = worker => originalTransaction(async transaction => {
+    const originalSet = transaction.set.bind(transaction);
+    transaction.set = (ref, ...args) => {
+      if (ref.path.startsWith('user_access/created-')) {
+        throw Object.assign(new Error(`write rejected ${PASSWORD}`), { code: 'unavailable' });
       }
-      return ref;
+      return originalSet(ref, ...args);
     };
-    return collection;
-  };
+    return worker(transaction);
+  });
 
   const { result, lines } = await captureConsole(() => request({
     method: 'POST', path: '/api/v1/admin/users', body: customerUser(),

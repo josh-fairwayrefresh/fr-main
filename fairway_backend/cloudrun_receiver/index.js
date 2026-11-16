@@ -6,6 +6,7 @@ const { PRODUCTION_PROJECT_ID, resolveRuntimeEnvironment } = require('./lib/envi
 const { createCustomer, updateCustomer } = require('./lib/fleet/customers');
 const { createCourse, getCourseForCustomer, updateCourse, coursesCollection } = require('./lib/fleet/courses');
 const { resolveCourseServiceState, resolveServiceGroup, requireService, serviceRef } = require('./lib/course_service');
+const operationalStorage = require('./lib/operational_storage');
 const {
   aggregateCourseReports,
   historyRequestsInRange,
@@ -249,6 +250,7 @@ function createFairwayHandlers(db, {
     const requestDoc = {
       customer_id: device.customer_id || null,
       course_id: device.course_id || 'unknown_course',
+      service_id: course?.service_id || device.service_id || device.course_id || 'unknown_service',
       course_name: device.course_name || null,
       device_id: deviceId,
       device_label: deriveDisplayLabelFromLocation(device.location),
@@ -280,6 +282,7 @@ function createFairwayHandlers(db, {
     };
 
     const existingRequestId = await db.runTransaction(async (transaction) => {
+      if (requestDoc.customer_id) await operationalStorage.assertOwner(db, requestDoc.customer_id, transaction);
       const openRequests = await transaction.get(windowQuery);
       // An operator-cleared rejection closes its window, as COMPLETE/Cancel do.
       const existing = openRequests.docs.find((doc) => !(rejection && doc.data().rejected_cleared_at));
@@ -708,6 +711,7 @@ function createFairwayHandlers(db, {
       courses: legacyCourses.map((course) => ({
         customer_id: course.customer_id,
         course_id: course.course_id,
+        ...(operationalStorage.mode() === 'customer' ? { service_id: course.service_id || course.course_id } : {}),
         course_name: course.course_name,
       })),
     };
@@ -783,6 +787,9 @@ function createFairwayHandlers(db, {
       const records = await transaction.get(accessCollection);
       const current = records.docs.find((doc) => doc.id === uid);
       const currentAccess = current ? normalizeAccessRecord(current.data()) : null;
+      for (const customerId of new Set([record.customer_id, currentAccess?.customer_id].filter(Boolean))) {
+        await operationalStorage.assertOwner(db, customerId, transaction);
+      }
       if (current?.data()?.schema_version === 3 && body.schema_version !== 3) {
         const error = new Error('Legacy access updates cannot modify v3 authorization');
         error.code = 'schema3_update_required';
@@ -843,7 +850,11 @@ function createFairwayHandlers(db, {
     }
 
     try {
-      await db.collection('user_access').doc(created.uid).set(accessRecord(authorization, actingAdmin.uid));
+      const record = accessRecord(authorization, actingAdmin.uid);
+      await db.runTransaction(async transaction => {
+        if (record.customer_id) await operationalStorage.assertOwner(db, record.customer_id, transaction);
+        transaction.set(db.collection('user_access').doc(created.uid), record);
+      });
     } catch (accessError) {
       console.error(`Admin user creation access write failed; ${accessError.code || 'unclassified'}`);
       try {
@@ -1022,18 +1033,23 @@ function createFairwayHandlers(db, {
     ));
     if (matches.length !== 1) return null;
     const assignment = matches[0];
+    if (operationalStorage.mode() === 'customer') {
+      const service = await requireService(db, assignment.customer_id, assignment.service_id || assignment.course_id);
+      return { ...assignment, ...service, course_id: assignment.service_id || assignment.course_id };
+    }
     return getCourseForCustomer(db, assignment.customer_id, assignment.course_id);
   }
 
   async function courseServiceReadModel(course) {
     const [assignedDevices, service] = await Promise.all([
       db.collection('devices').where('customer_id', '==', course.customer_id)
-        .where('course_id', '==', course.course_id).get(),
+        .where(operationalStorage.mode() === 'customer' ? 'service_id' : 'course_id', '==', course.service_id || course.course_id).get(),
       requireService(db, course.customer_id, course.course_id),
     ]);
     return {
       customer_id: course.customer_id,
       course_id: course.course_id,
+      ...(operationalStorage.mode() === 'customer' ? { service_id: course.service_id || course.course_id } : {}),
       course_name: course.course_name,
       timezone: course.timezone,
       operation_kind: courseOperation(course).kind,
@@ -1065,7 +1081,7 @@ function createFairwayHandlers(db, {
         .orderBy('recorded_at', 'asc').get(),
       db.collection('requests')
         .where('customer_id', '==', course.customer_id)
-        .where('course_id', '==', course.course_id)
+        .where(operationalStorage.mode() === 'customer' ? 'service_id' : 'course_id', '==', course.service_id || course.course_id)
         .where('completed_at', '>=', summaryRangeStart)
         .where('completed_at', '<=', requestTime)
         .orderBy('completed_at', 'asc')
@@ -1119,7 +1135,7 @@ function createFairwayHandlers(db, {
         courseServiceReadModel(course))),
       Promise.all(courses.map((course) => db.collection('requests')
         .where('customer_id', '==', course.customer_id)
-        .where('course_id', '==', course.course_id)
+        .where(operationalStorage.mode() === 'customer' ? 'service_id' : 'course_id', '==', course.service_id || course.course_id)
         .get())),
     ]);
     const courseRequests = requestSnapshots.map((snapshot) => (
@@ -1169,6 +1185,7 @@ function createFairwayHandlers(db, {
     const eventRef = courseRef.collection(group === 'on_course' ? 'service_events' : 'on_premise_service_events').doc();
     await db.runTransaction(async (transaction) => {
       const courseSnapshot = await transaction.get(courseRef);
+      await operationalStorage.assertOwner(db, course.customer_id, transaction);
       if (!courseSnapshot.exists) throw new Error('Course disappeared during service update');
       if (resolveCourseServiceState(courseSnapshot.data(), group).suspended === suspended) return;
       const stateUpdate = group === 'on_course' ? {
@@ -1189,7 +1206,8 @@ function createFairwayHandlers(db, {
         operator_id: operator.identity.uid,
       });
     });
-    const updated = await getCourseForCustomer(db, course.customer_id, course.course_id);
+    const updated = operationalStorage.mode() === 'customer'
+      ? course : await getCourseForCustomer(db, course.customer_id, course.course_id);
     return res.status(200).json(operatorCourseServiceModel(
       await courseServiceReadModel(updated)
     ));
@@ -1207,6 +1225,10 @@ function createFairwayHandlers(db, {
   }
 
   function sendAdminError(res, error) {
+    if (error instanceof operationalStorage.OperationalStorageError) {
+      console.error('Customer operations unavailable:', { code: error.code });
+      return res.status(error.status).json({ error: error.code, message: error.message });
+    }
     if (error instanceof OtaError) {
       return res.status(error.status).json({
         error: error.code,
@@ -1323,7 +1345,7 @@ function createFairwayHandlers(db, {
         customerSnap.ref.collection('courses').limit(500).get(),
         customerSnap.ref.collection('services').limit(501).get(),
       ]);
-      const serviceById = new Map(servicesSnap.docs.map((doc) => [doc.id, doc.data()]));
+      const serviceByContext = new Map(servicesSnap.docs.map((doc) => [doc.data().course_id, doc.data()]));
       const courses = coursesSnap.docs.map((courseSnap) => {
         const courseSource = courseSnap.data();
         const course = {
@@ -1331,7 +1353,9 @@ function createFairwayHandlers(db, {
           course_name: courseSource.course_name ?? null,
           timezone: courseSource.timezone ?? null,
           operation_kind: courseOperation(courseSource).kind,
-          service_suspension: courseSource.service_suspension ?? null,
+          service_suspension: operationalStorage.mode() === 'customer'
+            ? serviceByContext.get(courseSnap.id)?.service_suspension ?? null
+            : courseSource.service_suspension ?? null,
           comments: courseSource.comments ?? null,
           course_location: courseSource.course_location ?? null,
         };
@@ -1346,16 +1370,18 @@ function createFairwayHandlers(db, {
       let services;
       if (servicesSnap.size > 0 && servicesSnap.size <= 500 &&
           servicesSnap.docs.every((doc) => (
-            doc.data().course_id === doc.id && courseById.has(doc.id)
+            operationalStorage.mode() === 'customer'
+              ? doc.data().service_id === doc.id
+              : doc.data().course_id === doc.id && courseById.has(doc.id)
           ))) {
         services = servicesSnap.docs.map((doc) => {
-          const course = courseById.get(doc.id);
+          const course = courseById.get(doc.data().course_id);
           return {
             service_id: doc.id,
-            course_id: doc.id,
-            name: doc.data().name ?? course.course_name,
-            course_name: course.course_name,
-            timezone: course.timezone,
+            course_id: doc.data().course_id ?? null,
+            name: doc.data().name ?? course?.course_name,
+            course_name: operationalStorage.mode() === 'customer' ? doc.data().course_name : course.course_name,
+            timezone: operationalStorage.mode() === 'customer' ? doc.data().timezone : course.timezone,
           };
         });
       }
@@ -2179,6 +2205,10 @@ function createFairwayHandlers(db, {
 
       return res.status(404).send('Not Found\n');
     } catch (error) {
+      if (error instanceof operationalStorage.OperationalStorageError) {
+        console.error('Customer operations unavailable:', { code: error.code });
+        return res.status(error.status).json({ error: error.code, message: error.message });
+      }
       if (error instanceof RequestError) {
         if (error.status === 429) res.set('Retry-After', '60');
         return res.status(error.status).json({ error: error.message });
@@ -2394,6 +2424,10 @@ function createFairwayHandlers(db, {
   }
 
   function sendInventoryError(res, error) {
+    if (error instanceof operationalStorage.OperationalStorageError) {
+      console.error('Customer inventory unavailable:', { code: error.code });
+      return res.status(error.status).json({ error: error.code, message: error.message });
+    }
     if (error instanceof inventory.InventoryError) {
       return res.status(error.status).json({
         error: error.code,

@@ -66,7 +66,7 @@ physical marker button → nRF9151 firmware → LTE-M → HTTPS → Cloud Run re
 Each physical marker has a permanent device identity and unique credential. The receiver validates identity and authentication, applies the course service and request rules, and persists accepted requests for authorized Cart Operators.
 
 Anonymous permanent Driving Range bay-side pages also feed the same receiver,
-Course-owned request lifecycle and operator UI. They have no physical-device
+existing request lifecycle and operator UI. They have no physical-device
 identity or command path; operator access still requires normal authentication.
 
 ## Current Pilot Baseline
@@ -97,10 +97,23 @@ do not redevelop cart operations, redesign its dashboard or refactor its
 operational workflows to accommodate the restaurant. Retain the established
 cart implementation; limit cart changes to necessary ownership references,
 register recognition and entitlement wiring.
-Existing Customer-nested cart storage paths and stable contextual IDs are
-retained; their historical `courses` path segment does not confer ownership
-or permissions. The Customer asset/menu register governs migrated access,
-without relocating or reimplementing cart operational data.
+The Architect's source review of `5d7692feeb141d5c664c3d221bcd2395c7e9b0ab`
+identified that register-only ownership was insufficient. The local correction
+relocates authoritative cart configuration and all active inventory collections
+to `customers/{customerId}/assets/{assetId}` and service configuration/state,
+events and reviewed corrections to `customers/{customerId}/services/{serviceId}`.
+Assets explicitly reference their service; menus reference their cart asset;
+requests and assigned devices/bays reference their Customer service.
+Stable historical IDs, stock, sessions and operational algorithms are preserved.
+Course records and identifiers remain location/reporting/history metadata,
+not storage or authorization authorities.
+Historical Course-path records are retained read-only after cutover. A
+Customer maintenance marker fences compatible writers; verified recursive
+copy and explicit activation establish a single serving owner. Customer-mode
+operations never fall back to Course storage, including when an owner is
+missing. The explicit legacy runtime is a pre-cutover bridge only, and refuses
+Customers already transitioned. See the deployment owner's controlled
+migration and forward-recovery procedure.
 `user_access/{uid}` remains the single account-entitlement owner. Explicit
 Customer-owned service-asset grants preserve each user's existing operational
 access; Customer membership must not silently grant all services. Menu grants

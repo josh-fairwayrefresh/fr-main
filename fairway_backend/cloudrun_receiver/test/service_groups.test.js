@@ -6,6 +6,7 @@ const { FakeFirestore } = require('./fake_firestore');
 const { createFairwayHandlers } = require('../index');
 const { generateDeviceCredential } = require('../lib/fleet/credentials');
 const { resolveCourseServiceState } = require('../lib/course_service');
+const customerOwned = process.env.FAIRWAY_OPERATIONAL_STORAGE === 'customer';
 
 function response() {
   return {
@@ -19,13 +20,23 @@ function response() {
 
 async function fixture() {
   const db = new FakeFirestore();
-  const courseRef = db.collection('customers').doc('TEST').collection('courses').doc('TEST');
-  await db.collection('customers').doc('TEST').set({ customer_name: 'SYNTHETIC TEST' });
-  await courseRef.set({ course_name: 'SYNTHETIC TEST', timezone: 'UTC', service_suspension: null });
+  const customerRef = db.collection('customers').doc('TEST');
+  const courseRef = customerRef.collection(customerOwned ? 'services' : 'courses').doc('TEST');
+  await customerRef.set({ customer_name: 'SYNTHETIC TEST',
+    ...(customerOwned ? { operational_storage: { state: 'customer' }, authorization_schema_version: 3 } : {}),
+  });
+  await courseRef.set({ course_name: 'SYNTHETIC TEST', timezone: 'UTC', service_suspension: null,
+    ...(customerOwned ? { service_id: 'TEST', course_id: 'TEST', operation_kind: 'cart' } : {}),
+  });
+  if (customerOwned) await customerRef.collection('courses').doc('TEST').set({
+    course_name: 'Historical location', timezone: 'UTC', service_suspension: { historical_only: true },
+  });
   for (const uid of ['admin', 'operator', 'other-operator']) {
     await db.collection('user_access').doc(uid).set({
-      schema_version: 2, admin: uid === 'admin',
-      customer_id: uid === 'admin' ? null : 'TEST', course_ids: uid === 'admin' ? [] : ['TEST'],
+      schema_version: customerOwned ? 3 : 2, admin: uid === 'admin',
+      customer_id: uid === 'admin' ? null : 'TEST',
+      ...(customerOwned ? { menu_ids: [], service_ids: uid === 'admin' ? [] : ['TEST'] }
+        : { course_ids: uid === 'admin' ? [] : ['TEST'] }),
     });
   }
   const secretById = {};
@@ -34,6 +45,7 @@ async function fixture() {
     secretById[id] = secret;
     await db.collection('devices').doc(id).set({
       state: 'deployed', customer_id: 'TEST', course_id: 'TEST', course_name: 'SYNTHETIC TEST',
+      ...(customerOwned ? { service_id: 'TEST' } : {}),
       credential: verifier, location: { type: 'custom', name: `CUSTOM ${id}` },
       ...(group ? { service_group: group } : {}),
     });

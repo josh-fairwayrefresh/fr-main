@@ -75,7 +75,7 @@ function planCustomerAccess({ customerId, courses, services, menus, users }) {
   return {
     complete: false,
     executable: false,
-    reason: 'Access-only preview; Customer registration, source verification, backup and authorized cutover remain required. Cart operational data stays in place.',
+    reason: 'Access-only preview; operational migration, source verification, backup and authorized cutover remain required.',
     customer_id: customerId,
     users: entries,
   };

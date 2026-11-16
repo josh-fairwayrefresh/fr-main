@@ -15,6 +15,9 @@ function value(input) {
   if (typeof input === 'boolean') return { booleanValue: input };
   if (Number.isSafeInteger(input)) return { integerValue: String(input) };
   if (Array.isArray(input)) return { arrayValue: { values: input.map(value) } };
+  if (typeof input === 'object') return { mapValue: { fields: Object.fromEntries(
+    Object.entries(input).map(([key, item]) => [key, value(item)]),
+  ) } };
   throw new Error('Unsupported emulator fixture value');
 }
 
@@ -76,6 +79,18 @@ try {
   assert.equal((await getDoc(doc(legacy, 'requests', 'own'))).exists(), true);
   await seed('customers/customer', { authorization_schema_version: 3 });
   await denied(getDoc(doc(legacy, 'requests', 'own')));
+  await seed('customers/customer', { authorization_schema_version: 3, operational_storage: { state: 'customer' } });
+  await seed('customers/customer/services/service', { service_id: 'service', course_id: 'location-only' });
+  await seed('requests/customer-owned', { customer_id: 'customer', service_id: 'service', course_id: 'location-only' });
+  assert.equal((await getDoc(doc(service, 'requests', 'customer-owned'))).exists(), true);
+  await denied(getDoc(doc(service, 'requests', 'own')));
+  const customerQuery = query(collection(service, 'requests'),
+    where('customer_id', '==', 'customer'), where('service_id', '==', 'service'));
+  assert.equal((await getDocs(customerQuery)).size, 1);
+  await seedAccess('menu-only-owner', { ...access, menu_ids: ['cart'] });
+  await denied(getDoc(doc(client('menu-only-owner'), 'requests', 'customer-owned')));
+  await denied(setDoc(doc(service, 'customers', 'customer', 'services', 'service'), { service_suspension: null }));
+  console.log('PASS: Customer service references authorize queries independent of Course context; transitioned legacy-only references and client service writes denied.');
   console.log('PASS: actual Firestore rules preserve legacy access, explicit service grants, Customer isolation and backend-only writes; menu-only/empty/missing grants denied.');
 } finally {
   await Promise.all(apps.map(async ({ app, db }) => { await terminate(db); await deleteApp(app); }));

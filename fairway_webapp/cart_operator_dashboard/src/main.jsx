@@ -836,7 +836,7 @@ function App() {
       query(
         collection(db, 'requests'),
         where('customer_id', '==', course.customer_id),
-        where('course_id', '==', course.course_id),
+        where(course.service_id ? 'service_id' : 'course_id', '==', course.service_id || course.course_id),
         where('status', 'in', ['new', 'confirmed', 'rejected']),
         orderBy('received_at', 'asc')
       ),

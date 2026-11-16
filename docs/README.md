@@ -18,6 +18,16 @@ dashboard, explicit menu/service grants, permanent URLs and shared template.
 This is authorized local implementation, not a claim of production migration
 or deployment.
 
+The Architect's review of published menu increment `5d7692f` identified
+remaining Course-owned operational storage. The local correction moves cart
+inventory under Customer assets and service state/history under Customer
+services, retaining the cart algorithms and presentation. The
+[cutover owner](DEPLOYMENT_GUIDE.md#customer-operational-ownership-correction)
+defines the maintenance fence, verified recursive migration, forward recovery
+and remaining production prerequisites. The Lead Architect subsequently
+authorized feature-branch publication of the validated correction for
+independent source review. Production cutover and merge remain unauthorized.
+
 The OTA capability-gate removal is committed and deployed. FRB-0001 through
 FRB-0006 are selectable OTA targets; release approval, authentication,
 lifecycle, hardware compatibility and MCUboot signature controls remain.

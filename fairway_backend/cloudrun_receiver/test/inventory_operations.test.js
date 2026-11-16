@@ -6,6 +6,7 @@ const inventory = require('../lib/inventory');
 const { canOperateInventory } = require('../lib/user_access');
 
 const emulator = process.env.INVENTORY_TEST_EMULATOR === '1';
+const customerOwned = process.env.FAIRWAY_OPERATIONAL_STORAGE === 'customer';
 let db;
 if (emulator) {
   // The actual handler's environment guard requires this prefix, even on an emulator.
@@ -45,10 +46,25 @@ async function fixture({ timezone = 'America/Los_Angeles' } = {}) {
   const customerId = `inventory-test-${Date.now()}-${++fixtureSequence}`;
   const courseId = 'course-a';
   const customer = db.collection('customers').doc(customerId);
-  await customer.set({ customer_name: 'Synthetic inventory test' });
-  const course = customer.collection('courses').doc(courseId);
-  await course.set({ course_name: 'Synthetic Course', timezone });
+  await customer.set({ customer_name: 'Synthetic inventory test',
+    ...(customerOwned ? { authorization_schema_version: 3, operational_storage: { state: 'customer' } } : {}),
+  });
+  const course = customer.collection(customerOwned ? 'assets' : 'courses').doc(courseId);
+  await course.set({ course_name: 'Synthetic Course', timezone,
+    ...(customerOwned ? { type: 'cart', asset_id: courseId, service_id: courseId, course_id: 'historical-location' } : {}),
+  });
   await customer.collection('courses').doc('course-b').set({ course_name: 'Other Course', timezone });
+  if (customerOwned) {
+    await customer.collection('assets').doc('course-b').set({ type: 'cart', course_name: 'Other Course', timezone });
+    await customer.collection('services').doc(courseId).set({
+      service_id: courseId, course_id: 'historical-location', course_name: 'Synthetic Course',
+      timezone, operation_kind: 'cart',
+    });
+    await customer.collection('menus').doc('cart').set({
+      name: 'cart', type: 'cart', state: 'active', asset_id: courseId,
+      slug: `${customerId}_cart`, aliases: [customerId], branding: {},
+    });
+  }
   const actors = {
     operator: { uid: `${customerId}-operator` },
     other: { uid: `${customerId}-other` },
@@ -57,9 +73,10 @@ async function fixture({ timezone = 'America/Los_Angeles' } = {}) {
   };
   for (const key of ['operator', 'other', 'admin']) {
     await db.collection('user_access').doc(actors[key].uid).set({
-      schema_version: 2, admin: key === 'admin',
+      schema_version: customerOwned ? 3 : 2, admin: key === 'admin',
       customer_id: key === 'admin' ? null : customerId,
-      course_ids: key === 'admin' ? [] : [courseId],
+      ...(customerOwned ? { menu_ids: key === 'admin' ? [] : ['cart'], service_ids: key === 'admin' ? [] : [courseId] }
+        : { course_ids: key === 'admin' ? [] : [courseId] }),
     });
   }
   const handlers = createFairwayHandlers(db, { verifyOperatorToken: async (token) => actors[token] || null });
@@ -107,7 +124,15 @@ async function fixture({ timezone = 'America/Los_Angeles' } = {}) {
     name, category_name: 'Drinks', subcategory_name: null, brand: null, description: null, price: null,
   });
   const stock = (id, body) => ok('POST', `/products/${id}/stock`, { ...context(), ...body });
-  return { customerId, course, customer, base, staff, manager, shift, request, ok, select, context, seedProduct, metadata, stock, actors };
+  async function configureMenu() {
+    const path = `/api/v1/admin/customers/${customerId}/courses/course-a/inventory-menu`;
+    if (!customerOwned) return ok('PATCH', path, { public_menu_slug: customerId }, 'admin', true);
+    assert.equal((await request('PATCH', path, { public_menu_slug: customerId }, 'admin', true)).status, 410);
+    await db.collection('public_menu_slugs').doc(customerId).set({
+      customer_id: customerId, menu_id: 'cart', asset_id: courseId,
+    });
+  }
+  return { customerId, course, customer, base, staff, manager, shift, request, ok, select, context, seedProduct, metadata, stock, actors, configureMenu };
 }
 
 test('legacy quantity defaults to zero without changing availability or metadata; GET uses one transaction', async () => {
@@ -176,7 +201,9 @@ test('explicit staff assignments filter Courses, reject cross-Customer scope, an
   assert.equal((await f.request('POST', `${otherCourse}/shifts/select`, {
     session_id: 'wrong-course', staff_id: person.staff_id, operation_id: operation(),
   }, 'admin', true)).body.error, 'staff_unavailable');
-  await f.customer.collection('courses').doc('course-c').set({ course_name: 'Third Course' });
+  await f.customer.collection(customerOwned ? 'assets' : 'courses').doc('course-c').set({
+    course_name: 'Third Course', ...(customerOwned ? { type: 'cart' } : {}),
+  });
   assert.equal((await f.ok('GET', `/api/v1/inventory/courses/${f.customerId}/course-c/staff`, undefined, 'admin', true)).staff.some(s => s.staff_id === person.staff_id), false, 'future Courses are not assigned automatically');
   await db.collection('customers').doc(`${f.customerId}-foreign`).set({ customer_name: 'Other Customer' });
   await db.collection('customers').doc(`${f.customerId}-foreign`).collection('courses').doc('foreign').set({ course_name: 'Other Customer' });
@@ -272,10 +299,9 @@ test('every operational mutation rejects missing shift and cannot create unattri
 test('metadata, create, archive, category, subcategory and delete all lock attribution', async () => {
   const f = await fixture();
   const id = await f.seedProduct('Activity Product', 'on_cart', 1);
-  await f.customer.collection('courses').doc('course-a').collection('inventory_categories').doc('empty').set({ name: 'Empty' });
-  await f.customer.collection('courses').doc('course-a').collection('inventory_categories').doc('drinks').set({ name: 'Drinks' });
-  await f.ok('PATCH', `/api/v1/admin/customers/${f.customerId}/courses/course-a/inventory-menu`,
-    { public_menu_slug: f.customerId }, 'admin', true);
+  await f.course.collection('inventory_categories').doc('empty').set({ name: 'Empty' });
+  await f.course.collection('inventory_categories').doc('drinks').set({ name: 'Drinks' });
+  await f.configureMenu();
   const actions = [
     (context) => f.ok('PATCH', `/products/${id}`, { ...f.metadata('Activity Edited'), ...context }),
     (context) => f.ok('POST', '/products', { ...f.metadata('Activity Created'), ...context }),
@@ -738,8 +764,7 @@ test('daily sales use Course-local midnight rather than UTC midnight', async () 
 
 test('live menu uses one public allowlist, preserves links and follows committed stock and metadata', async () => {
   const f = await fixture();
-  await f.ok('PATCH', `/api/v1/admin/customers/${f.customerId}/courses/course-a/inventory-menu`,
-    { public_menu_slug: f.customerId }, 'admin', true);
+  await f.configureMenu();
   const id = await f.seedProduct('Public', 'on_cart', 5);
   await f.seedProduct('Empty Public', 'sold_out', 3);
   await f.seedProduct('Private', 'in_inventory', 12);
@@ -798,8 +823,7 @@ test('failed commit rolls back stock, immutable event, shift activity and idempo
   if (emulator) return;
   const f = await fixture();
   const id = await f.seedProduct('Rollback', 'on_cart', 2);
-  await f.ok('PATCH', `/api/v1/admin/customers/${f.customerId}/courses/course-a/inventory-menu`,
-    { public_menu_slug: f.customerId }, 'admin', true);
+  await f.configureMenu();
   const body = { ...f.context(), kind: 'sale', units: 1 };
   db.failNextTransactionCommit = true;
   assert.equal((await f.request('POST', `/products/${id}/stock`, body)).status, 500);

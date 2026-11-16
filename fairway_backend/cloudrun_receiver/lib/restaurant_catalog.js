@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const inventory = require('./inventory');
 const registry = require('./customer_menus');
+const storage = require('./operational_storage');
 
 function fail(status, code, message) { throw new inventory.InventoryError(status, code, message); }
 function categoryId(name) {
@@ -104,6 +105,7 @@ async function publicMenu(db, slugValue) {
   return db.runTransaction(async (tx) => {
     const alias = await tx.get(db.collection('public_menu_slugs').doc(slug));
     if (alias.exists && alias.data().menu_id === undefined && typeof alias.data().course_id === 'string') {
+      if (storage.mode() !== 'legacy') fail(409, 'menu_registration_required', 'Register the legacy menu before Customer cutover');
       return inventory.getPublicMenu(db, slug);
     }
     if (!alias.exists || typeof alias.data().customer_id !== 'string' || typeof alias.data().menu_id !== 'string') {
@@ -117,11 +119,12 @@ async function publicMenu(db, slugValue) {
     if (menu.state !== 'active') fail(410, 'menu_unavailable', 'Menu unavailable');
     if (![menu.slug, ...(menu.aliases || [])].includes(slug)) fail(404, 'menu_not_found', 'Menu not found');
     const owner = menu.type === 'cart'
-      ? registry.customerRef(db, customerId).collection('courses').doc(registry.id(menu.asset_id))
+      ? storage.inventoryRef(db, customerId, registry.id(menu.asset_id))
       : ref;
     if (menu.type === 'cart') {
+      await storage.assertOwner(db, customerId, tx);
       const asset = await tx.get(registry.assetRef(db, customerId, menu.asset_id));
-      if (!asset.exists || asset.data().type !== 'cart' || asset.data().course_id !== menu.asset_id) {
+      if (!asset.exists || asset.data().type !== 'cart') {
         fail(409, 'migration_required', 'Registered cart asset is unavailable');
       }
     }

@@ -1748,9 +1748,11 @@ entitlement boundary. The Customer register must recognize the existing cart
 menu without copying its content into a competing menu catalog.
 The cart migration is administrative/governance only. Register the existing
 cart as a Customer asset using its stable context ID; keep its operational
-collections at their existing Customer-nested paths. The `courses` path segment
-is retained storage/location context, not an independent ownership or permission
-authority. Do not relocate balances, sessions, histories or idempotency receipts.
+identities and algorithms intact while relocating authoritative collections
+under that Customer asset. Customer service state/history is similarly owned
+by the Customer service record, not the historical Course. The Architect's
+review of `5d7692f` rejected the prior register-only ownership interpretation.
+Historical Course records are not synchronized with active operational owners.
 Schema-2 accounts retain the established access path before conversion;
 schema-3 cart access requires an explicit registered menu grant and never
 falls back to a service or Course grant.
@@ -1809,13 +1811,153 @@ data and authorization. Do not deploy a partial ownership migration as a
 workaround. The current deployed schema/behavior remains authoritative for
 production until an explicitly authorized and verified cutover.
 
-### Local increment verification (2026-11-15)
+### Customer operational ownership correction
+
+**Validated correction after Architect review of `5d7692f`; authorized for
+feature-branch source-review publication, not deployment.** The Customer menu/restaurant increment remains intact. The
+correction changes operational ownership, not cart algorithms or presentation.
+
+Authoritative source model:
+
+- `customers/{customerId}/assets/{assetId}` owns cart identity/configuration.
+  Its `service_id` is the explicit associated Customer service reference.
+  Existing `inventory`, `inventory_*` collections (including nested categories,
+  idempotency receipts, sessions, shifts, sales, audits and closures) and
+  `sales_days` are under this asset.
+- `customers/{customerId}/services/{serviceId}` owns service identity,
+  configuration, operator suspension and on-premise ON/OFF state.
+  `service_events`, `on_premise_service_events` and `service_days` are under
+  this service. An inventory-capable service references its `asset_id`.
+- Customer menus reference their `asset_id`; restaurant catalogs remain under
+  their menu and do not use cart inventory.
+- The existing global requests/device/bay registers retain permanent identities,
+  Customer ownership fields and history. Explicit `service_id` references
+  qualify new operations and Customer-scoped request listeners. The migration
+  backfills existing request/device/bay references without changing IDs,
+  request status, credentials, commands, QR mappings or historical Course
+  attribution. Unassigned devices are not assigned by migration.
+- `user_access/{uid}` remains the only entitlement authority. Conversion
+  preserves each legacy user's effective cart/service access; existing v3
+  grants are preserved and checked. No restaurant grant is inferred.
+  Request rules/listeners use Customer service references after cutover.
+- Existing migrated asset/service IDs reuse historical context IDs to preserve
+  sessions, receipts and compatibility API/UI keys. Equality of these strings
+  is not ownership: inventory resolves an asset, services resolve a service,
+  and Customer-mode authorization never requires a Course document.
+  Legacy `course_id` API keys and staff `course_ids` scope fields retain their
+  stable-ID compatibility shapes. Course names/timezones remain contextual
+  display/reporting attributes.
+
+`FAIRWAY_OPERATIONAL_STORAGE=customer` is the candidate's default runtime;
+`legacy` is an explicit pre-cutover bridge. The Customer's
+`operational_storage.state` must match the configured runtime.
+Missing markers mean legacy only; they never permit Customer-mode fallback.
+`maintenance` denies operational access in either runtime. Operational write
+transactions read this marker, including inventory, service toggles, request
+acceptance/completion, entitlement writes, assigned-device configuration and
+sales-register synchronization. Once activated,
+even the compatible legacy runtime refuses that Customer's old paths.
+This is a coordinated serving-cohort cutover, not automatic per-request mode
+selection: every Customer served by a Customer-mode revision must be ready.
+Keep the existing deployed revision operational until the separately reviewed
+cutover; do not deploy the default Customer-mode candidate onto unmigrated data.
+
+The prepared capability is `lib/customer_operations_migration.js`, exercised
+only against synthetic local databases. It has no public migration endpoint
+and no production auto-run:
+
+1. Obtain separately authorized production scope, verified backup/restore
+   evidence and a fully drained writer cohort. This includes old receiver/Admin
+   revisions, background services, privileged writers and cached clients.
+   Old binaries without marker checks cannot be made safe by a data marker.
+   Stop their write paths before copying; do not rely on operator inactivity.
+2. `prepare` reads actual source/target records and creates a fingerprinted
+   plan. It recursively traverses subcollections, including descendants below
+   missing parent documents. Unknown legacy collections, conflicting
+   registries or unmapped users/assets stop preparation. `weather_days` remains
+   Course context; retired `published_menus` remains historical, never serving.
+   The plan itself is not a backup or approval.
+3. Review exact hashes, identities and access conversions. `begin` requires a
+   migration identity and references to independently verified backup and
+   write-quiescence evidence. These input strings record evidence; they do not
+   verify it or override Production Change Safety. `begin` transactionally sets
+   maintenance and the plan fingerprint. If a draining writer changed the
+   source, `resume` refuses the stale plan. While still in the pre-copy
+   `planned` phase, re-prepare under maintenance and explicitly review/adopt
+   the refreshed plan using the same migration identity.
+4. `resume` fences bounded transactional copy batches, verifies source values
+   and newly appearing records, and rejects divergent or unexpected target
+   records. Copy preserves data values and IDs rather than transforming
+   balances or replaying events. It verifies every target and nested identity,
+   then transactionally activates Customer ownership and authorization schema
+   3. No competing inventory, dual writes or silent legacy fallback is created.
+5. An interrupted copy stays unavailable in maintenance. Resume the same
+   exact plan/migration identity; identical copied rows are repeat-safe.
+   Replanning is refused after copying starts. A source/target divergence is
+   an explicit recovery stop, not an instruction to overwrite balances.
+   After activation, rerunning `resume` checks owners exist and **does not
+   restore** the old snapshot: it preserves intervening Customer activity.
+   `verify` is exact copy verification at cutover, not an assertion that live
+   inventory should forever equal the historical plan.
+6. Stage/verify the new Customer-service composite request indexes, compatible
+   Firestore rules, receiver/Admin configuration and frontend artifacts before
+   reopening the serving cohort. Exercise old and new permissions, preserved
+   public aliases/QR routes, cart operations and service/reporting behavior.
+   Recover forward on Customer paths; code rollback must remain compatible
+   with Customer ownership. Any disaster restore must use verified current
+   authoritative backups/recovery points and reconcile intervening activity,
+   never replay the pre-cutover legacy plan over live Customer records.
+
+Remaining production prerequisites are explicit authorization, reviewed exact
+source/build identities, verified backup/recovery evidence, reviewed migration
+fingerprint/access changes, drained writers, index readiness, coordinated
+data/rules/client cutover and operational acceptance. None was executed or
+claimed by the local correction.
+
+#### Local correction verification
+
+The local working tree is based on reviewed commit
+`5d7692feeb141d5c664c3d221bcd2395c7e9b0ab` on
+`feature/customer-assets-menu-register-20261115`. These are local validation
+results; the subsequent source-review commit is recorded in Git and is not
+a production release.
+
+- Complete backend `npm test` passes, retaining the legacy pre-cutover
+  regressions and adding seven Customer migration/ownership tests.
+- Customer-mode runs pass all 29 existing cart operational tests and all four
+  service-state regression tests. The cart fixture has no matching Course
+  owner and a different contextual location ID.
+- The seven migration/ownership tests cover recursive identity/value
+  preservation, interrupted multi-batch resume, changed/new source records,
+  conflicting targets, tampered plans, no legacy fallback, forward recovery
+  retaining live activity, public aliases and decoded QR destinations,
+  Course-independent service/reporting/notification qualification and
+  maintenance-fenced entitlement writes.
+- Actual local Firestore emulator tests pass Customer-service query rules,
+  menu/service grant separation, Customer isolation, legacy cutover denial,
+  backend-only service writes, an in-flight write versus the maintenance
+  fence, stale-plan refusal, orphan-parent descendants and forward recovery.
+- All 105 frontend unit tests pass. The established VS Code production-mode
+  web build passes and verifies all 107 accepted Driving Range assets.
+  Existing large-bundle warnings remain advisory.
+- Cart editor/session/workspace, restaurant presentation and shared public
+  template files remain byte-for-byte unchanged from the reviewed source.
+  Prior public-menu browser evidence is retained for these unchanged
+  components; current backend regressions verify their Customer storage
+  contract. No cart algorithm, polling or product-behavior redesign occurred.
+- Editor diagnostics and Git whitespace checks pass. Logs and emulator data
+  remain local, outside tracked source. No production migration, deployment,
+  account/permission mutation, device operation, commit, push or merge occurred.
+
+### Published menu increment verification (2026-11-15, historical source review)
 
 The scoped implementation retains the accepted cart editor, category controls,
 product tiles and board byte-for-byte; cart stock, sale, audit, shift, close-out,
 session and idempotency algorithms and their storage paths remain unchanged.
-Customer asset/service records are administrative references to that existing
-context. The cart uses its existing public-product allowlist, not restaurant
+That published revision's Customer asset/service records were administrative
+references only; the Architect identified this as the remaining defect.
+Its storage-path retention claim is superseded by the operational correction
+above. The cart uses its existing public-product allowlist, not restaurant
 catalog logic.
 
 Local verification passed the backend regression suite, 105 frontend unit
@@ -1872,6 +2014,24 @@ build outputs, emulator logs, local operational data and the session-only
 approved restaurant content package are excluded. Completed validation is
 retained; source-review publication does not authorize merging into `main`,
 deployment, production migration, permission changes or device operations.
+
+### Customer ownership correction source-review publication (2026-11-15)
+
+The Lead Architect separately authorized publishing the complete validated
+ownership correction as one commit on the existing
+`feature/customer-assets-menu-register-20261115` branch without force-pushing.
+Its baseline is reviewed commit
+`5d7692feeb141d5c664c3d221bcd2395c7e9b0ab`; Git records the correction's exact
+commit identity and file set. Existing successful validation remains applicable:
+publication changes no implementation, and only updates documentation to
+record this authorization and source-review status.
+
+Publication includes operational ownership, migration safeguards, associated
+tests, Firestore rules/index definitions and canonical documentation.
+Credentials, temporary files, generated artifacts, operational data and
+unrelated changes are excluded. This authorization permits neither merging
+into `main` nor production deployment, migration, permission changes or
+device operations.
 
 ## Current OTA Administration Procedure
 

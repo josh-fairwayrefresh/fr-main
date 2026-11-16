@@ -1,6 +1,7 @@
 'use strict';
 
 const { FieldValue } = require('@google-cloud/firestore');
+const storage = require('./operational_storage');
 
 const REPORTING_STATES = Object.freeze(['active', 'excluded']);
 function isReportableRequest(request) {
@@ -42,9 +43,10 @@ function isRequestReportingEligible(request) {
 }
 
 async function listExcludedRequests(db, customerId, courseId) {
+  await storage.assertOwner(db, customerId);
   const snapshot = await db.collection('requests')
     .where('customer_id', '==', customerId)
-    .where('course_id', '==', courseId)
+    .where(storage.mode() === 'customer' ? 'service_id' : 'course_id', '==', courseId)
     .where('reporting_state', '==', 'excluded')
     .get();
   return snapshot.docs
@@ -69,7 +71,7 @@ async function setRequestReportingState(db, {
 
   const requestRef = db.collection('requests').doc(requestId);
   const customerRef = db.collection('customers').doc(customerId);
-  const courseRef = customerRef.collection('courses').doc(courseId);
+  const courseRef = storage.serviceRef(db, customerId, courseId);
 
   return db.runTransaction(async (transaction) => {
     const [requestSnapshot, customerSnapshot, courseSnapshot] = await Promise.all([
@@ -82,12 +84,14 @@ async function setRequestReportingState(db, {
     }
 
     const request = requestSnapshot.data();
-    if (request.customer_id !== customerId || request.course_id !== courseId) {
+    if (request.customer_id !== customerId ||
+        (storage.mode() === 'customer' ? request.service_id : request.course_id) !== courseId) {
       throw new RequestReportingError('Request or Course was not found.', 404);
     }
     if (!isReportableRequest(request)) {
       throw new RequestReportingError('Only completed, cancelled, or service-suspended requests can be changed.', 409);
     }
+    await storage.assertOwner(db, customerId, transaction);
 
     const previousState = requestReportingState(request);
     if (previousState === reportingState) {

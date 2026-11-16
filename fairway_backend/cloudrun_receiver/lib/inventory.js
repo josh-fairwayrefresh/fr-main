@@ -6,6 +6,7 @@ const { coursesCollection } = require('./fleet/courses');
 const { getOperatorAssignment } = require('./operator_notifications');
 const { courseOperation } = require('./course_operation');
 const { INVENTORY_STAFF_ROLES, canOperateInventory } = require('./user_access');
+const storage = require('./operational_storage');
 
 const PUBLIC_MENU_SLUGS = 'public_menu_slugs';
 const INVENTORY_COLLECTION = 'inventory';
@@ -100,7 +101,7 @@ function eventsCollection(db, customerId, courseId) {
 }
 
 function courseRef(db, customerId, courseId) {
-  return coursesCollection(db, customerId).doc(courseId);
+  return storage.inventoryRef(db, customerId, courseId);
 }
 
 function isValidCoursePair(value) {
@@ -119,12 +120,14 @@ async function requireCourseAccess(db, uid, customerId, courseId) {
   const { getUserAccess, resolveAuthorizedCourses } = require('./user_access');
   const access = await getUserAccess(db, uid);
   if (!access) fail(403, 'customer_course_access_denied', 'Access denied');
+  if (!access.admin && access.customer_id !== customerId) fail(403, 'customer_course_access_denied', 'Access denied');
+  await storage.assertOwner(db, customerId);
   const ref = courseRef(db, customerId, courseId);
   const [snapshot, menus] = await Promise.all([
     db.collection('customers').doc(customerId).collection('assets').doc(courseId).get(),
     db.collection('customers').doc(customerId).collection('menus').get(),
   ]);
-  if (!snapshot.exists && access.schema_version === 2) {
+  if (storage.mode() === 'legacy' && access.schema_version === 2) {
     const courses = await resolveAuthorizedCourses(db, access);
     if (!courses.some((course) => course.customer_id === customerId && course.course_id === courseId &&
         courseOperation(course).inventory)) {
@@ -134,14 +137,14 @@ async function requireCourseAccess(db, uid, customerId, courseId) {
     if (!legacy.exists) fail(404, 'course_not_found', 'Course not found');
     return { ref, data: legacy.data() };
   }
-  if (!snapshot.exists || snapshot.data().type !== 'cart' || snapshot.data().course_id !== courseId) {
+  if (!snapshot.exists || snapshot.data().type !== 'cart') {
     fail(409, 'migration_required', 'Customer-owned cart asset is not available');
   }
   if (!access.admin) {
     if (access.customer_id !== customerId) fail(403, 'customer_course_access_denied', 'Access denied');
     const activeMenus = menus.docs.filter((doc) => doc.data().state === 'active' &&
       doc.data().type === 'cart' && doc.data().asset_id === courseId);
-    if (access.schema_version === 3) {
+    if (access.schema_version === 3 || storage.mode() === 'customer') {
       if (!activeMenus.some((menu) => access.menu_ids.includes(menu.id))) {
         fail(403, 'customer_course_access_denied', 'Cart menu grant required');
       }
@@ -220,13 +223,16 @@ function toPublicMenu(products) {
 }
 
 async function listInventory(db, customerId, courseId) {
-  const [courseSnapshot, stateSnapshot, productsSnapshot, categoriesSnapshot, customerSnapshot] = await db.runTransaction((transaction) => Promise.all([
+  const [courseSnapshot, stateSnapshot, productsSnapshot, categoriesSnapshot, customerSnapshot] = await db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
+    return Promise.all([
     transaction.get(courseRef(db, customerId, courseId)),
     transaction.get(inventoryStateRef(db, customerId, courseId)),
     transaction.get(productsCollection(db, customerId, courseId)),
     transaction.get(categoriesCollection(db, customerId, courseId)),
     transaction.get(db.collection('customers').doc(customerId)),
-  ]));
+    ]);
+  });
   if (!courseSnapshot.exists) fail(404, 'course_not_found', 'Course not found');
 
   const categoryDocs = await Promise.all(categoriesSnapshot.docs.map(async (categoryDoc) => {
@@ -284,6 +290,7 @@ async function configurePublicMenuSlug(db, customerId, courseId, value, actorUid
   const nextSlugRef = db.collection(PUBLIC_MENU_SLUGS).doc(slug);
 
   return db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
     const [courseSnapshot, stateSnapshot, nextSlugSnapshot, asset] = await Promise.all([
       transaction.get(courseDocument),
       transaction.get(stateDocument),
@@ -490,6 +497,7 @@ async function createStaff(db, customerId, body, actorUid, { operational = false
     operational && courseId ? { ...body, course_id: courseId } : body);
   const staffRef = staffCollection(db, customerId).doc();
   return db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
     const [previous, customer] = await Promise.all([transaction.get(operation), transaction.get(parent)]);
     const retry = retryResult(previous, hash);
     if (retry) return retry.result;
@@ -530,6 +538,7 @@ async function updateStaff(db, customerId, staffId, body, actorUid) {
   if (body.course_ids !== undefined) patch.course_ids = staffCourseIds(body.course_ids);
   const ref = staffCollection(db, customerId).doc(identifier(staffId, 'staff_id'));
   return db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) fail(404, 'staff_not_found', 'Staff member not found');
     if (patch.course_ids !== undefined) await validateStaffCourses(transaction, db, customerId, patch.course_ids);
@@ -559,6 +568,7 @@ function shiftModel(id, shift) {
 }
 
 async function getSessionShift(db, customerId, courseId, actorUid, sessionId) {
+  await storage.assertOwner(db, customerId);
   const session = await sessionRef(db, customerId, courseId, actorUid, sessionId).get();
   if (!session.exists || !session.data().shift_id) return { shift: null };
   const shift = await shiftsCollection(db, customerId, courseId).doc(session.data().shift_id).get();
@@ -572,6 +582,7 @@ async function selectShift(db, customerId, courseId, actorUid, body) {
   const hash = fingerprint(actorUid, 'shift_select', body);
   const newShift = shiftsCollection(db, customerId, courseId).doc();
   return db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
     const previous = await transaction.get(operation);
     const retry = retryResult(previous, hash);
     if (retry) return retry.result;
@@ -611,6 +622,7 @@ async function runMutation(db, customerId, courseId, actorUid, context, action, 
   const operation = operationRef(parent, context?.operation_id);
   const hash = fingerprint(actorUid, action, payload);
   return db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
     const previous = await transaction.get(operation);
     const retry = retryResult(previous, hash);
     if (retry) return retry.result;
@@ -771,6 +783,7 @@ async function createAudit(db, customerId, courseId, body, actorUid) {
 }
 
 async function auditHistory(db, customerId, courseId, now = new Date()) {
+  await storage.assertOwner(db, customerId);
   const course = await courseRef(db, customerId, courseId).get();
   if (!course.exists) fail(404, 'course_not_found', 'Course not found');
   const timezone = course.data().timezone;
@@ -801,6 +814,7 @@ async function closeShift(db, customerId, courseId, shiftId, body, actorUid) {
   const operation = operationRef(parent, body.operation_id);
   const hash = fingerprint(actorUid, 'shift_close', { shift_id: shiftId, body });
   return db.runTransaction(async (transaction) => {
+    await storage.assertOwner(db, customerId, transaction);
     const previous = await transaction.get(operation);
     const retry = retryResult(previous, hash);
     if (retry) return retry.result;
@@ -835,6 +849,7 @@ function localDate(value, timezone) {
 }
 
 async function dailySales(db, customerId, courseId, course, now = new Date()) {
+  await storage.assertOwner(db, customerId);
   const timezone = course.timezone || 'UTC';
   const today = localDate(now, timezone);
   // A single-field bounded time query avoids a composite index and includes DST's longest day.
@@ -1214,6 +1229,7 @@ async function getPublicMenu(db, slugValue) {
     if (typeof customerId !== 'string' || typeof courseId !== 'string') {
       fail(404, 'menu_not_found', 'Course menu not found');
     }
+    await storage.assertOwner(db, customerId, transaction);
     const [courseSnapshot, stateSnapshot, productsSnapshot] = await Promise.all([
       transaction.get(courseRef(db, customerId, courseId)),
       transaction.get(inventoryStateRef(db, customerId, courseId)),

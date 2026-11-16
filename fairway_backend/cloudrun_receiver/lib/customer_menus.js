@@ -5,6 +5,7 @@ const jsQR = require('jsqr');
 const { PNG } = require('pngjs');
 const { getUserAccess } = require('./user_access');
 const inventory = require('./inventory');
+const storage = require('./operational_storage');
 
 const origin = 'https://app.fairwayrefresh.com';
 const states = new Set(['on_menu', 'sold_out', 'in_inventory']);
@@ -59,6 +60,9 @@ async function registerCustomerAssets(db, customerId, actorUid) {
       tx.get(parent.collection('assets')), tx.get(parent.collection('services')),
     ]);
     if (!customer.exists) fail(404, 'customer_not_found', 'Customer not found');
+    if (customer.data().operational_storage?.state === 'maintenance') {
+      fail(503, 'operational_storage_unavailable', 'Customer migration is in progress');
+    }
     if (courses.size > 200) fail(409, 'registration_too_large', 'Review a bounded Customer registration');
     const now = new Date();
     const writes = [];
@@ -67,6 +71,9 @@ async function registerCustomerAssets(db, customerId, actorUid) {
       const operation = courseOperation(context);
       const existingService = services.docs.find((doc) => doc.id === course.id);
       const existingAsset = assets.docs.find((doc) => doc.id === course.id);
+      if (storage.mode() === 'customer' && (!existingService || (operation.inventory && !existingAsset))) {
+        fail(409, 'migration_required', 'Do not recreate operational owners from historical Course records');
+      }
       if (existingService && existingService.data().course_id !== course.id) {
         fail(409, 'service_conflict', 'Existing Customer service has a different context');
       }
@@ -76,11 +83,14 @@ async function registerCustomerAssets(db, customerId, actorUid) {
       }
       if (!existingService) writes.push({
         ref: parent.collection('services').doc(course.id),
-        data: { course_id: course.id, name: context.course_name, created_at: now, created_by: actorUid },
+        data: { ...(storage.mode() === 'customer' ? context : {}),
+          service_id: course.id, course_id: course.id, name: context.course_name,
+          created_at: now, created_by: actorUid },
       });
       if (operation.inventory && !existingAsset) writes.push({
         ref: assetRef(db, customerId, course.id),
         data: {
+          asset_id: course.id, service_id: course.id,
           type: 'cart', course_id: course.id, course_name: context.course_name,
           timezone: context.timezone ?? null, created_at: now, created_by: actorUid,
         },
@@ -136,7 +146,7 @@ async function saveMenu(db, customerId, menuId, body, actorUid) {
         inventory.normalizedKey(doc.data().name) === inventory.normalizedKey(name))) {
       fail(409, 'name_in_use', 'Menu name is already reserved for this Customer');
     }
-    if (assetId && (!asset.exists || asset.data().type !== 'cart' || asset.data().course_id !== assetId)) {
+    if (assetId && (!asset.exists || asset.data().type !== 'cart')) {
       fail(400, 'invalid_asset', 'Cart asset must reference its existing storage context');
     }
     if (slugDocs.some((doc) => doc.exists && (doc.data().customer_id !== customerId ||
@@ -214,12 +224,13 @@ async function bootstrap(db, uid) {
         if (entry.type === 'cart') {
           const [asset, context] = await Promise.all([
             assetRef(db, customer.id, entry.asset_id).get(),
-            customer.ref.collection('courses').doc(id(entry.asset_id)).get(),
+            storage.inventoryRef(db, customer.id, id(entry.asset_id)).get(),
           ]);
-          if (!asset.exists || asset.data().type !== 'cart' || asset.data().course_id !== entry.asset_id ||
+          if (!asset.exists || asset.data().type !== 'cart' ||
               !context.exists) {
             fail(409, 'migration_required', 'Registered cart storage context is unavailable');
           }
+          await storage.assertOwner(db, customer.id);
           entry.course_name = context.data().course_name;
           entry.timezone = context.data().timezone;
         }
