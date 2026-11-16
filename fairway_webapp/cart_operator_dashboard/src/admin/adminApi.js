@@ -14,7 +14,7 @@ async function readError(response) {
 }
 
 export async function adminRequest(user, apiBaseUrl, path, options = {}) {
-  const { method = 'GET', body, responseType = 'json' } = options;
+  const { method = 'GET', body, responseType = 'json', signal } = options;
   const token = await user.getIdToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
@@ -23,6 +23,7 @@ export async function adminRequest(user, apiBaseUrl, path, options = {}) {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     const failure = await readError(response);

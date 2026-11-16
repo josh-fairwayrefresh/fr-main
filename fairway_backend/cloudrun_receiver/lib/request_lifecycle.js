@@ -1,6 +1,7 @@
 'use strict';
 
 const { FieldValue } = require('@google-cloud/firestore');
+const { assertOwner, mode } = require('./operational_storage');
 
 class RequestError extends Error {
   constructor(status, message) {
@@ -27,8 +28,10 @@ async function transitionRequest(db, requestId, action, assignment, uid) {
       if (!snapshot.exists) throw new RequestError(404, 'Request not found');
       const request = snapshot.data();
       if (!assignment.courses.some((course) => (
-        course.customer_id === request.customer_id && course.course_id === request.course_id
+        course.customer_id === request.customer_id &&
+        (course.service_id || course.course_id) === (mode() === 'customer' ? request.service_id : request.service_id || request.course_id)
       ))) throw new RequestError(403, 'Operator is not authorized for this Course');
+      await assertOwner(db, request.customer_id, transaction);
       if (request.status !== 'rejected' || request.rejection_reason !== 'service_suspended') {
         throw new RequestError(409, 'Only service-suspended rejected requests can be cleared');
       }
@@ -50,8 +53,10 @@ async function transitionRequest(db, requestId, action, assignment, uid) {
     if (!snapshot.exists) throw new RequestError(404, 'Request not found');
     const request = snapshot.data();
     if (!assignment.courses.some((course) => (
-      course.customer_id === request.customer_id && course.course_id === request.course_id
+      course.customer_id === request.customer_id &&
+      (course.service_id || course.course_id) === (mode() === 'customer' ? request.service_id : request.service_id || request.course_id)
     ))) throw new RequestError(403, 'Operator is not authorized for this Course');
+    await assertOwner(db, request.customer_id, transaction);
 
     if (['completed', 'cancelled'].includes(request.status) && request.status !== config[0]) {
       throw new RequestError(409, `Request is already ${request.status}; refresh the queue`);

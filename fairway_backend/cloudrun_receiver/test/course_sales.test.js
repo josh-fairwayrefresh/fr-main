@@ -31,6 +31,7 @@ test('close-outs are summed per Course-local day', () => {
 
 test('the register syncs close-out days, keeps manual entries and leaves unrecorded days blank', async () => {
   const db = new FakeFirestore();
+  await db.collection('customers').doc('CUST-0001').set({ customer_name: 'Synthetic' });
   const register = courseDoc(db).collection('sales_days');
   await register.doc('2026-10-17').set({ day: '2026-10-17', total_minor: 143527, currency_code: 'USD', source: 'paper_record' });
   await register.doc('2026-10-30').set({ day: '2026-10-30', total_minor: 18780, currency_code: 'USD', source: 'reviewed_correction' });

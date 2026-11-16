@@ -2,6 +2,8 @@
 
 const USER_ACCESS_COLLECTION = 'user_access';
 const AUTHORIZATION_SCHEMA_VERSION = 2;
+const CUSTOMER_ASSET_SCHEMA_VERSION = 3;
+const storage = require('./operational_storage');
 const INVENTORY_STAFF_ROLES = Object.freeze(['cart_operator', 'fnb_management']);
 
 // Staff attribution is deliberately independent of account authorization.
@@ -13,6 +15,27 @@ function canOperateInventory(staff, courseId) {
 
 function normalizeAccessRecord(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  if (value.schema_version === CUSTOMER_ASSET_SCHEMA_VERSION) {
+    const validIds = (ids) => Array.isArray(ids) &&
+      ids.every((id) => typeof id === 'string' && id.length > 0 && !id.includes('/')) &&
+      new Set(ids).size === ids.length;
+    if (typeof value.admin !== 'boolean' || !validIds(value.menu_ids) ||
+        !validIds(value.service_ids)) return null;
+    if (value.admin) {
+      if (value.customer_id !== null || value.menu_ids.length || value.service_ids.length) return null;
+    } else if (typeof value.customer_id !== 'string' || !value.customer_id ||
+        value.customer_id.includes('/')) {
+      return null;
+    }
+    return {
+      schema_version: CUSTOMER_ASSET_SCHEMA_VERSION,
+      admin: value.admin,
+      customer_id: value.customer_id,
+      menu_ids: [...value.menu_ids],
+      service_ids: [...value.service_ids],
+    };
+  }
 
   if (value.schema_version !== AUTHORIZATION_SCHEMA_VERSION ||
       typeof value.admin !== 'boolean' ||
@@ -108,6 +131,23 @@ async function validateAccessRecord(db, value, customerCoursesCache = new Map())
   if (!access) return null;
   if (access.admin) return access;
 
+  if (access.schema_version === CUSTOMER_ASSET_SCHEMA_VERSION) {
+    const customer = db.collection('customers').doc(access.customer_id);
+    const [customerSnapshot, ...grants] = await Promise.all([
+      customer.get(),
+      ...access.menu_ids.map((id) => customer.collection('menus').doc(id).get()),
+      ...access.service_ids.map((id) => customer.collection('services').doc(id).get()),
+    ]);
+    if (!customerSnapshot.exists || grants.some((grant) => !grant.exists)) return null;
+    const services = grants.slice(access.menu_ids.length);
+    if (services.some((service) => storage.mode() === 'customer'
+      ? service.data().service_id !== service.id
+      : service.data().course_id !== service.id)) return null;
+    return access;
+  }
+
+  const customer = await db.collection('customers').doc(access.customer_id).get();
+  if (customer.data()?.authorization_schema_version === CUSTOMER_ASSET_SCHEMA_VERSION) return null;
   let coursesPromise = customerCoursesCache.get(access.customer_id);
   if (!coursesPromise) {
     coursesPromise = listCustomerCourses(db, access.customer_id);
@@ -123,9 +163,35 @@ async function validateAccessRecord(db, value, customerCoursesCache = new Map())
 
 async function resolveAuthorizedCourses(db, access) {
   if (!access) return [];
+  if (storage.mode() === 'customer') {
+    const customers = access.admin ? (await db.collection('customers').get()).docs
+      : [await db.collection('customers').doc(access.customer_id).get()];
+    const results = [];
+    for (const customer of customers) {
+      if (!customer.exists) continue;
+      await storage.assertOwner(db, customer.id);
+      const services = await customer.ref.collection('services').get();
+      for (const service of services.docs) {
+        if (!access.admin && !access.service_ids?.includes(service.id)) continue;
+        const data = service.data();
+        if (data.service_id !== service.id) throw new Error('Invalid Customer service identity');
+        results.push({
+          ...data, customer_id: customer.id, customer_name: customer.data().customer_name,
+          service_id: service.id, course_id: service.id,
+          context_course_id: data.course_id || null,
+          course_name: data.course_name || data.name,
+        });
+      }
+    }
+    return results;
+  }
   if (access.admin) return listAllCourses(db);
   const courses = await listCustomerCourses(db, access.customer_id);
   if (!courses) return [];
+  if (access.schema_version === CUSTOMER_ASSET_SCHEMA_VERSION) {
+    const allowed = new Set(access.service_ids);
+    return courses.filter((course) => allowed.has(course.course_id));
+  }
   if (access.course_ids.length === 0) return courses;
   const allowed = new Set(access.course_ids);
   return courses.filter((course) => allowed.has(course.course_id));
@@ -135,6 +201,7 @@ module.exports = {
   INVENTORY_STAFF_ROLES,
   canOperateInventory,
   AUTHORIZATION_SCHEMA_VERSION,
+  CUSTOMER_ASSET_SCHEMA_VERSION,
   USER_ACCESS_COLLECTION,
   getUserAccess,
   listAllCourses,

@@ -192,7 +192,8 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
   for (const request of requests) {
     const series = requestSeries(request);
     if (!series || !isRequestReportingEligible(request) ||
-        request.customer_id !== customer.customer_id || request.course_id !== course.course_id ||
+        request.customer_id !== customer.customer_id ||
+        (course.service_id ? request.service_id !== course.service_id : request.course_id !== course.course_id) ||
         request.event_type !== 'button_press' || request.source !== 'nrf9151' || seenRequests.has(request.id)) continue;
     const action = series === 'completed' ? request.completed_at : series === 'cancelled' ? request.cancelled_at : null;
     if (action && dateValue(action) <= asOf) operatorActions.push(dateValue(action));
@@ -228,36 +229,51 @@ function buildButtonReport({ customer, course, bounds, asOf, requests, currentLa
 }
 
 async function generateButtonReport(db, input, { asOf = new Date(), source, fetchImpl } = {}) {
-  if (!/^CUST-\d+$/.test(input.customer_id || '') || !/^COURSE-\d+$/.test(input.course_id || '')) {
+  const storage = require('./operational_storage');
+  const serviceId = input.service_id || input.course_id;
+  if (!/^CUST-\d+$/.test(input.customer_id || '') ||
+      !(storage.mode() === 'customer' ? /^[A-Za-z0-9_-]+$/ : /^COURSE-\d+$/).test(serviceId || '')) {
     throw new ButtonReportError('Select a valid Customer and Course.');
   }
   const parent = db.collection('customers').doc(input.customer_id);
-  const [customerDoc, courseDoc] = await Promise.all([parent.get(), parent.collection('courses').doc(input.course_id).get()]);
+  const [customerDoc, courseDoc] = await Promise.all([parent.get(),
+    storage.serviceRef(db, input.customer_id, serviceId).get()]);
   if (!customerDoc.exists || !courseDoc.exists) throw new ButtonReportError('Course does not belong to the selected Customer.', 404);
-  const course = { ...courseDoc.data(), course_id: input.course_id };
+  const course = { ...courseDoc.data(), course_id: serviceId };
   const customer = { customer_id: input.customer_id, customer_name: customerDoc.data().customer_name };
   // COURSE IDs are centrally allocated globally and never restart per Customer (fleet/courses.js).
-  const owners = await db.collectionGroup('courses').select().limit(10001).get();
-  if (owners.size > 10000 || owners.docs.filter(doc => doc.id === input.course_id).length !== 1) {
-    throw new ButtonReportError('Course ownership could not be verified unambiguously.', 422);
+  if (storage.mode() === 'customer') {
+    await storage.assertOwner(db, input.customer_id);
+    if (courseDoc.data().service_id !== serviceId) throw new ButtonReportError('Customer service identity is invalid.', 422);
+    course.context_course_id = courseDoc.data().course_id || null;
+    if (course.context_course_id) {
+      const context = await parent.collection('courses').doc(course.context_course_id).get();
+      if (context.exists) course.course_location = context.data().course_location || null;
+    }
+  } else {
+    const owners = await db.collectionGroup('courses').select().limit(10001).get();
+    if (owners.size > 10000 || owners.docs.filter(doc => doc.id === input.course_id).length !== 1) {
+      throw new ButtonReportError('Course ownership could not be verified unambiguously.', 422);
+    }
   }
   const bounds = reportBounds(input, course.timezone, asOf);
   const sources = source || require('./button_report_sources').createReportSources(db, { fetchImpl });
-  const requests = await sources.requests({ ...bounds, asOf, customerId: input.customer_id, courseId: input.course_id });
+  const requests = await sources.requests({ ...bounds, asOf, customerId: input.customer_id, courseId: serviceId });
   const unlabeled = [...new Set(requests.filter(request => request.device_id && !request.device_label &&
     !Number.isInteger(request.hole)).map(request => request.device_id))];
   const today = localPoint(asOf, course.timezone).day;
   const [currentLabels, serviceEvents, serviceCorrections, weather, sales] = await Promise.all([
-    unlabeled.length ? sources.currentLabels({ deviceIds: unlabeled, courseId: input.course_id }) : {},
-    sources.serviceEvents({ ...bounds, customerId: input.customer_id, courseId: input.course_id }),
-    sources.serviceCorrections ? sources.serviceCorrections({ customerId: input.customer_id, courseId: input.course_id,
+    unlabeled.length ? sources.currentLabels({ deviceIds: unlabeled, courseId: serviceId }) : {},
+    sources.serviceEvents({ ...bounds, customerId: input.customer_id, courseId: serviceId }),
+    sources.serviceCorrections ? sources.serviceCorrections({ customerId: input.customer_id, courseId: serviceId,
       days: bounds.days }) : null,
-    sources.weather ? sources.weather({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
+    sources.weather ? sources.weather({ customerId: input.customer_id, courseId: serviceId, course, days: bounds.days,
       today, now: asOf }) : null,
-    sources.sales ? sources.sales({ customerId: input.customer_id, courseId: input.course_id, course, days: bounds.days,
+    sources.sales ? sources.sales({ customerId: input.customer_id, courseId: serviceId, course, days: bounds.days,
       today, start: bounds.start, end: bounds.end, now: asOf }) : null,
   ]);
-  return buildButtonReport({ customer, course: { course_id: course.course_id, course_name: course.course_name, timezone: course.timezone },
+  return buildButtonReport({ customer, course: { course_id: course.course_id, course_name: course.course_name, timezone: course.timezone,
+    ...(storage.mode() === 'customer' ? { service_id: serviceId } : {}) },
     bounds, asOf, requests, currentLabels, serviceEvents, serviceCorrections, weather, sales });
 }
 

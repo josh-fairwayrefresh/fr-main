@@ -13,10 +13,24 @@ const { allocateNextId } = require('./ids');
 const { getCustomer } = require('./customers');
 const { getCourseForCustomer } = require('./courses');
 const { courseOperation } = require('../course_operation');
+const storage = require('../operational_storage');
 const { generateDeviceCredential, verifyDeviceCredential } = require('./credentials');
 
 const DEVICES_COLLECTION = 'devices';
 const { resolveServiceGroup } = require('../course_service');
+
+async function assignmentService(db, customerId, courseId, transaction) {
+  if (storage.mode() !== 'customer') return null;
+  await storage.assertOwner(db, customerId, transaction);
+  const query = db.collection('customers').doc(customerId).collection('services')
+    .where('course_id', '==', courseId);
+  const services = await (transaction ? transaction.get(query) : query.get());
+  if (services.size !== 1 || services.docs[0].data().service_id !== services.docs[0].id ||
+      !courseOperation(services.docs[0].data()).physical_devices) {
+    throw new Error('A unique Customer-owned physical-device service is required');
+  }
+  return services.docs[0].id;
+}
 
 function nextCredentialGeneration(device) {
   const current = device.credential_generation ?? 0;
@@ -126,7 +140,7 @@ async function createDevice(db, {
       throw new Error(`Course ${courseId} does not belong to customer ${customerId}`);
     }
     courseName = course.course_name;
-    if (!courseOperation(course).physical_devices) throw new Error('Invalid Course for physical devices');
+    if (storage.mode() === 'legacy' && !courseOperation(course).physical_devices) throw new Error('Invalid Course for physical devices');
   }
 
   const deviceId = await allocateNextId(db, ID_PREFIXES.DEVICE);
@@ -152,8 +166,15 @@ async function createDevice(db, {
     created_at: now,
     updated_at: now,
   };
-
-  await db.collection(DEVICES_COLLECTION).doc(deviceId).set(deviceDoc);
+  if (storage.mode() === 'legacy' && !customerId) {
+    await db.collection(DEVICES_COLLECTION).doc(deviceId).set(deviceDoc);
+  } else await db.runTransaction(async tx => {
+    if (customerId) await storage.assertOwner(db, customerId, tx);
+    if (customerId && courseId && storage.mode() === 'customer') {
+      deviceDoc.service_id = await assignmentService(db, customerId, courseId, tx);
+    }
+    tx.set(db.collection(DEVICES_COLLECTION).doc(deviceId), deviceDoc);
+  });
 
   return { device_id: deviceId, ...deviceDoc };
 }
@@ -189,6 +210,7 @@ async function updateDeviceAssignment(db, deviceId, {
     }
 
     const current = deviceSnap.data();
+    if (current.customer_id) await storage.assertOwner(db, current.customer_id, transaction);
     const update = { updated_at: new Date() };
     if (serviceGroup !== undefined) {
       if (!(courseId === undefined ? current.course_id : courseId)) {
@@ -231,6 +253,7 @@ async function updateDeviceAssignment(db, deviceId, {
     if (courseId !== undefined) {
       if (courseId === null) {
         update.course_id = null;
+        if (storage.mode() === 'customer') update.service_id = null;
         update.course_name = null;
       } else {
         if (!effectiveCustomerId) {
@@ -243,9 +266,10 @@ async function updateDeviceAssignment(db, deviceId, {
         if (!courseSnap.exists) {
           throw new Error(`Course ${courseId} does not belong to customer ${effectiveCustomerId}`);
         }
-        if (!courseOperation(courseSnap.data()).physical_devices) throw new Error('Invalid Course for physical devices');
+        if (storage.mode() === 'legacy' && !courseOperation(courseSnap.data()).physical_devices) throw new Error('Invalid Course for physical devices');
 
         update.course_id = courseId;
+        if (storage.mode() === 'customer') update.service_id = await assignmentService(db, effectiveCustomerId, courseId, transaction);
         update.course_name = courseSnap.data().course_name;
       }
     }
@@ -256,6 +280,9 @@ async function updateDeviceAssignment(db, deviceId, {
       if (!effectiveCourseId || !isValidMarkerLocation(effectiveLocation)) {
         throw new Error('Deployed devices require a Course and valid location');
       }
+    }
+    if (effectiveCustomerId && effectiveCustomerId !== current.customer_id) {
+      await storage.assertOwner(db, effectiveCustomerId, transaction);
     }
 
     transaction.update(deviceRef, update);
@@ -294,12 +321,14 @@ async function updateDeviceState(db, deviceId, nextState, {
     }
 
     const current = deviceSnap.data();
+    if (current.customer_id) await storage.assertOwner(db, current.customer_id, transaction);
     const update = { state: nextState, updated_at: new Date() };
 
     if ([DEVICE_STATES.IN_INVENTORY, DEVICE_STATES.MAINTENANCE].includes(nextState)) {
       update.customer_id = null;
       update.customer_name = null;
       update.course_id = null;
+      if (storage.mode() === 'customer') update.service_id = null;
       update.course_name = null;
       update.location = null;
       update.service_group = 'on_course';
@@ -323,11 +352,12 @@ async function updateDeviceState(db, deviceId, nextState, {
       if (!courseSnap.exists) {
         throw new Error(`Course ${effectiveCourseId} does not belong to customer ${effectiveCustomerId}`);
       }
-      if (!courseOperation(courseSnap.data()).physical_devices) throw new Error('Invalid Course for physical devices');
+      if (storage.mode() === 'legacy' && !courseOperation(courseSnap.data()).physical_devices) throw new Error('Invalid Course for physical devices');
 
       update.customer_id = effectiveCustomerId;
       update.customer_name = customerSnap.data().customer_name;
       update.course_id = effectiveCourseId;
+      if (storage.mode() === 'customer') update.service_id = await assignmentService(db, effectiveCustomerId, effectiveCourseId, transaction);
       update.course_name = courseSnap.data().course_name;
       update.location = effectiveLocation;
       update.service_group = resolveServiceGroup(serviceGroup === undefined ? current.service_group : serviceGroup);

@@ -60,18 +60,13 @@ export function subcategoryNamesInProducts(products = []) {
   return [...names].sort((left, right) => left.localeCompare(right));
 }
 
-export function matchCoursePresentation(course, presentations) {
-  if (!course) return null;
-  return presentations.find((presentation) => (
-    presentation.customerName === course.customer_name &&
-    presentation.courseName === course.course_name
-  )) || null;
-}
-
-export function groupPublishedProducts(products = []) {
+export function groupPublishedProducts(products = [], definitions = []) {
+  if (!Array.isArray(products) || !Array.isArray(definitions)) {
+    throw new Error('Menu products and category definitions must be arrays.');
+  }
   const categories = new Map();
   for (const product of products) {
-    if (product.archived === true || product.state !== 'on_cart') continue;
+    if (product.archived === true || !['on_cart', 'on_menu'].includes(product.state)) continue;
     const categoryName = product.category || product.category_name;
     if (typeof categoryName !== 'string' || !categoryName.trim()) continue;
     if (!categories.has(categoryName)) {
@@ -87,10 +82,17 @@ export function groupPublishedProducts(products = []) {
     }
     category.subcategories.get(product.subcategory).push(product);
   }
+  const order = new Map(definitions.map((category, index) => [category.name, index]));
+  const notes = new Map(definitions.map(category => [category.name, category.note]));
   return [...categories.values()]
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .sort((left, right) => {
+      const leftOrder = order.get(left.name) ?? Infinity;
+      const rightOrder = order.get(right.name) ?? Infinity;
+      return leftOrder - rightOrder || left.name.localeCompare(right.name);
+    })
     .map((category) => ({
       ...category,
+      note: notes.get(category.name) || null,
       subcategories: [...category.subcategories.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([name, items]) => ({ name, products: items })),

@@ -4,7 +4,9 @@ const crypto = require('crypto');
 const {
   COURSE_SUBSCRIPTIONS_COLLECTION,
   isNotificationEnabled,
+  getOperatorAssignment,
 } = require('./operator_notifications');
+const storage = require('./operational_storage');
 
 const DISPATCH_COLLECTION = 'notification_dispatches';
 const MAX_ATTEMPTS = 5;
@@ -25,7 +27,8 @@ function notificationPayload(requestId, request) {
     tag: requestId,
     request_id: requestId,
     course_id: request.course_id,
-    url: `/requests/${encodeURIComponent(requestId)}?customer_id=${encodeURIComponent(request.customer_id)}&course_id=${encodeURIComponent(request.course_id)}`,
+    ...(storage.mode() === 'customer' ? { service_id: request.service_id } : {}),
+    url: `/requests/${encodeURIComponent(requestId)}?customer_id=${encodeURIComponent(request.customer_id)}&course_id=${encodeURIComponent(storage.mode() === 'customer' ? request.service_id : request.course_id)}`,
   };
 }
 
@@ -75,12 +78,14 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
   if (!requestSnapshot.exists) return { skipped: 'missing_request' };
 
   const request = requestSnapshot.data();
-  if (!['button_press', 'server_request'].includes(request.event_type) || typeof request.course_id !== 'string') {
+  const serviceId = storage.mode() === 'customer' ? request.service_id : request.course_id;
+  if (!['button_press', 'server_request'].includes(request.event_type) || typeof serviceId !== 'string') {
     return { skipped: 'not_course_request' };
   }
+  if (storage.mode() === 'customer') await storage.assertOwner(db, request.customer_id);
 
   const subscriptions = await db.collection(COURSE_SUBSCRIPTIONS_COLLECTION)
-    .doc(request.course_id).collection('subscriptions')
+    .doc(serviceId).collection('subscriptions')
     .where('status', '==', 'active').get();
   const payload = JSON.stringify(notificationPayload(requestId, request));
   const transientFailures = [];
@@ -90,9 +95,14 @@ async function dispatchRequestNotifications(db, requestId, sendNotification, now
     const subscription = subscriptionSnapshot.data();
     if (typeof subscription.operator_uid !== 'string') continue;
     if (subscription.customer_id !== request.customer_id || !(await isNotificationEnabled(
-      db, subscription.operator_uid, request.customer_id, request.course_id
+      db, subscription.operator_uid, request.customer_id, serviceId
     ))) {
       continue;
+    }
+    if (storage.mode() === 'customer') {
+      const assignment = await getOperatorAssignment(db, subscription.operator_uid);
+      if (!assignment?.courses.some(service => service.customer_id === request.customer_id &&
+          service.service_id === serviceId)) continue;
     }
 
     const acquired = await acquireDispatch(db, requestId, subscriptionSnapshot.id, now);

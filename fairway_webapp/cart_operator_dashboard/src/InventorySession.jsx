@@ -4,7 +4,8 @@ import { usdPriceFromInput } from './lib/inventoryModel.mjs';
 import './inventorySession.css';
 
 export function inventoryCoursePath(course, suffix = '') {
-  return `/api/v1/inventory/courses/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.course_id)}${suffix}`;
+  const kind = course.asset_id ? 'customers' : 'courses';
+  return `/api/v1/inventory/${kind}/${encodeURIComponent(course.customer_id)}/${encodeURIComponent(course.asset_id || course.course_id)}${suffix}`;
 }
 
 const SESSION_CHANGED = 'inventory-session-changed';

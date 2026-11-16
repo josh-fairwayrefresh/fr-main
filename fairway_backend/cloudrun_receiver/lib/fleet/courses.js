@@ -4,6 +4,7 @@ const { ID_PREFIXES } = require('./schema');
 const { allocateNextId } = require('./ids');
 const { CUSTOMERS_COLLECTION } = require('./customers');
 const { courseOperation } = require('../course_operation');
+const storage = require('../operational_storage');
 
 const COURSES_SUBCOLLECTION = 'courses';
 
@@ -90,7 +91,27 @@ async function createCourse(db, {
     updated_at: now,
   };
 
-  await coursesCollection(db, customerId).doc(courseId).set(courseDoc);
+  const contextDoc = { ...courseDoc };
+  if (storage.mode() === 'customer') delete contextDoc.service_suspension;
+  await db.runTransaction(async batch => {
+    await storage.assertOwner(db, customerId, batch);
+    batch.set(coursesCollection(db, customerId).doc(courseId), contextDoc);
+    batch.set(db.collection(CUSTOMERS_COLLECTION).doc(customerId).collection('services').doc(courseId), {
+      service_id: courseId,
+      course_id: courseId,
+      ...(storage.mode() === 'customer' ? courseDoc : {}),
+      ...(operation.inventory ? { asset_id: courseId } : {}),
+      name: courseName,
+      created_at: now, updated_at: now,
+    });
+    if (operation.inventory) {
+      batch.set(db.collection(CUSTOMERS_COLLECTION).doc(customerId).collection('assets').doc(courseId), {
+        asset_id: courseId, service_id: courseId,
+        type: 'cart', course_id: courseId, course_name: courseName, timezone,
+        created_at: now, updated_at: now,
+      });
+    }
+  });
 
   return { course_id: courseId, customer_id: customerId, ...courseDoc };
 }
@@ -152,8 +173,18 @@ async function updateCourse(db, customerId, courseId, {
     update.course_location = courseLocation;
   }
 
-  const batch = db.batch();
-  batch.update(courseRef, update);
+  const linkedUpdates = [];
+  if (storage.mode() === 'customer') {
+    await storage.assertOwner(db, customerId);
+    const services = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).collection('services')
+      .where('course_id', '==', courseId).get();
+    const assets = await db.collection(CUSTOMERS_COLLECTION).doc(customerId).collection('assets')
+      .where('course_id', '==', courseId).get();
+    const contextualUpdate = { updated_at: updatedAt };
+    if (courseName !== undefined) contextualUpdate.course_name = courseName;
+    if (timezone !== undefined) contextualUpdate.timezone = timezone;
+    for (const doc of [...services.docs, ...assets.docs]) linkedUpdates.push({ ref: doc.ref, data: contextualUpdate });
+  }
 
   if (courseName !== undefined) {
     const devicesSnap = await db.collection('devices')
@@ -161,11 +192,15 @@ async function updateCourse(db, customerId, courseId, {
       .where('course_id', '==', courseId)
       .get();
     for (const deviceSnap of devicesSnap.docs) {
-      batch.update(deviceSnap.ref, { course_name: courseName, updated_at: updatedAt });
+      linkedUpdates.push({ ref: deviceSnap.ref, data: { course_name: courseName, updated_at: updatedAt } });
     }
   }
 
-  await batch.commit();
+  await db.runTransaction(async tx => {
+    await storage.assertOwner(db, customerId, tx);
+    tx.update(courseRef, update);
+    for (const item of linkedUpdates) tx.update(item.ref, item.data);
+  });
   const { service_schedule: _legacySchedule, ...courseData } = courseSnap.data();
   return { course_id: courseId, customer_id: customerId, ...courseData, ...update };
 }

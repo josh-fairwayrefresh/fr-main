@@ -2,6 +2,8 @@
 
 const { getCourseForCustomer } = require('./courses');
 const { courseOperation } = require('../course_operation');
+const { requireService } = require('../course_service');
+const storage = require('../operational_storage');
 
 function getLocalDateParts(instant, timeZone) {
 	const formatter = new Intl.DateTimeFormat('en-US', {
@@ -40,16 +42,22 @@ function resolveCourseLocalDateHour(instant, timeZone) {
 
 async function resolveDeviceHierarchy(db, device) {
 	if (!device.customer_id && !device.course_id) {
-		return { valid: true, course: null };
+		return { valid: storage.mode() === 'legacy', course: null };
 	}
 	if (!device.customer_id || !device.course_id) {
 		return { valid: false, course: null };
 	}
+	if (storage.mode() === 'customer' && !device.service_id) return { valid: false, course: null };
 
 	const course = await getCourseForCustomer(db, device.customer_id, device.course_id);
-
-	return course && courseOperation(course).physical_devices
-		? { valid: true, course } : { valid: false, course: null };
+	if (storage.mode() === 'legacy' && (!course || !courseOperation(course).physical_devices)) {
+		return { valid: false, course: null };
+	}
+	const serviceId = device.service_id || device.course_id;
+	const service = await requireService(db, device.customer_id, serviceId);
+	const operationOwner = storage.mode() === 'customer' ? service : course;
+	if (!operationOwner || !courseOperation(operationOwner).physical_devices) return { valid: false, course: null };
+	return { valid: true, course: { ...course, ...service, service_id: serviceId } };
 }
 
 module.exports = {

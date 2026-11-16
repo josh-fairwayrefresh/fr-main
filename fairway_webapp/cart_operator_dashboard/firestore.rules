@@ -17,12 +17,54 @@ service cloud.firestore {
           || (
             get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
             && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id is string
+            && (
+              !exists(/databases/$(database)/documents/customers/$(get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id))
+              || !('authorization_schema_version' in get(/databases/$(database)/documents/customers/$(get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id)).data)
+              || get(/databases/$(database)/documents/customers/$(get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id)).data.authorization_schema_version != 3
+            )
           )
         );
     }
 
+    function hasV3Access() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/user_access/$(request.auth.uid))
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.schema_version == 3
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin is bool
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.menu_ids is list
+        && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids is list
+        && (
+          (get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == null
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.menu_ids.size() == 0
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids.size() == 0)
+          || (get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
+            && get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id is string)
+        );
+    }
+
+    function customerOperationsActive(customerId) {
+      return exists(/databases/$(database)/documents/customers/$(customerId))
+        && 'operational_storage' in get(/databases/$(database)/documents/customers/$(customerId)).data
+        && get(/databases/$(database)/documents/customers/$(customerId)).data.operational_storage.state == 'customer';
+    }
+
+    function requestServiceId() {
+      return 'service_id' in resource.data ? resource.data.service_id : resource.data.course_id;
+    }
+
+    function validServiceReference() {
+      let customerId = resource.data.customer_id;
+      let serviceId = requestServiceId();
+      let servicePath = /databases/$(database)/documents/customers/$(customerId)/services/$(serviceId);
+      return exists(servicePath)
+        && (customerOperationsActive(customerId)
+          ? ('service_id' in resource.data && get(servicePath).data.service_id == serviceId)
+          : get(servicePath).data.course_id == serviceId);
+    }
+
     match /requests/{requestId} {
-      allow read: if hasV2Access() && (
+      allow read: if (hasV2Access() && (
           get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
           || (
             get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == false
@@ -32,7 +74,14 @@ service cloud.firestore {
               || resource.data.course_id in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.course_ids
             )
           )
-        );
+        )) || (hasV3Access() && (
+          get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.admin == true
+          || (
+            get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.customer_id == resource.data.customer_id
+            && requestServiceId() in get(/databases/$(database)/documents/user_access/$(request.auth.uid)).data.service_ids
+            && validServiceReference()
+          )
+        ));
       allow write: if false;
     }
 

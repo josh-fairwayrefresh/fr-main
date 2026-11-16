@@ -14,6 +14,7 @@ const USER_ERROR_MESSAGES = {
   customer_required: 'Select a Customer, or grant global Admin access.',
   customer_not_found: 'The selected Customer no longer exists. Refresh and try again.',
   course_not_in_customer: 'Every selected Course must belong to the selected Customer.',
+  schema3_update_required: 'This Customer uses explicit menu and service grants. Legacy Course authorization cannot be saved.',
   admin_scope_must_be_global: 'Admin access is global and cannot be limited to a Customer.',
   user_not_found: 'This account no longer exists. Refresh the directory.',
   cannot_modify_own_account: 'You cannot reset your own password or deactivate your own account here.',
@@ -40,52 +41,61 @@ function validateNewPassword(password, confirmation) {
 function authorizationSummary(authorization) {
   if (!authorization) return '';
   if (authorization.admin) return 'Global Admin';
-  const courses = authorization.course_ids.length
-    ? authorization.course_ids.join(', ')
-    : 'All courses';
-  return `${authorization.customer_id} · ${courses}`;
+  if (authorization.schema_version === 2 || (!authorization.schema_version && Array.isArray(authorization.course_ids))) {
+    const courses = authorization.course_ids?.length ? authorization.course_ids.join(', ') : 'All courses';
+    return `${authorization.customer_id} · legacy access · ${courses}`;
+  }
+  return `${authorization.customer_id} · ${authorization.menu_ids?.length || 0} menus · ${authorization.service_ids?.length || 0} services`;
 }
 
 function recordSummary(user) {
-  if (user.status === 'CONFIGURATION ERROR') return 'Invalid schema-v2 access record';
+  if (user.status === 'CONFIGURATION ERROR') return 'Invalid access record';
   if (user.status === 'ORPHANED RECORD') {
     return user.access_record_valid
       ? authorizationSummary(user.authorization)
-      : 'Orphaned record · invalid schema-v2 access';
+      : 'Orphaned record · invalid access';
   }
   if (user.status === 'NOT PROVISIONED') return 'No access record';
   return authorizationSummary(user.authorization);
 }
 
-function AccessFields({ customers, admin, setAdmin, customerId, setCustomerId, courseIds, setCourseIds }) {
+function AccessFields({ customers, menus, admin, setAdmin, customerId, setCustomerId, menuIds, setMenuIds, serviceIds, setServiceIds }) {
   const customer = customers.find((item) => item.customer_id === customerId) || null;
-  const customerCourses = useMemo(() => customer?.courses || [], [customer]);
-  function toggleCourse(courseId) {
-    setCourseIds((current) => current.includes(courseId)
-      ? current.filter((value) => value !== courseId)
-      : [...current, courseId]);
+  const services = useMemo(() => customer?.services || [], [customer]);
+  function toggle(setter, id) {
+    setter(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
   }
   return <>
     <label className="a-user-admin-toggle"><input type="checkbox" checked={admin} onChange={(event) => {
       setAdmin(event.target.checked);
       if (event.target.checked) {
         setCustomerId('');
-        setCourseIds([]);
+        setMenuIds([]);
+        setServiceIds([]);
       }
     }} /> Admin — global Admin, Cart, and Inventory access</label>
     {!admin && <>
-      <label>Customer<select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setCourseIds([]); }} required>
+      <label>Customer<select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setMenuIds([]); setServiceIds([]); }} required>
         <option value="">Select a Customer</option>
         {customers.map((item) => <option key={item.customer_id} value={item.customer_id}>{item.customer_name} ({item.customer_id})</option>)}
       </select></label>
       <fieldset disabled={!customer}>
-        <legend>Authorized Courses</legend>
-        <p className="a-user-course-help">Leave all boxes unchecked for <strong>All Courses for this Customer</strong>.</p>
-        {customerCourses.map((course) => <label key={course.course_id} className="a-user-course">
-          <input type="checkbox" checked={courseIds.includes(course.course_id)} onChange={() => toggleCourse(course.course_id)} />
-          {course.course_name} ({course.course_id})
+        <legend>Menu dashboards</legend>
+        <p className="a-user-course-help">Each selected menu grants its dashboard only. No selection grants no menus.</p>
+        {menus.filter(menu => menu.state === 'active').map(menu => <label key={menu.menu_id} className="a-user-course">
+          <input type="checkbox" checked={menuIds.includes(menu.menu_id)} onChange={() => toggle(setMenuIds, menu.menu_id)} />
+          {menu.name} ({menu.type === 'restaurant' ? 'Restaurant' : 'Cart'})
         </label>)}
-        {customer && customerCourses.length === 0 && <p className="a-user-course-help">No Courses are currently configured for this Customer.</p>}
+        {customer && menus.length === 0 && <p className="a-user-course-help">No menus are configured for this Customer.</p>}
+      </fieldset>
+      <fieldset disabled={!customer}>
+        <legend>Request services</legend>
+        <p className="a-user-course-help">Select each service separately. Menu access does not grant request access.</p>
+        {services.map(service => <label key={service.service_id} className="a-user-course">
+          <input type="checkbox" checked={serviceIds.includes(service.service_id)} onChange={() => toggle(setServiceIds, service.service_id)} />
+          {service.name || service.course_name}
+        </label>)}
+        {customer && services.length === 0 && <p className="a-user-course-help">No services are configured for this Customer.</p>}
       </fieldset>
     </>}
   </>;
@@ -104,7 +114,11 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
   const [mode, setMode] = useState('edit');
   const [admin, setAdmin] = useState(false);
   const [customerId, setCustomerId] = useState('');
-  const [courseIds, setCourseIds] = useState([]);
+  const [menuIds, setMenuIds] = useState([]);
+  const [serviceIds, setServiceIds] = useState([]);
+  const [menus, setMenus] = useState([]);
+  const [assetError, setAssetError] = useState('');
+  const [assetsLoading, setAssetsLoading] = useState(false);
   const [loadState, setLoadState] = useState('loading');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -159,11 +173,31 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
   useEffect(() => { void loadUsers(); }, [user, apiBaseUrl]);
 
   useEffect(() => {
+    setMenus([]);
+    setAssetError('');
+    if (!customerId || admin) {
+      setAssetsLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setAssetsLoading(true);
+    adminRequest(user, apiBaseUrl, `/api/v1/admin/customers/${encodeURIComponent(customerId)}/menus`, { signal: controller.signal })
+      .then(result => {
+        if (!Array.isArray(result.menus)) throw new Error('The menu register could not be verified.');
+        if (!controller.signal.aborted) setMenus(result.menus);
+      })
+      .catch(reason => { if (!controller.signal.aborted) setAssetError(reason.message); })
+      .finally(() => { if (!controller.signal.aborted) setAssetsLoading(false); });
+    return () => controller.abort();
+  }, [user, apiBaseUrl, customerId, admin]);
+
+  useEffect(() => {
     if (mode !== 'edit' || !selectedUser || selectedUser.status === 'ORPHANED RECORD') return;
     const access = selectedUser.authorization;
     setAdmin(access?.admin === true);
     setCustomerId(access?.admin === true ? '' : access?.customer_id || '');
-    setCourseIds(access?.admin === true ? [] : access?.course_ids || []);
+    setMenuIds(access?.admin === true ? [] : access?.menu_ids || []);
+    setServiceIds(access?.admin === true ? [] : access?.service_ids || []);
     clearPasswords();
   }, [mode, selectedUid, selectedUser?.authorization, selectedUser?.status]);
 
@@ -172,7 +206,8 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
     setUsername('');
     setAdmin(false);
     setCustomerId('');
-    setCourseIds([]);
+    setMenuIds([]);
+    setServiceIds([]);
     clearPasswords();
     setError('');
     setNotice('');
@@ -207,6 +242,10 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
 
   async function createUser(event) {
     event.preventDefault();
+    if (!admin && (assetsLoading || assetError || directoryUnavailable)) {
+      setError('Customer menu and service access must be verified before creating a user.');
+      return;
+    }
     const normalized = username.trim().toLowerCase();
     if (normalized.length > 64 || !USERNAME_PATTERN.test(normalized)) {
       setError(USER_ERROR_MESSAGES.invalid_username);
@@ -225,7 +264,9 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
           password,
           admin,
           customer_id: admin ? null : customerId,
-          course_ids: admin ? [] : courseIds,
+          schema_version: 3,
+          menu_ids: admin ? [] : menuIds,
+          service_ids: admin ? [] : serviceIds,
         },
       }),
       (result) => `Created ${result.email}. Share the initial password with the user through an approved channel.`
@@ -235,6 +276,10 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
   async function save(event) {
     event.preventDefault();
     if (!selectedUser || selectedUser.status === 'ORPHANED RECORD') return;
+    if (!admin && (legacyAccess || assetsLoading || assetError || directoryUnavailable)) {
+      setError('Migrate legacy access and verify the Customer menu and service directories before saving.');
+      return;
+    }
     setSaving(true);
     setError('');
     setNotice('');
@@ -248,7 +293,9 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
           body: {
             admin,
             customer_id: admin ? null : customerId,
-            course_ids: admin ? [] : courseIds,
+            schema_version: 3,
+            menu_ids: admin ? [] : menuIds,
+            service_ids: admin ? [] : serviceIds,
           },
         }
       );
@@ -297,6 +344,11 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
   }
 
   const isOrphan = selectedUser?.status === 'ORPHANED RECORD';
+  const legacyAccess = mode === 'edit' && !admin && (
+    selectedUser?.authorization?.schema_version === 2 ||
+    (!selectedUser?.authorization?.schema_version && Array.isArray(selectedUser?.authorization?.course_ids))
+  );
+  const directoryUnavailable = !admin && customerId && !Array.isArray(customers.find(item => item.customer_id === customerId)?.services);
   const statusClass = (status) => status === 'CONFIGURATION ERROR'
     ? 'a-user-status is-error'
     : status === 'ORPHANED RECORD' ? 'a-user-status is-warning' : 'a-user-status';
@@ -306,8 +358,11 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
     setAdmin={setAdmin}
     customerId={customerId}
     setCustomerId={setCustomerId}
-    courseIds={courseIds}
-    setCourseIds={setCourseIds}
+    menus={menus}
+    menuIds={menuIds}
+    setMenuIds={setMenuIds}
+    serviceIds={serviceIds}
+    setServiceIds={setServiceIds}
   />;
 
   return <section className="a-view" aria-labelledby="users-title">
@@ -330,6 +385,9 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
       </div>
     </div>
     {error && <div className="a-notice a-error" role="alert">{error}</div>}
+    {assetError && <div className="a-notice a-error" role="alert">Unable to load menu grants: {assetError}</div>}
+    {directoryUnavailable && <div className="a-notice a-error" role="alert">The Customer service directory is unavailable. Access cannot be changed until it is verified.</div>}
+    {legacyAccess && <div className="a-notice a-error" role="alert">This account has legacy Course access. Its existing grants must be migrated before editing; they will not be replaced with empty grants.</div>}
     {notice && <div className="a-notice a-success" role="status">{notice}</div>}
     <div className="a-user-management">
       <section className="a-user-list" aria-label="Firebase Authentication users" aria-busy={loading}>
@@ -363,7 +421,7 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
         {accessFields}
         <div className="a-modal-actions">
           <button type="button" onClick={() => { clearPasswords(); setMode('edit'); setError(''); }} disabled={saving}>Cancel</button>
-          <button className="a-primary" type="submit" disabled={saving || loading}><UserPlus size={16} />{saving ? 'Creating…' : 'Create user'}</button>
+          <button className="a-primary" type="submit" disabled={saving || loading || assetsLoading || Boolean(assetError) || directoryUnavailable}><UserPlus size={16} />{saving ? 'Creating…' : 'Create user'}</button>
         </div>
       </form>}
       {mode === 'edit' && loadState === 'ready' && isOrphan && <section className="a-form a-user-editor" aria-label="Orphaned access record">
@@ -371,7 +429,7 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
         <p>This access record has no Firebase Authentication identity. It was not changed or deleted.</p>
         {selectedUser.access_record_valid
           ? <p>Stored access: {authorizationSummary(selectedUser.authorization)}</p>
-          : <p className="a-user-status is-error">The stored access record also fails schema-v2 validation.</p>}
+          : <p className="a-user-status is-error">The stored access record also fails validation.</p>}
       </section>}
       {mode === 'edit' && loadState === 'ready' && selectedUser && !isOrphan && <div className="a-user-detail">
         <form className="a-form a-user-editor" onSubmit={save}>
@@ -384,7 +442,7 @@ export default function AdminUserManagement({ user, apiBaseUrl, customers }) {
           </p></div>
           <p>{recordSummary(selectedUser)}</p>
           {accessFields}
-          <button className="a-primary" type="submit" disabled={saving || loading}>
+          <button className="a-primary" type="submit" disabled={saving || loading || assetsLoading || Boolean(assetError) || directoryUnavailable || legacyAccess}>
             <Save size={16} />
             {saving ? 'Saving…' : selectedUser.status === 'NOT PROVISIONED'
               ? 'Provision access'

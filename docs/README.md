@@ -8,6 +8,28 @@ them by assumption.
 
 ## Current State
 
+The CPO/Architect approved the
+[Customer-only asset ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
+and coherent menu-register increment. Courses are contextual attributes, not
+owners of inventory, menus, users or permissions. The
+[UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
+defines the Customer menu register, preserved cart behavior, isolated restaurant
+dashboard, explicit menu/service grants, permanent URLs and shared template.
+This is authorized local implementation, not a claim of production migration
+or deployment. The CPO authorized resuming production promotion on 2026-11-16;
+the cutover and deployment are not yet complete.
+
+The Architect's review of published menu increment `5d7692f` identified
+remaining Course-owned operational storage. The local correction moves cart
+inventory under Customer assets and service state/history under Customer
+services, retaining the cart algorithms and presentation. The
+[cutover owner](DEPLOYMENT_GUIDE.md#customer-operational-ownership-correction)
+defines the maintenance fence, verified recursive migration, forward recovery
+and remaining production prerequisites. The Lead Architect subsequently
+authorized feature-branch publication of the validated correction for
+independent source review. The CPO has now authorized production promotion;
+see the dated preparation and execution record in the Deployment Guide.
+
 The OTA capability-gate removal is committed and deployed. FRB-0001 through
 FRB-0006 are selectable OTA targets; release approval, authentication,
 lifecycle, hardware compatibility and MCUboot signature controls remain.

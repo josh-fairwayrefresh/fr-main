@@ -8,7 +8,7 @@ const firestoreRules = await readFile(new URL('../firestore.rules', import.meta.
 test('Cart request listeners query each authorized course separately and merge the results', () => {
   assert.match(mainSource, /operatorConfig\.courses;/);
   assert.match(mainSource, /where\('customer_id', '==', course\.customer_id\)/);
-  assert.match(mainSource, /where\('course_id', '==', course\.course_id\)/);
+  assert.match(mainSource, /where\(course\.service_id \? 'service_id' : 'course_id', '==', course\.service_id \|\| course\.course_id\)/);
   assert.match(mainSource, /requestsByCourse\.values\(\)/);
   assert.doesNotMatch(mainSource, /where\('course_id', 'in', courseIds\)/);
 });

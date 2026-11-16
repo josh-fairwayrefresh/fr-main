@@ -3,9 +3,10 @@
 const { FieldValue } = require('@google-cloud/firestore');
 const { coursesCollection } = require('./fleet/courses');
 const { courseOperation } = require('./course_operation');
-const { resolveCourseServiceState } = require('./course_service');
+const { resolveCourseServiceState, serviceRef, requireService } = require('./course_service');
 const { resolveCourseLocalDateHour } = require('./fleet/hierarchy');
 const { RequestError } = require('./request_lifecycle');
+const { assertOwner, mode } = require('./operational_storage');
 
 const BAY_ID = /^[A-Za-z0-9_-]{24,64}$/;
 const OPERATION_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -21,11 +22,25 @@ function validateBayMappings(bays) {
 async function provisionQrBays(db, customerId, courseId, bays) {
   validateBayMappings(bays);
   return db.runTransaction(async (transaction) => {
-    const course = await transaction.get(coursesCollection(db, customerId).doc(courseId));
-    if (!course.exists || courseOperation(course.data()).kind !== 'driving_range' ||
-        resolveCourseServiceState(course.data()).active) {
+    let serviceId = courseId;
+    if (mode() === 'customer') {
+      const services = await transaction.get(db.collection('customers').doc(customerId)
+        .collection('services').where('course_id', '==', courseId));
+      if (services.size !== 1 || services.docs[0].data().service_id !== services.docs[0].id) {
+        throw new Error('A unique Customer-owned Driving Range service is required');
+      }
+      serviceId = services.docs[0].id;
+    }
+    const [course, service] = await Promise.all([
+      transaction.get(coursesCollection(db, customerId).doc(courseId)),
+      transaction.get(serviceRef(db, customerId, serviceId)),
+    ]);
+    if (!(mode() === 'customer' ? service.exists : course.exists) ||
+        courseOperation(mode() === 'customer' ? service.data() : course.data()).kind !== 'driving_range' ||
+        !service.exists || resolveCourseServiceState(service.data()).active) {
       throw new Error('Provisioning requires the owning Driving Range Course to be suspended');
     }
+    await assertOwner(db, customerId, transaction);
     const existing = await transaction.get(db.collection('qr_bays').where('course_id', '==', courseId));
     const snapshots = await Promise.all(bays.map((bay) => transaction.get(bayRef(db, bay.id))));
     if (existing.docs.some((doc) => !bays.some((bay) => bay.id === doc.id))) {
@@ -43,6 +58,7 @@ async function provisionQrBays(db, customerId, courseId, bays) {
     snapshots.forEach((snapshot, index) => {
       if (!snapshot.exists) transaction.set(snapshot.ref, {
         customer_id: customerId, course_id: courseId,
+        ...(mode() === 'customer' ? { service_id: serviceId } : {}),
         bay_number: bays[index].bay_number, bay_side: bays[index].bay_side,
         enabled: true, active_request_id: null,
       });
@@ -68,13 +84,15 @@ async function publicBay(db, id) {
   const snapshot = await bayRef(db, id).get();
   if (!snapshot.exists) throw new RequestError(404, 'Bay not found');
   const bay = snapshot.data();
+  if (mode() === 'customer' && !bay.service_id) throw new RequestError(503, 'Customer service reference is unavailable');
   const course = await coursesCollection(db, bay.customer_id).doc(bay.course_id).get();
-  validateBay(bay, course.exists ? course.data() : null);
+  const service = await requireService(db, bay.customer_id, bay.service_id || bay.course_id);
+  validateBay(bay, mode() === 'customer' ? service : course.exists ? course.data() : null);
   return {
     bay_number: bay.bay_number,
     ...(bay.bay_side ? { bay_side: bay.bay_side } : {}),
-    course_name: course.data().course_name,
-    available: resolveCourseServiceState(course.data()).active,
+    course_name: mode() === 'customer' ? service.course_name : course.data().course_name,
+    available: resolveCourseServiceState(service).active,
   };
 }
 
@@ -92,15 +110,23 @@ async function acceptQrRequest(db, id, operationId, networkId, now = new Date())
     const baySnapshot = await transaction.get(ref);
     if (!baySnapshot.exists) throw new RequestError(404, 'Bay not found');
     const bay = baySnapshot.data();
-    const [courseSnapshot, receipt] = await Promise.all([
+    if (mode() === 'customer' && !bay.service_id) throw new RequestError(503, 'Customer service reference is unavailable');
+    await assertOwner(db, bay.customer_id, transaction);
+    const [courseSnapshot, serviceSnapshot, receipt] = await Promise.all([
       transaction.get(coursesCollection(db, bay.customer_id).doc(bay.course_id)),
+      transaction.get(serviceRef(db, bay.customer_id, bay.service_id || bay.course_id)),
       transaction.get(receiptRef),
     ]);
-    const course = courseSnapshot.exists ? courseSnapshot.data() : null;
+    const course = mode() === 'customer'
+      ? serviceSnapshot.exists ? serviceSnapshot.data() : null
+      : courseSnapshot.exists ? courseSnapshot.data() : null;
     validateBay(bay, course);
     // A lost response remains the same submission even after suspension or completion.
     if (receipt.exists) return { status: 'accepted' };
-    if (!resolveCourseServiceState(course).active) {
+    if (!serviceSnapshot.exists) {
+      throw new RequestError(503, 'Customer service storage context is unavailable');
+    }
+    if (!resolveCourseServiceState(serviceSnapshot.data()).active) {
       throw new RequestError(409, 'Server requests are currently unavailable. Please visit the restaurant.');
     }
     const window = Math.floor(now.getTime() / 60000);
@@ -128,6 +154,7 @@ async function acceptQrRequest(db, id, operationId, networkId, now = new Date())
       const local = resolveCourseLocalDateHour(now, course.timezone);
       transaction.set(requestRef, {
         customer_id: bay.customer_id,
+        service_id: bay.service_id || bay.course_id,
         course_id: bay.course_id,
         course_name: course.course_name,
         bay_id: id,

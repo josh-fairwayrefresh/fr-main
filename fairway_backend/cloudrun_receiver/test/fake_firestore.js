@@ -128,6 +128,13 @@ class FakeDocRef {
     return new FakeCollectionRef(this.db, `${this.path}/${name}`);
   }
 
+  async listCollections() {
+    const prefix = `${this.path}/`;
+    const names = new Set([...this.db._docs.keys()].filter(path => path.startsWith(prefix))
+      .map(path => path.slice(prefix.length).split('/')[0]));
+    return [...names].map(name => new FakeCollectionRef(this.db, `${prefix}${name}`));
+  }
+
   async get() {
     return new FakeDocSnapshot(this.db, this.path, this.db._docs.get(this.path));
   }
@@ -155,6 +162,14 @@ class FakeCollectionRef {
   constructor(db, path) {
     this.db = db;
     this.path = path;
+    this.id = path.split('/').at(-1);
+  }
+
+  async listDocuments() {
+    const prefix = `${this.path}/`;
+    const ids = new Set([...this.db._docs.keys()].filter(path => path.startsWith(prefix))
+      .map(path => path.slice(prefix.length).split('/')[0]));
+    return [...ids].map(id => this.doc(id));
   }
 
   doc(id) {

@@ -15,6 +15,7 @@ test('changing only the category owner display name preserves identities and ser
     runInNewContext(source, {
       module,
       require(id) {
+        if (id === './operational_storage') return require('../lib/operational_storage');
         assert.equal(id, './service_categories.json');
         return categories;
       },

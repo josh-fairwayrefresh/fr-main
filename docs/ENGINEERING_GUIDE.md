@@ -66,7 +66,7 @@ physical marker button → nRF9151 firmware → LTE-M → HTTPS → Cloud Run re
 Each physical marker has a permanent device identity and unique credential. The receiver validates identity and authentication, applies the course service and request rules, and persists accepted requests for authorized Cart Operators.
 
 Anonymous permanent Driving Range bay-side pages also feed the same receiver,
-Course-owned request lifecycle and operator UI. They have no physical-device
+existing request lifecycle and operator UI. They have no physical-device
 identity or command path; operator access still requires normal authentication.
 
 ## Current Pilot Baseline
@@ -80,6 +80,55 @@ identity or command path; operator access still requires normal authentication.
 - The responsive Cart Operator release is live. The production deployment record does not establish authenticated physical-phone/Safari acceptance; that acceptance remains pending.
 
 ## Current System Boundaries
+
+### Customer ownership decision (2026-11-15)
+
+The CPO/Architect approved Customer as the sole authoritative ownership
+boundary for data, assets, users, permissions and operations. Courses are
+contextual attributes, not independent owners. This decision supersedes the
+earlier Course-owned inventory and Course-entitlement architecture described
+in dated implementation/release sections.
+
+The authorized coherent increment provides Customer-owned menu and service
+assets, moves cart inventory into that ownership boundary without changing
+its accepted operational behavior, and adds an isolated restaurant menu.
+The CPO clarified that the cart migration is administrative/governance only:
+do not redevelop cart operations, redesign its dashboard or refactor its
+operational workflows to accommodate the restaurant. Retain the established
+cart implementation; limit cart changes to necessary ownership references,
+register recognition and entitlement wiring.
+The Architect's source review of `5d7692feeb141d5c664c3d221bcd2395c7e9b0ab`
+identified that register-only ownership was insufficient. The local correction
+relocates authoritative cart configuration and all active inventory collections
+to `customers/{customerId}/assets/{assetId}` and service configuration/state,
+events and reviewed corrections to `customers/{customerId}/services/{serviceId}`.
+Assets explicitly reference their service; menus reference their cart asset;
+requests and assigned devices/bays reference their Customer service.
+Stable historical IDs, stock, sessions and operational algorithms are preserved.
+Course records and identifiers remain location/reporting/history metadata,
+not storage or authorization authorities.
+Historical Course-path records are retained read-only after cutover. A
+Customer maintenance marker fences compatible writers; verified recursive
+copy and explicit activation establish a single serving owner. Customer-mode
+operations never fall back to Course storage, including when an owner is
+missing. The explicit legacy runtime is a pre-cutover bridge only, and refuses
+Customers already transitioned. See the deployment owner's controlled
+migration and forward-recovery procedure.
+`user_access/{uid}` remains the single account-entitlement owner. Explicit
+Customer-owned service-asset grants preserve each user's existing operational
+access; Customer membership must not silently grant all services. Menu grants
+are separate: a cart-menu grant permits its full existing inventory system;
+a restaurant-menu grant permits its isolated menu dashboard. Course location,
+timezone and historical attribution may remain context without determining
+ownership or granting access.
+
+The [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
+defines the approved product behavior. Implementation and local verification
+do not establish deployment or authorize production migration, account writes,
+restaurant import, commits or pushes. The
+[deployment owner](DEPLOYMENT_GUIDE.md#production-change-safety) retains the
+verified-backup and production-change gates. Existing production behavior
+remains in force until a separately authorized, verified cutover.
 
 - Firmware, backend, web applications, build configuration, and canonical documents are in the `nfed` repository. The official Nordic SDK and matching toolchain are installed separately; build and deployment procedures are owned by `docs/DEPLOYMENT_GUIDE.md`.
 - Device provisioning, registry lifecycle, and authentication requirements are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.
