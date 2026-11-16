@@ -18,6 +18,12 @@ Existing capability values are retained as inert historical data.
 This decision does not change release approval, device authentication,
 lifecycle, hardware compatibility, or MCUboot signature verification.
 
+**Current field handoff (2026-11-15, 18:29 Pacific):** FRB-0001 Version 6A
+installation is suspended for insufficient available battery power; no 6A
+flash occurred. Engineering readiness remains READY. The
+[suspension and restart record](#version-6a-field-deployment-suspension-and-restart-2026-11-15)
+owns the latest CPO-reported fleet runtime validation limits.
+
 | Area | Latest recorded state | Last verified / evidence limit |
 |---|---|---|
 | Accepted Pilot 1.1 field operation | CPO confirms FRB-0001 through FRB-0006 commissioned and in operation; accepted firmware source is `6a19f83c5bd5d1d390efd937daa1c38c0e837eb0` | Aggregate acceptance does not identify a live image on each device or current registry assignments. The latest local OTA build is not the accepted/deployed field firmware. |
@@ -36,6 +42,87 @@ credential-lifecycle backend was originally deployed on 2026-10-17;
 this rollout performed no credential operation or authenticated lifecycle
 request. See
 `docs/DEVICE_PROVISIONING_GUIDE.md`.
+
+### Version 6A field deployment suspension and restart (2026-11-15)
+
+**Suspended, not failed:** the CPO left the course because available battery
+power was insufficient to complete the field visit. FRB-0001 remains the first
+intended Version 6A installation target. No Version 6A flashing, erase,
+provisioning or production change was performed. The host-only probe enumeration
+returned no connected probes; the CPO clarified that the device was not connected
+and requested a pause. This does not establish a device or Service Mode failure.
+
+**Latest CPO-reported fleet baseline, 2026-11-15:** FRB-0001, FRB-0002,
+FRB-0003, FRB-0004 and FRB-0006 are field units at Monarch Bay / Tony Lema
+with OTA 0.1 installed. FRB-0001 and FRB-0006 have not demonstrated their
+expected 900-second commissioning check-ins and require runtime validation;
+record this as unvalidated runtime behavior, not demonstrated firmware failure.
+FRB-0004's previous OTA attempt failed with error `-140`; no investigation or
+retry is authorized by this handoff. FRB-0005 is on the CPO's workbench, is the
+only device currently running OTA 1.0 (`1.0.0+4`), and remains the validated
+operational/nightly-OTA reference device. These are CPO-reported physical
+observations, not new production registry assignments or independently polled
+backend state. Earlier authenticated version-confirmation evidence is retained
+as dated evidence; it does not close the newly reported check-in/runtime
+validation gaps.
+
+**Preserved readiness:** Version 6A completed engineering review and remains
+READY for field execution. The unchanged restart reference is the CPO's
+[FR_OTA_Standard_Deployment_v6A_FINAL.md](../../../../Desktop/FR_OTA_Standard_Deployment_v6A_FINAL.md).
+Approved release `OTA-1.0-r4`, version `1.0.0+4`, uses
+`OTA-1.0-r4-ota.signed.bin` (281,659 bytes), SHA-256
+`cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e`.
+The reviewed probe-rs 0.31.0 command remains:
+
+```sh
+probe-rs download \
+  --chip nRF9151_xxAA \
+  --binary-format bin \
+  --base-address 0x10000 \
+  --verify \
+  --restore-unwritten \
+  /Users/DuplexLoop/fairway-builds/ota-OTA-1.0-r4-production-20261110-r1/OTA-1.0-r4-ota.signed.bin
+```
+
+This is non-erasing primary-slot programming, not chip erase. Preserve existing
+TF-M Protected Storage, permanent identity, credentials, SIM association and
+backend records. Do not substitute merged HEX, commissioning firmware,
+credential extraction/rotation/reprovisioning or a rebuilt artifact.
+
+**Resume directly when the CPO returns to FRB-0001:**
+
+1. Reuse the completed readiness review and unchanged finalized procedure.
+   Do not reopen validated decisions without new evidence. Confirm sufficient
+   laptop/service power for uninterrupted programming and verification.
+2. Guide physical actions explicitly in chat: identify FRB-0001; disconnect VXX
+   field power and device USB so the device is off; connect the cable to the
+   laptop while leaving its device end disconnected. Wait for CPO confirmation.
+3. Instruct the CPO to press and hold PV8 before connecting USB to the Feather,
+   then keep PV8 held through USB-powered boot with VXX disconnected. Wait for
+   explicit confirmation; never assume the button is held.
+4. Establish access to the physically identified device's debugger. One
+   compatible probe may use the command above; multiple probes require explicit
+   selection of the CPO-identified probe. Enumeration alone is not target-access
+   evidence. If access fails or association is ambiguous, stop and report the
+   actual error. Do not wait silently, race boot or erase.
+5. Once established Service Mode has latched the boot-button selection and
+   debugger access is confirmed, explicitly tell the CPO to release PV8 while
+   keeping USB connected and VXX disconnected. Wait for release confirmation.
+   No fixed hold duration is established; do not invent one.
+6. Execute only after the CPO authorizes the resumed Version 6A operation and
+   the physical confirmations above are complete. Report programming and
+   read-back verification success or the exact failure. A failed/interrupted
+   write may leave an incomplete application; do not report success or improvise
+   recovery.
+7. After successful programming and verification, explicitly instruct the CPO
+   to disconnect USB/service hardware, leave PV8 released, and only then restore
+   normal field power. The CPO handles physical actions and operational
+   validation; VSC performs no Admin interaction or operational field checks.
+
+If the non-erasing path is blocked, stop at the observed error. Version 6 remains
+the separately authorized erase-and-reprovision fallback; do not invoke it
+automatically. This handoff authorizes documentation only, not resumed execution,
+device operations, deployments, production writes, commits or pushes.
 
 ### OTA capability-gate retirement production release (2026-11-15)
 
