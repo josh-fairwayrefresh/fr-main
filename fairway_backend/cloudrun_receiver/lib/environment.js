@@ -76,6 +76,13 @@ function resolveRuntimeEnvironment(env = process.env) {
   });
 }
 
+function resolvePublicMenuOrigin(env = process.env) {
+  const runtime = resolveRuntimeEnvironment(env);
+  return runtime.environment === 'sandbox'
+    ? `https://${runtime.projectId}.web.app`
+    : PRODUCTION_CUSTOM_DOMAIN_ORIGIN;
+}
+
 module.exports = {
   PRODUCTION_ADMIN_ORIGINS,
   PRODUCTION_CUSTOM_DOMAIN_ORIGIN,
@@ -83,5 +90,6 @@ module.exports = {
   PRODUCTION_HOSTING_ORIGIN,
   SANDBOX_PROJECT_PREFIX,
   resolveRuntimeEnvironment,
+  resolvePublicMenuOrigin,
   resolveSandboxEnvironment,
 };

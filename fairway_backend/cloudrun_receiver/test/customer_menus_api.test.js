@@ -151,10 +151,10 @@ test('renames derive the current URL from the sole menu name and permanently pre
   const created = await request('POST', base, { name: 'restaurant_menu', type: 'restaurant' });
   assert.equal(created.statusCode, 201);
   const menuId = created.body.menu.menu_id;
-  assert.equal(created.body.menu.public_url, 'https://app.fairwayrefresh.com/cartmenus/customer_restaurant_menu');
+  assert.equal(created.body.menu.public_url, `https://${process.env.FAIRWAY_GCP_PROJECT}.web.app/cartmenus/customer_restaurant_menu`);
   const renamed = await request('PATCH', `${base}/${menuId}`, { name: 'bistro_menu' });
   assert.equal(renamed.statusCode, 200);
-  assert.equal(renamed.body.menu.public_url, 'https://app.fairwayrefresh.com/cartmenus/customer_bistro_menu');
+  assert.equal(renamed.body.menu.public_url, `https://${process.env.FAIRWAY_GCP_PROJECT}.web.app/cartmenus/customer_bistro_menu`);
   assert.deepEqual(renamed.body.menu.aliases, ['customer_restaurant_menu']);
   for (const slug of ['customer_restaurant_menu', 'customer_bistro_menu']) {
     const response = await request('GET', `/api/v1/public/menus/${slug}`);

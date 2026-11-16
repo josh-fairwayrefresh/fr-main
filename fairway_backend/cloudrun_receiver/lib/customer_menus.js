@@ -6,8 +6,8 @@ const { PNG } = require('pngjs');
 const { getUserAccess } = require('./user_access');
 const inventory = require('./inventory');
 const storage = require('./operational_storage');
+const { resolvePublicMenuOrigin } = require('./environment');
 
-const origin = 'https://app.fairwayrefresh.com';
 const states = new Set(['on_menu', 'sold_out', 'in_inventory']);
 
 function fail(status, code, message) {
@@ -37,7 +37,7 @@ function assetRef(db, customerId, assetId) {
 }
 function model(customerId, doc) {
   const data = doc.data();
-  return { ...data, customer_id: customerId, menu_id: doc.id, public_url: `${origin}/cartmenus/${data.slug}` };
+  return { ...data, customer_id: customerId, menu_id: doc.id, public_url: `${resolvePublicMenuOrigin()}/cartmenus/${data.slug}` };
 }
 function fields(body, allowed) {
   if (!body || typeof body !== 'object' || Array.isArray(body) ||

@@ -1128,7 +1128,7 @@ function createFairwayHandlers(db, {
       }
     }
     const courses = (await Promise.all(assignedCourses.map((assignment) =>
-      getCourseForCustomer(db, assignment.customer_id, assignment.course_id))))
+      authorizedCourse(operator, assignment.course_id, assignment.customer_id))))
       .filter(Boolean);
     const [serviceCourses, requestSnapshots] = await Promise.all([
       Promise.all(courses.map((course) =>

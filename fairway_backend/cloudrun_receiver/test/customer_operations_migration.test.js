@@ -93,7 +93,7 @@ test('migration preserves nested identities, stock, attribution, history and ind
   const qr = await menus.qr(f.db, f.customer.id, 'cart-menu', 'png');
   const image = PNG.sync.read(qr.data);
   assert.equal(jsQR(new Uint8ClampedArray(image.data), image.width, image.height).data,
-    'https://app.fairwayrefresh.com/cartmenus/synthetic_cart');
+    `https://${process.env.FAIRWAY_GCP_PROJECT}.web.app/cartmenus/synthetic_cart`);
 });
 
 test('repeat and forward recovery never overwrite intervening Customer activity or reactivate legacy', async () => {
