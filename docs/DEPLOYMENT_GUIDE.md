@@ -2,16 +2,15 @@
 
 ## Current Deployment and OTA Readiness
 
-The Customer-assets/menu-register increment has CPO authorization for the
-coordinated production promotion. Production remains unchanged until the
-verified cutover is executed. Its
+The Customer-assets/menu-register increment was promoted to production on
+2026-11-16 after CPO authorization and the verified coordinated cutover. Its
 [ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
-supersedes the previous Course-owned architecture; it has not changed this
-production snapshot. Use the
+supersedes the previous Course-owned architecture. Use the
 [Customer asset cutover boundary](#customer-assets-and-menu-register-cutover)
-before proposing any data migration or release.
+for the completed migration evidence, current serving identities and
+Customer-compatible recovery requirements.
 
-This snapshot records the 2026-11-15 capability-gate removal deployment and
+This snapshot records the 2026-11-16 Customer-ownership promotion and the
 latest CPO fleet handoff, with earlier release evidence retained separately.
 “Last verified” means the date of the evidence,
 not continuous production monitoring. Confirm actual
@@ -1605,7 +1604,7 @@ Deployment continues to use the existing Cloud Run services/entrypoints:
 | Runtime identity | `936892386735-compute@developer.gserviceaccount.com` | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime environment / mode | `FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=receiver` | `FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=admin` |
 | Entry function | `fairwayButtonReceiver` | `fairwayAdmin` |
-| Prior serving revision | `fairway-button-receiver-roll-26b6201` | `fairway-admin-cartperf-35e7c6c` |
+| Pre-cutover serving revision (historical) | `fairway-button-receiver-roll-26b6201` | `fairway-admin-cartperf-35e7c6c` |
 
 Both project environment variables remain `savvy-kit-496703-r5`. Preserve
 all existing environment/secret bindings, invocation settings, limits, traffic
@@ -1625,11 +1624,15 @@ do not use the immediate-traffic examples elsewhere in this guide unchanged.
 Deploy only from the isolated reviewed package and retain its exact source
 and lockfile checksums with the rollout record.
 Do not probe real-device OTA checks or create production assignments as a smoke
-test. On failure restore Hosting version `c6a6de50274e48b5`, then Admin traffic
-to `fairway-admin-cartperf-35e7c6c` and receiver traffic to
-`fairway-button-receiver-roll-26b6201`, preserving existing tags. These anchors
-must still be checked immediately before rollout. Code rollback does not
-restore Firestore data.
+test. Before the Customer cutover, the documented failure targets were Hosting
+version `c6a6de50274e48b5`, Admin revision `fairway-admin-cartperf-35e7c6c`,
+and receiver revision `fairway-button-receiver-roll-26b6201`. **This rollback
+set is superseded by the completed Customer migration below and is not safe to
+use against Customer-owned data.** The old revisions remain retained but their
+public revision tags were removed during writer fencing. After migration,
+rollback only to a Customer-compatible artifact; otherwise recover forward
+using verified authoritative data and reconcile intervening activity. Code
+rollback does not restore Firestore data.
 
 Artifact follow-on remains gated: project `_Default` retains 30 days and has
 no bearer-path exclusion; organization `284487864580` sink inspection requires
@@ -1739,10 +1742,8 @@ immediately before changing production.
 ## Customer Assets and Menu Register Cutover
 
 **CPO/Architect-approved coherent increment, 2026-11-15; production promotion
-subsequently authorized by the CPO.** The current execution instruction
-authorizes the coordinated cutover and associated Git publication. No
-production migration, user-access mutation, restaurant import or deployment
-has yet been performed. The
+subsequently authorized by the CPO and completed 2026-11-16. The recorded
+release and cutover below are the current production baseline. The
 [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
 defines product requirements; the
 [Engineering Guide](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
@@ -1778,9 +1779,10 @@ request mappings, installed signs, firmware and OTA assignments.
 The CPO-supplied restaurant source is `Restaurant menu.docx`, SHA-256
 `da2583425ae805a9a5bb7b0100c29f699d9d4d15fa22ebaccc9986b9df464ed0`.
 The CPO approved the corrected full transcription: 24 priced products, five
-ordered categories and all source notes. The local approved import package
-is content evidence, not production publication or data-write authorization.
-No guessed products or demonstration entries may become restaurant content.
+ordered categories and all source notes. It was published with the canonical
+restaurant importer on 2026-11-16; its package and source-document hashes and
+production catalog revision are recorded below. No guessed products or
+demonstration entries may become restaurant content.
 
 Before production writes and serving-cohort promotion:
 
@@ -1819,10 +1821,12 @@ Before production writes and serving-cohort promotion:
    against the approved transcription. Keep physical sign use and CPO
    operational acceptance distinct from local tests or generated QR images.
 
-Stop if any operation requires unapproved production writes or cannot preserve
-data and authorization. Do not deploy a partial ownership migration as a
-workaround. The current deployed schema/behavior remains authoritative for
-production until an explicitly authorized and verified cutover.
+Stop if any further operation requires unapproved production writes or cannot
+preserve data and authorization. Do not deploy a partial ownership migration
+as a workaround. Following the verified cutover below, Customer-owned assets,
+services, menu registrations and schema-3 grants are authoritative. Any
+recovery must preserve Customer-mode ownership and reconcile activity; never
+re-enable a legacy writer or replay the pre-cutover plan over live records.
 
 ### Customer operational ownership correction
 
@@ -1926,7 +1930,7 @@ subsequently authorized this promotion. Current read-only preflight and
 recovery evidence are recorded below; writer fencing, migration, deployment
 and post-cutover acceptance remain execution steps.
 
-#### Production promotion authorization and preparation — 2026-11-16
+#### Production promotion authorization and preflight — 2026-11-16
 
 The CPO authorized resuming the previously accepted Customer-ownership
 production promotion from release preparation on 2026-11-16. The approved
@@ -1972,9 +1976,77 @@ against production with the CPO-approved restaurant payload:
   91 target rows and 109 source paths. It preserves its service and cart
   inventory but plans no menus or public routes and no menu grants.
 
-These are reviewed, read-only fingerprints, not authorization to skip the
-writer drain. Revalidate the source and exact fingerprints after fencing
-writers and before copying; any difference requires a fresh reviewed plan.
+These reviewed fingerprints were revalidated after the writer fence and
+matched exactly before copying. The completed cutover and post-deployment
+evidence follow.
+
+#### Production cutover completed — 2026-11-16
+
+The CPO-authorized release source is commit `dc60b997d5582e997a56b2e73d054556e0a23c98`
+on `feature/customer-ownership-production-20261116`. It contains the tested
+planner/access corrections, menu-less inventory entry, customer-owned menu
+registration, approved UX, and this cutover record. Local `node_modules` and
+the untracked customer-acceptance Firebase configuration were excluded.
+
+Before copying data, both serving Cloud Run services were switched to the
+tested Customer-mode revisions; their protected operator bootstrap reads
+returned 401 without authentication. All 23 old Admin and 18 old receiver
+revision tags were removed from public routing to prevent stale tagged
+revisions from bypassing the writer fence. The old revisions were retained,
+not deleted. The new `menu-cutover-1116` revision tags remain the only tagged
+routes, and both legacy tag URLs checked after the switch returned 404.
+Production Firestore rules from the candidate compiled and deployed
+successfully. No index deployment was needed: all three required
+Customer-service request composites were already READY.
+
+After that fence, read-only preparation reproduced the exact fingerprints
+above. Migration `customer-ownership-CUST-0001-20261116` copied and verified
+4,246 target rows; migration `customer-ownership-CUST-0002-20261116` copied
+and verified 91 target rows. Both Customers are now in `operational_storage`
+state `customer` with authorization schema 3. CUST-0001 has exactly the
+registered cart and restaurant menus. Its cart remains associated with
+asset `COURSE-0001`; `COURSE-0004` retains its cart asset without a public
+menu.
+CUST-0002 has no menu or public route. The migration verification confirmed
+source values, nested identities and histories, access conversions and
+integrity fingerprints.
+
+The existing canonical `importRestaurantMenu` importer published
+`restaurant-CUST-0001`, using the approved JSON package SHA-256
+`d525ce1c061f974bb68196dc554db4471f3182437a61b0b90f0b114a62f76bd1` and
+approved source-document SHA-256
+`da2583425ae805a9a5bb7b0100c29f699d9d4d15fa22ebaccc9986b9df464ed0`.
+The verified global Admin actor is recorded on the imported catalog; revision
+1 contains all five categories and 24 products. No restaurant menu grant was
+created.
+
+Serving release identities:
+
+| Surface | Production identity | Verified result |
+|---|---|---|
+| Receiver | `fairway-button-receiver-menu-cutover-1116`, image `sha256:447bf62ea87e7c227c10c8c0c629730b47a3e882437ff07aa68943ea2855124c` | READY; 100% traffic; original receiver runtime identity preserved |
+| Admin API | `fairway-admin-menu-cutover-1116`, image `sha256:0f8b04b69fa6568bf44de982688111f431ece137511561975133924e7d0a6d0c` | READY; 100% traffic; original Admin runtime identity preserved |
+| Firebase Hosting | `savvy-kit-496703-r5`, version `670d4ac3cc383263`, release `1794876716835000` | Released 2026-11-17 00:51:56Z (2026-11-16 16:51:56 PST); 128 files |
+
+Post-deployment public API checks returned HTTP 200 for `monarch-bay`,
+`monarchbay_tony_lema_course` and `cust-0001_restaurant_menu`. Both cart aliases
+resolve to `cart-COURSE-0001` and return 82 currently On Cart products at
+inventory revision 1576; Firestore independently reports 82 unarchived
+`on_cart` products from 139 inventory products. The existing public cart URL
+was loaded in a browser and displayed the current Monarch Bay inventory. The
+restaurant URL displayed THE LANDING, all five approved categories and all
+24 products. Both Customer menu QR records exist. Access records preserve
+three cart-menu grants and the established service grants; restaurant grants
+remain disabled. CUST-0002 still has zero menus.
+
+The READY production backup and recovery schedule were unchanged. No Firebase Auth or device identities, firmware, unrelated
+services or notifier configuration were changed. No synthetic operational
+request, stock adjustment/sale or device traffic was generated. User-facing
+authenticated operational writes were not used as smoke tests; local
+Customer-mode authorization/operation suites and exact production copy
+verification cover those paths without adding production activity. Legacy code
+rollback is not safe after this data cutover; recover forward using
+Customer-compatible revisions and the verified recovery procedure.
 
 #### Local correction verification
 
@@ -2008,8 +2080,10 @@ a production release.
   components; current backend regressions verify their Customer storage
   contract. No cart algorithm, polling or product-behavior redesign occurred.
 - Editor diagnostics and Git whitespace checks pass. Logs and emulator data
-  remain local, outside tracked source. No production migration, deployment,
-  account/permission mutation, device operation, commit, push or merge occurred.
+  remain local, outside tracked source. At this local-validation checkpoint no
+  production migration, deployment, account/permission mutation, device
+  operation, commit, push or merge had occurred; the later production outcome
+  is recorded in “Production cutover completed” above.
 
 ### Published menu increment verification (2026-11-15, historical source review)
 

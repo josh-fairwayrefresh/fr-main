@@ -131,11 +131,11 @@ bypass a registered menu's missing grant or archived state.
 The [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
 defines the approved product behavior. Implementation and local verification
 do not establish deployment authorization by themselves. The CPO has now
-authorized the coordinated production promotion and associated Git
-publication. The
-[deployment owner](DEPLOYMENT_GUIDE.md#production-change-safety) retains the
-verified-backup and production-change gates. Existing production behavior
-remains in force until a separately authorized, verified cutover.
+authorized the coordinated production promotion, which completed on
+2026-11-16; execution evidence is in the
+[Deployment Guide](DEPLOYMENT_GUIDE.md#production-cutover-completed--2026-11-16).
+The [deployment owner](DEPLOYMENT_GUIDE.md#production-change-safety) retains
+the verified-backup and production-change gates for future changes.
 
 - Firmware, backend, web applications, build configuration, and canonical documents are in the `nfed` repository. The official Nordic SDK and matching toolchain are installed separately; build and deployment procedures are owned by `docs/DEPLOYMENT_GUIDE.md`.
 - Device provisioning, registry lifecycle, and authentication requirements are owned by `docs/DEVICE_PROVISIONING_GUIDE.md`.

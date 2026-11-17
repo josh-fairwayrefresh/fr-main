@@ -1132,8 +1132,11 @@ verification performed.
 
 **CPO/Architect decision, 2026-11-15.** Customer owns menus, inventory, user
 entitlements and service assets. Course is location/operation context only.
-The CPO subsequently authorized the coordinated production promotion; this
-specification defines behavior, not evidence that promotion has completed.
+The CPO authorized the coordinated production promotion, completed on
+2026-11-16 as recorded in the
+[Deployment Guide](DEPLOYMENT_GUIDE.md#production-cutover-completed--2026-11-16).
+This specification defines behavior, while the deployment record is the
+evidence of execution.
 This supersedes earlier Course-owned inventory and Course-dependent
 permission descriptions; those describe the prior implementation and retained
 production evidence.
