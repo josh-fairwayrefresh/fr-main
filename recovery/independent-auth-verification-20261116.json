@@ -1,0 +1,14 @@
+{
+  "status": "import_attributes_and_access_verified",
+  "loginVerified": false,
+  "recoveryProject": "fairway-refresh-recovery",
+  "recoveryDatabase": "recovery-import-20261116",
+  "sourceExport": "auth/2026-11-16/39f9e09b-3af6-4e36-bfd1-b3c2d47e0941",
+  "usersVerified": 6,
+  "uidAccessRelationshipsVerified": 6,
+  "passwordHashAndSaltBytesVerified": true,
+  "existingAccessWithoutAuthIdentity": 1,
+  "signInEnabled": false,
+  "productionWrites": 0,
+  "verifiedAt": "2026-11-16T20:07:05.643Z"
+}

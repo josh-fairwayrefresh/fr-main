@@ -1,0 +1,81 @@
+{
+  "source_documents_at_comparison_time": 4485,
+  "restored_documents": 4485,
+  "verified_unchanged_snapshot_documents": 4485,
+  "verified_by_collection_path": {
+    "customers": 2,
+    "customers/courses": 4,
+    "customers/courses/inventory": 2,
+    "customers/courses/inventory_audits": 28,
+    "customers/courses/inventory_categories": 13,
+    "customers/courses/inventory_categories/subcategories": 41,
+    "customers/courses/inventory_events": 1600,
+    "customers/courses/inventory_operations": 1560,
+    "customers/courses/inventory_product_keys": 140,
+    "customers/courses/inventory_products": 140,
+    "customers/courses/inventory_sessions": 44,
+    "customers/courses/inventory_shift_closures": 16,
+    "customers/courses/inventory_shifts": 51,
+    "customers/courses/on_premise_service_events": 6,
+    "customers/courses/published_menus": 4,
+    "customers/courses/sales_days": 16,
+    "customers/courses/service_days": 1,
+    "customers/courses/service_events": 169,
+    "customers/courses/weather_days": 30,
+    "customers/inventory_operations": 8,
+    "customers/staff": 8,
+    "qr_bays": 52,
+    "qr_bays/submissions": 12,
+    "requests": 437,
+    "requests/reporting_state_history": 94,
+    "user_access": 7
+  },
+  "unverifiable_changed_or_deleted": {},
+  "mismatches": {},
+  "oldest_verified_creation_time": "2026-09-18T23:50:48.679168Z",
+  "newest_verified_creation_time": "2026-11-15T23:41:47.795012Z",
+  "source_database": "(default)",
+  "recovery_database": "recovery-verify-20261116",
+  "backup_snapshot_time": "2026-11-16T16:41:13.672381Z",
+  "source_comparison_time": "2026-11-16T16:42:00Z",
+  "scope": [
+    "customers",
+    "requests",
+    "user_access",
+    "qr_bays"
+  ],
+  "excluded_collection_ids": [
+    "commands",
+    "course_push_subscriptions",
+    "device_credential_rotation_locks",
+    "device_credential_rotation_secrets",
+    "device_credential_rotations",
+    "devices",
+    "notification_dispatches"
+  ],
+  "production_writes": 0,
+  "recovery_writes": 0,
+  "managed_restore": {
+    "start_time": "2026-11-16T18:15:08.720355Z",
+    "end_time": "2026-11-16T18:29:14.791620Z",
+    "elapsed_seconds": 846.071265,
+    "operation_state": "SUCCESSFUL",
+    "backup_id": "243d89d7-e6ad-4229-82d9-bd9a69994ea4",
+    "operation_suffix": "qYg9TqP-tJHbTnCVfpRxLRAqNW1hbgQiChAaGg"
+  },
+  "post_verification": {
+    "anonymous_valid_document_http": 403,
+    "anonymous_query_http": 403,
+    "authenticated_firebase_client_probe": "not_performed",
+    "production_database_uid_unchanged": true,
+    "native_schedule_and_pitr_unchanged": true,
+    "eventarc_database_filter": "(default)",
+    "serving_revisions": {
+      "fairway-admin": "fairway-admin-nogate-1115-1222",
+      "fairway-button-receiver": "fairway-button-receiver-nogate-1115-1222",
+      "fairway-request-notifier": "fairway-request-notifier-00009-seg"
+    },
+    "serving_traffic_percent": 100,
+    "backup_or_database_deletions": 0
+  }
+}

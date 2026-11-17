@@ -8,6 +8,22 @@ them by assumption.
 
 ## Current State
 
+Production Firestore now has native daily backups with 30-day retention and
+seven-day PITR enabled (2026-11-16). The
+[Recovery Guide](RECOVERY_GUIDE.md#firestore-database-and-historical-records)
+contains the verified configuration and isolated-restore procedure. The first
+backup was restored successfully in isolation in 14m 6s, with 4,485 scoped
+records matching across 26 historical/nested collection paths.
+The [Digital Recovery Readiness increment](RECOVERY_GUIDE.md#digital-recovery-readiness-implementation)
+now operates daily independent Firestore/Auth exports in the restricted recovery
+project, with 30-day retention and native failure incidents. Independent restore
+matched 4,486 scoped records; six recovered Auth identities retained UID/access
+relationships and password material; all 11 accepted OTA packages recovered from
+independent storage with exact hashes/signatures. The guide distinguishes these
+results from untested login/failover and full application reconstruction.
+This verified recovery point satisfied the recovery gate for the Customer
+ownership cutover completed on 2026-11-16.
+
 The CPO/Architect approved the
 [Customer-only asset ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15).
 Courses are contextual attributes, not owners of inventory, menus, users or
@@ -258,8 +274,14 @@ detailed evidence retained only on its historical branch. No rerun is implied.
   and commissioning lifecycle.
 - `docs/UX_SPECIFICATION.md` — current externally observable golfer and
   operator behavior.
-- `docs/DEPLOYMENT_GUIDE.md` — deployment configuration, production alignment,
+- `docs/DEPLOYMENT_GUIDE.md` — deployment configuration, production change
+  safety, release verification, deployment rollback, production alignment,
   and retained release/deployment audit records.
+- `docs/RECOVERY_GUIDE.md` — operational recovery for digital systems:
+  incident-path selection, data/identity/service restoration, capability
+  evidence and gaps, and end-to-end restoration verification. Subsystem
+  implementation/configuration and deployment rollback remain with their
+  respective owners.
 - `docs/feature_backlog.md` — open, deferred engineering work only.
 - `docs/archive.md` — superseded milestones, abandoned work, and lessons;
   historical and non-authoritative.

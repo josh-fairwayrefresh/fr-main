@@ -1,0 +1,16 @@
+{
+  "name": "fairway-recovery-exports",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Preparatory managed recovery jobs; no deployment or recovery acceptance implied",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "start": "node cli.cjs"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.0.0",
+    "@google-cloud/storage": "^8.4.0",
+    "firebase-admin": "^13.0.0"
+  }
+}

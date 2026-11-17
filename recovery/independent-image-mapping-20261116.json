@@ -1,0 +1,5 @@
+{
+  "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-admin@sha256:fb4cd12954b27c7a1befd8a7a394b24b5e2d9fd0e184407f1c92b240ea689ddd": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/fairway-admin@sha256:fb4cd12954b27c7a1befd8a7a394b24b5e2d9fd0e184407f1c92b240ea689ddd",
+  "us-central1-docker.pkg.dev/savvy-kit-496703-r5/cloud-run-source-deploy/fairway-button-receiver@sha256:0367d5e992d37c649bf7863199477f4d9be5dd8306907e27f6b0b2c2d53bac2c": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/fairway-button-receiver@sha256:0367d5e992d37c649bf7863199477f4d9be5dd8306907e27f6b0b2c2d53bac2c",
+  "us-central1-docker.pkg.dev/savvy-kit-496703-r5/gcf-artifacts/savvy--kit--496703--r5__us--central1__fairway--request--notifier@sha256:b7538283dcd23891f7af8af9b2f7d10b4f7af90390e31a06b1e22f6541c00b45": "us-central1-docker.pkg.dev/fairway-refresh-recovery/recovery/fairway-request-notifier@sha256:b7538283dcd23891f7af8af9b2f7d10b4f7af90390e31a06b1e22f6541c00b45"
+}
