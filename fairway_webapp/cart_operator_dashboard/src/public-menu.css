@@ -1,4 +1,4 @@
-.public-menu-app {
+.public-menu-app, .bay-page {
   --pm-green: #174d3b;
   --pm-green-deep: #123b2d;
   --pm-gold: #b58a35;
@@ -6,6 +6,9 @@
   --pm-ink: #26372e;
   --pm-muted: #6d786f;
   --pm-line: #ded8ca;
+}
+
+.public-menu-app {
   min-height: 100vh;
   color-scheme: light;
   color: var(--pm-ink);
@@ -14,12 +17,20 @@
   padding: 0 18px 24px;
 }
 
-.public-menu-app *, .public-menu-app *::before, .public-menu-app *::after { box-sizing: border-box; }
+.public-menu-app *, .public-menu-app *::before, .public-menu-app *::after,
+.bay-page *, .bay-page *::before, .bay-page *::after { box-sizing: border-box; }
 .public-menu-app button { font: inherit; }
 .pm-gold-rule { height: 6px; margin: 0 -18px 18px; background: var(--pm-gold); }
 .pm-header { max-width: 760px; margin: 0 auto; }
 .pm-brand-lockup { min-height: 94px; display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr); align-items: center; gap: 12px; border-bottom: 1px solid #d9cfb6; }
 .pm-brand-lockup img { width: 100%; height: 82px; object-fit: contain; }
+.pm-fr-stack { min-width: 0; display: grid; justify-items: center; gap: 3px; }
+.pm-fr-stack .pm-fairway-logo { width: auto; max-width: 100%; height: 62px; }
+.pm-tagline { color: #3d3d3d; font-size: 8.5px; font-style: italic; font-weight: 600; letter-spacing: .15px; line-height: 1.2; white-space: nowrap; }
+.pm-tagline b { color: #1e5a37; font-weight: 600; }
+.pm-pay { margin: 14px 0 2px; padding: 10px 12px; border: 1px solid #d9cfb6; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; background: #efe8d6; color: var(--pm-green-deep); font-size: 13px; font-weight: 800; letter-spacing: 1.4px; }
+.pm-pay-icon { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; background: #c8ad68; color: #fff; }
+.pm-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .pm-customer-name { min-width: 0; display: grid; place-items: center; overflow-wrap: anywhere; color: var(--pm-green-deep); font: 700 19px/1.15 Georgia, serif; text-align: center; }
 .pm-at { min-height: 44px; display: grid; place-items: center; border-inline: 1px solid var(--pm-gold); color: #987329; font: 700 11px Georgia, serif; }
 .pm-heading { padding: 18px 2px 13px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 5px 12px; }
@@ -29,6 +40,7 @@
 .pm-section-label { max-width: 760px; margin: 18px auto 10px; color: #987329; font-size: 10px; font-weight: 800; letter-spacing: 1px; }
 .pm-category-grid { max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px; }
 .pm-category-section { min-width: 0; }
+.pm-category-section:has(> .pm-category-card.expanded) { grid-column: 1 / -1; }
 .pm-category-card { width: 100%; min-height: 62px; padding: 8px 10px; border: 1px solid transparent; border-radius: 7px; display: grid; grid-template-columns: 30px minmax(0, 1fr) 18px; align-items: center; gap: 9px; background: #e9e3d5; color: var(--pm-ink); text-align: left; cursor: pointer; }
 .pm-category-card:hover { border-color: #cbb985; }
 .pm-category-card > svg { transition: transform .18s ease; }

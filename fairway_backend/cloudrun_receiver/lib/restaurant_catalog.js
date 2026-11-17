@@ -107,7 +107,7 @@ async function publicMenu(db, slugValue) {
     const alias = await tx.get(db.collection('public_menu_slugs').doc(slug));
     if (alias.exists && alias.data().menu_id === undefined && typeof alias.data().course_id === 'string') {
       if (storage.mode() !== 'legacy') fail(409, 'menu_registration_required', 'Register the legacy menu before Customer cutover');
-      return inventory.getPublicMenu(db, slug);
+      return { ...await inventory.getPublicMenu(db, slug), type: 'cart' };
     }
     if (!alias.exists || typeof alias.data().customer_id !== 'string' || typeof alias.data().menu_id !== 'string') {
       fail(404, 'menu_not_found', 'Menu not found');
@@ -143,7 +143,7 @@ async function publicMenu(db, slugValue) {
       : catalogProducts.filter((product) => product.archived !== true && product.state === 'on_menu')
         .sort(order).map(inventory.publicProduct);
     return {
-      menu_id: menuDoc.id, customer_id: customerId, customer_name: customer.data().customer_name || customerId,
+      menu_id: menuDoc.id, type: menu.type, customer_id: customerId, customer_name: customer.data().customer_name || customerId,
       name: menu.name, title: menu.title || menu.name, subtitle: menu.subtitle || null, footer: menu.footer || null,
       timezone: menu.timezone || ownerSnap.data().timezone || null,
       updated_at: state.data()?.updated_at || menu.updated_at || null,

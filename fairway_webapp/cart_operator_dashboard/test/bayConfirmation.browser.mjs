@@ -39,8 +39,36 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
     await page.route('**/mock-api/api/v1/public/bays/test-bay-id', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ bay_number: 9, bay_side: 'B', course_name: 'TEST Driving Range', available: true }),
+      body: JSON.stringify({
+        bay_number: 9, bay_side: 'B', course_name: 'TEST Driving Range', available: true,
+        restaurant_menu_slug: 'test_restaurant_menu',
+      }),
     }));
+    let menuRequests = 0;
+    await page.route('**/mock-api/api/v1/public/menus/test_restaurant_menu', (route) => {
+      menuRequests += 1;
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({
+          type: 'restaurant', name: 'restaurant_menu', title: 'TEST RESTAURANT', customer_name: 'TEST Customer',
+          categories: [{ name: 'Starters', sort_order: 0 }, { name: 'Burgers', sort_order: 1 }],
+          products: [
+            { product_id: 'one', name: 'Fries', category: 'Starters', state: 'on_menu', price: { amount_minor: 800, currency_code: 'USD' } },
+            { product_id: 'two', name: 'Cheeseburger', category: 'Burgers', state: 'on_menu' },
+          ],
+        }),
+      });
+    });
+    const menuVisible = async () => {
+      await page.getByRole('heading', { name: /Restaurant Menu\s*Order from Server only/ }).waitFor();
+      assert.equal(await page.getByText('BROWSE BY CATEGORY', { exact: true }).count(), 1);
+      assert.equal(await page.locator('.pm-category-card').count(), 2);
+      assert.equal(await page.getByText('TEST RESTAURANT').count(), 0, 'Embedded menu omits the menu heading');
+      await page.locator('.pm-category-card', { hasText: 'Starters' }).tap();
+      await page.getByText('Fries', { exact: true }).waitFor();
+      await page.locator('.pm-category-card', { hasText: 'Starters' }).tap();
+      assert.equal(await page.getByText('Fries', { exact: true }).count(), 0);
+    };
     await page.route('**/mock-api/api/v1/public/bays/test-bay-id/requests', async (route) => {
       const request = route.request();
       submissions.push(request.postDataJSON());
@@ -56,7 +84,10 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
     await page.goto(`${origin}/__bay-confirmation`);
     await page.getByRole('heading', { name: 'Bay 9B', exact: true }).waitFor();
-    await page.getByRole('heading', { name: 'Would you like a server to come and take your order?', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Would you like a server from the restaurant to come and take your order?', exact: true }).waitFor();
+    await page.getByText('At the TEST Driving Range', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Bar and Restaurant service', { exact: true }).count(), 1);
+    await menuVisible();
     let confirmationNavigations = 0;
     page.on('framenavigated', (frame) => {
       if (frame === page.mainFrame()) confirmationNavigations += 1;
@@ -70,6 +101,7 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
       ['No service request was sent.', 'You can close this browser tab.'],
     );
     assert.equal(submissions.length, 0, 'No must not submit a request');
+    await menuVisible();
     assert.equal(await page.getByRole('button', { name: 'Close Window', exact: true }).count(), 0);
     for (const width of [375, 430]) {
       await page.setViewportSize({ width, height: 900 });
@@ -106,6 +138,8 @@ test('QR Yes and No end on persistent confirmations with tab-close instructions'
       ['Thank you!', 'A server will visit your bay shortly.', 'You can close this browser tab.'],
     );
     assert.equal(createdRequests, 1, 'Only the successful response represents a created request');
+    await menuVisible();
+    assert.equal(menuRequests, 2, 'The menu loads once per page open, never on interaction or polling');
     assert.equal(submissions.length, 2);
     assert.equal(submissions[0].operation_id, submissions[1].operation_id, 'Retry must preserve the original submission identity');
     assert.equal(await page.getByRole('button', { name: 'Close Window', exact: true }).count(), 0);

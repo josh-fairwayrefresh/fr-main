@@ -207,15 +207,23 @@ validation are recorded in the
   `qr_bays` remains the identity owner, with numeric `bay_number` and explicit
   `bay_side: A | B`. The
   anonymous mobile page uses the existing public bay availability response.
-  When service is suspended, it displays only
-  **"Sorry, we are outside of service hours. You may close this window."**
-  and exposes no request or other service action. Missing or invalid
-  availability fails closed without showing the active request flow. When
-  service is active, the page identifies the Course and bay and asks:
-  **"Would you like a server to come and take your order?"**
-  The complete page uses a white background and dark readable text, including
-  the surrounding viewport and loading, confirmation and error states,
-  regardless of the phone's light/dark appearance setting.
+  Bay restaurant menu refinement (CPO-approved 2026-11-17; released
+  2026-11-17, see the
+  [release record](DEPLOYMENT_GUIDE.md#bay-restaurant-menu-and-cart-menu-header--production-release-2026-11-17)): every state uses the shared
+  public-menu cream palette (`#f6f2e8` page, dark green text), including the
+  surrounding viewport, regardless of the phone's light/dark setting. A
+  compact banner at the top reads **"Bar and Restaurant service"** above
+  **"At the {Course name}"** (same font, taken from the Driving Range Course
+  display name in Admin) beside **"powered by"** and the horizontal Fairway
+  Refresh logo. The Customer logo does not appear on this page.
+  When service is suspended, the page shows only the banner, the message
+  **"Sorry, we are outside of service hours."** and, at the bottom of the
+  screen, **"You may close this window."** It exposes no request, menu or
+  other service action. Missing or invalid availability fails closed without
+  showing the active request flow. When service is active, a card below the
+  banner asks **"Would you like a server from the restaurant to come and take
+  your order?"** (about the size of the bay name), then the bay name, then the
+  unchanged Yes/No buttons.
   No creates nothing and ends at **"No service request was sent."** followed by
   the ordinary text **"You can close this browser tab."** Yes confirms only
   server-acknowledged acceptance; after successful creation, the page displays
@@ -225,6 +233,15 @@ validation are recorded in the
   Confirmations remain visible until the golfer closes or navigates away from
   the tab; the page does not attempt script-initiated closure or automatically
   reload, redirect, or navigate away.
+  Below the request card, a full-width bar **"Restaurant Menu | Order from
+  Server only"** introduces the Customer's restaurant menu, rendered with the
+  shared public-menu **BROWSE BY CATEGORY** grid (no menu, Course or Customer
+  heading). The menu appears only when service is active and the bay's
+  Customer has exactly one active restaurant menu in the Customer Menu
+  Register; otherwise the bar and menu are hidden. The menu stays visible
+  before the decision, while submitting/retrying, and after Yes or No until
+  the tab closes. It is fetched once per page open and a menu failure never
+  affects the request flow. The menu is view-only.
   No golfer login, order entry or payment is required.
 - One outstanding request exists per bay side until Complete or Cancel;
   A and B can request independently. Public pages, new request snapshots,
@@ -243,7 +260,8 @@ validation are recorded in the
   closed History; newer closed work cannot hide old active work behind a cap.
   Restaurant requests and service time do not enter Cart performance metrics.
 - Public responses contain only bay number/side, Course display name, availability,
-  or a minimal acceptance acknowledgement. Private requests, account access,
+  the active Customer restaurant menu slug (only while available), or a
+  minimal acceptance acknowledgement. Private requests, account access,
   staff, endpoints and operation receipts are not public.
 - Signs use 26 US Letter portrait pages, one numbered bay per page with
   two codes: A on the left and B on the right, white
@@ -1203,7 +1221,10 @@ production evidence.
   template update takes effect across menus through normal deployment.
 - Every public menu header reads **Fairway Refresh logo / AT / Customer logo**
   in one centered row, for cart and restaurant menus alike. The Fairway
-  Refresh horizontal logo is part of the template. Branding, including the
+  Refresh logo is part of the template: cart menus use the stacked logo with
+  the brand tagline **"Push Button. Stay Refreshed."** beneath it
+  (CPO-approved 2026-11-17); restaurant menus keep the horizontal logo and
+  their existing header unchanged. Branding, including the
   logo, is owned by the Customer and inherited automatically by every menu of
   that Customer; menus never own, assign or override a logo. When the Customer
   has no logo, or it cannot load, the same slot shows the Customer name; the
@@ -1214,8 +1235,15 @@ production evidence.
   the next menu open. Menu responses reference only the current logo; a
   previously published logo URL keeps serving its original bytes, and only
   under its own Customer.
-  Categories initially collapse; saved content is read on open/reload, without
-  polling or a separate Publish step. Ordering and checkout remain excluded.
+  Cart menus replace the Customer name, menu title and LAST UPDATED lines with
+  a **"PAY AT THE CART ONLY"** strip (payment-card icon) above **BROWSE BY
+  CATEGORY**; the menu name remains as an accessible, visually hidden page
+  heading. Restaurant menus keep their existing title block.
+  Categories initially collapse in a two-column grid; an opened category spans
+  the full width and the grid returns to two columns when it closes. The same
+  category grid is embedded in the Driving Range bay page. Saved content is
+  read on open/reload, without polling or a separate Publish step. Ordering
+  and checkout remain excluded.
 - The restaurant source is the CPO-supplied `Restaurant menu.docx`. The CPO
   approved its complete corrected transcription: 24 priced items in five
   ordered categories, the restaurant heading, burger-cooking note, Poutine

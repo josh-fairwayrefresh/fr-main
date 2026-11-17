@@ -57,6 +57,7 @@ test('menu ownership, explicit grants, public aliases, restaurant isolation and 
     name: 'Bad', category_id: categoryId, quantity: 3,
   }, 'worker')).statusCode, 400);
   response = await request('GET', '/api/v1/public/menus/restaurant');
+  assert.equal(response.body.type, 'restaurant');
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.products[0].name, 'Lunch');
   assert.equal(response.body.products[0].price.amount_minor, 1200);
@@ -124,6 +125,7 @@ test('administrative registration preserves all existing cart records and perman
   assert.equal(inventory.body.products[0].stock_revision, 12);
   assert.deepEqual([...db._docs].filter(([path]) => path.startsWith(course.path)), before);
   const publicMenu = await request('GET', '/api/v1/public/menus/monarch-bay');
+  assert.equal(publicMenu.body.type, 'cart', 'the shared template distinguishes cart menus by registered type');
   assert.equal(publicMenu.body.products[0].name, 'Water');
   assert.equal(Object.hasOwn(publicMenu.body.products[0], 'quantity'), false);
   assert.equal((await customer.collection('menu_qr_codes').doc(menuId).get()).data().menu_id, menuId);

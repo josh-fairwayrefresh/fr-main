@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium } from 'playwright-core';
 
-test('QR bay page stays white and usable across appearance settings, viewport sizes and states', {
+const CREAM = 'rgb(246, 242, 232)';
+
+test('QR bay page stays on the menu cream palette and usable across appearance settings, viewport sizes and states', {
   timeout: 60000,
   skip: process.env.FAIRWAY_QR_FIXTURE ? false : 'requires the private synthetic sandbox fixture',
 }, async () => {
@@ -26,7 +28,7 @@ test('QR bay page stays white and usable across appearance settings, viewport si
         });
         await page.goto(`https://${fixture.projectId}.web.app/range/${fixture.bays[0].id}`, { waitUntil: 'domcontentloaded' });
         await page.getByText('Loading bay…', { exact: true }).waitFor();
-        assert.equal(await page.locator('html').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
+        assert.equal(await page.locator('html').evaluate((element) => getComputedStyle(element).backgroundColor), CREAM);
         releaseModule();
         await page.getByRole('heading', { name: 'Bay 1A', exact: true }).waitFor();
         for (const width of [375, 430, 768, 1024]) {
@@ -38,13 +40,13 @@ test('QR bay page stays white and usable across appearance settings, viewport si
             scheme: getComputedStyle(document.documentElement).colorScheme,
             overflow: document.documentElement.scrollWidth > innerWidth,
           })), {
-            root: 'rgb(255, 255, 255)', body: 'rgb(255, 255, 255)', main: 'rgb(255, 255, 255)',
+            root: CREAM, body: CREAM, main: CREAM,
             scheme: 'light', overflow: false,
           });
         }
         await page.getByRole('button', { name: 'No', exact: true }).tap();
         await page.getByRole('heading', { name: 'No service request was sent.', exact: true }).waitFor();
-        await page.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
+        await page.getByText('You can close this browser tab.', { exact: true }).waitFor();
         // Stub submissions so appearance checks cannot create server records.
         await page.route('**/api/v1/public/bays/*/requests', (route) => route.fulfill({
           status: 200, contentType: 'application/json', body: '{"status":"accepted"}',
@@ -52,11 +54,11 @@ test('QR bay page stays white and usable across appearance settings, viewport si
         await page.reload();
         await page.getByRole('button', { name: 'Yes', exact: true }).tap();
         await page.getByRole('heading', { name: 'Thank you!', exact: true }).waitFor();
-        await page.getByRole('button', { name: 'Close Window', exact: true }).waitFor();
-        assert.equal(await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
+        await page.getByText('You can close this browser tab.', { exact: true }).waitFor();
+        assert.equal(await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor), CREAM);
         await page.unroute('**/api/v1/public/bays/*/requests');
         for (const response of [
-          { status: 200, body: { bay_number: 1, course_name: 'TEST Driving Range', available: false }, text: 'Server requests are currently unavailable.' },
+          { status: 200, body: { bay_number: 1, course_name: 'TEST Driving Range', available: false }, text: 'Sorry, we are outside of service hours.' },
           { status: 404, body: { error: 'Bay unavailable for appearance check.' }, text: 'Bay unavailable for appearance check.' },
         ]) {
           await page.route('**/api/v1/public/bays/*', (route) => route.fulfill({
@@ -64,7 +66,7 @@ test('QR bay page stays white and usable across appearance settings, viewport si
           }));
           await page.reload();
           await page.getByText(response.text, { exact: true }).waitFor();
-          assert.equal(await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
+          assert.equal(await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor), CREAM);
           await page.unroute('**/api/v1/public/bays/*');
         }
       } finally { await context.close(); }

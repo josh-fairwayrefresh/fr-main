@@ -65,6 +65,26 @@ test('public bay allowlist exposes identity and availability only', async () => 
   await assert.rejects(publicBay(db, '../private'), { status: 404 });
 });
 
+test('public bay links exactly one active Customer restaurant menu, never cart, archived or ambiguous menus', async () => {
+  const db = await fixture();
+  const menus = db.collection('customers').doc('customer').collection('menus');
+  await menus.doc('cart').set({ type: 'cart', state: 'active', slug: 'customer_cart_menu' });
+  await menus.doc('old').set({ type: 'restaurant', state: 'archived', slug: 'customer_old_menu' });
+  assert.equal(Object.hasOwn(await publicBay(db, id), 'restaurant_menu_slug'), false);
+  await menus.doc('restaurant').set({ type: 'restaurant', state: 'active', slug: 'customer_restaurant_menu' });
+  assert.equal((await publicBay(db, id)).restaurant_menu_slug, 'customer_restaurant_menu');
+  await db.collection('customers').doc('other').collection('menus').doc('foreign')
+    .set({ type: 'restaurant', state: 'active', slug: 'other_restaurant_menu' });
+  assert.equal((await publicBay(db, id)).restaurant_menu_slug, 'customer_restaurant_menu', 'Customer isolated');
+  await db.doc(coursePath).update({ service_suspension: { suspended_at: new Date() } });
+  assert.deepEqual(await publicBay(db, id), {
+    bay_number: 1, course_name: 'Independent QR Course', available: false,
+  }, 'outside service hours exposes no menu link');
+  await db.doc(coursePath).update({ service_suspension: null });
+  await menus.doc('second').set({ type: 'restaurant', state: 'active', slug: 'customer_bistro_menu' });
+  assert.equal(Object.hasOwn(await publicBay(db, id), 'restaurant_menu_slug'), false, 'ambiguous menus stay hidden');
+});
+
 test('A/B requests have independent claims, labels and completion; legacy requests keep their snapshots', async () => {
   const db = await fixture();
   await acceptQrRequest(db, id, randomUUID(), network);

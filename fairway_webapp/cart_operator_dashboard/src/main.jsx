@@ -945,7 +945,7 @@ function App() {
   if (entry === 'public_bay') {
     const match = window.location.pathname.match(/^\/range\/([A-Za-z0-9_-]+)\/?$/);
     return <Suspense fallback={<EntryStatus title="Server request" message="Loading bay…" />}>
-      <BayRequestApp apiBaseUrl={API_BASE_URL} bayId={match?.[1] || ''} sandbox={fairwayEnvironment === 'sandbox'} />
+      <BayRequestApp apiBaseUrl={API_BASE_URL} menuApiBaseUrl={adminApiBaseUrl} bayId={match?.[1] || ''} sandbox={fairwayEnvironment === 'sandbox'} />
     </Suspense>;
   }
 

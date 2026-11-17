@@ -4,9 +4,10 @@ import { createServer } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
-const SUSPENDED_MESSAGE = 'Sorry, we are outside of service hours. You may close this window.';
+const SUSPENDED_MESSAGE = 'Sorry, we are outside of service hours.';
+const CLOSE_MESSAGE = 'You may close this window.';
 
-test('suspended QR page is message-only; active and indeterminate states are safe', {
+test('suspended QR page shows only the banner and messages; active and indeterminate states are safe', {
   timeout: 90000,
 }, async () => {
   const server = await createServer({
@@ -34,6 +35,11 @@ test('suspended QR page is message-only; active and indeterminate states are saf
       const page = await context.newPage();
       const errors = [];
       let submissions = 0;
+      let menuRequests = 0;
+      await page.route('**/mock-api/api/v1/public/menus/**', (route) => {
+        menuRequests += 1;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{"products":[]}' });
+      });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.route('**/mock-api/api/v1/public/bays/test-bay-id', (route) => route.fulfill({
         status: 200,
@@ -50,12 +56,14 @@ test('suspended QR page is message-only; active and indeterminate states are saf
       const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
       await page.goto(`${origin}/__bay-suspension`);
       await page.getByRole('heading', {
-        name: 'Would you like a server to come and take your order?', exact: true,
+        name: 'Would you like a server from the restaurant to come and take your order?', exact: true,
       }).waitFor();
       assert.equal(await page.getByRole('heading', { name: 'Bay 9B', exact: true }).count(), 1);
       assert.equal(await page.getByRole('button', { name: 'Yes', exact: true }).count(), 1);
       assert.equal(await page.getByRole('button', { name: 'No', exact: true }).count(), 1);
       assert.equal(submissions, 0);
+      assert.equal(menuRequests, 0, 'No menu link means no menu request');
+      assert.equal(await page.getByText('BROWSE BY CATEGORY').count(), 0, 'Menu is hidden without menu assets');
 
       await page.evaluate(() => sessionStorage.setItem(
         'fairway.bay.submission.test-bay-id', 'preserved-pending-operation',
@@ -66,12 +74,18 @@ test('suspended QR page is message-only; active and indeterminate states are saf
         contentType: 'application/json',
         body: JSON.stringify({
           bay_number: 9, bay_side: 'B', course_name: 'TEST Driving Range', available: false,
+          restaurant_menu_slug: 'ignored_when_suspended',
         }),
       }));
       await page.reload();
       await page.getByRole('status').getByText(SUSPENDED_MESSAGE, { exact: true }).waitFor();
-      assert.equal(await page.locator('main').innerText(), SUSPENDED_MESSAGE);
-      assert.equal(await page.locator('main').locator('> *').count(), 1);
+      assert.deepEqual((await page.locator('main').innerText()).split('\n').map((line) => line.trim()).filter(Boolean), [
+        'BAR AND RESTAURANT SERVICE', 'AT THE TEST DRIVING RANGE', 'POWERED BY', SUSPENDED_MESSAGE, CLOSE_MESSAGE,
+      ]);
+      assert.equal(await page.locator('main').locator('> *').count(), 3);
+      assert.equal(await page.getByRole('img', { name: 'Fairway Refresh' }).count(), 1);
+      assert.equal(menuRequests, 0, 'Outside service hours shows no menu');
+      assert.equal(await page.locator('.pm-category-card').count(), 0);
       assert.equal(await page.getByRole('button').count(), 0);
       assert.equal(await page.getByRole('link').count(), 0);
       assert.equal(submissions, 0);
