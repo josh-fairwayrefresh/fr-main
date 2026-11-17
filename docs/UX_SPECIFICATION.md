@@ -1130,11 +1130,13 @@ verification performed.
 
 ## Customer Menu Register and Restaurant Menu
 
-**CPO/Architect decision, 2026-11-15; authorized local implementation, not
-production deployment.** Customer owns menus, inventory, user entitlements and
-service assets. Course is location/operation context only. This supersedes
-earlier Course-owned inventory and Course-dependent permission descriptions;
-those describe the prior implementation and retained production evidence.
+**CPO/Architect decision, 2026-11-15.** Customer owns menus, inventory, user
+entitlements and service assets. Course is location/operation context only.
+The CPO subsequently authorized the coordinated production promotion; this
+specification defines behavior, not evidence that promotion has completed.
+This supersedes earlier Course-owned inventory and Course-dependent
+permission descriptions; those describe the prior implementation and retained
+production evidence.
 
 - Each Customer owns a menu register. Names such as `cart_menu` and
   `restaurant_menu` are unique within that Customer, not globally unique
@@ -1183,6 +1185,13 @@ those describe the prior implementation and retained production evidence.
   entitlement is inferred from Customer membership. Existing cart access is
   preserved during migration; restaurant access starts disabled until an
   authorized Admin explicitly grants it.
+- A registered cart menu is not required for an authorized cart service to
+  operate. When a Customer service has an authorized cart asset but no cart
+  menu is registered, its granted operators can enter Cart Inventory directly;
+  the workspace clearly states that no public menu is registered. Do not
+  synthesize a menu identity, alias, QR record or public route. If a cart menu
+  is registered, its explicit menu grant remains required; service access does
+  not bypass a missing grant or archived menu.
 - One shared golfer-menu template file serves cart and restaurant menus and
   future Customers. Identity, branding and content are supplied as data, not
   Customer-specific template forks or hardcoded URL translations. A reviewed

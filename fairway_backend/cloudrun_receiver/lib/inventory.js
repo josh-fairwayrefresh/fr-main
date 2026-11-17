@@ -142,15 +142,21 @@ async function requireCourseAccess(db, uid, customerId, courseId) {
   }
   if (!access.admin) {
     if (access.customer_id !== customerId) fail(403, 'customer_course_access_denied', 'Access denied');
-    const activeMenus = menus.docs.filter((doc) => doc.data().state === 'active' &&
+    const registeredMenus = menus.docs.filter((doc) =>
       doc.data().type === 'cart' && doc.data().asset_id === courseId);
     if (access.schema_version === 3 || storage.mode() === 'customer') {
-      if (!activeMenus.some((menu) => access.menu_ids.includes(menu.id))) {
-        fail(403, 'customer_course_access_denied', 'Cart menu grant required');
+      if (registeredMenus.length) {
+        if (!registeredMenus.some((menu) => menu.data().state === 'active' &&
+            access.menu_ids.includes(menu.id))) {
+          fail(403, 'customer_course_access_denied', 'Cart menu grant required');
+        }
+      } else if (!access.service_ids.includes(snapshot.data().service_id)) {
+        fail(403, 'customer_course_access_denied', 'Cart service grant required');
       }
     } else {
       const courses = await resolveAuthorizedCourses(db, access);
-      if (!activeMenus.length || !courses.some((course) => course.course_id === courseId)) {
+      if (!registeredMenus.some((menu) => menu.data().state === 'active') ||
+          !courses.some((course) => course.course_id === courseId)) {
         fail(403, 'customer_course_access_denied', 'Access denied');
       }
     }
@@ -171,6 +177,36 @@ async function getInventoryBootstrap(db, uid) {
     assignments = directory.customers.flatMap((customer) => customer.menus
       .filter((menu) => menu.type === 'cart')
       .map((menu) => ({ customer_id: customer.customer_id, course_id: menu.asset_id })));
+    const customers = access.admin
+      ? (await db.collection('customers').get()).docs
+      : [await db.collection('customers').doc(access.customer_id).get()];
+    const registeredKeys = new Set(assignments.map(item => `${item.customer_id}/${item.course_id}`));
+    for (const customer of customers) {
+      if (!customer.exists) continue;
+      await storage.assertOwner(db, customer.id);
+      const [services, assets, menus] = await Promise.all([
+        customer.ref.collection('services').get(),
+        customer.ref.collection('assets').get(),
+        customer.ref.collection('menus').get(),
+      ]);
+      const cartMenuAssets = new Set(menus.docs
+        .filter(menu => menu.data().type === 'cart')
+        .map(menu => menu.data().asset_id));
+      const serviceIds = new Set(access.service_ids || []);
+      for (const service of services.docs) {
+        if (!access.admin && !serviceIds.has(service.id)) continue;
+        const serviceData = service.data();
+        const assetId = serviceData.asset_id;
+        if (typeof assetId !== 'string' || cartMenuAssets.has(assetId) ||
+            registeredKeys.has(`${customer.id}/${assetId}`)) continue;
+        const asset = assets.docs.find(doc => doc.id === assetId);
+        if (!asset || asset.data().type !== 'cart' || asset.data().service_id !== service.id) {
+          fail(409, 'migration_required', 'Customer cart service has no matching inventory asset');
+        }
+        assignments.push({ customer_id: customer.id, course_id: assetId });
+        registeredKeys.add(`${customer.id}/${assetId}`);
+      }
+    }
   } else {
     assignments = await getCustomerCourses(db, uid);
   }
@@ -184,6 +220,7 @@ async function getInventoryBootstrap(db, uid) {
     return {
       customer_id: assignment.customer_id,
       course_id: assignment.course_id,
+      ...(access.schema_version === 3 ? { asset_id: assignment.course_id } : {}),
       customer_name: customer.data()?.customer_name || data.customer_name || null,
       course_name: data.course_name || null,
       timezone: data.timezone || null,

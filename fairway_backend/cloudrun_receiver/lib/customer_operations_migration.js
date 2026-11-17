@@ -4,10 +4,15 @@ const crypto = require('crypto');
 const { courseOperation } = require('./course_operation');
 const { planCustomerAccess } = require('./customer_access_plan');
 const { normalizeAccessRecord } = require('./user_access');
+const { previewRestaurantImport } = require('./restaurant_import');
 
 const SERVICE_FIELDS = ['service_suspension', 'on_premise_service', 'service_schedule', 'service_events'];
 const SERVICE_COLLECTIONS = new Set(['service_events', 'on_premise_service_events', 'service_days']);
 const CONTEXT_COLLECTIONS = new Set(['weather_days', 'published_menus']);
+const FIRESTORE_READ_CONCURRENCY = 16;
+const LEGACY_PERMANENT_MENU_ALIASES = new Map([
+  ['CUST-0001/COURSE-0001', ['monarchbay_tony_lema_course']],
+]);
 
 function canonical(value) {
   if (value === null || typeof value !== 'object') return value;
@@ -32,19 +37,144 @@ function customerRef(db, customerId) {
   return db.collection('customers').doc(customerId);
 }
 
-async function tree(ref, targetPath, rows) {
-  const snapshot = await ref.get();
-  if (snapshot.exists) rows.push({ source: ref.path, target: targetPath, data: snapshot.data() });
-  const collections = await ref.listCollections();
-  for (const collection of collections) {
-    // listDocuments includes missing parent documents with populated descendants.
-    for (const child of await collection.listDocuments()) {
-      await tree(child, `${targetPath}/${collection.id}/${child.id}`, rows);
+function menuSlug(customerId, name) {
+  return `${customerId.toLowerCase()}_${name}`;
+}
+
+async function mapLimit(values, limit, callback) {
+  const results = new Array(values.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= values.length) return;
+      results[index] = await callback(values[index], index);
     }
+  }));
+  return results;
+}
+
+async function treeMany(roots, rows) {
+  let frontier = roots;
+  while (frontier.length) {
+    const levels = await mapLimit(frontier, FIRESTORE_READ_CONCURRENCY,
+      async ({ ref, targetPath }) => {
+        const [snapshot, collections] = await Promise.all([ref.get(), ref.listCollections()]);
+        if (snapshot.exists) rows.push({ source: ref.path, target: targetPath, data: snapshot.data() });
+        const descendants = await Promise.all(collections.map(async collection => {
+          // listDocuments includes missing parent documents with populated descendants.
+          const children = await collection.listDocuments();
+          return children.map(child => ({
+            ref: child,
+            targetPath: `${targetPath}/${collection.id}/${child.id}`,
+          }));
+        }));
+        return descendants.flat();
+      });
+    frontier = levels.flat();
   }
 }
 
-async function prepare(db, customerId) {
+async function registerLegacyCartMenu(db, customerId, parent, course, menus, rows) {
+  const matching = menus.filter(menu => menu.data().type === 'cart' &&
+    menu.data().asset_id === course.id);
+  if (matching.length > 1) throw new Error(`Multiple registered cart menus for ${course.id}`);
+  if (matching.length === 1) return matching[0].data().menu_id
+    ? matching[0].data().menu_id : matching[0].id;
+
+  const stateRef = course.ref.collection('inventory').doc('state');
+  const state = await stateRef.get();
+  const legacySlug = state.data()?.public_menu_slug;
+  if (typeof legacySlug !== 'string' || !legacySlug) return null;
+
+  const routeRef = db.collection('public_menu_slugs').doc(legacySlug);
+  const route = await routeRef.get();
+  if (!route.exists || route.data().customer_id !== customerId ||
+      route.data().course_id !== course.id || route.data().menu_id !== undefined) {
+    throw new Error(`Legacy public menu route does not match ${customerId}/${course.id}`);
+  }
+
+  const name = 'cart_menu';
+  if (menus.some(menu => menu.data().name === name)) {
+    throw new Error(`Cart menu name is already registered for ${customerId}`);
+  }
+  const menuId = `cart-${course.id}`;
+  const ref = parent.collection('menus').doc(menuId);
+  if ((await ref.get()).exists) throw new Error(`Deterministic cart menu identity already exists: ${menuId}`);
+  const canonicalSlug = menuSlug(customerId, name);
+  const aliases = [...new Set([
+    legacySlug,
+    ...(LEGACY_PERMANENT_MENU_ALIASES.get(`${customerId}/${course.id}`) || []),
+  ])].filter(value => value !== canonicalSlug);
+  const menu = {
+    name,
+    type: 'cart',
+    slug: canonicalSlug,
+    aliases,
+    state: 'active',
+    asset_id: course.id,
+    title: course.data().course_name || name,
+    timezone: course.data().timezone || null,
+  };
+  rows.push({ source: ref.path, target: ref.path, data: menu, root: true });
+  rows.push({ source: routeRef.path, target: routeRef.path,
+    data: { customer_id: customerId, menu_id: menuId }, root: true });
+  for (const slug of [canonicalSlug, ...aliases]) {
+    if (slug === legacySlug) continue;
+    const aliasRef = db.collection('public_menu_slugs').doc(slug);
+    if ((await aliasRef.get()).exists) throw new Error(`Permanent public menu URL is already reserved: ${slug}`);
+    rows.push({ source: aliasRef.path, target: aliasRef.path,
+      data: { customer_id: customerId, menu_id: menuId }, root: true });
+  }
+  const qrRef = parent.collection('menu_qr_codes').doc(menuId);
+  const qr = await qrRef.get();
+  if (qr.exists && qr.data().menu_id !== menuId) {
+    throw new Error(`Menu QR identity conflict: ${menuId}`);
+  }
+  if (!qr.exists) rows.push({ source: qrRef.path, target: qrRef.path, data: { menu_id: menuId }, root: true });
+  return menuId;
+}
+
+async function registerRestaurantMenu(db, customerId, parent, menus, rows, input) {
+  const preview = previewRestaurantImport(input);
+  if (preview.customer_id !== customerId) throw new Error('Restaurant import belongs to a different Customer');
+  const existing = menus.find(menu => menu.data().name === preview.menu_name);
+  if (existing) {
+    const data = existing.data();
+    if (data.type !== 'restaurant' || data.asset_id != null ||
+        data.slug !== menuSlug(customerId, preview.menu_name)) {
+      throw new Error('Registered restaurant menu conflicts with the approved import');
+    }
+    return { id: existing.id, data };
+  }
+
+  const menuId = `restaurant-${customerId}`;
+  const ref = parent.collection('menus').doc(menuId);
+  if ((await ref.get()).exists) throw new Error(`Deterministic restaurant menu identity already exists: ${menuId}`);
+  const slug = menuSlug(customerId, preview.menu_name);
+  const slugRef = db.collection('public_menu_slugs').doc(slug);
+  if ((await slugRef.get()).exists) throw new Error(`Restaurant menu URL is already reserved: ${slug}`);
+  const data = {
+    name: preview.menu_name,
+    type: 'restaurant',
+    slug,
+    aliases: [],
+    state: 'active',
+    asset_id: null,
+    title: preview.title,
+    subtitle: preview.subtitle,
+    footer: preview.footer,
+  };
+  rows.push({ source: ref.path, target: ref.path, data, root: true });
+  rows.push({ source: slugRef.path, target: slugRef.path,
+    data: { customer_id: customerId, menu_id: menuId }, root: true });
+  const qrRef = parent.collection('menu_qr_codes').doc(menuId);
+  if ((await qrRef.get()).exists) throw new Error(`Restaurant menu QR identity already exists: ${menuId}`);
+  rows.push({ source: qrRef.path, target: qrRef.path, data: { menu_id: menuId }, root: true });
+  return { id: menuId, data };
+}
+
+async function prepare(db, customerId, { restaurantMenu } = {}) {
   const parent = customerRef(db, customerId);
   const customer = await parent.get();
   if (!customer.exists) throw new Error('Customer not found');
@@ -56,6 +186,7 @@ async function prepare(db, customerId) {
     db.collection('user_access').where('customer_id', '==', customerId).get(),
   ]);
   const rows = [];
+  const plannedMenus = menus.docs.map(doc => ({ id: doc.id, data: () => doc.data() }));
   for (const user of users.docs) {
     const access = normalizeAccessRecord(user.data());
     if (!access || (access.schema_version === 3 &&
@@ -88,6 +219,11 @@ async function prepare(db, customerId) {
       rows.push({ source: course.ref.path, target: parent.collection('assets').doc(course.id).path,
         data: asset, root: true });
       service.asset_id = course.id;
+      const menuId = await registerLegacyCartMenu(db, customerId, parent, course, plannedMenus, rows);
+      if (menuId && !plannedMenus.some(menu => menu.id === menuId)) {
+        const menuRow = rows.find(row => row.target === parent.collection('menus').doc(menuId).path);
+        plannedMenus.push({ id: menuId, data: () => menuRow.data });
+      }
     }
     for (const collection of await course.ref.listCollections()) {
       let target;
@@ -97,16 +233,25 @@ async function prepare(db, customerId) {
         target = parent.collection('assets').doc(course.id).path;
       } else if (CONTEXT_COLLECTIONS.has(collection.id)) continue;
       else throw new Error(`Unclassified legacy collection: ${collection.path}`);
-      for (const child of await collection.listDocuments()) {
-        await tree(child, `${target}/${collection.id}/${child.id}`, rows);
-      }
+      const children = await collection.listDocuments();
+      await treeMany(children.map(child => ({
+        ref: child,
+        targetPath: `${target}/${collection.id}/${child.id}`,
+      })), rows);
+    }
+  }
+  if (restaurantMenu) {
+    const registered = await registerRestaurantMenu(
+      db, customerId, parent, plannedMenus, rows, restaurantMenu);
+    if (!plannedMenus.some(menu => menu.id === registered.id)) {
+      plannedMenus.push({ id: registered.id, data: () => registered.data });
     }
   }
   const accessPlan = planCustomerAccess({
     customerId,
     courses: courses.docs.map(doc => ({ ...doc.data(), course_id: doc.id })),
     services: courses.docs.map(doc => ({ service_id: doc.id, course_id: doc.id })),
-    menus: menus.docs.map(doc => ({ ...doc.data(), menu_id: doc.id })),
+    menus: plannedMenus.map(menu => ({ ...menu.data(), menu_id: menu.id })),
     users: users.docs.filter(doc => doc.data().schema_version === 2)
       .map(doc => ({ uid: doc.id, access: doc.data() })),
   });
@@ -128,45 +273,58 @@ async function prepare(db, customerId) {
     ...rows.flatMap(row => [row.source, row.target]), ...users.docs.map(doc => doc.ref.path),
     ...menus.docs.map(doc => doc.ref.path),
   ])].sort();
-  const sources = await Promise.all(sourcePaths.map(async path => {
+  const sources = await mapLimit(sourcePaths, FIRESTORE_READ_CONCURRENCY, async path => {
     const doc = await db.doc(path).get();
     return { path, data: doc.exists ? doc.data() : null };
-  }));
+  });
   rows.sort((a, b) => a.target.localeCompare(b.target));
   const content = { customer_id: customerId, rows, sources };
   return { ...content, fingerprint: hash(content) };
 }
 
 async function verifySources(db, plan) {
-  for (const source of plan.sources) {
+  const copiedByTarget = new Map(plan.rows.map(row => [row.target, row]));
+  const changedSources = await mapLimit(plan.sources, FIRESTORE_READ_CONCURRENCY, async source => {
     const current = await db.doc(source.path).get();
     if (hash(current.exists ? current.data() : null) !== hash(source.data)) {
-      const copied = plan.rows.find(row => row.target === source.path);
-      if (copied && current.exists && hash(current.data()) === hash(copied.data)) continue;
-      throw new Error(`Legacy source changed: ${source.path}`);
+      const copied = copiedByTarget.get(source.path);
+      return !(copied && current.exists && hash(current.data()) === hash(copied.data));
     }
-    const parent = customerRef(db, plan.customer_id);
-    for (const name of ['requests', 'devices', 'qr_bays', 'user_access']) {
-      const current = await db.collection(name).where('customer_id', '==', plan.customer_id).get();
-      if (current.docs.some(doc => !(name === 'devices' && !doc.data().course_id) &&
-          !plan.sources.some(source => source.path === doc.ref.path))) {
-        throw new Error(`New ${name} records appeared after migration planning`);
-      }
+    return false;
+  });
+  if (changedSources.some(Boolean)) throw new Error('Legacy source changed since migration planning');
+
+  const parent = customerRef(db, plan.customer_id);
+  const allowedSourcePaths = new Set(plan.sources.map(source => source.path));
+  const registerNames = ['requests', 'devices', 'qr_bays', 'user_access'];
+  const registers = await Promise.all(registerNames.map(name =>
+    db.collection(name).where('customer_id', '==', plan.customer_id).get()));
+  for (const [index, name] of registerNames.entries()) {
+    if (registers[index].docs.some(doc => !(name === 'devices' && !doc.data().course_id) &&
+        !allowedSourcePaths.has(doc.ref.path))) {
+      throw new Error(`New ${name} records appeared after migration planning`);
     }
-    const courses = await parent.collection('courses').get();
-    const roots = plan.sources.filter(row => row.path.startsWith(`${parent.path}/courses/`) &&
-      row.path.split('/').length === 4).map(row => row.path).sort();
-    if (hash(courses.docs.map(doc => doc.ref.path).sort()) !== hash(roots)) throw new Error('Legacy Course register changed');
-    for (const course of courses.docs) {
-      for (const collection of await course.ref.listCollections()) {
-        if (CONTEXT_COLLECTIONS.has(collection.id)) continue;
-        const currentRows = [];
-        for (const child of await collection.listDocuments()) await tree(child, child.path, currentRows);
-        if (currentRows.some(row => !plan.sources.some(source => source.path === row.source))) {
-          throw new Error('New legacy operational records appeared after migration planning');
-        }
-      }
+  }
+  const courses = await parent.collection('courses').get();
+  const roots = plan.sources.filter(source => source.path.startsWith(`${parent.path}/courses/`) &&
+    source.path.split('/').length === 4).map(source => source.path).sort();
+  if (hash(courses.docs.map(doc => doc.ref.path).sort()) !== hash(roots)) {
+    throw new Error('Legacy Course register changed');
+  }
+  const collectionsByCourse = await mapLimit(courses.docs, FIRESTORE_READ_CONCURRENCY,
+    async course => ({ course, collections: await course.ref.listCollections() }));
+  const nestedRoots = [];
+  for (const { course, collections } of collectionsByCourse) {
+    for (const collection of collections) {
+      if (CONTEXT_COLLECTIONS.has(collection.id)) continue;
+      const children = await collection.listDocuments();
+      nestedRoots.push(...children.map(child => ({ ref: child, targetPath: child.path })));
     }
+  }
+  const currentRows = [];
+  await treeMany(nestedRoots, currentRows);
+  if (currentRows.some(row => !allowedSourcePaths.has(row.source))) {
+    throw new Error('New legacy operational records appeared after migration planning');
   }
 }
 
@@ -258,20 +416,20 @@ async function resume(db, plan, migrationId) {
 
 async function verify(db, plan) {
   validatePlan(plan);
-  for (const row of plan.rows) {
+  await mapLimit(plan.rows, FIRESTORE_READ_CONCURRENCY, async row => {
     const current = await db.doc(row.target).get();
     if (!current.exists || hash(current.data()) !== hash(row.data)) {
       throw new Error(`Customer copy verification failed: ${row.target}`);
     }
-    for (const root of plan.rows.filter(row => row.root &&
-      (row.target.includes('/assets/') || row.target.includes('/services/')))) {
-      const currentRows = [];
-      await tree(db.doc(root.target), root.target, currentRows);
-      if (currentRows.some(row => !plan.rows.some(expected => expected.target === row.target))) {
-        throw new Error(`Unexpected competing Customer records: ${root.target}`);
-      }
+  });
+  const roots = plan.rows.filter(row => row.root &&
+    (row.target.includes('/assets/') || row.target.includes('/services/')));
+  const currentRows = [];
+  await treeMany(roots.map(root => ({ ref: db.doc(root.target), targetPath: root.target })), currentRows);
+  const expectedTargets = new Set(plan.rows.map(row => row.target));
+  if (currentRows.some(row => !expectedTargets.has(row.target))) {
+    throw new Error('Unexpected competing Customer records');
     }
-  }
   return { documents: plan.rows.length, fingerprint: plan.fingerprint };
 }
 

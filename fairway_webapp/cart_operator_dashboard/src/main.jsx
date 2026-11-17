@@ -25,6 +25,7 @@ import OperatorDesignReview from './operator-design/OperatorDesignReview';
 import { APP_MODE, modeForPath, resolveEntry, shouldRedirectFreshSignInToCartOperations } from './lib/appEntry.mjs';
 import { createCourseRequestState } from './lib/courseRequestState.mjs';
 import { inventoryRequest } from './lib/inventoryApi.mjs';
+import { normalizeInventoryBootstrap } from './lib/inventoryBootstrap.mjs';
 import { normalizeMenuBootstrap } from './lib/menuBootstrap.mjs';
 import { operatorRequest } from './lib/operator';
 import './styles.css';
@@ -626,6 +627,7 @@ function App() {
   const [operatorError, setOperatorError] = useState('');
   const [operatorState, setOperatorState] = useState('not_requested');
   const [menuCustomers, setMenuCustomers] = useState([]);
+  const [inventoryCourses, setInventoryCourses] = useState([]);
   const [inventoryState, setInventoryState] = useState('not_requested');
   const [inventoryError, setInventoryError] = useState('');
   const [focusedRequestId] = useState(() => {
@@ -775,6 +777,7 @@ function App() {
   useEffect(() => {
     if (!user || ![APP_MODE.INVENTORY, APP_MODE.OPERATOR].includes(entryMode)) {
       setMenuCustomers([]);
+      setInventoryCourses([]);
       setInventoryState('not_requested');
       setInventoryError('');
       return undefined;
@@ -782,13 +785,19 @@ function App() {
     let active = true;
     setInventoryState('checking');
     setInventoryError('');
-    inventoryRequest(user, adminApiBaseUrl, '/api/v1/menus/bootstrap')
-      .then((result) => {
+    Promise.all([
+      inventoryRequest(user, adminApiBaseUrl, '/api/v1/menus/bootstrap'),
+      inventoryRequest(user, adminApiBaseUrl, '/api/v1/inventory/bootstrap'),
+    ])
+      .then(([menuResult, inventoryResult]) => {
         if (!active) return;
-        const assigned = normalizeMenuBootstrap(result);
+        const assigned = normalizeMenuBootstrap(menuResult);
+        const courses = normalizeInventoryBootstrap(inventoryResult);
         setMenuCustomers(assigned);
-        setInventoryState(assigned.length ? 'authorized' : 'denied');
-        setInventoryError(assigned.length ? '' : 'No menu dashboards are assigned to this account.');
+        setInventoryCourses(courses);
+        const authorized = assigned.length > 0 || courses.length > 0;
+        setInventoryState(authorized ? 'authorized' : 'denied');
+        setInventoryError(authorized ? '' : 'No menu dashboards or cart inventory assignments are available.');
       })
       .catch((error) => {
         if (!active) return;
@@ -974,7 +983,7 @@ function App() {
     return <EntryStatus title="Fairway Refresh" message="Checking menu access..." />;
   }
   if (entryMode === APP_MODE.OPERATOR && entry === 'denied' && inventoryState === 'authorized') {
-    return <Suspense fallback={<EntryStatus title="Menu Management" message="Loading menus…" />}><MenuWorkspace user={user} apiBaseUrl={adminApiBaseUrl} customers={menuCustomers} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={requestSignOut} /></Suspense>;
+    return <Suspense fallback={<EntryStatus title="Menu Management" message="Loading menus…" />}><MenuWorkspace user={user} apiBaseUrl={adminApiBaseUrl} customers={menuCustomers} inventoryCourses={inventoryCourses} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={requestSignOut} /></Suspense>;
   }
 
   if (entry === 'denied') {
@@ -993,7 +1002,7 @@ function App() {
   }
 
   if (entry === 'inventory') {
-    return <Suspense fallback={<EntryStatus title="Menu Management" message="Loading menus…" />}><MenuWorkspace user={user} apiBaseUrl={adminApiBaseUrl} customers={menuCustomers} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={requestSignOut} /></Suspense>;
+    return <Suspense fallback={<EntryStatus title="Menu Management" message="Loading menus…" />}><MenuWorkspace user={user} apiBaseUrl={adminApiBaseUrl} customers={menuCustomers} inventoryCourses={inventoryCourses} isAdmin={isAdmin} onOpenAdmin={() => window.location.assign('/admin')} onSignOut={requestSignOut} /></Suspense>;
   }
 
   return (

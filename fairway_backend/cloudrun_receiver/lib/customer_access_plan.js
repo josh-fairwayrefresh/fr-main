@@ -45,11 +45,6 @@ function planCustomerAccess({ customerId, courses, services, menus, users }) {
       cartByCourse.set(menu.asset_id, menu.menu_id);
     }
   }
-  for (const course of courses) {
-    if (courseOperation(course).inventory && !cartByCourse.has(course.course_id)) {
-      throw new Error('Missing cart asset mapping');
-    }
-  }
   const seenUsers = new Set();
   const entries = users.map(({ uid, access: raw }) => {
     if (typeof uid !== 'string' || !uid || seenUsers.has(uid)) throw new Error('Invalid or duplicate user');

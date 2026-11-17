@@ -96,6 +96,117 @@ test('migration preserves nested identities, stock, attribution, history and ind
     `https://${process.env.FAIRWAY_GCP_PROJECT}.web.app/cartmenus/synthetic_cart`);
 });
 
+test('legacy cart and approved restaurant register preserve Monarch aliases and live inventory', async () => {
+  const db = new FakeFirestore();
+  const customer = db.collection('customers').doc('CUST-0001');
+  await customer.set({ customer_name: 'Monarch Bay Golf Club', operational_storage: { state: 'legacy' } });
+  const course = customer.collection('courses').doc('COURSE-0001');
+  await course.set({ course_name: 'Tony Lema Course', timezone: 'America/Los_Angeles' });
+  await course.collection('inventory').doc('state').set({
+    inventory_revision: 4, public_menu_slug: 'monarch-bay',
+  });
+  await course.collection('inventory_products').doc('water').set({
+    name: 'Water', quantity: 3, state: 'on_cart', archived: false,
+  });
+  await customer.collection('courses').doc('COURSE-0004')
+    .set({ course_name: 'Inactive Course', timezone: 'America/Los_Angeles' });
+  await db.collection('public_menu_slugs').doc('monarch-bay').set({
+    customer_id: 'CUST-0001', course_id: 'COURSE-0001',
+  });
+  await db.collection('user_access').doc('operator').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0001', course_ids: ['COURSE-0001'],
+  });
+
+  const restaurantInput = {
+    schema_version: 1, customer_id: 'CUST-0001', menu_name: 'restaurant_menu',
+    title: 'THE LANDING', subtitle: 'AT MONARCH BAY', footer: 'Thank you for dining with us!',
+    source: { filename: 'Restaurant menu.docx', sha256: 'a'.repeat(64),
+      cpo_approved: true, approved_at: '2026-11-16' },
+    categories: [{ name: 'SANDWICHES', sort_order: 0, note: null, products: [{
+      name: 'TORTA CUBANA', description: 'Toasted telera.',
+      price: { amount_minor: 2000, currency_code: 'USD' }, state: 'on_menu', sort_order: 0,
+    }] }],
+  };
+  const plan = await migration.prepare(db, 'CUST-0001', { restaurantMenu: restaurantInput });
+  assert.equal(plan.rows.length > 0, true);
+  assert.deepEqual(plan.rows.find(row =>
+    row.target === 'customers/CUST-0001/menus/cart-COURSE-0001').data, {
+    name: 'cart_menu', type: 'cart', slug: 'cust-0001_cart_menu',
+    aliases: ['monarch-bay', 'monarchbay_tony_lema_course'], state: 'active',
+    asset_id: 'COURSE-0001', title: 'Tony Lema Course', timezone: 'America/Los_Angeles',
+  });
+  assert.equal(plan.rows.some(row => row.target === 'customers/CUST-0001/menus/cart-COURSE-0004'), false);
+  assert.deepEqual(plan.rows.find(row =>
+    row.target === 'customers/CUST-0001/menus/restaurant-CUST-0001').data, {
+    name: 'restaurant_menu', type: 'restaurant', slug: 'cust-0001_restaurant_menu',
+    aliases: [], state: 'active', asset_id: null, title: 'THE LANDING',
+    subtitle: 'AT MONARCH BAY', footer: 'Thank you for dining with us!',
+  });
+
+  await migration.begin(db, plan, evidence);
+  await migration.resume(db, plan, evidence.migrationId);
+  await migration.verify(db, plan);
+  assert.deepEqual((await customer.collection('menus').get()).docs.map(doc => doc.id).sort(),
+    ['cart-COURSE-0001', 'restaurant-CUST-0001']);
+  assert.equal((await customer.collection('assets').doc('COURSE-0001')
+    .collection('inventory_products').doc('water').get()).data().state, 'on_cart');
+  for (const slug of ['cust-0001_cart_menu', 'monarch-bay', 'monarchbay_tony_lema_course']) {
+    const route = (await db.collection('public_menu_slugs').doc(slug).get()).data();
+    assert.deepEqual(route, { customer_id: 'CUST-0001', menu_id: 'cart-COURSE-0001' });
+    assert.deepEqual((await publicMenu(db, slug)).products.map(product => product.name), ['Water']);
+  }
+});
+
+test('cart operations migrate without creating a menu when no public menu is registered', async () => {
+  const db = new FakeFirestore();
+  const customer = db.collection('customers').doc('CUST-0002');
+  await customer.set({ customer_name: 'Synthetic Customer', operational_storage: { state: 'legacy' } });
+  const course = customer.collection('courses').doc('COURSE-0002');
+  await course.set({ course_name: 'Synthetic Cart', timezone: 'America/Los_Angeles' });
+  await course.collection('inventory').doc('state').set({ inventory_revision: 1 });
+  await course.collection('inventory_products').doc('water').set({
+    name: 'Water', quantity: 5, state: 'on_cart', archived: false,
+  });
+  await db.collection('user_access').doc('test-operator').set({
+    schema_version: 2, admin: false, customer_id: 'CUST-0002', course_ids: ['COURSE-0002'],
+  });
+
+  const plan = await migration.prepare(db, 'CUST-0002');
+  assert.equal(plan.rows.some(row => row.target.startsWith('customers/CUST-0002/menus/')), false);
+  assert.equal(plan.rows.some(row => row.target.startsWith('public_menu_slugs/')), false);
+  const access = plan.rows.find(row => row.target === 'user_access/test-operator').data;
+  assert.equal(access.schema_version, 3);
+  assert.equal(access.admin, false);
+  assert.equal(access.customer_id, 'CUST-0002');
+  assert.deepEqual(access.menu_ids, []);
+  assert.deepEqual(access.service_ids, ['COURSE-0002']);
+  assert.equal(plan.rows.find(row =>
+    row.target === 'customers/CUST-0002/services/COURSE-0002').data.asset_id, 'COURSE-0002');
+
+  await migration.begin(db, plan, evidence);
+  await migration.resume(db, plan, evidence.migrationId);
+  await migration.verify(db, plan);
+  assert.equal((await customer.collection('menus').get()).size, 0);
+  assert.equal((await inventory.requireCourseAccess(db, 'test-operator', 'CUST-0002', 'COURSE-0002'))
+    .data.course_name, 'Synthetic Cart');
+  assert.deepEqual((await inventory.getInventoryBootstrap(db, 'test-operator')).courses
+    .map(item => [item.customer_id, item.course_id, item.asset_id]),
+  [['CUST-0002', 'COURSE-0002', 'COURSE-0002']]);
+  assert.equal((await inventory.listInventory(db, 'CUST-0002', 'COURSE-0002'))
+    .products[0].quantity, 5);
+  await db.collection('user_access').doc('unassigned-operator').set({
+    schema_version: 3, admin: false, customer_id: 'CUST-0002',
+    menu_ids: [], service_ids: [],
+  });
+  assert.deepEqual((await inventory.getInventoryBootstrap(db, 'unassigned-operator')).courses, []);
+  await assert.rejects(
+    inventory.requireCourseAccess(db, 'unassigned-operator', 'CUST-0002', 'COURSE-0002'),
+    error => error.status === 403
+  );
+  await assert.rejects(publicMenu(db, 'cust-0002_cart_menu'),
+    error => error.status === 404);
+});
+
 test('repeat and forward recovery never overwrite intervening Customer activity or reactivate legacy', async () => {
   const f = await fixture();
   await migration.begin(f.db, f.plan, evidence);

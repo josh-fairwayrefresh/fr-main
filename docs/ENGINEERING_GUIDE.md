@@ -121,11 +121,18 @@ are separate: a cart-menu grant permits its full existing inventory system;
 a restaurant-menu grant permits its isolated menu dashboard. Course location,
 timezone and historical attribution may remain context without determining
 ownership or granting access.
+Registering a public cart menu is optional for operating a cart service.
+Existing service-asset grants continue to authorize that service's inventory
+when no cart menu is registered; the menu bootstrap must not invent a menu,
+alias, QR record or public route. If a cart menu is registered, its explicit
+menu grant remains required for inventory access. A service grant does not
+bypass a registered menu's missing grant or archived state.
 
 The [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
 defines the approved product behavior. Implementation and local verification
-do not establish deployment or authorize production migration, account writes,
-restaurant import, commits or pushes. The
+do not establish deployment authorization by themselves. The CPO has now
+authorized the coordinated production promotion and associated Git
+publication. The
 [deployment owner](DEPLOYMENT_GUIDE.md#production-change-safety) retains the
 verified-backup and production-change gates. Existing production behavior
 remains in force until a separately authorized, verified cutover.

@@ -35,6 +35,16 @@ test('access preview preserves broad and restricted v2 scopes without granting r
   assert.deepEqual(result.users[1].authorization.menu_ids, []);
 });
 
+test('cart service access does not require a registered public menu', () => {
+  const input = fixture();
+  input.menus = input.menus.filter(menu => menu.type !== 'cart');
+  const result = planCustomerAccess(input);
+  assert.deepEqual(result.users[0].authorization.service_ids, ['cart', 'range']);
+  assert.deepEqual(result.users[0].authorization.menu_ids, []);
+  assert.deepEqual(result.users[1].authorization.service_ids, ['range']);
+  assert.deepEqual(result.users[1].authorization.menu_ids, []);
+});
+
 test('access preview rejects incomplete or ambiguous mappings and foreign scopes', () => {
   let input = fixture();
   input.services.pop();

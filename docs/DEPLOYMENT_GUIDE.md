@@ -2,8 +2,9 @@
 
 ## Current Deployment and OTA Readiness
 
-The Customer-assets/menu-register increment is authorized for local
-implementation only. Its
+The Customer-assets/menu-register increment has CPO authorization for the
+coordinated production promotion. Production remains unchanged until the
+verified cutover is executed. Its
 [ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
 supersedes the previous Course-owned architecture; it has not changed this
 production snapshot. Use the
@@ -1713,11 +1714,17 @@ records, device identity/credentials, user access, or historical operational
 data, the release owner must verify the configured production
 backup/recovery capability, its recovery point and retention, and the
 applicable restore procedure with the responsible platform owner. This
-repository contains no verified backup, restore, export, or point-in-time
-recovery procedure or current recovery-point evidence. Until that capability
-is independently established, do not claim production data is recoverable or
-proceed with a data-affecting operation; obtain CPO and Lead Architect
-direction. Do not use code rollback as a substitute for data restoration.
+recovery gate is satisfied for this promotion by the verified production
+configuration and isolated restore recorded in the
+[Digital Recovery Readiness runbook](https://github.com/josh-fairwayrefresh/fr-main/blob/feature/customer-assets-menu-register-20261115/docs/RECOVERY_GUIDE.md).
+Production `(default)` in `nam5` has daily 30-day backups and seven-day PITR;
+backup `243d89d7-e6ad-4229-82d9-bd9a69994ea4` reached READY, and its isolated
+restore matched 4,485 scoped records across 26 collection paths. Daily
+independent Firestore/Auth exports with 30-day retention and independent
+protection of all 11 accepted OTA packages were also verified. This is
+previously accepted recovery evidence, not a reason to repeat recovery tests
+or change recovery resources during this cutover. Do not use code rollback as
+a substitute for data restoration.
 This deployment gate does not replace routine application workflows or
 read-only operational checks.
 
@@ -1731,10 +1738,11 @@ immediately before changing production.
 
 ## Customer Assets and Menu Register Cutover
 
-**CPO/Architect-approved coherent increment, 2026-11-15.** Implementation and
-local tests/builds are authorized. No production migration, user-access
-mutation, restaurant import, deployment, commit, push or device operation is
-authorized by that approval. The
+**CPO/Architect-approved coherent increment, 2026-11-15; production promotion
+subsequently authorized by the CPO.** The current execution instruction
+authorizes the coordinated cutover and associated Git publication. No
+production migration, user-access mutation, restaurant import or deployment
+has yet been performed. The
 [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
 defines product requirements; the
 [Engineering Guide](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
@@ -1753,9 +1761,10 @@ under that Customer asset. Customer service state/history is similarly owned
 by the Customer service record, not the historical Course. The Architect's
 review of `5d7692f` rejected the prior register-only ownership interpretation.
 Historical Course records are not synchronized with active operational owners.
-Schema-2 accounts retain the established access path before conversion;
-schema-3 cart access requires an explicit registered menu grant and never
-falls back to a service or Course grant.
+Schema-2 accounts retain the established access path before conversion. A
+registered cart menu requires its explicit menu grant; a menu-less cart service
+continues through its explicit service-asset grant without creating a public
+menu. Neither path falls back to Course ownership or authorization.
 
 The existing Monarch public URL
 `https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course` remains
@@ -1773,7 +1782,7 @@ ordered categories and all source notes. The local approved import package
 is content evidence, not production publication or data-write authorization.
 No guessed products or demonstration entries may become restaurant content.
 
-Before a separately authorized production cutover:
+Before production writes and serving-cohort promotion:
 
 1. Verify the production backup/recovery capability, current recovery point
    and restore procedure under Production Change Safety. Retaining source
@@ -1791,11 +1800,15 @@ Before a separately authorized production cutover:
    and evidence. Verify identities, document counts, values, nested histories
    and old/new effective permission boundaries. There must be one active
    serving owner, not dual writes or silent legacy fallback.
-   After every reviewed Customer account has explicit schema-3 grants, set
-   that Customer's `authorization_schema_version` to `3` as the final
-   authorization cutover marker. Backend access, Admin writes and Firestore
-   reads then refuse legacy Customer Course authorization; old clients cannot
-   recreate it. Do not set this marker before grant conversion is verified.
+   Convert each reviewed account's effective grants to schema 3: service
+   grants preserve authorized operations, and menu grants are present only for
+   menus actually registered and granted. A service may have no public cart
+   menu; do not generate one to satisfy migration. After every reviewed
+   Customer account's grants are verified, set that Customer's
+   `authorization_schema_version` to `3` as the final authorization cutover
+   marker. Backend access, Admin writes and Firestore reads then refuse legacy
+   Customer Course authorization; old clients cannot recreate it. Do not set
+   this marker before grant conversion is verified.
 5. Stage the exact compatible Admin/receiver and Hosting artifacts under
    existing release gates. Coordinate the data/rules/client contracts and
    old cached-client behavior in the reviewed cutover order. Code rollback
@@ -1908,11 +1921,10 @@ and no production auto-run:
    authoritative backups/recovery points and reconcile intervening activity,
    never replay the pre-cutover legacy plan over live Customer records.
 
-At source-review publication, remaining production prerequisites were explicit
-authorization, reviewed exact source/build identities, verified backup/recovery
-evidence, reviewed migration fingerprint/access changes, drained writers,
-index readiness, coordinated data/rules/client cutover and operational
-acceptance. None was executed or claimed by the local correction.
+At source-review publication, production prerequisites remained. The CPO
+subsequently authorized this promotion. Current read-only preflight and
+recovery evidence are recorded below; writer fencing, migration, deployment
+and post-cutover acceptance remain execution steps.
 
 #### Production promotion authorization and preparation — 2026-11-16
 
@@ -1933,16 +1945,36 @@ verification.
 Read-only production preflight reconfirmed the `(default)` database in `nam5`,
 seven-day PITR, the daily 30-day backup schedule, and READY backup
 `243d89d7-e6ad-4229-82d9-bd9a69994ea4` for that database. Receiver and Admin
-each route 100% to their existing `nogate-1115-1222` revision; notifier remains
-100% on `00009-seg`. No production data, service, traffic, rule, index,
-identity, or device was changed during release preparation.
+each route 100% to `nogate-1115-1222`; notifier remains 100% on `00009-seg`.
+No production data, service, traffic, rule, index, identity, or device was
+changed during preflight.
 
-The current production composite-index inventory does not include the
-Customer-service request indexes required by the candidate. They must be
-created from the reviewed candidate and reach READY before the coordinated
-cutover. The migration plan is being prepared read-only; its exact fingerprints
-and access conversions, writer quiescence, index readiness, and post-cutover
-acceptance remain required before production writes or traffic promotion.
+The candidate's three Customer-service request composites are all present and
+READY in production: `customer_id + service_id + status + received_at
+ASCENDING`, `customer_id + service_id + completed_at ASCENDING`, and
+`customer_id + service_id + received_at DESCENDING`. No index creation is
+required.
+
+Read-only migration preparation was rerun from the tested candidate worktree
+against production with the CPO-approved restaurant payload:
+
+- `CUST-0001`: fingerprint
+  `eadc6181eebe55b7ef215133fa994ca9c518f27fdd0480651d1067081c65ed10`;
+  4,246 target rows and 8,059 source paths. It plans the existing cart menu
+  `cart-COURSE-0001` associated with asset `COURSE-0001`, preserving
+  `monarch-bay` and `monarchbay_tony_lema_course`; adds the approved
+  `restaurant-CUST-0001` menu; and leaves `COURSE-0004` as an operational
+  cart asset without a public menu. The restaurant menu receives no access
+  grant. Exactly four routes resolve to the two canonical menus and their
+  permanent cart aliases.
+- `CUST-0002`: fingerprint
+  `fe48c80b2c164dfb7863f52e4d0371dbc75004f102b7a0640f1ade9c6413d3c1`;
+  91 target rows and 109 source paths. It preserves its service and cart
+  inventory but plans no menus or public routes and no menu grants.
+
+These are reviewed, read-only fingerprints, not authorization to skip the
+writer drain. Revalidate the source and exact fingerprints after fencing
+writers and before copying; any difference requires a fresh reviewed plan.
 
 #### Local correction verification
 
