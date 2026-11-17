@@ -80,6 +80,27 @@ function MenuMessage({ title, detail, retry }) {
   </section>;
 }
 
+// Customer logos are served by the menu API; only its relative paths are accepted.
+function customerLogoUrl(apiBaseUrl, logoUrl) {
+  return typeof logoUrl === 'string' && /^\/(?!\/)/.test(logoUrl) ? `${apiBaseUrl}${logoUrl}` : null;
+}
+
+// Shared template header for every Customer menu: Fairway Refresh · AT · Customer.
+// The Customer slot shows the Customer-owned logo, or the Customer name when
+// no logo is assigned or it cannot be loaded.
+function BrandLockup({ apiBaseUrl, menu }) {
+  const logoUrl = customerLogoUrl(apiBaseUrl, menu?.branding?.logo_url);
+  const [failedUrl, setFailedUrl] = useState(null);
+  const customerName = menu?.customer_name || menu?.course_name || '';
+  return <div className="pm-brand-lockup">
+    <img className="pm-fairway-logo" src={fairwayRefreshLogo} alt="Fairway Refresh" />
+    <span className="pm-at">AT</span>
+    {logoUrl && failedUrl !== logoUrl
+      ? <img className="pm-course-logo" src={logoUrl} alt={customerName || 'Customer'} onError={() => setFailedUrl(logoUrl)} />
+      : <span className="pm-customer-name">{customerName}</span>}
+  </div>;
+}
+
 export default function PublicMenuApp({ apiBaseUrl, slug }) {
   const [status, setStatus] = useState('loading');
   const [menu, setMenu] = useState(null);
@@ -127,11 +148,7 @@ export default function PublicMenuApp({ apiBaseUrl, slug }) {
   return <main className="public-menu-app">
     <div className="pm-gold-rule" />
     <header className="pm-header">
-      <div className="pm-brand-lockup">
-        <img className="pm-fairway-logo" src={fairwayRefreshLogo} alt="Fairway Refresh" />
-        {menu?.branding?.logo_url && <><span className="pm-at">AT</span>
-          <img className="pm-course-logo" src={menu.branding.logo_url} alt={menu.customer_name || 'Customer'} /></>}
-      </div>
+      <BrandLockup apiBaseUrl={apiBaseUrl} menu={menu} />
       <div className="pm-heading">
         <p>{menu?.customer_name || menuName}</p>
         <h1>{menu?.title || menuName}</h1>

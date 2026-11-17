@@ -9,6 +9,9 @@ supersedes the previous Course-owned architecture. Use the
 [Customer asset cutover boundary](#customer-assets-and-menu-register-cutover)
 for the completed migration evidence, current serving identities and
 Customer-compatible recovery requirements.
+The Customer-owned menu branding template was released to production on
+2026-11-16; see its
+[release record](#customer-menu-branding-template--production-release-2026-11-16).
 
 This snapshot records the 2026-11-16 Customer-ownership promotion and the
 latest CPO fleet handoff, with earlier release evidence retained separately.
@@ -2047,6 +2050,115 @@ Customer-mode authorization/operation suites and exact production copy
 verification cover those paths without adding production activity. Legacy code
 rollback is not safe after this data cutover; recover forward using
 Customer-compatible revisions and the verified recovery procedure.
+
+#### Customer menu branding template — production release (2026-11-16)
+
+After the cutover, the CPO observed that the public Monarch Bay cart menu
+lacked the Fairway Refresh / AT / Monarch Bay header. Inventory, aliases and
+live On Cart behavior had migrated faithfully, but the register record was
+created without branding, the template showed AT and a Customer logo only when
+a menu carried `branding.logo_url`, and the approved Monarch artwork had never
+been attached to the Customer. The CPO approved formalizing the shared
+template with Customer-owned branding, then authorized its production release.
+
+Implementation (based on `4de0b8c` of
+`feature/customer-ownership-production-20261116`; the release commit follows
+this record in Git):
+
+- `lib/customer_branding.js` owns Customer branding at
+  `customers/{customerId}/branding/profile`, with immutable logo bytes at
+  `customers/{customerId}/branding_logos/{sha256}`. Replaced logos are
+  retained, not deleted. Existing deny-all Firestore rules keep both
+  server-only; no rules change was needed.
+- Admin `GET`/`PUT /api/v1/admin/customers/{customerId}/branding/logo` reads or
+  sets the logo (validated PNG, at most 900 KiB, 2048 pixels; Admin only).
+  Public `GET /api/v1/public/customers/{customerId}/logo/{sha256}` serves any
+  logo stored for that Customer after verifying its hash, with
+  `Cache-Control: public, max-age=31536000, immutable` and `nosniff`. A
+  historical logo URL therefore keeps serving its original bytes after
+  replacement, and never under another Customer.
+- Every public menu response resolves `branding` from its owning Customer in
+  the same read-only transaction, so it references only the current logo.
+  Menus can no longer accept or store `branding`; any legacy per-menu value is
+  ignored and removed when that menu is next saved.
+- `PublicMenuApp.jsx` always renders the Fairway Refresh logo, AT and the
+  Customer slot. The Customer logo resolves against the menu API origin; only
+  API-relative paths are accepted. Missing or unloadable logos fall back to
+  the Customer name.
+- `scripts/publish_customer_logo.js` derives the web logo from approved
+  artwork after verifying the source SHA-256, and writes only with `--apply`.
+
+Release validation:
+
+- Backend `npm test` (legacy mode, all suites) and
+  `npm run test:customer-operations` (which now includes
+  `customer_branding.test.js`) pass. The branding tests cover deterministic
+  derivation, Monarch derivative limits, Admin-only writes, inheritance by
+  cart aliases and restaurant menus, logo replacement reaching every menu,
+  historical URLs serving original bytes with immutable headers, Customer
+  isolation of current and historical hashes, tamper and unknown-hash 404s,
+  and rejection or removal of menu-level branding. The Customer-mode
+  migration test verifies that a migrated cart menu inherits Customer
+  branding through both aliases.
+- Frontend `npm test` passes 108 of 108. The public-menu browser test verifies
+  AT and Customer-name fallback without a logo; a loaded logo resolved against
+  the API origin; one-row Fairway / AT / Customer order at 320, 390 and 900
+  pixels; broken-image fallback; and rejection of non-relative logo URLs.
+  The full browser suite passes except two failures that reproduce on
+  unmodified `4de0b8c` and involve unchanged files (Admin onboarding form and
+  a static `main.jsx` sign-out count).
+- `npm run build:production` passes and verifies 107 Driving Range assets.
+
+Production release, in order:
+
+1. Receiver and Admin were deployed from this source with the cutover
+   commands and unchanged Customer-mode configuration as no-traffic revisions
+   tagged `menu-branding-1116`. On the tagged Admin revision all three menu
+   destinations returned `branding.logo_url: null` and payloads, excluding
+   `branding`, byte-identical to the serving cutover revision; the Admin
+   branding route returned 401 unauthenticated. Both services were then
+   switched to 100%. The `menu-cutover-1116` revisions and tags are retained
+   for rollback. (This workstation's IPv6 route to Google APIs was failing, so
+   gcloud was run through a local IPv4-only Python wrapper; the deployment
+   commands themselves were unchanged.)
+2. Hosting was built with `npm run build:production` and deployed with
+   `firebase deploy --only hosting` to `savvy-kit-496703-r5`.
+3. The Monarch Bay logo was published to CUST-0001 with
+   `publish_customer_logo.js --apply` (actor `josh@fairwayrefresh.com`) after
+   a dry run reproduced the approved derivative: source
+   `0851107eae56a7e1562a179f19ab6a611f8dc91c36e70f137abf7d85bd9de85e` →
+   640×321, 167,935 bytes, SHA-256
+   `854f1da92432a293a5e3e1ea660d32e553ef8fcad81308c84bfdc17aa3f02ae5`, crop
+   `{left 129, top 182, width 1283, height 643}`.
+
+Serving release identities:
+
+| Surface | Production identity |
+|---|---|
+| Receiver | `fairway-button-receiver-menu-branding-1116`, image `sha256:149f7e5a10131d4f26840b8e7644c9d07156f182811548979c7c15a7a4100b35`, 100% |
+| Admin API and public menus | `fairway-admin-menu-branding-1116`, image `sha256:02ed208aea502d08a5a33be62b3c77e31715939f07d47455ed6fe17609aeb829`, 100% |
+| Hosting | version `9852a7384c357435`, released 2026-11-17T02:04:03Z (UTC) |
+| CUST-0001 logo | `customers/CUST-0001/branding_logos/854f1da9…2ae5`, published 2026-11-17T02:04:32Z (UTC) |
+
+Production verification:
+
+- `monarch-bay`, `monarchbay_tony_lema_course` and `cust-0001_restaurant_menu`
+  each return 200 with `logo_url`
+  `/api/v1/public/customers/CUST-0001/logo/854f1da9…2ae5`. Excluding
+  `branding`, their payloads are byte-identical to the pre-release responses:
+  the cart menu remains `cart-COURSE-0001`, revision 1576 with 82 On Cart
+  products in 12 categories; the restaurant menu remains
+  `restaurant-CUST-0001`, revision 1, 5 categories and 24 products.
+- The logo URL returns 200 `image/png`, 167,935 bytes, whose SHA-256 matches,
+  with immutable caching and `nosniff`. The same hash under CUST-0002 returns
+  404; POST returns 405; the Admin branding route returns 401
+  unauthenticated. The receiver's protected operator bootstrap still returns
+  401, and Admin's still returns 404, as on the prior revisions.
+- In the browser, all three destinations show the Fairway Refresh logo, AT
+  and the Monarch Bay logo, both images loaded, without the name fallback. The
+  header is one row with no horizontal overflow at 390 pixels.
+- Firestore (read-only): CUST-0001 holds exactly the cart and restaurant menus
+  and one logo; CUST-0002 has no menus, branding profile or logos.
 
 #### Local correction verification
 

@@ -1199,6 +1199,19 @@ production evidence.
   future Customers. Identity, branding and content are supplied as data, not
   Customer-specific template forks or hardcoded URL translations. A reviewed
   template update takes effect across menus through normal deployment.
+- Every public menu header reads **Fairway Refresh logo / AT / Customer logo**
+  in one centered row, for cart and restaurant menus alike. The Fairway
+  Refresh horizontal logo is part of the template. Branding, including the
+  logo, is owned by the Customer and inherited automatically by every menu of
+  that Customer; menus never own, assign or override a logo. When the Customer
+  has no logo, or it cannot load, the same slot shows the Customer name; the
+  Fairway logo and AT remain. Customer logos are published from approved
+  source artwork as a deterministic web derivative (invisible margins trimmed,
+  proportions preserved, at most 640 pixels wide) and served immutably by
+  content hash, so a replacement logo reaches all of that Customer's menus on
+  the next menu open. Menu responses reference only the current logo; a
+  previously published logo URL keeps serving its original bytes, and only
+  under its own Customer.
   Categories initially collapse; saved content is read on open/reload, without
   polling or a separate Publish step. Ordering and checkout remain excluded.
 - The restaurant source is the CPO-supplied `Restaurant menu.docx`. The CPO

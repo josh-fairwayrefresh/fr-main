@@ -47,6 +47,7 @@ const { createOtaService, OtaError, HARDWARE_ID } = require('./lib/ota/ota_servi
 const { createGcsArtifactStore } = require('./lib/ota/gcs_artifact_store');
 const inventory = require('./lib/inventory');
 const customerMenus = require('./lib/customer_menus');
+const customerBranding = require('./lib/customer_branding');
 const restaurantCatalog = require('./lib/restaurant_catalog');
 const crypto = require('crypto');
 const { courseOperation } = require('./lib/course_operation');
@@ -1645,6 +1646,13 @@ function createFairwayHandlers(db, {
           return res.status(200).send(image.data);
         }
       }
+      const brandingLogoMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/branding\/logo$/);
+      if (brandingLogoMatch) {
+        const customerId = decodeURIComponent(brandingLogoMatch[1]);
+        if (req.method === 'GET') return res.status(200).json(await customerBranding.getBranding(db, customerId));
+        if (req.method === 'PUT') return res.status(200).json(await customerBranding.setLogo(db, customerId, req.body, admin.uid));
+        return res.status(405).json({ error: 'method_not_allowed' });
+      }
       const assetsMatch = path.match(/^\/api\/v1\/admin\/customers\/([^/]+)\/assets$/);
       if (req.method === 'GET' && assetsMatch) {
         const customer = customerMenus.customerRef(db, decodeURIComponent(assetsMatch[1]));
@@ -2278,6 +2286,20 @@ function createFairwayHandlers(db, {
     }
     if (path.startsWith('/api/v1/menus/')) {
       return handleMenusRequest(req, res, path);
+    }
+    if (path.startsWith('/api/v1/public/customers/')) {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+      try {
+        const match = path.match(/^\/api\/v1\/public\/customers\/([^/]+)\/logo\/([a-f0-9]{64})$/);
+        if (!match) return res.status(404).json({ error: 'logo_not_found' });
+        const logo = await customerBranding.publicLogo(db, decodeURIComponent(match[1]), match[2]);
+        res.set('Content-Type', logo.type);
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        res.set('X-Content-Type-Options', 'nosniff');
+        return res.status(200).send(logo.data);
+      } catch (error) {
+        return sendInventoryError(res, error);
+      }
     }
     if (path.startsWith('/api/v1/public/menus/')) {
       if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });

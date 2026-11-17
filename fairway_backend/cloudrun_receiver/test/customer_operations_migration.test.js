@@ -14,6 +14,7 @@ const { transitionRequest } = require('../lib/request_lifecycle');
 const { generateButtonReport } = require('../lib/button_activity_report');
 const menus = require('../lib/customer_menus');
 const { publicMenu } = require('../lib/restaurant_catalog');
+const customerBranding = require('../lib/customer_branding');
 const { PNG } = require('pngjs');
 const jsQR = require('jsqr');
 const { createFairwayHandlers } = require('../index');
@@ -42,7 +43,7 @@ async function fixture() {
   await course.collection('sales_days').doc('2026-11-15').set({ source: 'paper_record', total_minor: 9000 });
   await customer.collection('menus').doc('cart-menu').set({
     type: 'cart', asset_id: 'cart', name: 'cart', state: 'active',
-    slug: 'synthetic_cart', aliases: ['synthetic-original-cart'], branding: {},
+    slug: 'synthetic_cart', aliases: ['synthetic-original-cart'],
   });
   for (const slug of ['synthetic_cart', 'synthetic-original-cart']) {
     await db.collection('public_menu_slugs').doc(slug).set({ customer_id: customer.id, menu_id: 'cart-menu' });
@@ -84,9 +85,14 @@ test('migration preserves nested identities, stock, attribution, history and ind
   assert.equal(resolveCourseServiceState(await requireService(f.db, f.customer.id, 'cart')).suspended, true);
   assert.equal((await inventory.listInventory(f.db, f.customer.id, 'cart')).products[0].quantity, 7);
   assert.equal((await menus.bootstrap(f.db, 'operator')).customers[0].menus[0].asset_id, 'cart');
+  const logo = new PNG({ width: 2, height: 1 });
+  logo.data.fill(255);
+  const logoBuffer = PNG.sync.write(logo, { colorType: 6 });
+  const savedLogo = await customerBranding.setLogo(f.db, f.customer.id, { png_base64: logoBuffer.toString('base64') }, 'admin');
   for (const slug of ['synthetic_cart', 'synthetic-original-cart']) {
     const publicView = await publicMenu(f.db, slug);
     assert.equal(publicView.menu_id, 'cart-menu');
+    assert.deepEqual(publicView.branding, { logo_url: savedLogo.logo.logo_url }, 'Migrated cart menu inherits Customer branding');
     assert.equal(publicView.products[0].name, 'Water');
     assert.equal('quantity' in publicView.products[0], false);
   }

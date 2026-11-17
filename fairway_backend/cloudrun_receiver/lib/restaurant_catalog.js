@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const inventory = require('./inventory');
 const registry = require('./customer_menus');
+const customerBranding = require('./customer_branding');
 const storage = require('./operational_storage');
 
 function fail(status, code, message) { throw new inventory.InventoryError(status, code, message); }
@@ -131,8 +132,9 @@ async function publicMenu(db, slugValue) {
     const productCollection = menu.type === 'cart' ? owner.collection('inventory_products') : products(ref);
     const stateDocument = menu.type === 'cart' ? owner.collection('inventory').doc('state') : stateRef(ref);
     const categoryCollection = menu.type === 'cart' ? owner.collection('inventory_categories') : categories(ref);
-    const [ownerSnap, productDocs, state, categoryDocs] = await Promise.all([
+    const [ownerSnap, productDocs, state, categoryDocs, branding] = await Promise.all([
       tx.get(owner), tx.get(productCollection), tx.get(stateDocument), tx.get(categoryCollection),
+      customerBranding.publicBranding(tx, db, customerId),
     ]);
     if (!ownerSnap.exists) fail(409, 'migration_required', 'Menu asset is unavailable');
     const catalogProducts = productDocs.docs.map((doc) => ({ ...doc.data(), product_id: doc.id }));
@@ -146,7 +148,7 @@ async function publicMenu(db, slugValue) {
       timezone: menu.timezone || ownerSnap.data().timezone || null,
       updated_at: state.data()?.updated_at || menu.updated_at || null,
       revision: state.data()?.revision ?? state.data()?.inventory_revision ?? 0,
-      branding: menu.branding ? { logo_url: menu.branding.logo_url } : null,
+      branding,
       categories: categoryDocs.docs.map((doc) => ({ name: doc.data().name, note: doc.data().note || null, sort_order: doc.data().sort_order ?? 0 })).sort(order),
       products: publicProducts,
     };

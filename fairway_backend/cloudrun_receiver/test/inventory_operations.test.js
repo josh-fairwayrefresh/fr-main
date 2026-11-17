@@ -62,7 +62,7 @@ async function fixture({ timezone = 'America/Los_Angeles' } = {}) {
     });
     await customer.collection('menus').doc('cart').set({
       name: 'cart', type: 'cart', state: 'active', asset_id: courseId,
-      slug: `${customerId}_cart`, aliases: [customerId], branding: {},
+      slug: `${customerId}_cart`, aliases: [customerId],
     });
   }
   const actors = {
