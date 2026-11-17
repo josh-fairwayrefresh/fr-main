@@ -469,7 +469,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
   }
 
   const columnStates = ['on_cart', 'sold_out', 'in_inventory'];
-  if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No course access</h1><p>This account is not assigned to a customer course.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
+  if (!course) return <main className="inventory-app"><section className="inv-empty-access"><h1>No cart inventory access</h1><p>This account is not assigned to a customer cart inventory asset.</p><button className="inv-secondary" type="button" onClick={onSignOut}><LogOut size={16} />Sign out</button></section></main>;
 
   const displayNames = courseDisplayNames(course);
   return <main className="inventory-app">
@@ -492,7 +492,7 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
       </div>
       <div className="inv-header-context">
         <div className="inv-course-identity"><span>{displayNames.customer}</span><strong>{displayNames.course}</strong></div>
-        {onSelectMenu && <button className="inv-secondary" type="button" disabled={Boolean(session.submitting || session.unresolved || busyId || editor || categoryEditor || categoryManager || stockAction || auditing || sessionEditing || session.choosing || movement.drag)} onClick={onSelectMenu}>Select menu</button>}
+        {onSelectMenu && <button className="inv-secondary" type="button" disabled={Boolean(session.submitting || session.unresolved || busyId || editor || categoryEditor || categoryManager || stockAction || auditing || sessionEditing || session.choosing || movement.drag)} onClick={onSelectMenu}>Select menu or inventory</button>}
         {courses.length > 1 && <label className="inv-course-picker"><span>Course</span><select value={courseKey(course)} onChange={(event) => { const selected = courses.find((item) => courseKey(item) === event.target.value); if (!selected) return; setSelectedKey(courseKey(selected)); replaceCourseContext('/inventory', selected); }} aria-label="Select course">{courses.map((item) => <option key={courseKey(item)} value={courseKey(item)}>{item.customer_name} · {item.course_name}</option>)}</select></label>}
         <div className="inv-header-tools">
           <span className="inv-user-label">{user.email}</span>
@@ -526,9 +526,9 @@ export default function InventoryApp({ user, apiBaseUrl, courses, isAdmin = fals
           <button className="inv-category-manage-trigger" type="button" onClick={() => setCategoryManager(category)} title={`Manage ${category.name}`} aria-label={`Manage ${category.name} category`}><Settings size={13} /></button>
         </div>)}
       </nav><div className="inv-audit-action">
-        {hasCurrentInventory && (course.public_url || inventory?.public_menu_slug)
+        {hasCurrentInventory && course.public_menu_unavailable !== true && (course.public_url || inventory?.public_menu_slug)
           ? <button className="inv-secondary inv-menu-link" type="button" ref={menuOpenButtonRef} onClick={() => setMenuViewerOpen(true)}>Golfer-View Menu</button>
-          : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">Public menu link not configured for this Course. Contact Admin.</span>}
+          : hasCurrentInventory && loadStatus === 'ready' && <span className="inv-menu-unconfigured">{course.public_menu_unavailable === true ? 'No public menu is registered for this cart inventory.' : 'Public menu link not configured. Contact Admin.'}</span>}
       </div></div>}
       {inventory && selectedCategory !== 'all' && subcategoryNames.length > 0 && <nav className="inv-subcategory-filters" aria-label="Filter inventory by subcategory">
         <button className={`inv-subcategory-filter ${selectedSubcategory === 'all' ? 'active' : ''}`} type="button" aria-pressed={selectedSubcategory === 'all'} onClick={() => setSelectedSubcategory('all')}>All <span>{categoryFilteredProducts.length}</span></button>

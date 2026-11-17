@@ -2,15 +2,18 @@
 
 ## Current Deployment and OTA Readiness
 
-The Customer-assets/menu-register increment is authorized for local
-implementation only. Its
+The Customer-assets/menu-register increment was promoted to production on
+2026-11-16 after CPO authorization and the verified coordinated cutover. Its
 [ownership decision](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
-supersedes the previous Course-owned architecture; it has not changed this
-production snapshot. Use the
+supersedes the previous Course-owned architecture. Use the
 [Customer asset cutover boundary](#customer-assets-and-menu-register-cutover)
-before proposing any data migration or release.
+for the completed migration evidence, current serving identities and
+Customer-compatible recovery requirements.
+The Customer-owned menu branding template was released to production on
+2026-11-16; see its
+[release record](#customer-menu-branding-template--production-release-2026-11-16).
 
-This snapshot records the 2026-11-15 capability-gate removal deployment and
+This snapshot records the 2026-11-16 Customer-ownership promotion and the
 latest CPO fleet handoff, with earlier release evidence retained separately.
 “Last verified” means the date of the evidence,
 not continuous production monitoring. Confirm actual
@@ -1604,7 +1607,7 @@ Deployment continues to use the existing Cloud Run services/entrypoints:
 | Runtime identity | `936892386735-compute@developer.gserviceaccount.com` | `fairway-admin-prod@savvy-kit-496703-r5.iam.gserviceaccount.com` |
 | Runtime environment / mode | `FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=receiver` | `FAIRWAY_ENV=production`, `FAIRWAY_SERVICE_MODE=admin` |
 | Entry function | `fairwayButtonReceiver` | `fairwayAdmin` |
-| Prior serving revision | `fairway-button-receiver-roll-26b6201` | `fairway-admin-cartperf-35e7c6c` |
+| Pre-cutover serving revision (historical) | `fairway-button-receiver-roll-26b6201` | `fairway-admin-cartperf-35e7c6c` |
 
 Both project environment variables remain `savvy-kit-496703-r5`. Preserve
 all existing environment/secret bindings, invocation settings, limits, traffic
@@ -1624,11 +1627,15 @@ do not use the immediate-traffic examples elsewhere in this guide unchanged.
 Deploy only from the isolated reviewed package and retain its exact source
 and lockfile checksums with the rollout record.
 Do not probe real-device OTA checks or create production assignments as a smoke
-test. On failure restore Hosting version `c6a6de50274e48b5`, then Admin traffic
-to `fairway-admin-cartperf-35e7c6c` and receiver traffic to
-`fairway-button-receiver-roll-26b6201`, preserving existing tags. These anchors
-must still be checked immediately before rollout. Code rollback does not
-restore Firestore data.
+test. Before the Customer cutover, the documented failure targets were Hosting
+version `c6a6de50274e48b5`, Admin revision `fairway-admin-cartperf-35e7c6c`,
+and receiver revision `fairway-button-receiver-roll-26b6201`. **This rollback
+set is superseded by the completed Customer migration below and is not safe to
+use against Customer-owned data.** The old revisions remain retained but their
+public revision tags were removed during writer fencing. After migration,
+rollback only to a Customer-compatible artifact; otherwise recover forward
+using verified authoritative data and reconcile intervening activity. Code
+rollback does not restore Firestore data.
 
 Artifact follow-on remains gated: project `_Default` retains 30 days and has
 no bearer-path exclusion; organization `284487864580` sink inspection requires
@@ -1713,11 +1720,17 @@ records, device identity/credentials, user access, or historical operational
 data, the release owner must verify the configured production
 backup/recovery capability, its recovery point and retention, and the
 applicable restore procedure with the responsible platform owner. This
-repository contains no verified backup, restore, export, or point-in-time
-recovery procedure or current recovery-point evidence. Until that capability
-is independently established, do not claim production data is recoverable or
-proceed with a data-affecting operation; obtain CPO and Lead Architect
-direction. Do not use code rollback as a substitute for data restoration.
+recovery gate is satisfied for this promotion by the verified production
+configuration and isolated restore recorded in the
+[Digital Recovery Readiness runbook](https://github.com/josh-fairwayrefresh/fr-main/blob/feature/customer-assets-menu-register-20261115/docs/RECOVERY_GUIDE.md).
+Production `(default)` in `nam5` has daily 30-day backups and seven-day PITR;
+backup `243d89d7-e6ad-4229-82d9-bd9a69994ea4` reached READY, and its isolated
+restore matched 4,485 scoped records across 26 collection paths. Daily
+independent Firestore/Auth exports with 30-day retention and independent
+protection of all 11 accepted OTA packages were also verified. This is
+previously accepted recovery evidence, not a reason to repeat recovery tests
+or change recovery resources during this cutover. Do not use code rollback as
+a substitute for data restoration.
 This deployment gate does not replace routine application workflows or
 read-only operational checks.
 
@@ -1731,10 +1744,9 @@ immediately before changing production.
 
 ## Customer Assets and Menu Register Cutover
 
-**CPO/Architect-approved coherent increment, 2026-11-15.** Implementation and
-local tests/builds are authorized. No production migration, user-access
-mutation, restaurant import, deployment, commit, push or device operation is
-authorized by that approval. The
+**CPO/Architect-approved coherent increment, 2026-11-15; production promotion
+subsequently authorized by the CPO and completed 2026-11-16. The recorded
+release and cutover below are the current production baseline. The
 [UX owner](UX_SPECIFICATION.md#customer-menu-register-and-restaurant-menu)
 defines product requirements; the
 [Engineering Guide](ENGINEERING_GUIDE.md#customer-ownership-decision-2026-11-15)
@@ -1753,9 +1765,10 @@ under that Customer asset. Customer service state/history is similarly owned
 by the Customer service record, not the historical Course. The Architect's
 review of `5d7692f` rejected the prior register-only ownership interpretation.
 Historical Course records are not synchronized with active operational owners.
-Schema-2 accounts retain the established access path before conversion;
-schema-3 cart access requires an explicit registered menu grant and never
-falls back to a service or Course grant.
+Schema-2 accounts retain the established access path before conversion. A
+registered cart menu requires its explicit menu grant; a menu-less cart service
+continues through its explicit service-asset grant without creating a public
+menu. Neither path falls back to Course ownership or authorization.
 
 The existing Monarch public URL
 `https://app.fairwayrefresh.com/cartmenus/monarchbay_tony_lema_course` remains
@@ -1769,11 +1782,12 @@ request mappings, installed signs, firmware and OTA assignments.
 The CPO-supplied restaurant source is `Restaurant menu.docx`, SHA-256
 `da2583425ae805a9a5bb7b0100c29f699d9d4d15fa22ebaccc9986b9df464ed0`.
 The CPO approved the corrected full transcription: 24 priced products, five
-ordered categories and all source notes. The local approved import package
-is content evidence, not production publication or data-write authorization.
-No guessed products or demonstration entries may become restaurant content.
+ordered categories and all source notes. It was published with the canonical
+restaurant importer on 2026-11-16; its package and source-document hashes and
+production catalog revision are recorded below. No guessed products or
+demonstration entries may become restaurant content.
 
-Before a separately authorized production cutover:
+Before production writes and serving-cohort promotion:
 
 1. Verify the production backup/recovery capability, current recovery point
    and restore procedure under Production Change Safety. Retaining source
@@ -1791,11 +1805,15 @@ Before a separately authorized production cutover:
    and evidence. Verify identities, document counts, values, nested histories
    and old/new effective permission boundaries. There must be one active
    serving owner, not dual writes or silent legacy fallback.
-   After every reviewed Customer account has explicit schema-3 grants, set
-   that Customer's `authorization_schema_version` to `3` as the final
-   authorization cutover marker. Backend access, Admin writes and Firestore
-   reads then refuse legacy Customer Course authorization; old clients cannot
-   recreate it. Do not set this marker before grant conversion is verified.
+   Convert each reviewed account's effective grants to schema 3: service
+   grants preserve authorized operations, and menu grants are present only for
+   menus actually registered and granted. A service may have no public cart
+   menu; do not generate one to satisfy migration. After every reviewed
+   Customer account's grants are verified, set that Customer's
+   `authorization_schema_version` to `3` as the final authorization cutover
+   marker. Backend access, Admin writes and Firestore reads then refuse legacy
+   Customer Course authorization; old clients cannot recreate it. Do not set
+   this marker before grant conversion is verified.
 5. Stage the exact compatible Admin/receiver and Hosting artifacts under
    existing release gates. Coordinate the data/rules/client contracts and
    old cached-client behavior in the reviewed cutover order. Code rollback
@@ -1806,10 +1824,12 @@ Before a separately authorized production cutover:
    against the approved transcription. Keep physical sign use and CPO
    operational acceptance distinct from local tests or generated QR images.
 
-Stop if any operation requires unapproved production writes or cannot preserve
-data and authorization. Do not deploy a partial ownership migration as a
-workaround. The current deployed schema/behavior remains authoritative for
-production until an explicitly authorized and verified cutover.
+Stop if any further operation requires unapproved production writes or cannot
+preserve data and authorization. Do not deploy a partial ownership migration
+as a workaround. Following the verified cutover below, Customer-owned assets,
+services, menu registrations and schema-3 grants are authoritative. Any
+recovery must preserve Customer-mode ownership and reconcile activity; never
+re-enable a legacy writer or replay the pre-cutover plan over live records.
 
 ### Customer operational ownership correction
 
@@ -1908,13 +1928,12 @@ and no production auto-run:
    authoritative backups/recovery points and reconcile intervening activity,
    never replay the pre-cutover legacy plan over live Customer records.
 
-At source-review publication, remaining production prerequisites were explicit
-authorization, reviewed exact source/build identities, verified backup/recovery
-evidence, reviewed migration fingerprint/access changes, drained writers,
-index readiness, coordinated data/rules/client cutover and operational
-acceptance. None was executed or claimed by the local correction.
+At source-review publication, production prerequisites remained. The CPO
+subsequently authorized this promotion. Current read-only preflight and
+recovery evidence are recorded below; writer fencing, migration, deployment
+and post-cutover acceptance remain execution steps.
 
-#### Production promotion authorization and preparation — 2026-11-16
+#### Production promotion authorization and preflight — 2026-11-16
 
 The CPO authorized resuming the previously accepted Customer-ownership
 production promotion from release preparation on 2026-11-16. The approved
@@ -1933,16 +1952,213 @@ verification.
 Read-only production preflight reconfirmed the `(default)` database in `nam5`,
 seven-day PITR, the daily 30-day backup schedule, and READY backup
 `243d89d7-e6ad-4229-82d9-bd9a69994ea4` for that database. Receiver and Admin
-each route 100% to their existing `nogate-1115-1222` revision; notifier remains
-100% on `00009-seg`. No production data, service, traffic, rule, index,
-identity, or device was changed during release preparation.
+each route 100% to `nogate-1115-1222`; notifier remains 100% on `00009-seg`.
+No production data, service, traffic, rule, index, identity, or device was
+changed during preflight.
 
-The current production composite-index inventory does not include the
-Customer-service request indexes required by the candidate. They must be
-created from the reviewed candidate and reach READY before the coordinated
-cutover. The migration plan is being prepared read-only; its exact fingerprints
-and access conversions, writer quiescence, index readiness, and post-cutover
-acceptance remain required before production writes or traffic promotion.
+The candidate's three Customer-service request composites are all present and
+READY in production: `customer_id + service_id + status + received_at
+ASCENDING`, `customer_id + service_id + completed_at ASCENDING`, and
+`customer_id + service_id + received_at DESCENDING`. No index creation is
+required.
+
+Read-only migration preparation was rerun from the tested candidate worktree
+against production with the CPO-approved restaurant payload:
+
+- `CUST-0001`: fingerprint
+  `eadc6181eebe55b7ef215133fa994ca9c518f27fdd0480651d1067081c65ed10`;
+  4,246 target rows and 8,059 source paths. It plans the existing cart menu
+  `cart-COURSE-0001` associated with asset `COURSE-0001`, preserving
+  `monarch-bay` and `monarchbay_tony_lema_course`; adds the approved
+  `restaurant-CUST-0001` menu; and leaves `COURSE-0004` as an operational
+  cart asset without a public menu. The restaurant menu receives no access
+  grant. Exactly four routes resolve to the two canonical menus and their
+  permanent cart aliases.
+- `CUST-0002`: fingerprint
+  `fe48c80b2c164dfb7863f52e4d0371dbc75004f102b7a0640f1ade9c6413d3c1`;
+  91 target rows and 109 source paths. It preserves its service and cart
+  inventory but plans no menus or public routes and no menu grants.
+
+These reviewed fingerprints were revalidated after the writer fence and
+matched exactly before copying. The completed cutover and post-deployment
+evidence follow.
+
+#### Production cutover completed — 2026-11-16
+
+The CPO-authorized release source is commit `dc60b997d5582e997a56b2e73d054556e0a23c98`
+on `feature/customer-ownership-production-20261116`. It contains the tested
+planner/access corrections, menu-less inventory entry, customer-owned menu
+registration, approved UX, and this cutover record. Local `node_modules` and
+the untracked customer-acceptance Firebase configuration were excluded.
+
+Before copying data, both serving Cloud Run services were switched to the
+tested Customer-mode revisions; their protected operator bootstrap reads
+returned 401 without authentication. All 23 old Admin and 18 old receiver
+revision tags were removed from public routing to prevent stale tagged
+revisions from bypassing the writer fence. The old revisions were retained,
+not deleted. The new `menu-cutover-1116` revision tags remain the only tagged
+routes, and both legacy tag URLs checked after the switch returned 404.
+Production Firestore rules from the candidate compiled and deployed
+successfully. No index deployment was needed: all three required
+Customer-service request composites were already READY.
+
+After that fence, read-only preparation reproduced the exact fingerprints
+above. Migration `customer-ownership-CUST-0001-20261116` copied and verified
+4,246 target rows; migration `customer-ownership-CUST-0002-20261116` copied
+and verified 91 target rows. Both Customers are now in `operational_storage`
+state `customer` with authorization schema 3. CUST-0001 has exactly the
+registered cart and restaurant menus. Its cart remains associated with
+asset `COURSE-0001`; `COURSE-0004` retains its cart asset without a public
+menu.
+CUST-0002 has no menu or public route. The migration verification confirmed
+source values, nested identities and histories, access conversions and
+integrity fingerprints.
+
+The existing canonical `importRestaurantMenu` importer published
+`restaurant-CUST-0001`, using the approved JSON package SHA-256
+`d525ce1c061f974bb68196dc554db4471f3182437a61b0b90f0b114a62f76bd1` and
+approved source-document SHA-256
+`da2583425ae805a9a5bb7b0100c29f699d9d4d15fa22ebaccc9986b9df464ed0`.
+The verified global Admin actor is recorded on the imported catalog; revision
+1 contains all five categories and 24 products. No restaurant menu grant was
+created.
+
+Serving release identities:
+
+| Surface | Production identity | Verified result |
+|---|---|---|
+| Receiver | `fairway-button-receiver-menu-cutover-1116`, image `sha256:447bf62ea87e7c227c10c8c0c629730b47a3e882437ff07aa68943ea2855124c` | READY; 100% traffic; original receiver runtime identity preserved |
+| Admin API | `fairway-admin-menu-cutover-1116`, image `sha256:0f8b04b69fa6568bf44de982688111f431ece137511561975133924e7d0a6d0c` | READY; 100% traffic; original Admin runtime identity preserved |
+| Firebase Hosting | `savvy-kit-496703-r5`, version `670d4ac3cc383263`, release `1794876716835000` | Released 2026-11-17 00:51:56Z (2026-11-16 16:51:56 PST); 128 files |
+
+Post-deployment public API checks returned HTTP 200 for `monarch-bay`,
+`monarchbay_tony_lema_course` and `cust-0001_restaurant_menu`. Both cart aliases
+resolve to `cart-COURSE-0001` and return 82 currently On Cart products at
+inventory revision 1576; Firestore independently reports 82 unarchived
+`on_cart` products from 139 inventory products. The existing public cart URL
+was loaded in a browser and displayed the current Monarch Bay inventory. The
+restaurant URL displayed THE LANDING, all five approved categories and all
+24 products. Both Customer menu QR records exist. Access records preserve
+three cart-menu grants and the established service grants; restaurant grants
+remain disabled. CUST-0002 still has zero menus.
+
+The READY production backup and recovery schedule were unchanged. No Firebase Auth or device identities, firmware, unrelated
+services or notifier configuration were changed. No synthetic operational
+request, stock adjustment/sale or device traffic was generated. User-facing
+authenticated operational writes were not used as smoke tests; local
+Customer-mode authorization/operation suites and exact production copy
+verification cover those paths without adding production activity. Legacy code
+rollback is not safe after this data cutover; recover forward using
+Customer-compatible revisions and the verified recovery procedure.
+
+#### Customer menu branding template — production release (2026-11-16)
+
+After the cutover, the CPO observed that the public Monarch Bay cart menu
+lacked the Fairway Refresh / AT / Monarch Bay header. Inventory, aliases and
+live On Cart behavior had migrated faithfully, but the register record was
+created without branding, the template showed AT and a Customer logo only when
+a menu carried `branding.logo_url`, and the approved Monarch artwork had never
+been attached to the Customer. The CPO approved formalizing the shared
+template with Customer-owned branding, then authorized its production release.
+
+Implementation (based on `4de0b8c` of
+`feature/customer-ownership-production-20261116`; the release commit follows
+this record in Git):
+
+- `lib/customer_branding.js` owns Customer branding at
+  `customers/{customerId}/branding/profile`, with immutable logo bytes at
+  `customers/{customerId}/branding_logos/{sha256}`. Replaced logos are
+  retained, not deleted. Existing deny-all Firestore rules keep both
+  server-only; no rules change was needed.
+- Admin `GET`/`PUT /api/v1/admin/customers/{customerId}/branding/logo` reads or
+  sets the logo (validated PNG, at most 900 KiB, 2048 pixels; Admin only).
+  Public `GET /api/v1/public/customers/{customerId}/logo/{sha256}` serves any
+  logo stored for that Customer after verifying its hash, with
+  `Cache-Control: public, max-age=31536000, immutable` and `nosniff`. A
+  historical logo URL therefore keeps serving its original bytes after
+  replacement, and never under another Customer.
+- Every public menu response resolves `branding` from its owning Customer in
+  the same read-only transaction, so it references only the current logo.
+  Menus can no longer accept or store `branding`; any legacy per-menu value is
+  ignored and removed when that menu is next saved.
+- `PublicMenuApp.jsx` always renders the Fairway Refresh logo, AT and the
+  Customer slot. The Customer logo resolves against the menu API origin; only
+  API-relative paths are accepted. Missing or unloadable logos fall back to
+  the Customer name.
+- `scripts/publish_customer_logo.js` derives the web logo from approved
+  artwork after verifying the source SHA-256, and writes only with `--apply`.
+
+Release validation:
+
+- Backend `npm test` (legacy mode, all suites) and
+  `npm run test:customer-operations` (which now includes
+  `customer_branding.test.js`) pass. The branding tests cover deterministic
+  derivation, Monarch derivative limits, Admin-only writes, inheritance by
+  cart aliases and restaurant menus, logo replacement reaching every menu,
+  historical URLs serving original bytes with immutable headers, Customer
+  isolation of current and historical hashes, tamper and unknown-hash 404s,
+  and rejection or removal of menu-level branding. The Customer-mode
+  migration test verifies that a migrated cart menu inherits Customer
+  branding through both aliases.
+- Frontend `npm test` passes 108 of 108. The public-menu browser test verifies
+  AT and Customer-name fallback without a logo; a loaded logo resolved against
+  the API origin; one-row Fairway / AT / Customer order at 320, 390 and 900
+  pixels; broken-image fallback; and rejection of non-relative logo URLs.
+  The full browser suite passes except two failures that reproduce on
+  unmodified `4de0b8c` and involve unchanged files (Admin onboarding form and
+  a static `main.jsx` sign-out count).
+- `npm run build:production` passes and verifies 107 Driving Range assets.
+
+Production release, in order:
+
+1. Receiver and Admin were deployed from this source with the cutover
+   commands and unchanged Customer-mode configuration as no-traffic revisions
+   tagged `menu-branding-1116`. On the tagged Admin revision all three menu
+   destinations returned `branding.logo_url: null` and payloads, excluding
+   `branding`, byte-identical to the serving cutover revision; the Admin
+   branding route returned 401 unauthenticated. Both services were then
+   switched to 100%. The `menu-cutover-1116` revisions and tags are retained
+   for rollback. (This workstation's IPv6 route to Google APIs was failing, so
+   gcloud was run through a local IPv4-only Python wrapper; the deployment
+   commands themselves were unchanged.)
+2. Hosting was built with `npm run build:production` and deployed with
+   `firebase deploy --only hosting` to `savvy-kit-496703-r5`.
+3. The Monarch Bay logo was published to CUST-0001 with
+   `publish_customer_logo.js --apply` (actor `josh@fairwayrefresh.com`) after
+   a dry run reproduced the approved derivative: source
+   `0851107eae56a7e1562a179f19ab6a611f8dc91c36e70f137abf7d85bd9de85e` →
+   640×321, 167,935 bytes, SHA-256
+   `854f1da92432a293a5e3e1ea660d32e553ef8fcad81308c84bfdc17aa3f02ae5`, crop
+   `{left 129, top 182, width 1283, height 643}`.
+
+Serving release identities:
+
+| Surface | Production identity |
+|---|---|
+| Receiver | `fairway-button-receiver-menu-branding-1116`, image `sha256:149f7e5a10131d4f26840b8e7644c9d07156f182811548979c7c15a7a4100b35`, 100% |
+| Admin API and public menus | `fairway-admin-menu-branding-1116`, image `sha256:02ed208aea502d08a5a33be62b3c77e31715939f07d47455ed6fe17609aeb829`, 100% |
+| Hosting | version `9852a7384c357435`, released 2026-11-17T02:04:03Z (UTC) |
+| CUST-0001 logo | `customers/CUST-0001/branding_logos/854f1da9…2ae5`, published 2026-11-17T02:04:32Z (UTC) |
+
+Production verification:
+
+- `monarch-bay`, `monarchbay_tony_lema_course` and `cust-0001_restaurant_menu`
+  each return 200 with `logo_url`
+  `/api/v1/public/customers/CUST-0001/logo/854f1da9…2ae5`. Excluding
+  `branding`, their payloads are byte-identical to the pre-release responses:
+  the cart menu remains `cart-COURSE-0001`, revision 1576 with 82 On Cart
+  products in 12 categories; the restaurant menu remains
+  `restaurant-CUST-0001`, revision 1, 5 categories and 24 products.
+- The logo URL returns 200 `image/png`, 167,935 bytes, whose SHA-256 matches,
+  with immutable caching and `nosniff`. The same hash under CUST-0002 returns
+  404; POST returns 405; the Admin branding route returns 401
+  unauthenticated. The receiver's protected operator bootstrap still returns
+  401, and Admin's still returns 404, as on the prior revisions.
+- In the browser, all three destinations show the Fairway Refresh logo, AT
+  and the Monarch Bay logo, both images loaded, without the name fallback. The
+  header is one row with no horizontal overflow at 390 pixels.
+- Firestore (read-only): CUST-0001 holds exactly the cart and restaurant menus
+  and one logo; CUST-0002 has no menus, branding profile or logos.
 
 #### Local correction verification
 
@@ -1976,8 +2192,10 @@ a production release.
   components; current backend regressions verify their Customer storage
   contract. No cart algorithm, polling or product-behavior redesign occurred.
 - Editor diagnostics and Git whitespace checks pass. Logs and emulator data
-  remain local, outside tracked source. No production migration, deployment,
-  account/permission mutation, device operation, commit, push or merge occurred.
+  remain local, outside tracked source. At this local-validation checkpoint no
+  production migration, deployment, account/permission mutation, device
+  operation, commit, push or merge had occurred; the later production outcome
+  is recorded in “Production cutover completed” above.
 
 ### Published menu increment verification (2026-11-15, historical source review)
 

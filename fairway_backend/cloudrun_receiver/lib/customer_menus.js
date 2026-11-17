@@ -102,7 +102,7 @@ async function registerCustomerAssets(db, customerId, actorUid) {
 }
 
 async function saveMenu(db, customerId, menuId, body, actorUid) {
-  fields(body, ['name', 'type', 'slug', 'aliases', 'state', 'asset_id', 'title', 'subtitle', 'footer', 'timezone', 'branding']);
+  fields(body, ['name', 'type', 'slug', 'aliases', 'state', 'asset_id', 'title', 'subtitle', 'footer', 'timezone']);
   const parent = customerRef(db, customerId);
   const ref = menuId ? menuRef(db, customerId, menuId) : parent.collection('menus').doc();
   return db.runTransaction(async (tx) => {
@@ -162,18 +162,14 @@ async function saveMenu(db, customerId, menuId, body, actorUid) {
       subtitle: inventory.optionalText(body.subtitle ?? old?.subtitle ?? null, 'subtitle', 400),
       footer: inventory.optionalText(body.footer ?? old?.footer ?? null, 'footer', 1000),
       timezone: body.timezone ?? old?.timezone ?? asset?.data()?.timezone ?? null,
-      branding: body.branding ?? old?.branding ?? null,
       updated_at: now, updated_by: actorUid,
       ...(old ? {} : { created_at: now, created_by: actorUid }),
     };
     if (record.timezone !== null) {
       try { new Intl.DateTimeFormat('en', { timeZone: record.timezone }); } catch { fail(400, 'invalid_timezone', 'Invalid timezone'); }
     }
-    if (record.branding !== null && (typeof record.branding !== 'object' || Array.isArray(record.branding) ||
-        Object.keys(record.branding).some((key) => key !== 'logo_url') ||
-        typeof record.branding.logo_url !== 'string' || !/^\/[A-Za-z0-9/_\-.]+$/.test(record.branding.logo_url))) {
-      fail(400, 'invalid_branding', 'Brand logo must be a local path');
-    }
+    // Branding is Customer-owned (customer_branding.js); menus never carry it.
+    delete record.branding;
     tx.set(ref, record);
     slugRefs.forEach((target) => tx.set(target, { customer_id: customerId, menu_id: ref.id }));
     tx.set(parent.collection('menu_qr_codes').doc(ref.id), {

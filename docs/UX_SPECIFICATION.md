@@ -1130,11 +1130,16 @@ verification performed.
 
 ## Customer Menu Register and Restaurant Menu
 
-**CPO/Architect decision, 2026-11-15; authorized local implementation, not
-production deployment.** Customer owns menus, inventory, user entitlements and
-service assets. Course is location/operation context only. This supersedes
-earlier Course-owned inventory and Course-dependent permission descriptions;
-those describe the prior implementation and retained production evidence.
+**CPO/Architect decision, 2026-11-15.** Customer owns menus, inventory, user
+entitlements and service assets. Course is location/operation context only.
+The CPO authorized the coordinated production promotion, completed on
+2026-11-16 as recorded in the
+[Deployment Guide](DEPLOYMENT_GUIDE.md#production-cutover-completed--2026-11-16).
+This specification defines behavior, while the deployment record is the
+evidence of execution.
+This supersedes earlier Course-owned inventory and Course-dependent
+permission descriptions; those describe the prior implementation and retained
+production evidence.
 
 - Each Customer owns a menu register. Names such as `cart_menu` and
   `restaurant_menu` are unique within that Customer, not globally unique
@@ -1183,10 +1188,30 @@ those describe the prior implementation and retained production evidence.
   entitlement is inferred from Customer membership. Existing cart access is
   preserved during migration; restaurant access starts disabled until an
   authorized Admin explicitly grants it.
+- A registered cart menu is not required for an authorized cart service to
+  operate. When a Customer service has an authorized cart asset but no cart
+  menu is registered, its granted operators can enter Cart Inventory directly;
+  the workspace clearly states that no public menu is registered. Do not
+  synthesize a menu identity, alias, QR record or public route. If a cart menu
+  is registered, its explicit menu grant remains required; service access does
+  not bypass a missing grant or archived menu.
 - One shared golfer-menu template file serves cart and restaurant menus and
   future Customers. Identity, branding and content are supplied as data, not
   Customer-specific template forks or hardcoded URL translations. A reviewed
   template update takes effect across menus through normal deployment.
+- Every public menu header reads **Fairway Refresh logo / AT / Customer logo**
+  in one centered row, for cart and restaurant menus alike. The Fairway
+  Refresh horizontal logo is part of the template. Branding, including the
+  logo, is owned by the Customer and inherited automatically by every menu of
+  that Customer; menus never own, assign or override a logo. When the Customer
+  has no logo, or it cannot load, the same slot shows the Customer name; the
+  Fairway logo and AT remain. Customer logos are published from approved
+  source artwork as a deterministic web derivative (invisible margins trimmed,
+  proportions preserved, at most 640 pixels wide) and served immutably by
+  content hash, so a replacement logo reaches all of that Customer's menus on
+  the next menu open. Menu responses reference only the current logo; a
+  previously published logo URL keeps serving its original bytes, and only
+  under its own Customer.
   Categories initially collapse; saved content is read on open/reload, without
   polling or a separate Publish step. Ordering and checkout remain excluded.
 - The restaurant source is the CPO-supplied `Restaurant menu.docx`. The CPO
