@@ -80,6 +80,16 @@ function validateBay(bay, course) {
   }
 }
 
+// The bay page embeds its Customer's restaurant menu only when exactly one
+// active restaurant menu is registered; otherwise the menu link is hidden.
+async function restaurantMenuSlug(db, customerId) {
+  if (typeof customerId !== 'string' || !customerId) return null;
+  const menus = (await db.collection('customers').doc(customerId).collection('menus').get()).docs
+    .map((doc) => doc.data())
+    .filter((menu) => menu.type === 'restaurant' && menu.state === 'active' && typeof menu.slug === 'string' && menu.slug);
+  return menus.length === 1 ? menus[0].slug : null;
+}
+
 async function publicBay(db, id) {
   const snapshot = await bayRef(db, id).get();
   if (!snapshot.exists) throw new RequestError(404, 'Bay not found');
@@ -88,11 +98,14 @@ async function publicBay(db, id) {
   const course = await coursesCollection(db, bay.customer_id).doc(bay.course_id).get();
   const service = await requireService(db, bay.customer_id, bay.service_id || bay.course_id);
   validateBay(bay, mode() === 'customer' ? service : course.exists ? course.data() : null);
+  const available = resolveCourseServiceState(service).active;
+  const menuSlug = available ? await restaurantMenuSlug(db, bay.customer_id) : null;
   return {
     bay_number: bay.bay_number,
     ...(bay.bay_side ? { bay_side: bay.bay_side } : {}),
     course_name: mode() === 'customer' ? service.course_name : course.data().course_name,
-    available: resolveCourseServiceState(service).active,
+    available,
+    ...(menuSlug ? { restaurant_menu_slug: menuSlug } : {}),
   };
 }
 

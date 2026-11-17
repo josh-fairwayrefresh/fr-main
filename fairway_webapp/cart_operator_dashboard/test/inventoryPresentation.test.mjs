@@ -56,7 +56,7 @@ test('subcategory filters appear as a second row, reset on category change, and 
 });
 
 test('public menu uses category icons and retains NA for Non-Alcoholic', async () => {
-  const publicMenuSource = await readFile(new URL('../src/PublicMenuApp.jsx', import.meta.url), 'utf8');
+  const publicMenuSource = await readFile(new URL('../src/MenuCategoryGrid.jsx', import.meta.url), 'utf8');
   assert.match(publicMenuSource, /'craft beers': Beer/);
   assert.match(publicMenuSource, /shots: GlassWater/);
   assert.match(publicMenuSource, /cocktails: Martini/);

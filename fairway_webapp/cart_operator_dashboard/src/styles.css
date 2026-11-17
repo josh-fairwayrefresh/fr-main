@@ -15,13 +15,13 @@ body {
 
 :root.public-bay-page {
   color-scheme: light;
-  background: #fff;
-  color: #163c2c;
+  background: #f6f2e8;
+  color: #26372e;
 }
 
 .public-bay-page body {
   min-height: 100vh;
-  background: #fff;
+  background: #f6f2e8;
 }
 
 button {

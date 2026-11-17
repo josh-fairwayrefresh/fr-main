@@ -1,11 +1,35 @@
-.bay-page { max-width: 32rem; margin: 2rem auto; padding: 1.25rem; text-align: center; color: #163c2c; background: #fff; }
-.bay-page img { width: min(100%, 22rem); height: auto; }
-.bay-page h1 { font-size: 2.5rem; margin: 1rem 0; }
-.bay-page h2 { font-size: 1.4rem; line-height: 1.4; }
-.bay-page p { line-height: 1.5; overflow-wrap: anywhere; }
-.bay-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin: 2rem 0; }
-.bay-page button { min-width: 7rem; min-height: 48px; padding: .75rem 1.5rem; font: inherit; border: 2px solid #246447; border-radius: .6rem; background: white; color: #163c2c; cursor: pointer; }
+/* Driving Range bay page. Palette tokens are shared with the public menu
+   template (public-menu.css) so the request page and its menu match. */
+.bay-page { max-width: 32rem; min-height: 100vh; margin: 0 auto; padding: 0 18px 24px; color: var(--pm-ink); background: var(--pm-cream); font-family: "Avenir Next", Avenir, "Trebuchet MS", sans-serif; color-scheme: light; }
+.bay-page p { overflow-wrap: anywhere; }
+
+.bay-banner { margin: 0 -18px; padding: 10px 16px 9px; border-top: 6px solid var(--pm-gold); border-bottom: 1px solid #d9cfb6; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; background: #fffdf8; }
+.bb-text { min-width: 0; display: grid; gap: 2px; }
+.bb-text p { margin: 0; color: #987329; font-size: 10.5px; font-weight: 800; letter-spacing: .9px; line-height: 1.35; text-transform: uppercase; }
+.bb-power { display: grid; justify-items: end; gap: 2px; padding: 2px 0 2px 12px; border-left: 1px solid var(--pm-gold); }
+.bb-power span { color: var(--pm-muted); font-size: 8.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+.bb-power img { display: block; width: 128px; height: auto; }
+
+.bay-card { margin: 14px 0 0; padding: 16px 14px 14px; border: 1px solid #e3dccb; border-radius: 10px; background: #fffdf8; text-align: center; }
+.bay-card > p, .bay-card section > p { margin: 10px 0 0; font-size: 15px; line-height: 1.45; }
+.bay-q { margin: 0; color: var(--pm-green-deep); font: 700 22px/1.25 Georgia, serif; }
+.bay-name { margin: 10px 0 0; color: #987329; font: 700 26px/1.1 Georgia, serif; letter-spacing: .5px; }
+.bay-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin: 16px 0 2px; }
+.bay-card button { min-width: 7rem; min-height: 48px; padding: .75rem 1.5rem; font: inherit; font-size: 16px; border: 2px solid #246447; border-radius: .6rem; background: white; color: #163c2c; cursor: pointer; }
 .bay-actions button:first-child { background: #246447; color: white; }
-.bay-page button:disabled { opacity: .6; cursor: wait; }
-.bay-page button:focus-visible { outline: 3px solid #d09a22; outline-offset: 3px; }
-.bay-test { border: 2px solid #a35700; padding: .6rem; font-weight: 700; color: #854200; }
+.bay-card button:disabled { opacity: .6; cursor: wait; }
+.bay-card button:focus-visible { outline: 3px solid #d09a22; outline-offset: 3px; }
+.bay-reload { margin-top: 14px; }
+.bay-done { min-height: 66px; margin-top: 12px; display: grid; align-content: center; gap: 4px; }
+.bay-done p { margin: 0; font-size: 15px; line-height: 1.45; }
+.bay-page .bay-close { color: var(--pm-muted); font-size: 14px; }
+.bay-error { color: #8a2f1d; }
+.bay-test { margin: 12px 0 0; border: 2px solid #a35700; padding: .6rem; font-weight: 700; color: #854200; text-align: center; }
+
+.bay-suspended { min-height: 100svh; display: flex; flex-direction: column; }
+.bay-closed { padding-block: 22px; }
+.bay-close-note { margin: auto 0 0; padding-top: 14px; border-top: 1px solid var(--pm-line); color: var(--pm-muted); font-size: 14px; text-align: center; }
+
+.bay-sub-bar { margin: 18px -18px 0; min-height: 40px; padding: 0 16px; border-bottom: 3px solid var(--pm-gold); display: flex; align-items: center; justify-content: center; gap: 11px; background: var(--pm-green); color: #fffdf8; font-size: 11.5px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; }
+.bay-sub-bar i { width: 1px; height: 16px; background: #d9bd70; }
+.bay-menu .pm-section-label { margin-top: 14px; }
