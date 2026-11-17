@@ -4,6 +4,12 @@
 
 This document owns device identity, authentication, registry lifecycle, and commissioning requirements. Firmware build/flash procedures are owned by `docs/DEPLOYMENT_GUIDE.md`; current firmware behavior is owned by `docs/FIRMWARE_SPECIFICATION.md`.
 
+For incident recovery and restoration of backend/device connectivity, start
+with the [Recovery Guide](RECOVERY_GUIDE.md#backend-to-device-connectivity).
+This document retains the device-specific lifecycle APIs, eligibility,
+physical cutover constraints and dated execution evidence used by that guide.
+It does not establish a separate digital-system recovery workflow.
+
 The latest CPO report records OTA 0.1 installed on field units FRB-0001,
 FRB-0002, FRB-0003, FRB-0004 and FRB-0006; FRB-0005 alone runs operational
 OTA 1.0 on the CPO's workbench. FRB-0001 and FRB-0006 lack demonstrated
@@ -262,8 +268,10 @@ are recorded in `docs/FIRMWARE_SPECIFICATION.md`.
 
 ### USB-only commissioning
 
-**Scope:** this section owns credential commissioning and recovery, not
-Version 6A. The reviewed
+**Scope:** this section owns credential commissioning and device-specific
+lifecycle mechanics, not the digital-system incident workflow or Version 6A.
+Use the [Recovery Guide](RECOVERY_GUIDE.md#backend-to-device-connectivity)
+for incident-path selection. The reviewed
 [Version 6A restart procedure](./DEPLOYMENT_GUIDE.md#version-6a-field-deployment-suspension-and-restart-2026-11-15)
 installs `OTA-1.0-r4` on FRB-0001 while preserving existing Protected Storage.
 It uses no commissioner, credential extraction, rotation, provisioning,

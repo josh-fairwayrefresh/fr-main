@@ -273,7 +273,8 @@ validation are recorded in the
 
 Released through merged PR #21; the
 [current deployment record](DEPLOYMENT_GUIDE.md#admin-button-activity-report-controlled-production-release---2026-10-28)
-owns source/runtime identities, production verification and recovery.
+owns source/runtime identities, production verification and deployment rollback.
+The [Recovery Guide](RECOVERY_GUIDE.md) owns operational restoration.
 Existing global Admin authorization gates
 **Admin → Reports → Customer → Course → date range → Generate → Download PDF**.
 The selectors reuse Admin's existing Customer/Course directory; the backend
@@ -538,8 +539,9 @@ without an initialization write or automatic movement; an existing On Cart
 product remains On Cart, including on the public menu, until an explicit
 authorized stock operation changes it. Production continues using ordinary
 Firebase sign-in and existing account/Course permissions, never automatic
-sandbox review entry. Release verification and recovery are owned by the
+sandbox review entry. Release verification and deployment rollback are owned by the
 [Deployment Guide](DEPLOYMENT_GUIDE.md#persistent-inventory-production-release--2026-10-26).
+Operational restoration is owned by the [Recovery Guide](RECOVERY_GUIDE.md).
 
 The CPO authorized this coherent increment on 2026-10-23, from accepted main
 `08aa2cf0cb7d16b7bb6ab6d5900f15712e5060bf`, initially for sandbox review.

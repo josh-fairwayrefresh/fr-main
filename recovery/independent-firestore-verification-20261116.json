@@ -1,0 +1,64 @@
+{
+  "source_documents_at_comparison_time": 4486,
+  "restored_documents": 4486,
+  "verified_unchanged_snapshot_documents": 4486,
+  "verified_by_collection_path": {
+    "customers": 2,
+    "customers/courses": 4,
+    "customers/courses/inventory": 2,
+    "customers/courses/inventory_audits": 28,
+    "customers/courses/inventory_categories": 13,
+    "customers/courses/inventory_categories/subcategories": 41,
+    "customers/courses/inventory_events": 1600,
+    "customers/courses/inventory_operations": 1560,
+    "customers/courses/inventory_product_keys": 140,
+    "customers/courses/inventory_products": 140,
+    "customers/courses/inventory_sessions": 44,
+    "customers/courses/inventory_shift_closures": 16,
+    "customers/courses/inventory_shifts": 51,
+    "customers/courses/on_premise_service_events": 6,
+    "customers/courses/published_menus": 4,
+    "customers/courses/sales_days": 16,
+    "customers/courses/service_days": 1,
+    "customers/courses/service_events": 169,
+    "customers/courses/weather_days": 30,
+    "customers/inventory_operations": 8,
+    "customers/staff": 8,
+    "qr_bays": 52,
+    "qr_bays/submissions": 12,
+    "requests": 438,
+    "requests/reporting_state_history": 94,
+    "user_access": 7
+  },
+  "unverifiable_changed_or_deleted": {},
+  "mismatches": {},
+  "oldest_verified_creation_time": "2026-09-18T23:50:48.679168Z",
+  "newest_verified_creation_time": "2026-11-16T17:18:59.091039Z",
+  "source_project": "savvy-kit-496703-r5",
+  "recovery_project": "fairway-refresh-recovery",
+  "recovery_database": "recovery-import-20261116",
+  "snapshot_time": "2026-11-16T19:37:00Z",
+  "import_operation": "projects/fairway-refresh-recovery/databases/recovery-import-20261116/operations/AiBkNjJhZDhhMzViYmMtMGMwYi1mZWI0LTVmYWYtN2VkMzAxN2YkGnNlbmlsZXBpcAkKMxI",
+  "import_metadata": {
+    "@type": "type.googleapis.com/google.firestore.admin.v1.ImportDocumentsMetadata",
+    "startTime": "2026-11-16T19:42:12.738961Z",
+    "endTime": "2026-11-16T19:43:40.523812Z",
+    "operationState": "SUCCESSFUL",
+    "progressDocuments": {
+      "estimatedWork": "6612",
+      "completedWork": "6612"
+    },
+    "progressBytes": {
+      "estimatedWork": "5424414",
+      "completedWork": "5624985"
+    },
+    "inputUriPrefix": "gs://fairway-refresh-recovery-exports/firestore/2026-11-16T19:37:00Z/7c60b0d9-8e8b-4617-a563-5cedca531670/data"
+  },
+  "scope": [
+    "customers",
+    "requests",
+    "user_access",
+    "qr_bays"
+  ],
+  "production_writes": 0
+}

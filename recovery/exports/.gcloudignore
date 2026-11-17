@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!.dockerignore
+!package.json
+!package-lock.json
+!cli.cjs
+!jobs.cjs
+!cloudbuild.json

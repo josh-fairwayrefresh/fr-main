@@ -1,0 +1,141 @@
+{
+  "public_key_fingerprint": "sha256:be1c125733db97148309513e75282736024bec3e2b47beb44b7aa3008f4f88eb",
+  "independent_cloud_protection": "downloaded_and_reverified",
+  "independent_bucket_prefix": "gs://fairway-refresh-recovery-accepted-artifacts/accepted/accepted-ota-recovered-again-20261116/",
+  "retention": "supported_device_release_lifetime_no_age_expiry",
+  "releases": {
+    "OTA-0.1": {
+      "sha256": "98687914b7ff0b7ab9116a7fff34d525b67c96955f84d06a24bd349538240f40",
+      "source_commit": "2d72b5de401b3faecb09a5e86a5410156692d18e",
+      "build_source_sha256": "6c786dd3257d5c05c4b792fa3d33f90d6473a790036dbc1377f886395433040c",
+      "canonical_manifest_present": false,
+      "files": {
+        "OTA-0.1-manifest.json": "bc6a1a731d38c036efae28f9ef323870f3a5f254ae581aa052af78b373d05b20",
+        "OTA-0.1-ota.signed.bin": "98687914b7ff0b7ab9116a7fff34d525b67c96955f84d06a24bd349538240f40",
+        "OTA-0.1-merged.hex": "1e87d6628fbdc5f034e7224440f23691542d3a61c03528f59b16400d5f7e48d7"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-0.1alt": {
+      "sha256": "0ba9922abd81af93c721a37ac3d4c7ba2739cef24eaa7e56966c812865089cd4",
+      "source_commit": "2d72b5de401b3faecb09a5e86a5410156692d18e",
+      "build_source_sha256": "6c786dd3257d5c05c4b792fa3d33f90d6473a790036dbc1377f886395433040c",
+      "canonical_manifest_present": false,
+      "files": {
+        "OTA-0.1alt-manifest.json": "0b301c4fd10e7febfd809d209a4b279d9cb5c32bc13c22d2ed3044512fb1c3f3",
+        "OTA-0.1alt-ota.signed.bin": "0ba9922abd81af93c721a37ac3d4c7ba2739cef24eaa7e56966c812865089cd4",
+        "OTA-0.1alt-merged.hex": "c9aa9cbcaabf6b7b746273da9871dae0e9bf959b42bfbb4592b8efbdec33085d"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-1.0": {
+      "sha256": "eab949f43a87949708e2764299464521e01688afe3307a1fe2444d92aa8d06b0",
+      "source_commit": "2d72b5de401b3faecb09a5e86a5410156692d18e",
+      "build_source_sha256": "6c786dd3257d5c05c4b792fa3d33f90d6473a790036dbc1377f886395433040c",
+      "canonical_manifest_present": false,
+      "files": {
+        "OTA-1.0-manifest.json": "51a8ac5be84f215c6ed5c906d906dd24ed22dabd0ab07b43e9cf5b5111d39980",
+        "OTA-1.0-ota.signed.bin": "eab949f43a87949708e2764299464521e01688afe3307a1fe2444d92aa8d06b0",
+        "OTA-1.0-merged.hex": "080050a560eab1dc1292c78610ee5e9d45e6f4c90d43fefba550584cd05dfd89"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-0.1alt-r2": {
+      "sha256": "2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844",
+      "source_commit": "11213b4ad0607486df12f28d764f6d6abd90cdb6",
+      "build_source_sha256": "47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-0.1alt-r2-manifest.json": "9408fb6cbd23f3349b7a30d5e968d665b0e31801aaf9cf261056c7e47f2189b2",
+        "OTA-0.1alt-r2-ota.signed.bin": "2f146c14586740fd7b0097e6a67ef2be3e82b20aa7d6b4d8cd792f39ef667844",
+        "OTA-0.1alt-r2-merged.hex": "8c5c0b9aaf66bee025f66ba4dc0e0716979c88c7c54ac9730cfb2dd2542bf388"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-1.0-r2": {
+      "sha256": "21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c",
+      "source_commit": "11213b4ad0607486df12f28d764f6d6abd90cdb6",
+      "build_source_sha256": "47bbaa7c2543469f336e81d91121c49d1334400cc5ac426b20ff8cd44e414dc3",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-1.0-r2-manifest.json": "1b9aa92a4ee89662c09707af42acb42ad4f14ea8d3a60eeac49bc755f42490c9",
+        "OTA-1.0-r2-ota.signed.bin": "21fe0f3df7cf775631b1d0af5f534ba35927e099e72b1b3184ee4713c4ba594c",
+        "OTA-1.0-r2-merged.hex": "2215521d2b71f1fd638155205b4832c4d55750152e6d3f3a9ed6bb2b4723bba1"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-0.1-r3": {
+      "sha256": "a93b4620d119a7d08b253ca76e1dcbe697557f329d2bf262246b742d58d6986d",
+      "source_commit": "a99c45cf97de478c5c199381e48e6061d9de5fcd",
+      "build_source_sha256": "7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-0.1-r3-manifest.json": "4c85e519549ff8c01fc434d9e20a96fae2f1b23f3a95d576c16ece84f780d510",
+        "OTA-0.1-r3-ota.signed.bin": "a93b4620d119a7d08b253ca76e1dcbe697557f329d2bf262246b742d58d6986d",
+        "OTA-0.1-r3-merged.hex": "0e99e939bbf8c1bdc68dcb7d96652104c25483cdf096a29f9a7d1bc44fb4a167"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-0.1alt-r3": {
+      "sha256": "79e53b5643fcc78cabb152e89eeac4fc1377587dd58b71c51d41c0cb7637275d",
+      "source_commit": "a99c45cf97de478c5c199381e48e6061d9de5fcd",
+      "build_source_sha256": "7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-0.1alt-r3-manifest.json": "d0cdebf44a3378b3449f83616f73fe0161a9795145d1f23eaeb62e32eb4f002e",
+        "OTA-0.1alt-r3-ota.signed.bin": "79e53b5643fcc78cabb152e89eeac4fc1377587dd58b71c51d41c0cb7637275d",
+        "OTA-0.1alt-r3-merged.hex": "8b0480000b231be66a533a39a58c958225d5d85e2dce97292847d945dada9dac"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-1.0-r3": {
+      "sha256": "2869c2f47cb1b6a35665235e6b24bacd401aaafe8dfa59f632514d0cf0ebd41d",
+      "source_commit": "00530a1a5875c3217e1de7e0368cd8b323fe1173",
+      "build_source_sha256": "7db7dfa0a8f8070eb93253cecddc82bce09b66d5585f165ef3041afca52b7051",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-1.0-r3-manifest.json": "077431b10d323b3f2890e1d529074ffcb90bde5373d8dd0b99431ee4d06a77d5",
+        "OTA-1.0-r3-ota.signed.bin": "2869c2f47cb1b6a35665235e6b24bacd401aaafe8dfa59f632514d0cf0ebd41d",
+        "OTA-1.0-r3-merged.hex": "11eff2e7df63b4774f489d90f9b41a8add3adb2ca967ac5eb915497ed13423d9"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-0.1-r4": {
+      "sha256": "00a33f9f06056e3468ad7165af51a255ffad40574d9a14570cccd78c030717e1",
+      "source_commit": "a6350d738088557463909886c411775149fd5984",
+      "build_source_sha256": "831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-0.1-r4-manifest.json": "15bf472e98537e3b8800b75734afcc99fc7e96c9d7e07c67e2092d06f69dd4e2",
+        "OTA-0.1-r4-ota.signed.bin": "00a33f9f06056e3468ad7165af51a255ffad40574d9a14570cccd78c030717e1",
+        "OTA-0.1-r4-merged.hex": "2c9f192a6c9aac7224cf094b542d8229728d092dcb66a3c08044096df2a1626d"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-0.1alt-r4": {
+      "sha256": "e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2",
+      "source_commit": "a6350d738088557463909886c411775149fd5984",
+      "build_source_sha256": "831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-0.1alt-r4-manifest.json": "f6f8166e03e7032ce1817619dfccbc068987ed9aa4fb9c33f7bf5a0e56b0f92a",
+        "OTA-0.1alt-r4-ota.signed.bin": "e05e67f4b5b060658badd1881fd0189be1b53f3019df67ee29c0a221a45849f2",
+        "OTA-0.1alt-r4-merged.hex": "c7ff9789b8c30ef7dc1fe7366578442f6b1dfd35836c3d0af02ac7c148fa9395"
+      },
+      "fresh_signature_verification": true
+    },
+    "OTA-1.0-r4": {
+      "sha256": "cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e",
+      "source_commit": "cfc98efde2db49e6190c769064c5e587c2076a10",
+      "build_source_sha256": "831cf3b9a2eadc52e6b6c425e2c3bf8377a0f7fb63a3644e1535c5f998eb69c9",
+      "canonical_manifest_present": true,
+      "files": {
+        "OTA-1.0-r4-manifest.json": "89940c4d1aed467c99e3de7383d193bf475e1aaa9eb5da88ec7c6dab0d1f3cd3",
+        "OTA-1.0-r4-ota.signed.bin": "cd1ecbdf6072a5ad72b2ed1e86d6fe207c12717d5f057c6f8f1437b29db9e26e",
+        "OTA-1.0-r4-merged.hex": "ae57e9d96c1e0c3b721176a630e05b363423c04e24c8bd6324c915af51cfa648"
+      },
+      "fresh_signature_verification": true
+    }
+  },
+  "verification_scope": "Local immutable packages -> independent private lifetime bucket -> fresh download -> fresh recovered bundle; all 11 accepted exact hashes and public-anchor ECDSA signatures verified. No private key access, rebuild, publication, assignment, or devices."
+}
