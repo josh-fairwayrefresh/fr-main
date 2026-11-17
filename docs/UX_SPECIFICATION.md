@@ -207,8 +207,9 @@ validation are recorded in the
   `qr_bays` remains the identity owner, with numeric `bay_number` and explicit
   `bay_side: A | B`. The
   anonymous mobile page uses the existing public bay availability response.
-  Bay restaurant menu refinement (CPO-approved 2026-11-17 static mockups;
-  source-only until a recorded release): every state uses the shared
+  Bay restaurant menu refinement (CPO-approved 2026-11-17; released
+  2026-11-17, see the
+  [release record](DEPLOYMENT_GUIDE.md#bay-restaurant-menu-and-cart-menu-header--production-release-2026-11-17)): every state uses the shared
   public-menu cream palette (`#f6f2e8` page, dark green text), including the
   surrounding viewport, regardless of the phone's light/dark setting. A
   compact banner at the top reads **"Bar and Restaurant service"** above

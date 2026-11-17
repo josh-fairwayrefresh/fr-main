@@ -2202,6 +2202,82 @@ Production verification:
 - Firestore (read-only): CUST-0001 holds exactly the cart and restaurant menus
   and one logo; CUST-0002 has no menus, branding profile or logos.
 
+#### Bay restaurant menu and cart-menu header — production release (2026-11-17)
+
+The CPO approved the Driving Range bay-page and cart-menu header mockups on
+2026-11-17 and authorized commit, push and production deployment. The CPO
+directed that restaurant menus keep their existing header and horizontal
+Fairway Refresh logo, and approved the banner's use of the Driving Range
+Course display name. Product behavior is specified in the
+[UX contract](UX_SPECIFICATION.md#driving-range-qr-requests-review-increment).
+
+Source: commit `2f7b4a2` on `feature/bay-restaurant-menu-20261117` (based on
+`main` `afc91f4`); this evidence record follows in Git.
+
+- `publicBay` adds `restaurant_menu_slug` only while service is available and
+  the bay's Customer has exactly one active restaurant menu; `publicMenu`
+  adds `type` (`cart` for legacy/alias cart responses). No data, rules,
+  index or configuration change.
+- `BayRequestApp` renders the banner, revised question, cream palette,
+  two-line out-of-service page and the embedded view-only restaurant menu via
+  the shared `MenuCategoryGrid`. Cart menus show the stacked Fairway Refresh
+  logo with tagline and the PAY AT THE CART ONLY strip; restaurant menus are
+  unchanged apart from full-width opened categories.
+
+Release validation: backend `npm test` (legacy, all suites, 117 pass) and
+`npm run test:customer-operations` (23 pass); frontend `npm test` 108/108;
+the full browser suite passes except the two established unrelated failures
+(Admin onboarding form; static `main.jsx` sign-out count), with the gated
+appearance test skipped locally; `npm run build:production` passes and
+verifies 107 Driving Range assets. Rendered pages were compared with the
+approved mockups before release.
+
+Production release, in order:
+
+1. Receiver and Admin were deployed from the committed source with the
+   established commands as no-traffic revisions tagged `bay-menu-1117`. Their
+   service account, environment, resources and scaling annotations were
+   identical to the serving `menu-branding-1116` revisions. On the tagged
+   revisions Bay 1A and all three menu destinations returned payloads whose
+   existing fields were identical to the pre-release production responses,
+   adding only `type` (`cart`, `cart`, `restaurant`); the receiver operator
+   bootstrap and Admin branding route returned 401 and Admin's operator
+   bootstrap 404, as before. Both services were then switched to 100%. The
+   `menu-branding-1116` and `menu-cutover-1116` revisions and tags are
+   retained for rollback.
+2. Hosting was built with `npm run build:production` and deployed with
+   `firebase deploy --only hosting` to `savvy-kit-496703-r5`.
+
+Both gcloud and Firebase CLI credentials had expired and were re-authenticated
+by the CPO interactively; no credential was created or changed.
+
+| Surface | Production identity |
+|---|---|
+| Receiver | `fairway-button-receiver-bay-menu-1117`, image `sha256:0278ce519a0461b03e5066c6ff16469a77b4f8b8146bd87b8e8fe69becf7899a`, 100% |
+| Admin API and public menus | `fairway-admin-bay-menu-1117`, image `sha256:e16e2a7e5da81f41c762f71fd3342b2b1e93c0f81c73b6b4db176ac331b53e67`, 100% |
+| Hosting | version `14342fd7ffbc062d`, released 2026-11-17T19:18:26Z (UTC) |
+
+Production verification (browser, `app.fairwayrefresh.com`):
+
+- `monarchbay_tony_lema_course` and `monarch-bay` show the stacked logo with
+  "Push Button. Stay Refreshed.", AT, the loaded Monarch Bay logo and PAY AT
+  THE CART ONLY, without the title block; 8 categories (On Cart content
+  unchanged, revision 1576).
+- `cust-0001_restaurant_menu` keeps its title block (THE LANDING), the
+  horizontal Fairway Refresh logo and the Monarch Bay logo, with 5
+  categories.
+- Bay 1A (`/range/Eq4h2a-N5qu4pS4aVSf9BW7Y`): the Driving Range Course is
+  currently suspended, so the page shows only the banner ("Bar and Restaurant
+  service / At the Driving Range", powered by Fairway Refresh), "Sorry, we
+  are outside of service hours." and "You may close this window.", with no
+  buttons or menu, on the cream background.
+
+Limitation: the active bay flow with the embedded restaurant menu was not
+observed in production because the service is suspended and resuming it is
+an operational action outside this release. It is covered by the backend
+tests and browser tests; the menu will appear on the next resume, because
+CUST-0001 has exactly one active restaurant menu.
+
 #### Local correction verification
 
 The local working tree is based on reviewed commit
