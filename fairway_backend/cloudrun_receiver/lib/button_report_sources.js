@@ -97,7 +97,7 @@ function createReportSources(db, { fetchImpl = (...args) => fetch(...args) } = {
           .where('customer_id', '==', customerId)          .where(mode() === 'customer' ? 'service_id' : 'course_id', '==', courseId)
           .where('received_at', '>=', start).where('received_at', endExclusive ? '<' : '<=', end)
           .orderBy('received_at', 'desc').orderBy(FieldPath.documentId(), 'desc')
-          .select('customer_id', 'course_id', 'device_id', 'received_at', 'completed_at', 'status', 'source', 'event_type', 'reporting_state', 'rejection_reason',
+          .select('customer_id', 'course_id', 'service_id', 'device_id', 'received_at', 'completed_at', 'status', 'source', 'event_type', 'reporting_state', 'rejection_reason',
             'cancelled_at', 'device_label', 'hole')
           .limit(500);
         const rows = await collectRequestPages(cursor => {
