@@ -55,24 +55,29 @@ function matchesFilter(data, filter) {
 }
 
 class FakeQuery {
-  constructor(db, collectionPath, filters, limitCount, ordering) {
+  constructor(db, collectionPath, filters, limitCount, ordering, selectedFields) {
     this.db = db;
     this.collectionPath = collectionPath;
     this.filters = filters || [];
     this.limitCount = limitCount || null;
     this.ordering = ordering || null;
+    this.selectedFields = selectedFields;
   }
 
   where(field, op, value) {
-    return new FakeQuery(this.db, this.collectionPath, [...this.filters, { field, op, value }], this.limitCount, this.ordering);
+    return new FakeQuery(this.db, this.collectionPath, [...this.filters, { field, op, value }], this.limitCount, this.ordering, this.selectedFields);
   }
 
   orderBy(field, direction = 'asc') {
-    return new FakeQuery(this.db, this.collectionPath, this.filters, this.limitCount, { field, direction });
+    return new FakeQuery(this.db, this.collectionPath, this.filters, this.limitCount, { field, direction }, this.selectedFields);
   }
 
   limit(count) {
-    return new FakeQuery(this.db, this.collectionPath, this.filters, count, this.ordering);
+    return new FakeQuery(this.db, this.collectionPath, this.filters, count, this.ordering, this.selectedFields);
+  }
+
+  select(...fields) {
+    return new FakeQuery(this.db, this.collectionPath, this.filters, this.limitCount, this.ordering, fields);
   }
 
   async get() {
@@ -107,7 +112,10 @@ class FakeQuery {
       });
     }
 
-    return new FakeQuerySnapshot(this.limitCount ? matches.slice(0, this.limitCount) : matches);
+    const limited = this.limitCount ? matches.slice(0, this.limitCount) : matches;
+    return new FakeQuerySnapshot(this.selectedFields === undefined ? limited : limited.map(snapshot =>
+      new FakeDocSnapshot(this.db, snapshot.ref.path, Object.fromEntries(this.selectedFields
+        .filter(field => Object.hasOwn(snapshot.data(), field)).map(field => [field, snapshot.data()[field]])))));
   }
 }
 

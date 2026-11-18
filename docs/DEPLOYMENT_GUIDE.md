@@ -2746,6 +2746,42 @@ infrastructure were unchanged.
 - Backend 14 files and frontend 89 unit plus 28 browser tests passed on the
   release commit.
 
+## Cart Performance Report Customer-ownership projection correction (2026-11-18)
+
+The CPO reported that the October 30-November 15 Tony Lema report showed zero
+button outcomes. Read-only investigation found all 261 historical button
+request IDs still present in production and in the verified November 16
+recovery database. Every original field matched; the migration had only added
+`service_id`. This was a reporting integration defect, not data loss.
+
+The Customer-mode query filtered requests by `service_id`, but omitted it
+from its field projection. The report's existing ownership qualification then
+discarded every returned row. The correction retains `service_id` in
+`button_report_sources.js`; ownership, qualification, exclusions, calculations,
+pagination and read-only as-of semantics are unchanged.
+
+Local validation:
+
+- The new Customer-mode query-to-report regression fails with zero outcomes
+  before the correction and passes afterward. It exercises the real
+  `createReportSources().requests` adapter and `generateButtonReport`, with a
+  projection-aware Firestore test double, for historical and current dates.
+  Valid completed, cancelled and service-suspended records are included;
+  other Customers/services, missing service ownership, excluded requests,
+  other rejections, pending requests, QR activity and other event types are not.
+- Full backend `npm test`: 118 passing tests; Customer operational suites:
+  17 passing tests. Editor diagnostics and `git diff --check` pass.
+- The corrected real Firestore query was exercised read-only against
+  production for CUST-0001 / COURSE-0001, October 30-November 15, 2026:
+  261 source records; 61 completed, 87 service-suspended and 32 cancelled,
+  totaling 180 report-eligible outcomes, exactly matching the investigation.
+
+The CPO authorized implementation, regression tests, PR integration, an
+Admin-only production deployment and verification. Production release
+identities and authenticated PDF verification are recorded below after release.
+No database restoration or historical record modification is part of this
+correction. The separate November 11 sales correction remains unapplied.
+
 ## Button report one-page layout and service-hours anchoring production release (2026-11-03)
 
 **CPO-authorized Admin-only release.** Source is `19f7f29`
