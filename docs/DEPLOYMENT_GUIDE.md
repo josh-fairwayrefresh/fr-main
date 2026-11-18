@@ -2272,11 +2272,10 @@ Production verification (browser, `app.fairwayrefresh.com`):
   are outside of service hours." and "You may close this window.", with no
   buttons or menu, on the cream background.
 
-Limitation: the active bay flow with the embedded restaurant menu was not
-observed in production because the service is suspended and resuming it is
-an operational action outside this release. It is covered by the backend
-tests and browser tests; the menu will appear on the next resume, because
-CUST-0001 has exactly one active restaurant menu.
+Active-flow acceptance: the active bay flow with the embedded restaurant menu
+was not observable during release because the service was suspended. On
+2026-11-17 the CPO confirmed in production that it works while service is
+active, and accepted and closed the increment.
 
 #### Local correction verification
 
