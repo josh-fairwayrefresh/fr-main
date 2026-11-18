@@ -2777,10 +2777,52 @@ Local validation:
   totaling 180 report-eligible outcomes, exactly matching the investigation.
 
 The CPO authorized implementation, regression tests, PR integration, an
-Admin-only production deployment and verification. Production release
-identities and authenticated PDF verification are recorded below after release.
-No database restoration or historical record modification is part of this
-correction. The separate November 11 sales correction remains unapplied.
+Admin-only production deployment and verification. Correction commit
+`e9162a56c9470daa309b403689f10ec3e3d80954` was merged through PR #42 as
+`0fe9acf7f368cae84967edab67736137d06b7c01`; deployment used that merged,
+tracked-clean source.
+
+Production execution and verification:
+
+- Native November 16, 17 and 18 backups were READY with 30-day retention;
+  seven-day PITR remained enabled. Existing recovery evidence and the
+  Recovery Guide's isolated restore procedure were reused; no restore ran.
+- Only `fairway-admin` in `savvy-kit-496703-r5`, `us-central1`, was
+  deployed, using the established source/function command, initially with
+  no traffic and tag `report-projection-1118`. The revision was Ready, its
+  runtime specification excluding the image and its scaling/network
+  annotations matched `fairway-admin-bay-menu-1117`, and the unauthenticated
+  report request returned 401 before promotion.
+- `fairway-admin-report-projection-1118` now serves 100%, image
+  `sha256:3200aec55a1c54f54fea8577d894b90b0ddc60df8100796b7011bf9f6f66796d`.
+  The prior `fairway-admin-bay-menu-1117` remains tagged `bay-menu-1117` at
+  zero traffic for compatible rollback. Rollback, if separately authorized,
+  uses the normal `gcloud run services update-traffic fairway-admin
+  --project=savvy-kit-496703-r5 --region=us-central1
+  --to-revisions=fairway-admin-bay-menu-1117=100` procedure; no data restore.
+- The signed-in production Admin Reports page regenerated the PDF for
+  CUST-0001 / Tony Lema, October 30-November 15, 2026. Text extracted from
+  the actual returned PDF showed **61 COMPLETED, 87 SERVICE SUSPENDED and
+  32 CANCELLED**, exactly the established 180-outcome baseline. The
+  corrected source query returned all 261 historical source records.
+  The report also shows 76.8 cart hours using the unchanged calculation:
+  restoring the request rows restores their operator-action anchors.
+- The inspected PDF was 148,497 bytes, SHA-256
+  `e882e563c656d8c25d1da0ec5bc5df6f0d0e370968a03fe361c421e1d4176225`.
+  Cloud Run request logs independently show authenticated report POSTs
+  returning 200 on the new revision (including
+  `2026-11-18T23:55:41.940995Z`), CORS preflights returning 204, and no
+  revision errors during verification.
+- Before/after fingerprints and document update times matched for all 261
+  historical requests and the November 11 sales-day and closeout records
+  (263 documents total). That day's stored value remains 6,979 cents
+  ($69.79, rounded to $70 in the report); the separately requested $786
+  correction was deliberately not applied.
+
+No Firestore restoration, migration, deletion or historical-record modification
+occurred. Receiver `fairway-button-receiver-bay-menu-1117`, Hosting, firmware,
+devices and other services were not changed. The increment is complete;
+the release-evidence documentation commit follows through the normal PR flow.
 
 ## Button report one-page layout and service-hours anchoring production release (2026-11-03)
 
